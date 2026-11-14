@@ -1,7 +1,8 @@
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { createRequestAction } from './actions';
 import {
   STATUS_LABEL,
+  cashRequestStoreIds,
   listActivePersons,
   listRegister,
   listStores,
@@ -28,13 +29,17 @@ export default async function CashRequestsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/cash-requests');
+  const { actor, refusal } = await requirePageAccess('/cash-requests');
+  if (refusal) return refusal;
 
-  const [stores, persons, requests] = await Promise.all([
+  // T-577 (DEF-834): only the viewer's stores' requests (undefined = every store, e.g. an admin).
+  const storeIds = await cashRequestStoreIds(actor);
+  const [allStores, persons, requests] = await Promise.all([
     listStores(actor.orgId),
     listActivePersons(actor.orgId),
-    listRegister(actor.orgId),
+    listRegister(actor.orgId, storeIds),
   ]);
+  const stores = allStores.filter((s) => !storeIds || storeIds.includes(s.id));
   const storeById = new Map(stores.map((s) => [s.id, s]));
   const personById = new Map(persons.map((p) => [p.id, p]));
 

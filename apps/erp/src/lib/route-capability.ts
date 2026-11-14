@@ -104,6 +104,13 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/money-accounts': 'view_financial_reports',
   '/money-transfers': 'view_financial_reports',
   '/prepaid': 'view_financial_reports',
+  // T-577 (DEF-834, Ian 13 Nov, bible row 461): these three screens read the whole org's money and were open to any signed-in person. Each lists the
+  // capabilities its own actions already check (any ONE opens it), so nobody who works the screen is locked out and nobody else reads it. Children inherit.
+  // /ap: log, verify or pay a supplier invoice, or approve a supplier (the screen's writes). /cash-requests: the ask (`create_expense`) and the decision (`approve_expense`).
+  '/ap': ['record_supplier_invoice', 'verify_supplier_invoice', 'record_ap_payment', 'approve_supplier'],
+  // /budgets only sets and removes caps (`manage_expense_budgets`). A spender still sees what is left on /expenses/new, which stays open.
+  '/budgets': 'manage_expense_budgets',
+  '/cash-requests': ['create_expense', 'approve_expense'],
   // T-511 S4: uploading a Grab / Foodpanda statement. `ingestSettlementFile` checks the same word at the store the file belongs to. The longer prefix wins over the open /channel-settlements.
   '/channel-settlements/upload': 'upload_settlement_files',
   // T-511 S5b: reading, rejecting and reopening the staged days. The list and detail are scoped per store inside the domain by the same word `rejectDay` checks (recording a channel settlement); the longer prefix wins over the open /channel-settlements.

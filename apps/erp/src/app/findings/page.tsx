@@ -25,6 +25,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { CheckedForm } from '@/components/forms';
 import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { ChevronIcon } from '@/components/shell/icons';
 import { FINDINGS_MISSED_MONTH_RULES, FINDINGS_MISSING_PERIOD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Findings — Shareat System' };
@@ -231,40 +232,45 @@ function FindingGroup({
         <p className="max-w-2xl text-xs text-neutral-500 dark:text-neutral-500">{blurb}</p>
       </div>
       {rows.map((f) => (
-        <div key={f.key} className={`space-y-2 rounded-lg border p-4 ${border}`}>
-          <div className="flex flex-wrap items-baseline gap-2">
-            <span className="text-sm font-medium">{KIND_LABEL[f.kind] ?? f.kind}</span>
-            {/* ⚠️ The KIND stays visible beside the label: a label can drift, a kind is the key. */}
-            <code className="text-xs text-neutral-500">{f.kind}</code>
-            {f.status === 'acknowledged' && (
-              <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-xs dark:bg-neutral-800">
-                {/* ⭐ Age is the point — an ageing acceptance is a smell. */}
-                accepted {f.acknowledgementAgeDays ?? 0}d ago
+        <details key={f.key} className={`group rounded-[20px] border bg-surface ${border}`}>
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0">
+              <span className="flex flex-wrap items-baseline gap-2">
+                <span className="text-sm font-medium">{KIND_LABEL[f.kind] ?? f.kind}</span>
+                <code className="text-xs text-muted">{f.kind}</code>
+                {f.status === 'acknowledged' && (
+                  <span className="rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">
+                    accepted {f.acknowledgementAgeDays ?? 0}d ago
+                  </span>
+                )}
               </span>
+              <span className="mt-1 block truncate text-xs text-muted">{f.detail}</span>
+            </span>
+            <ChevronIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted transition group-open:rotate-180" />
+          </summary>
+          <div className="space-y-2 border-t border-surface-border p-4">
+            <p className="text-sm">{f.detail}</p>
+            {f.status === 'open' ? (
+              <form action={acknowledgeFindingAction} className="flex flex-wrap items-end gap-2">
+                <input type="hidden" name="findingKey" value={f.key} />
+                <input type="hidden" name="period" value={period} />
+                <Input
+                  name="note"
+                  placeholder="Why is this acceptable for now?"
+                  className="w-full min-w-0 flex-1 basis-72"
+                />
+                <Button type="submit" variant="secondary">
+                  Accept for now
+                </Button>
+              </form>
+            ) : (
+              <p className="text-xs text-muted">
+                Accepted — it expires on its own, and it is still counted above. The only way it
+                leaves this list is for the condition to stop being true.
+              </p>
             )}
           </div>
-          <p className="text-sm text-neutral-700 dark:text-neutral-300">{f.detail}</p>
-
-          {f.status === 'open' ? (
-            <form action={acknowledgeFindingAction} className="flex flex-wrap items-end gap-2">
-              <input type="hidden" name="findingKey" value={f.key} />
-              <input type="hidden" name="period" value={period} />
-              <Input
-                name="note"
-                placeholder="Why is this acceptable for now?"
-                className="w-full min-w-0 flex-1 basis-72"
-              />
-              <Button type="submit" variant="secondary">
-                Accept for now
-              </Button>
-            </form>
-          ) : (
-            <p className="text-xs text-neutral-500">
-              Accepted — it expires on its own, and it is still counted above. The only way it
-              leaves this list is for the condition to stop being true.
-            </p>
-          )}
-        </div>
+        </details>
       ))}
     </section>
   );
@@ -308,27 +314,32 @@ function MissingPeriodsSection({
       {pieces.map((p) => {
         const label = p.whole ? p.yearMonth : `${p.startsOn} to ${p.endsOn} (part of ${p.yearMonth})`;
         return (
-          <div key={`${p.startsOn}-${p.endsOn}`} className="space-y-2 rounded-lg border border-warning bg-surface p-3">
-            <div className="text-sm">
-              <span className="font-medium">{label}</span> — will be created as{' '}
-              <span className="font-medium">{p.targetStatus}</span>
+          <details key={`${p.startsOn}-${p.endsOn}`} className="group rounded-[20px] border border-warning bg-surface">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm [&::-webkit-details-marker]:hidden">
+              <span>
+                <span className="font-medium">{label}</span>
+                <span className="ml-2 text-muted">will be created as {p.targetStatus}</span>
+              </span>
+              <ChevronIcon className="h-4 w-4 shrink-0 text-muted transition group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-warning/40 p-3">
+              {canCreate ? (
+                <CheckedForm rules={FINDINGS_MISSING_PERIOD_RULES} action={createMissingClosedPeriodAction} className="flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="period" value={period} />
+                  <input type="hidden" name="startsOn" value={p.startsOn} />
+                  <input type="hidden" name="endsOn" value={p.endsOn} />
+                  <Field label="Reason" rule={FINDINGS_MISSING_PERIOD_RULES.reason} className="w-full flex-1 basis-72">
+                    <Input {...nativeAttrs(FINDINGS_MISSING_PERIOD_RULES.reason)} placeholder="Why is this being created now?" className="w-full min-w-0" />
+                  </Field>
+                  <Button type="submit" variant="secondary">
+                    Create the missing month
+                  </Button>
+                </CheckedForm>
+              ) : (
+                <p className="text-xs text-muted">Only an administrator can create a missing month.</p>
+              )}
             </div>
-            {canCreate ? (
-              <CheckedForm rules={FINDINGS_MISSING_PERIOD_RULES} action={createMissingClosedPeriodAction} className="flex flex-wrap items-end gap-2">
-                <input type="hidden" name="period" value={period} />
-                <input type="hidden" name="startsOn" value={p.startsOn} />
-                <input type="hidden" name="endsOn" value={p.endsOn} />
-                <Field label="Reason" rule={FINDINGS_MISSING_PERIOD_RULES.reason} className="w-full flex-1 basis-72">
-                  <Input {...nativeAttrs(FINDINGS_MISSING_PERIOD_RULES.reason)} placeholder="Why is this being created now?" className="w-full min-w-0" />
-                </Field>
-                <Button type="submit" variant="secondary">
-                  Create the missing month
-                </Button>
-              </CheckedForm>
-            ) : (
-              <p className="text-xs text-neutral-500">Only an administrator can create a missing month.</p>
-            )}
-          </div>
+          </details>
         );
       })}
     </section>
@@ -367,27 +378,37 @@ function ScheduledChargesMissedSection({
         <p className="text-xs text-neutral-500">Only an administrator can book a missed month.</p>
       ) : (
         rows.map((r) => (
-          <div
+          <details
             key={`${r.schedule}-${r.subjectId}-${r.belongsToPeriod}`}
-            className="space-y-2 rounded-lg border border-warning bg-surface p-3"
+            className="group rounded-[20px] border border-warning bg-surface"
           >
-            <div className="text-sm">
-              <span className="font-medium">{r.subjectName}</span> — {r.belongsToPeriod} —{' '}
-              {peso(Number(r.amount))} — will be booked in {currentPeriod()}
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0">
+                <span className="font-medium">{r.subjectName}</span>
+                <span className="ml-2 text-muted">
+                  {r.belongsToPeriod} · {peso(Number(r.amount))}
+                </span>
+              </span>
+              <ChevronIcon className="h-4 w-4 shrink-0 text-muted transition group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-warning/40 p-3">
+              <p className="mb-2 text-xs text-muted">
+                Will be booked in {currentPeriod()}.
+              </p>
+              <CheckedForm rules={FINDINGS_MISSED_MONTH_RULES} action={bookMissedMonthAction} className="flex flex-wrap items-end gap-2">
+                <input type="hidden" name="period" value={period} />
+                <input type="hidden" name="schedule" value={r.schedule} />
+                <input type="hidden" name="subjectId" value={r.subjectId} />
+                <input type="hidden" name="belongsToPeriod" value={r.belongsToPeriod} />
+                <Field label="Reason" rule={FINDINGS_MISSED_MONTH_RULES.reason} className="w-full flex-1 basis-72">
+                  <Input {...nativeAttrs(FINDINGS_MISSED_MONTH_RULES.reason)} placeholder="Why is this being booked now?" className="w-full min-w-0" />
+                </Field>
+                <Button type="submit" variant="secondary">
+                  Book it
+                </Button>
+              </CheckedForm>
             </div>
-            <CheckedForm rules={FINDINGS_MISSED_MONTH_RULES} action={bookMissedMonthAction} className="flex flex-wrap items-end gap-2">
-              <input type="hidden" name="period" value={period} />
-              <input type="hidden" name="schedule" value={r.schedule} />
-              <input type="hidden" name="subjectId" value={r.subjectId} />
-              <input type="hidden" name="belongsToPeriod" value={r.belongsToPeriod} />
-              <Field label="Reason" rule={FINDINGS_MISSED_MONTH_RULES.reason} className="w-full flex-1 basis-72">
-                <Input {...nativeAttrs(FINDINGS_MISSED_MONTH_RULES.reason)} placeholder="Why is this being booked now?" className="w-full min-w-0" />
-              </Field>
-              <Button type="submit" variant="secondary">
-                Book it
-              </Button>
-            </CheckedForm>
-          </div>
+          </details>
         ))
       )}
     </section>

@@ -4,8 +4,8 @@ topic: staff/cashier-dine-in-sop
 about: [cashier]
 readers: staff
 must_be_exact: true
-related: [customer-experience/dine-in-journey, policies/leftover-policy, staff/server-and-kitchen-sop, policies/allergies-and-dietary-requests, staff/cashier-take-out-and-online-sop, store-operations/opening-and-closing]
-updated: 2026-10-23
+related: [customer-experience/dine-in-journey, policies/leftover-policy, staff/server-and-kitchen-sop, policies/allergies-and-dietary-requests, staff/cashier-take-out-and-online-sop, store-operations/opening-and-closing, cash-and-payments/future-franchise-cash-and-sales-controls]
+updated: 2026-11-04
 ---
 
 # Cashier SOP — dine-in
@@ -43,3 +43,9 @@ Enter every allergy or dietary note — the kitchen sees it. A no-pork table get
 session and a clean setup. Buffet side dishes cannot be adjusted for allergies; à la carte can.
 Never call anything "halal". Full rules:
 [allergies and dietary requests](../policies/allergies-and-dietary-requests.md).
+
+## Future franchise approval responsibilities
+
+Use [future franchise cash and sales controls](../cash-and-payments/future-franchise-cash-and-sales-controls.md)
+for discount, complimentary-item, refund, unpaid-order cancellation, POS Convert and cash-report
+authority. These are future-franchise assignments; this page remains the customer-service procedure.

@@ -4,8 +4,8 @@ topic: staff/cashier-take-out-and-online-sop
 about: [cashier, manager]
 readers: staff
 must_be_exact: true
-related: [customer-experience/take-out-in-store, customer-experience/online-orders, staff/server-and-kitchen-sop, staff/cashier-dine-in-sop, cash-and-payments/platform-wastage]
-updated: 2026-10-23
+related: [customer-experience/take-out-in-store, customer-experience/online-orders, staff/server-and-kitchen-sop, staff/cashier-dine-in-sop, cash-and-payments/platform-wastage, company/future-franchise-brand-and-bookings, store-operations/future-franchise-daily-operations]
+updated: 2026-11-04
 ---
 
 # Cashier SOP — take-out and online orders
@@ -55,3 +55,11 @@ updated: 2026-10-23
 - Check every platform order carefully. If an item is wrong or missing, the platform refunds the
   customer and takes it out of the store's payout, and the cost may be charged to the staff
   member responsible.
+
+## Future franchise responsibilities
+
+The manager oversees timely platform-order preparation/dispatch and coordinates staff/rider
+issues under [future franchise daily operations](../store-operations/future-franchise-daily-operations.md).
+For future franchises, regular menu-price changes require SharEat approval; see
+[brand and bookings](../company/future-franchise-brand-and-bookings.md). Technical access to a
+menu screen alone does not grant that approval authority or prove planned integrations are live.

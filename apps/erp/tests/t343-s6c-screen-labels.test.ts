@@ -486,8 +486,9 @@ describe('R1 — usage list: a damage_storage row shows its label; NewUsageForm 
     expect(visibleText).toContain(WASTAGE_REASON_LABEL.damage_storage);
     expect(visibleText).not.toContain('damage storage');
 
-    // Only this page's Reason column shares this exact class string.
-    const reasonCells = [...html.matchAll(/<td class="px-3 py-2 text-neutral-600 dark:text-neutral-400">([\s\S]*?)<\/td>/g)].map(
+    // T-568: the shared <Td> primitive renders a native <td>; the Reason column is the only
+    // muted cell in this table.
+    const reasonCells = [...html.matchAll(/<td class="[^"]*text-muted[^"]*">([\s\S]*?)<\/td>/g)].map(
       (m) => stripTags(m[1]!),
     );
     expect(reasonCells, 'expected one Reason cell per record').toHaveLength(2);

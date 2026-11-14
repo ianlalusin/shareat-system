@@ -8,7 +8,7 @@ import { staffStoresFor } from '../../staff/lib';
 import { daypartsForStore } from '../../admin/stores/lib';
 import { DaypartsSection } from '../DaypartsSection';
 
-export const metadata = { title: 'Lunch and dinner hours - Shareat System' };
+export const metadata = { title: 'Menu hours - Shareat System' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -25,7 +25,7 @@ export default async function MenuHoursPage({ searchParams }: { searchParams: Pr
   if (stores.length === 0) {
     return (
       <Page density="table">
-        <h1 className="text-2xl font-semibold">Lunch and dinner hours</h1>
+        <h1 className="text-2xl font-semibold">Menu hours</h1>
         <Banner tone="warning">You do not manage any store&apos;s settings, so there are no hours for you to set.</Banner>
       </Page>
     );
@@ -37,7 +37,7 @@ export default async function MenuHoursPage({ searchParams }: { searchParams: Pr
   return (
     <Page density="table">
       <div>
-        <h1 className="text-2xl font-semibold">Lunch and dinner hours</h1>
+        <h1 className="text-2xl font-semibold">Menu hours</h1>
         <PageDescription>The hours a price can follow at {store.name}, like Lunch from 08:00 to 17:00.</PageDescription>
       </div>
 
