@@ -25,7 +25,7 @@ export function HeroNumber({
         <CountUp value={value} text={text} />
       </div>
       {delta?.same ? (
-        <div className="text-[15px] text-muted">Same as last period</div>
+        <div className="text-base text-muted">Same as last period</div>
       ) : delta ? (
         <div className="flex flex-wrap items-center gap-3">
           {delta.pct !== null ? (
@@ -40,7 +40,7 @@ export function HeroNumber({
               {delta.pct}
             </span>
           ) : null}
-          <span className="text-[15px] text-muted">
+          <span className="text-base text-muted">
             ₱{delta.abs} {delta.up ? 'more' : 'less'} than {delta.against}
           </span>
         </div>

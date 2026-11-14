@@ -26,8 +26,8 @@ export function ChannelDonut({
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <div className="flex items-center gap-4 border-t-2 border-ink pt-3">
-        <h2 className="m-0 font-display text-[28px] font-bold leading-none">By channel</h2>
-        <span className="text-[13px] text-muted">{subtitle}</span>
+        <h2 className="m-0 font-display text-3xl font-bold leading-none">By channel</h2>
+        <span className="text-sm text-muted">{subtitle}</span>
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-4">
         <div className="relative aspect-square w-2/5 max-w-48 min-w-0 flex-none">

@@ -21,8 +21,8 @@ export function OutlineCount({
       className="outline-count flex min-h-11 min-w-0 flex-col gap-1.5 border-r border-surface-border px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-4 focus-visible:ring-offset-canvas"
     >
       <span className="outline-count-num break-words font-display text-4xl font-extrabold leading-tight">{count}</span>
-      <span className="text-[15px] font-semibold">{label} →</span>
-      <span className="text-[13px] text-muted">{hint}</span>
+      <span className="text-base font-semibold">{label} →</span>
+      <span className="text-sm text-muted">{hint}</span>
     </Link>
   );
 }
