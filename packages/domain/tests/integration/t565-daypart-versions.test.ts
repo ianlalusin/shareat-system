@@ -45,11 +45,12 @@ async function setup() {
 }
 
 /**
- * Wait (at most ~2 ms) until the database clock is past the offer's start. A daypart edit stamps valid_to = date_trunc('milliseconds', now()); edited in the same
+ * Wait (at most ~2 ms) until the database clock is past the START OF THE STORE'S NEWEST OFFER (every offer, not one variant's: a later offer written just before a read has the same race).
+ * It guards every read at a ms-truncated instant (a daypart edit's valid_to, dbNow()) that follows a write. A daypart edit stamps valid_to = date_trunc('milliseconds', now()); edited in the same
  * millisecond as an offer insert, valid_to lands BEFORE the offer's effective_from (item then "not on the store menu", not "outside hours"). Offers cannot be back-dated.
  */
-const afterOffer = (variantId: string) =>
-  sql`select pg_sleep(greatest(0, extract(epoch from (select max(effective_from) from menu_offers where variant_id = ${variantId}) + interval '2 milliseconds' - clock_timestamp())))`;
+const afterOffers = (f: Fx) =>
+  sql`select pg_sleep(greatest(0, extract(epoch from (select max(effective_from) from menu_offers where store_id = ${f.storeId}) + interval '2 milliseconds' - clock_timestamp())))`;
 
 /** The instant an offer of this variant is first in force, exactly (effective_from rounded UP to the millisecond, the grain of a JS Date). */
 const offerFrom = async (variantId: string) =>
@@ -80,7 +81,7 @@ describe('T-565 - an order is judged by the window in force when it was taken', 
     const { id: lunch } = await mkDaypart('Lunch', win(pivot, -60, 60));
     const plate = await dish('Lunch plate', lunch, '338.00');
     const allDay = await dish('Soda', null, '80.00');
-    await afterOffer(plate.variantId);
+    await afterOffers(f);
     await updateDaypart(f.admin, { id: lunch, ...moveTo(pivot, 180, 240) });
     const [v1, v2] = await versionsOf(lunch);
     expect(v1!.valid_to).not.toBeNull();
@@ -103,7 +104,7 @@ describe('T-565 - an order is judged by the window in force when it was taken', 
     const { f, pivot, mkDaypart, dish } = await setup();
     const { id: lunch } = await mkDaypart('Lunch', win(pivot, -60, 60));
     const plate = await dish('Lunch plate', lunch, '338.00');
-    await afterOffer(plate.variantId);
+    await afterOffers(f);
     await updateDaypart(f.admin, { id: lunch, ...moveTo(pivot, 180, 240) });
     const [v1] = await versionsOf(lunch);
     expect((await offerFrom(plate.variantId)).getTime()).toBeLessThanOrEqual(v1!.valid_to!.getTime()); // the offer was live: only the window can refuse
@@ -115,9 +116,10 @@ describe('T-565 - an order is judged by the window in force when it was taken', 
     const { f, pivot, mkDaypart, dish } = await setup();
     const { id: breakfast } = await mkDaypart('Breakfast', win(pivot, -60, 60));
     const eggs = await dish('Eggs', breakfast, '120.00');
-    await afterOffer(eggs.variantId);
+    await afterOffers(f);
     await insDaypartOffer(f, eggs.variantId, breakfast, null); // withdraw, so the daypart may retire
     const withdrawnAt = (await sql<{ t: Date }[]>`select date_trunc('milliseconds', max(effective_from) + interval '999 microseconds') t from menu_offers where variant_id = ${eggs.variantId}`)[0]!.t;
+    await afterOffers(f); // the retirement closes the version at date_trunc(ms, now()): it must fall AFTER the withdrawal, which the order is placed just before
     await retireDaypart(f.admin, { id: breakfast });
     const vs = await versionsOf(breakfast);
     expect(vs.map((v) => v.status)).toEqual(['active', 'retired']);
@@ -138,7 +140,7 @@ describe('T-565 - an order is judged by the window in force when it was taken', 
     const { id: lunch } = await mkDaypart('Lunch', win(pivot, -60, 60));
     const plate = await dish('Lunch plate', lunch, '338.00');
     await dish('Soda', null, '80.00'); // real work between the lunch offer and the new daypart, so the two instants are far apart
-    await afterOffer(plate.variantId);
+    await afterOffers(f);
     const { id: dinner } = await mkDaypart('Dinner', win(pivot, -90, 90));
     await dish('Dinner plate', dinner, '358.00');
     const [dinnerV1] = await versionsOf(dinner);
@@ -168,7 +170,7 @@ describe('T-565 - an order is judged by the window in force when it was taken', 
               values (${f.orgId}, ${f.storeId}, ${refill.variantId}, 'store', ${lunch}, null, false, ${f.personId})`;
     const o = await orderAt(f, pkg, await offerFrom(pkg.variantId));
     await o.add();
-    await afterOffer(refill.variantId);
+    await afterOffers(f);
     await updateDaypart(f.admin, { id: lunch, ...moveTo(pivot, 180, 240) });
     const [v1] = await versionsOf(lunch);
     const asked = before(v1!.valid_to!, MS);
@@ -195,6 +197,7 @@ describe('T-565 - an order is judged by the window in force when it was taken', 
     await sql`insert into kitchen_routes (org_id, store_id, menu_item_id, station_id, created_by) values (${f.orgId}, ${f.storeId}, ${it.itemId}, ${f.grill}, ${f.personId})`;
     for (const [i, a] of [[0, '100.00'], [1, '200.00'], [2, '300.00']] as const) await insDaypartOffer(f, it.variantId, ids[i]!, a);
 
+    await afterOffers(f); // dbNow() is ms-truncated: an offer inserted in the same millisecond would not yet be live at it
     const { asOf, current, live } = await asOrg(f.orgId, async (tx) => {
       const now = await menuRepo.dbNow(tx);
       return {
