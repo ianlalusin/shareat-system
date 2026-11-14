@@ -185,6 +185,8 @@ const EXEMPT: Record<string, string> = {
   // `recordCollection` and `voidCharge` were DEF-190's unreachable half; T-226 gave them
   // `/customers/[customerId]` and this test failed until the rows were deleted — which is the
   // stale-exemption rule doing its whole job, on the very next task after the guard shipped.
+  gateLineAction:
+    'INTERNAL — T-576. Called only by cancelLine (pos/order.ts) and addLineDiscount, removeLineDiscount and applyPresetToAllLines (pos/discounts.ts), which the POS inbox runs; it is the manager-PIN gate on a line action, not a screen action of its own.',
   recordOwnerSelfAgreement:
     'INTERNAL — T-519 R5. Called only by `recoverFromPay` in owners/index.ts, in the same transaction; it is not a screen action and never authorizes a human of its own.',
   reconcileSupplier:

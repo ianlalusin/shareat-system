@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * T-387 S7 - `/staff`: ID card wall (default) plus live roster. Data layer mocked, markup asserted.
+ * T-387 S7 / T-568 - `/staff`: ID cards (default) plus the optional live roster table. Data layer mocked, markup asserted.
  *
  * PINNED HOOKS (the builder must emit these; docs/design/t387 has the looks, not the hooks):
  *  - cards view container `data-view="cards"`, roster container `data-view="roster"`; only the chosen one renders
@@ -181,7 +181,7 @@ describe('T-435 - /staff reads through the gate and the Actor-taking loader', ()
 });
 
 describe('T-387 S7 - /staff views', () => {
-  it('the default view is the card wall', async () => {
+  it('the default view is the ID card wall', async () => {
     const html = await render();
     expect(html).toContain('data-view="cards"');
     expect(html).not.toContain('data-view="roster"');
@@ -299,7 +299,7 @@ describe('T-387 S7 - /staff views', () => {
 
 describe('T-387 S7 - a card', () => {
   it('shows name, primary position, store, tenure and employment status', async () => {
-    const html = await render();
+    const html = await render({ view: 'cards' });
     expect((html.match(/data-staff-card/g) ?? []).length).toBe(3);
     expect(html).toContain('Ana Reyes');
     expect(html).toContain('Cashier');
@@ -312,7 +312,7 @@ describe('T-387 S7 - a card', () => {
   });
 
   it('the photo is an <img> through /files/<id> only when canViewPhoto is true; otherwise initials', async () => {
-    const html = await render();
+    const html = await render({ view: 'cards' });
     expect(html).toContain('<img');
     expect(html).toMatch(/<img[^>]*src="\/files\/file-ana"/);
     // Cia has a file the viewer may not see: no image, no id in the markup, initials instead.

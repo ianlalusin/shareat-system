@@ -11,6 +11,7 @@ import { posV2Repo, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { parseDecimalInput } from '../shared/money-input';
 import { lockOpenSession } from './order';
+import { gateLineAction, type LineApprovalInput } from './line-approval';
 import {
   audit,
   billedHeads,
@@ -29,7 +30,7 @@ import {
   type PosDeps,
 } from './shared';
 
-export interface AddLineDiscountInput {
+export interface AddLineDiscountInput extends LineApprovalInput {
   storeId: string;
   pairingId: string | null;
   discountId: string;
@@ -42,6 +43,7 @@ export interface AddLineDiscountInput {
   dinerNo?: number;
   appliedAtDevice: string | Date;
 }
+
 
 const freeSentence = (name: string, free: number): string =>
   free <= 0 ? `No unit of ${name} is free of discount.` : `Only ${free} ${free === 1 ? 'unit' : 'units'} of ${name} ${free === 1 ? 'is' : 'are'} free of discount.`;
@@ -119,12 +121,14 @@ export async function addLineDiscount(tx: Tx, actor: Actor, input: AddLineDiscou
     }
   }
   const v = await resolveValue(at, tx, actor, input, line, deps);
+  // T-576: a custom or preset discount (not the statutory one) needs a manager's PIN (or approval) when the rule is on.
+  const gate = statutory ? {} : await gateLineAction(tx, actor, { storeId: input.storeId, pairingId, sessionId: session.id, lineIds: [line.id], action: 'discount.added', targetId: discountId, detail: { kind: input.kind, presetId: input.presetId, valueType: input.valueType, value: input.value, qty, lineId: input.lineId }, at, deps, input });
   await posV2Repo.insertLineDiscounts(tx, [
     { id: discountId, orgId: actor.orgId, storeId: input.storeId, sessionLineId: line.id, kind: input.kind, presetId: v.presetId, valueType: v.valueType, value: money(v.value), qty, dinerNo, appliedBy: actor.personId, appliedAtDevice: at },
   ]);
   await audit(tx, actor, 'pos.discount_added', {
     storeId: input.storeId, entityId: discountId, pairingId, at,
-    after: { lineId: line.id, kind: input.kind, qty, valueType: v.valueType, value: v.value, dinerNo, presetId: v.presetId },
+    after: { lineId: line.id, kind: input.kind, qty, valueType: v.valueType, value: v.value, dinerNo, presetId: v.presetId, ...(gate.approvedBy ? { approvedBy: gate.approvedBy } : {}) },
   });
   await posV2Repo.bumpStateVersion(tx, actor.orgId, input.storeId);
   return { wrote: true };
@@ -133,7 +137,8 @@ export async function addLineDiscount(tx: Tx, actor: Actor, input: AddLineDiscou
 export async function removeLineDiscount(
   tx: Tx,
   actor: Actor,
-  input: { storeId: string; pairingId: string | null; discountId: string; removedAtDevice: string | Date },
+  input: { storeId: string; pairingId: string | null; discountId: string; removedAtDevice: string | Date } & LineApprovalInput,
+  deps?: PosDeps,
 ): Promise<{ wrote: boolean }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
   const pairingId = await requireContext(tx, actor, input.storeId, input.pairingId, false);
@@ -143,10 +148,12 @@ export async function removeLineDiscount(
   if (d.status === 'removed') return { wrote: false };
   const line = await posV2Repo.getLine(tx, actor.orgId, input.storeId, d.sessionLineId);
   await lockOpenSession(tx, actor.orgId, input.storeId, line!.sessionId);
+  const gate = await gateLineAction(tx, actor, { storeId: input.storeId, pairingId, sessionId: line!.sessionId, lineIds: [d.sessionLineId], action: 'discount.removed', targetId: d.id, at, deps, input });
   await posV2Repo.removeLineDiscounts(tx, actor.orgId, input.storeId, [d.id], actor.personId, at);
   await audit(tx, actor, 'pos.discount_removed', {
     storeId: input.storeId, entityId: d.id, pairingId, at,
     before: { lineId: d.sessionLineId, kind: d.kind, qty: d.qty, dinerNo: d.dinerNo },
+    ...(gate.approvedBy ? { after: { approvedBy: gate.approvedBy } } : {}),
   });
   await posV2Repo.bumpStateVersion(tx, actor.orgId, input.storeId);
   return { wrote: true };
@@ -159,7 +166,8 @@ export async function removeLineDiscount(
 export async function applyPresetToAllLines(
   tx: Tx,
   actor: Actor,
-  input: { storeId: string; pairingId: string | null; sessionId: string; presetId: string; applyId: string; appliedAtDevice: string | Date },
+  input: { storeId: string; pairingId: string | null; sessionId: string; presetId: string; applyId: string; appliedAtDevice: string | Date } & LineApprovalInput,
+  deps?: PosDeps,
 ): Promise<{ wrote: boolean; applied: number; skipped: number }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
   const pairingId = await requireContext(tx, actor, input.storeId, input.pairingId, false);
@@ -187,11 +195,13 @@ export async function applyPresetToAllLines(
     rows.push({ id, orgId: actor.orgId, storeId: input.storeId, sessionLineId: l.id, kind: 'preset', presetId: preset.id, valueType: preset.valueType, value: money(preset.value), qty: free, dinerNo: null, appliedBy: actor.personId, appliedAtDevice: at });
   }
   if (rows.length === 0) return { wrote: false, applied, skipped };
+  // T-576: the same gate as one preset on one line, once for the whole button (one review row per line it discounted).
+  const gate = await gateLineAction(tx, actor, { storeId: input.storeId, pairingId, sessionId: session.id, lineIds: rows.map((r) => r.sessionLineId), action: 'discount.applied_to_all', targetId: session.id, detail: { presetId: preset.id }, at, deps, input });
   await posV2Repo.insertLineDiscounts(tx, rows);
   for (const r of rows) {
     await audit(tx, actor, 'pos.discount_added', {
       storeId: input.storeId, entityId: r.id!, pairingId, at,
-      after: { lineId: r.sessionLineId, kind: 'preset', qty: r.qty, valueType: r.valueType, value: r.value, presetId: preset.id, applyAll: true },
+      after: { lineId: r.sessionLineId, kind: 'preset', qty: r.qty, valueType: r.valueType, value: r.value, presetId: preset.id, applyAll: true, ...(gate.approvedBy ? { approvedBy: gate.approvedBy } : {}) },
     });
   }
   await posV2Repo.bumpStateVersion(tx, actor.orgId, input.storeId);

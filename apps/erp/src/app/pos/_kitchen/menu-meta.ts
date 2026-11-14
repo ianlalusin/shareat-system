@@ -5,7 +5,7 @@
  */
 import type { MenuLike } from '../_orders/menu-filter';
 import { asStoreMenu } from '../_orders/menu-filter';
-import { refillMeats } from '../_refills/meats';
+import { refillMeats, type RefillMeat } from '../_refills/meats';
 
 export interface MenuMetaStation {
   id: string;
@@ -16,7 +16,7 @@ export interface MenuMetaStation {
 export interface MenuMeta {
   stations: MenuMetaStation[];
   /** Package variant id -> its refills, in the order the package lists them. An id the menu no longer holds is left out. */
-  refillCatalog: Record<string, { itemId: string; name: string }[]>;
+  refillCatalog: Record<string, RefillMeat[]>;
 }
 
 export function menuMetaOf(menu: MenuLike): MenuMeta {

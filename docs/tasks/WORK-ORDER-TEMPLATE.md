@@ -2,8 +2,9 @@
 
 > **Who writes it:** the Opus planner (BOSS or a spec lane). **Who builds from it:** an AI coding
 > app outside Claude Code (today: Freebuff, running DeepSeek or Nemotron) or a human.
-> **Who checks it:** CI on the PR; a Codex audit of the open PRs' diffs every 12 hours; Claude fixes
-> the findings (a Sonnet fixer, verified by Opus); then BOSS's merge queue. Ian, 2026-11-06.
+> **Who checks it:** CI on the PR; a Codex audit of the open PRs' diffs every 12 hours, posted as a
+> **"Codex audit" comment on the PR itself** (Ian, 2026-11-11; no longer a file in `shareat-audits/OPEN`);
+> Claude fixes the findings (a Sonnet fixer, verified by Opus); then BOSS's merge queue. Ian, 2026-11-06.
 >
 > A work order is a task spec written so that a builder with **no memory of this project** can finish
 > it from the file alone. A field you cannot fill means the work order is not ready to hand out.
@@ -121,8 +122,9 @@ blocked report is better than a silent workaround.
 
 ## 9. Audit checklist (for the Codex 12-hour audit and the Claude fixer, not the builder)
 
-The audit runs on the PR **before** it is queued, so nothing unaudited reaches `main`. Findings go
-to BOSS; a Sonnet fixer pushes fixes to the same `wo/` branch; Opus verifies; BOSS queues it.
+The audit runs on the PR **before** it is queued, so nothing unaudited reaches `main`. Codex posts its
+findings as **one PR comment headed "Codex audit"** (Ian, 2026-11-11), not as a file in
+`shareat-audits/OPEN`. A Sonnet fixer pushes fixes to the same `wo/` branch; Opus verifies; BOSS queues it.
 
 
 - [ ] Diff touches only §4 files
@@ -130,7 +132,7 @@ to BOSS; a Sonnet fixer pushes fixes to the same `wo/` branch; Opus verifies; BO
 - [ ] No §7 rule broken (numbers, hard-coded values, other branches, bible/knowledge edits)
 - [ ] Matches the bible and glossary names
 - [ ] Money, auth or schema touched? Then the risk class was wrong; stop and send back to the planner
-- [ ] Findings reported to BOSS; PR queued only when the audit is clean
+- [ ] Findings posted as the PR's "Codex audit" comment; PR queued only when the audit is clean
 
 ## Builder notes
 

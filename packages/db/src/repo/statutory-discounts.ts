@@ -159,6 +159,50 @@ export interface StatutoryDiscountSummary {
   pwdCount: number;
 }
 
+export interface PriorIdUse {
+  invoiceNumber: string;
+  businessDate: string;
+  /** When the sale was made: the receipt's own device time when a till receipt backs the row, else when the row was written. */
+  at: Date;
+  /** The till receipt behind the row, when there is one (a hand-entered register row, or a diner whose discount rounded to nothing, has none). */
+  receiptId: string | null;
+}
+
+/**
+ * T-575: the LIVE register rows of ONE store where this card number (trimmed, any case) was used on a business date in [from, to], newest first, never the holder's name.
+ * `excludeInvoiceNumber` keeps the sale being written out of its own answer. The match is `lower(btrim(id_number))`, the same key as the one-live-row-per-card index.
+ */
+export async function listPriorIdUses(
+  tx: Tx,
+  orgId: string,
+  q: { storeId: string; idNumber: string; from: string; to: string; excludeInvoiceNumber?: string },
+): Promise<PriorIdUse[]> {
+  const r = statutoryDiscountRecords;
+  const receiptOf = sql`(select rc.id, rc.issued_at_device from pos_sales_receipt_line_discounts d join pos_sales_receipt_lines l on l.id = d.receipt_line_id join pos_sales_receipts rc on rc.id = l.receipt_id where d.statutory_record_id = ${r.id} order by rc.issued_at_device limit 1)`;
+  const clauses = [
+    eq(r.orgId, orgId),
+    eq(r.storeId, q.storeId),
+    isNull(r.voidedAt),
+    gte(r.businessDate, q.from),
+    lte(r.businessDate, q.to),
+    sql`lower(btrim(${r.idNumber})) = lower(btrim(${q.idNumber}))`,
+  ];
+  if (q.excludeInvoiceNumber !== undefined) clauses.push(sql`${r.invoiceNumber} <> ${q.excludeInvoiceNumber}`);
+  const rows = await tx
+    .select({
+      invoiceNumber: r.invoiceNumber,
+      businessDate: r.businessDate,
+      createdAt: r.createdAt,
+      receiptId: sql<string | null>`(select x.id from ${receiptOf} x)`,
+      receiptAt: sql<Date | string | null>`(select x.issued_at_device from ${receiptOf} x)`,
+    })
+    .from(r)
+    .where(and(...clauses));
+  return rows
+    .map((x) => ({ invoiceNumber: x.invoiceNumber, businessDate: x.businessDate, at: x.receiptAt ? new Date(x.receiptAt) : x.createdAt, receiptId: x.receiptId }))
+    .sort((a, b) => b.at.getTime() - a.at.getTime());
+}
+
 /**
  * The report footer. ⚠️ **Summed in Postgres, in `numeric`** — totalling money in JavaScript is
  * how a register that reconciles on screen stops reconciling on paper.

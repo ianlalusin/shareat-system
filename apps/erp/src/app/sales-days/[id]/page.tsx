@@ -6,6 +6,7 @@ import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { addDays, formatBusinessDateTime, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listActingPersons, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
+import { canReadAtStore } from '@/lib/can-read-at-store';
 import { postPosCorrectionAction, recheckPosDayAction, reimportSalesDayAction, editSalesDayAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { canOverrideClosedMonth } from '../../expenses/reimbursements/lib';
@@ -47,7 +48,8 @@ export default async function SalesDayDetailPage({
   const orgId = actor.orgId;
 
   const day = await withOrgPrincipal(orgId, (tx) => salesDaysRepo.getById(tx, orgId, id));
-  if (!day) notFound();
+  // T-577 (DEF-834): a sales day outside the viewer's stores is the same not-found as a forged id. The page's own actions are submit/verify.
+  if (!day || !(await withOrgPrincipal(orgId, (tx) => canReadAtStore(tx, actor, day.storeId, ['submit_sales_day', 'verify_sales_day'])))) notFound();
 
   const [channels, stores, persons] = await Promise.all([
     withOrgPrincipal(orgId, (tx) => salesDaysRepo.getChannelsForDay(tx, day.id)),

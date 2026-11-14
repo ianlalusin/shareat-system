@@ -8,13 +8,14 @@
  */
 import { add, compare, fromCentavos, money, subtract, toCentavos, type Money } from '@shareat/core/money';
 import { authorize, can, verifyPosManagerApproval, POS_TERMINAL_NOT_REGISTERED, type Actor } from '@shareat/auth';
-import { posV2Repo, statutoryDiscountsRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, posV2Repo, statutoryDiscountsRepo, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { parseMoneyInput } from '../shared/money-input';
 import { POS_PAYMENT_REFERENCE_RULES, POS_REASON_RULES, POS_STATUTORY_HOLDER_RULES } from '../field-rules/pos';
 import { priceSession, type PricedSession } from './price';
 import { isUniqueViolation, lockOpenSession } from './order';
+import { earlierUsesOfCard } from './senior-repeat';
 import {
   audit,
   billedHeads,
@@ -258,6 +259,8 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   const storeCode = await posV2Repo.getStoreCode(tx, actor.orgId, storeId);
   const printed = `${storeCode}-${pad(terminalNo, 2)}-${pad(terminalSeq, 6)}`;
   const recordIds = new Map<number, string>();
+  // T-575 follow-up: one card used by two tills at once - each would miss the other's uncommitted register row below; queue per card (sorted, so two multi-card sales cannot deadlock).
+  for (const id of [...new Set(holders.map((h) => h.idNumber.trim().toLowerCase()))].sort()) await advisoryLocksRepo.lockSeniorCard(tx, actor.orgId, storeId, id);
   for (const h of holders) {
     const g = diners.get(h.dinerNo)!;
     const rec = await statutoryDiscountsRepo.create(tx, {
@@ -265,6 +268,14 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
       grossAmount: fromCentavos(g.gross), discountAmount: fromCentavos(g.discount), source: 'pos', recordedBy: actor.personId,
     });
     recordIds.set(h.dinerNo, rec.id);
+  }
+  // T-575 (row 462): a card already used at this store in the window is flagged for a manager below (never refused). Our own rows are left out by the printed number.
+  const earlierReceipts = new Set<string>();
+  let repeatedCard = false;
+  for (const h of holders) {
+    const uses = await earlierUsesOfCard(tx, actor.orgId, storeId, h.idNumber, rules!.businessDate, printed);
+    if (uses.length > 0) repeatedCard = true;
+    for (const u of uses) if (u.receiptId) earlierReceipts.add(u.receiptId);
   }
   try {
     await posV2Repo.insertReceipt(tx, {
@@ -280,7 +291,7 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     const p = priced.lines[i]!;
     const id = globalThis.crypto.randomUUID();
     receiptLineIds.set(l.id, id);
-    return { id, orgId: actor.orgId, receiptId, lineNo: i + 1, sessionLineId: l.id, kind: l.kind, name: l.name, qty: l.qty, unitPrice: money(l.unitPrice), gross: p.gross, discountTotal: p.discountTotal, net: p.net };
+    return { id, orgId: actor.orgId, receiptId, lineNo: i + 1, sessionLineId: l.id, kind: l.kind, name: l.name, qty: l.qty, unitPrice: money(l.unitPrice), optionValueIds: l.optionValueIds, gross: p.gross, discountTotal: p.discountTotal, net: p.net };
   });
   await posV2Repo.insertReceiptLines(tx, lineRows);
   const presetNames = new Map<string, string>();
@@ -331,6 +342,8 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     if (toCentavos(gap) > tolerance) await audit(tx, actor, 'pos.sale_payment_shortfall', o);
     else await audit(tx, actor, 'pos.sale_payment_variance', o);
   }
+  // The manager's trail: this receipt and the earlier ones. No card number and no name (the earlier receipts lead to them). shortcut: at most 50 earlier receipts are listed.
+  if (repeatedCard) await audit(tx, actor, 'pos.senior_id_repeat', { storeId, entityId: receiptId, pairingId, at: issuedAt, after: { receiptId, earlierReceiptIds: [...earlierReceipts].slice(0, 50) } });
   await audit(tx, actor, 'pos.sale_completed', {
     storeId, entityId: receiptId, pairingId, at: issuedAt,
     after: { sessionId, receiptNo: printed, offline, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, payments: rows.length, statutoryDiners: holders.length },

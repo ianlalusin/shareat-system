@@ -5,6 +5,7 @@ import { NewOrderForm } from './NewOrderForm';
 import { orderFormData, orderRegister, peso, today, tradeStoresFor } from './lib';
 import { StoreNotAvailable } from '../../../lib/page-access';
 import { Page } from '@/components/shell/Page';
+import { ChevronIcon } from '@/components/shell/icons';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, FlashBanner, FormModal, LinkRow, RowLink, Select } from '@/components/ui';
@@ -49,7 +50,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
       </div>
       <PageDescription>
         One document for a wholesale sale and an internal transfer alike — the commissary packs the
-        same crates whoever is receiving; only the books differ. ⭐ <strong>Dispatch is the event</strong>:
+        same crates whoever is receiving; only the books differ. <strong>Dispatch is the event</strong>:
         a sale bills the customer and relieves stock with cost of sales; a transfer puts the goods in
         transit at cost, and both stores&rsquo; books move when the branch confirms what arrived.
       </PageDescription>

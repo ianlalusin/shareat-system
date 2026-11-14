@@ -85,7 +85,7 @@ describe('T-558 seed pin - migration 0248', () => {
     expect(e248, '0248 is in the journal').toBeDefined();
     expect(e248!.tag).toBe(FILE.replace(/\.sql$/, ''));
     expect(e248!.when).toBe(e247!.when + 86_400_000);
-    expect(journal.entries.at(-1)!.idx, '0248 is the last entry').toBe(248);
+    expect(journal.entries.at(-1)!.idx, '0248 is the last entry, or is followed only by later ones (0249 = T-557)').toBeGreaterThanOrEqual(248);
   });
 
   it('0248 on its own seeds exactly pos.sale_variance_tolerance: 0.01, at 2000-01-01, set_by null, reason "Starting value" [kills: a wrong value, date or reason; another key seeded twice]', async () => {
@@ -97,8 +97,8 @@ describe('T-558 seed pin - migration 0248', () => {
     expect(rows[0]!.reason).toBe('Starting value');
   });
 
-  it('0239, 0241, 0245 and 0248 for one org write exactly one row per registry key, and every value IS the registry default [kills: drift between the seed and the registry; a registry key with no seed row anywhere]', async () => {
-    const rows = await replay([fileOf('0239_'), fileOf('0241_'), fileOf('0245_'), fileOf('0248_')]);
+  it('0239, 0241, 0245, 0248 and 0255 (T-575) and 0256 (T-576) for one org write exactly one row per registry key, and every value IS the registry default [kills: drift between the seed and the registry; a registry key with no seed row anywhere]', async () => {
+    const rows = await replay([fileOf('0239_'), fileOf('0241_'), fileOf('0245_'), fileOf('0248_'), fileOf('0255_'), fileOf('0256_')]);
     expect(rows.map((r) => r.key)).toEqual(Object.keys(RULE_REGISTRY).sort());
     for (const r of rows) {
       const want = (RULE_REGISTRY as Record<string, { default: unknown }>)[r.key]!.default;
@@ -109,8 +109,8 @@ describe('T-558 seed pin - migration 0248', () => {
     }
   });
 
-  it('the four files name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key]', () => {
-    const named = [...new Set(['0239_', '0241_', '0245_', '0248_'].flatMap((p) => namedKeys(text(fileOf(p)))))].sort();
+  it('the six files (0255 = T-575, 0256 = T-576) name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key]', () => {
+    const named = [...new Set(['0239_', '0241_', '0245_', '0248_', '0255_', '0256_'].flatMap((p) => namedKeys(text(fileOf(p)))))].sort();
     expect(named).toEqual(Object.keys(RULE_REGISTRY).sort());
   });
 

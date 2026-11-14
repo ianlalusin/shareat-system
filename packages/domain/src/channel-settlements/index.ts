@@ -721,6 +721,8 @@ export async function recordChannelSettlement(
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const legBlockers = await loanLegBlockers(trx, actor.orgId, figures.loanLegs);
     if (legBlockers.length > 0) throw refuse('recordChannelSettlement: a loan leg is not valid', legBlockers[0]!);
+    // T-573: a dock lowers a loan's principal, so it takes the same row lock a payment does (in id order: two settlements cannot deadlock).
+    for (const id of [...new Set(figures.loanLegs.map((l) => l.loanId))].sort()) await loansRepo.lockForPayment(trx, actor.orgId, id);
     const config = ctx.config;
     const c = computeSettlement(figures, input.acknowledgeDifference, ctx.outstanding, ctx.nettedCharges, config.name, ctx.variance);
 
@@ -1058,6 +1060,8 @@ export async function voidChannelSettlement(
     await authorize(trx, actor, 'record_ar_collection', { storeId: seen.storeId });
     // The channel lock approve takes first (channel, then the staged line, then the books), so a void and an approve of the same channel queue instead of crossing.
     await advisoryLocksRepo.lockSettlementChannel(trx, seen.channelId);
+    // T-573: reversing a dock raises each docked loan's principal - the same row lock a payment takes, in id order, after the channel lock.
+    for (const id of [...new Set(seen.loanLegs.map((l) => l.loanId))].sort()) await loansRepo.lockForPayment(trx, actor.orgId, id);
     // Read again under the lock: a second voider that queued behind the first must see it voided.
     const s = (await R.getById(trx, actor.orgId, input.settlementId)) ?? seen;
     if (s.status === 'voided') throw refuse(`voidChannelSettlement: settlement is ${s.status}, not posted.`, 'This settlement was already voided.');

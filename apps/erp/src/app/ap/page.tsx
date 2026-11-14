@@ -1,8 +1,8 @@
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import Link from 'next/link';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { recordInvoiceAction } from './actions';
-import { listSuppliersWithPosition, listInvoicesWithStanding, standingPills, listStores, peso, today } from './lib';
+import { apStoreIds, listSuppliersWithPosition, listInvoicesWithStanding, standingPills, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -28,15 +28,19 @@ interface SearchParams {
 
 export default async function ApPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/ap');
+  const { actor, refusal } = await requirePageAccess('/ap');
+  if (refusal) return refusal;
 
   const onlySelfVerified = sp.selfVerified === '1';
   const onlyPending = sp.status === 'pending';
-  const [suppliers, allInvoices, stores] = await Promise.all([
-    listSuppliersWithPosition(actor.orgId),
-    listInvoicesWithStanding(actor.orgId),
+  // T-577 (DEF-834): only the viewer's stores' invoices and balances (undefined = every store, e.g. an admin).
+  const storeIds = await apStoreIds(actor);
+  const [suppliers, allInvoices, allStores] = await Promise.all([
+    listSuppliersWithPosition(actor.orgId, storeIds),
+    listInvoicesWithStanding(actor.orgId, { storeIds }),
     listStores(actor.orgId),
   ]);
+  const stores = allStores.filter((s) => !storeIds || storeIds.includes(s.id));
   const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));
   // T-475: the facts the live business-rule lines read (each supplier's status and vatStatus), built by the SAME function the domain uses; no status or VAT rule is derived here.
   const supplierFacts = buildSupplierFacts(suppliers);

@@ -205,6 +205,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-558 (row 453): a sale paid short of the server's total is recorded, never refused. Up to the tolerance it is a routine variance; above it, a finding for a manager.
   def('pos.sale_payment_variance', 'money', 'low', 'store', 'pos_sales_receipts', 'T-558'),
   def('pos.sale_payment_shortfall', 'money', 'high', 'store', 'pos_sales_receipts', 'T-558'),
+  // T-575 (row 462): a senior/PWD card number already used at this store within the repeat window; the sale went through (entity = the receipt). The details name receipts, never the card or the holder.
+  def('pos.senior_id_repeat', 'order', 'high', 'store', 'pos_sales_receipts', 'T-575'),
+  // T-576 (row 460): a line cancel / line discount went through with no manager PIN while the rule asks for one (the till was offline, or said so); a manager reviews it (entity = the line).
+  def('pos.line_action_unapproved', 'order', 'high', 'store', 'table_session_lines', 'T-576'),
   // T-525: a manager replayed or discarded a quarantined tablet event (entity = the pos_events row). Server-only: the tablet never sends them.
   def('pos.event_replayed', 'order', 'normal', 'store', 'pos_events', 'T-525'),
   def('pos.event_discarded', 'order', 'high', 'store', 'pos_events', 'T-525'),

@@ -5,6 +5,7 @@ import { previewExpenseApproval } from '@shareat/domain';
 import { buildCategoryFacts } from '@shareat/domain/business-rules';
 import { listStores, listActingPersons, listCategoriesGrouped } from '../lib';
 import { requireSession } from '../../../lib/session';
+import { canReadAtStore } from '@/lib/can-read-at-store';
 import { approveExpenseAction, voidExpenseAction, updateDraftAction, deleteDraftAction } from '../actions';
 import { withOrgPrincipal } from '../lib';
 import { canOverrideClosedMonth } from '../reimbursements/lib';
@@ -60,7 +61,8 @@ export default async function ExpenseDetailPage({
   const orgId = actor.orgId;
 
   const expense = await withOrgPrincipal(orgId, (tx) => expensesRepo.getExpenseById(tx, orgId, id));
-  if (!expense) notFound();
+  // T-577 (DEF-834): an expense outside the viewer's stores is the same not-found as a forged id. The page's own actions are edit (own draft), approve and void.
+  if (!expense || !(await withOrgPrincipal(orgId, (tx) => canReadAtStore(tx, actor, expense.storeId, ['create_expense', 'edit_own_expense', 'approve_expense'])))) notFound();
 
   const [payments, stores, persons, categories] = await Promise.all([
     withOrgPrincipal(orgId, (tx) => expensesRepo.getPaymentsForExpense(tx, expense.id)),

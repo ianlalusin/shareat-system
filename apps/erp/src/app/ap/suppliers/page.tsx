@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import {
   CLASSIFICATION_LABEL,
+  apStoreIds,
   listSuppliersWithPosition,
   maskAccountNumber,
   matchesSupplier,
@@ -40,9 +41,10 @@ export default async function SuppliersPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/ap/suppliers');
+  const { actor, refusal } = await requirePageAccess('/ap/suppliers');
+  if (refusal) return refusal;
 
-  const all = await listSuppliersWithPosition(actor.orgId);
+  const all = await listSuppliersWithPosition(actor.orgId, await apStoreIds(actor)); // T-577: balances at the viewer's stores only
   const q = sp.q ?? '';
   const includeInactive = sp.show === 'all';
 

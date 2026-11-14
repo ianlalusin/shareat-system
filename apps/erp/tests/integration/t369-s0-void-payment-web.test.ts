@@ -240,13 +240,13 @@ describe('T9 — "Payments against this bill"', () => {
     const a = await bill(f, '3000.00', 'INV-A');
     await payBills(f, '3000.00', [{ expenseId: a.expenseId, amountApplied: '3000.00' }]);
 
-    for (const who of [f.staff, f.otherManager]) {
-      const html = await renderBill(who, a.invoiceId);
-      expect(html, 'the row is visible').toMatch(/Payments against this bill/);
-      expect(html).toMatch(/3,000\.00/);
-      expect(voidPanels(html), 'no void panel for a non-holder').toHaveLength(0);
-      expect(html).not.toMatch(/Void this payment/);
-    }
+    // T-577: a viewer outside the bill's store no longer reads it at all (the same not-found as a forged id); staff at the store still do.
+    const html = await renderBill(f.staff, a.invoiceId);
+    expect(html, 'the row is visible').toMatch(/Payments against this bill/);
+    expect(html).toMatch(/3,000\.00/);
+    expect(voidPanels(html), 'no void panel for a non-holder').toHaveLength(0);
+    expect(html).not.toMatch(/Void this payment/);
+    await expect(renderBill(f.otherManager, a.invoiceId), 'another store manager').rejects.toThrow(/notFound\(\)/);
   });
 
   it('a voided payment shows "Voided — {reason}" and no control; the bill\'s other forms are unchanged', async () => {
