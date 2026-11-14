@@ -322,22 +322,35 @@ describe('T-422 case 9 - dependencies', () => {
     expect(pkg.dependencies?.firebase).toMatch(/^\^?10\./);
   });
 
-  it('package-lock.json changes no version of a package that existed at f18494f; one react/react-dom/next. Mutant: ERP firebase dropped to 10, or a second react', () => {
-    type Lock = { packages: Record<string, { version?: string }> };
-    const before = JSON.parse(
-      execFileSync('git', ['show', 'f18494f:package-lock.json'], { cwd: repoRoot, maxBuffer: 256 * 1024 * 1024 }).toString('utf8'),
-    ) as Lock;
-    const after = JSON.parse(read('package-lock.json')) as Lock;
-    const changed: string[] = [];
-    for (const [key, entry] of Object.entries(before.packages)) {
-      if (!key.startsWith('node_modules/') || !entry.version) continue;
-      const now = after.packages[key];
-      if (!now) changed.push(`${key}: ${entry.version} -> (removed)`);
-      else if (now.version !== entry.version) changed.push(`${key}: ${entry.version} -> ${now.version}`);
+  // T-579 (BOSS ruling, 14 Nov 2026): the old check refused ANY version change since f18494f, so every deliberate security bump hit it.
+  // It now holds the two things that check was protecting.
+  type Lock = { packages: Record<string, { version?: string }> };
+  const lockProblems = (lock: Lock): string[] => {
+    const problems: string[] = [];
+    for (const name of ['react', 'react-dom', 'next']) {
+      const copies = Object.keys(lock.packages).filter((k) => k === `node_modules/${name}` || k.endsWith(`/node_modules/${name}`));
+      if (copies.length !== 1 || copies[0] !== `node_modules/${name}`) problems.push(`${name}: expected one copy at the root, found ${JSON.stringify(copies)}`);
     }
-    expect(changed).toEqual([]);
-    const dupes = Object.keys(after.packages).filter((k) => /(^|\/)node_modules\/(react|react-dom|next)$/.test(k) && k.startsWith('apps/'));
-    expect(dupes).toEqual([]);
+    const firebaseMajor = Number((lock.packages['node_modules/firebase']?.version ?? '0').split('.')[0]);
+    if (!(firebaseMajor >= 11)) problems.push(`root (ERP) firebase is at major ${firebaseMajor}, needs 11 or higher`);
+    return problems;
+  };
+  const realLock = (): Lock => JSON.parse(read('package-lock.json')) as Lock;
+
+  it('package-lock.json holds exactly one react, react-dom and next, and the root (ERP) firebase is major 11 or higher', () => {
+    expect(lockProblems(realLock())).toEqual([]);
+  });
+
+  it('Mutant: a second react (under apps/pos) is refused', () => {
+    const lock = realLock();
+    lock.packages['apps/pos/node_modules/react'] = { version: '18.2.0' };
+    expect(lockProblems(lock)).toHaveLength(1);
+  });
+
+  it('Mutant: ERP firebase dropped to 10 is refused', () => {
+    const lock = realLock();
+    lock.packages['node_modules/firebase'] = { version: '10.14.1' };
+    expect(lockProblems(lock)).toHaveLength(1);
   });
 });
 
