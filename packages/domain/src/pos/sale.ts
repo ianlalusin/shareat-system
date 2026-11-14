@@ -8,13 +8,14 @@
  */
 import { add, compare, fromCentavos, money, subtract, toCentavos, type Money } from '@shareat/core/money';
 import { authorize, can, verifyPosManagerApproval, POS_TERMINAL_NOT_REGISTERED, type Actor } from '@shareat/auth';
-import { posV2Repo, statutoryDiscountsRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, posV2Repo, statutoryDiscountsRepo, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { parseMoneyInput } from '../shared/money-input';
 import { POS_PAYMENT_REFERENCE_RULES, POS_REASON_RULES, POS_STATUTORY_HOLDER_RULES } from '../field-rules/pos';
 import { priceSession, type PricedSession } from './price';
 import { isUniqueViolation, lockOpenSession } from './order';
+import { earlierUsesOfCard } from './senior-repeat';
 import {
   audit,
   billedHeads,
@@ -122,6 +123,31 @@ const sameCentavos = (a: string, b: Money) => {
   }
 };
 
+/** T-556 (audit P-001, R9): a replay is a no-op only when it carries what the frozen receipt recorded: the sale's flags, time and tablet total, its payments and its card holders. */
+async function replayMatches(tx: Tx, actor: Actor, input: CompleteSaleInput, prior: posV2Repo.PosSalesReceiptRow, at: { issuedAt: Date; offline: boolean; printed: string }): Promise<boolean> {
+  if (prior.offline !== at.offline || prior.issuedAtDevice.getTime() !== at.issuedAt.getTime() || !sameCentavos(String(input.device?.total ?? ''), money(prior.deviceTotal))) return false;
+  const pays = input.payments;
+  if (!Array.isArray(pays)) return false;
+  const kinds = new Map((await posV2Repo.listTenders(tx, actor.orgId, pays.map((p) => String(p.tenderId)))).map((t) => [t.id, t.kind]));
+  const payKey = (tenderId: string, amount: Money, ref: string, toCheck: boolean) => `${tenderId}|${toCentavos(amount)}|${ref}|${toCheck}`;
+  const sent = pays.map((p) => {
+    const ref = kinds.get(String(p.tenderId)) === 'wallet' ? assertFieldRules(POS_PAYMENT_REFERENCE_RULES, { referenceNo: p.referenceNo ?? '' }).referenceNo! : '';
+    return payKey(String(p.tenderId), parseMoneyInput(String(p.amount ?? ''), 'pos: the payment amount', 'The payment amount'), ref, p.toCheck === true);
+  });
+  const stored = (await posV2Repo.listReceiptPayments(tx, actor.orgId, prior.id)).map((r) => payKey(r.tenderId, money(r.amount), r.referenceNo ?? '', r.toCheck));
+  if (JSON.stringify(sent.sort()) !== JSON.stringify(stored.sort())) return false;
+
+  const holders = (Array.isArray(input.seniors) ? input.seniors : []).map((e) => {
+    const h = assertFieldRules(POS_STATUTORY_HOLDER_RULES, { holderName: e.holderName ?? '', idNumber: e.idNumber ?? '' });
+    return { dinerNo: e.dinerNo, kind: e.kind, idNumber: h.idNumber!, holderName: h.holderName! };
+  });
+  const card = (x: { kind: string; idNumber: string; holderName: string }) => `${x.kind}|${x.idNumber}|${x.holderName}`;
+  const recorded = await posV2Repo.listReceiptStatutory(tx, actor.orgId, prior.storeId, prior.id, at.printed);
+  if (JSON.stringify(holders.map(card).sort()) !== JSON.stringify(recorded.map(card).sort())) return false;
+  // shortcut: a diner's number is checked only where its discount left a receipt row (one that rounded to nothing leaves none), the card details always.
+  return recorded.every((r) => r.dinerNo === null || holders.some((h) => h.dinerNo === r.dinerNo && card(h) === card(r)));
+}
+
 export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInput, deps?: PosDeps): Promise<{ wrote: boolean; receiptId: string }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
   const pairingId = await requireContext(tx, actor, input.storeId, input.pairingId, false);
@@ -139,7 +165,10 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   const terminal = await posV2Repo.getTerminalByNo(tx, actor.orgId, storeId, terminalNo);
   const prior = await posV2Repo.getReceiptBySession(tx, actor.orgId, storeId, sessionId);
   if (prior) {
-    if (prior.id === receiptId && prior.terminalSeq === terminalSeq && terminal?.id === prior.terminalId) return { wrote: false, receiptId };
+    if (prior.id === receiptId && prior.terminalSeq === terminalSeq && terminal?.id === prior.terminalId) {
+      if (!(await replayMatches(tx, actor, input, prior, { issuedAt, offline, printed: `${await posV2Repo.getStoreCode(tx, actor.orgId, storeId)}-${pad(terminalNo, 2)}-${pad(terminalSeq, 6)}` }))) throw recordedDifferently();
+      return { wrote: false, receiptId };
+    }
     if (prior.id === receiptId) throw recordedDifferently();
     throw refuse('pos: table already paid', 'This table is already paid.');
   }
@@ -230,6 +259,8 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   const storeCode = await posV2Repo.getStoreCode(tx, actor.orgId, storeId);
   const printed = `${storeCode}-${pad(terminalNo, 2)}-${pad(terminalSeq, 6)}`;
   const recordIds = new Map<number, string>();
+  // T-575 follow-up: one card used by two tills at once - each would miss the other's uncommitted register row below; queue per card (sorted, so two multi-card sales cannot deadlock).
+  for (const id of [...new Set(holders.map((h) => h.idNumber.trim().toLowerCase()))].sort()) await advisoryLocksRepo.lockSeniorCard(tx, actor.orgId, storeId, id);
   for (const h of holders) {
     const g = diners.get(h.dinerNo)!;
     const rec = await statutoryDiscountsRepo.create(tx, {
@@ -237,6 +268,14 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
       grossAmount: fromCentavos(g.gross), discountAmount: fromCentavos(g.discount), source: 'pos', recordedBy: actor.personId,
     });
     recordIds.set(h.dinerNo, rec.id);
+  }
+  // T-575 (row 462): a card already used at this store in the window is flagged for a manager below (never refused). Our own rows are left out by the printed number.
+  const earlierReceipts = new Set<string>();
+  let repeatedCard = false;
+  for (const h of holders) {
+    const uses = await earlierUsesOfCard(tx, actor.orgId, storeId, h.idNumber, rules!.businessDate, printed);
+    if (uses.length > 0) repeatedCard = true;
+    for (const u of uses) if (u.receiptId) earlierReceipts.add(u.receiptId);
   }
   try {
     await posV2Repo.insertReceipt(tx, {
@@ -252,7 +291,7 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     const p = priced.lines[i]!;
     const id = globalThis.crypto.randomUUID();
     receiptLineIds.set(l.id, id);
-    return { id, orgId: actor.orgId, receiptId, lineNo: i + 1, sessionLineId: l.id, kind: l.kind, name: l.name, qty: l.qty, unitPrice: money(l.unitPrice), gross: p.gross, discountTotal: p.discountTotal, net: p.net };
+    return { id, orgId: actor.orgId, receiptId, lineNo: i + 1, sessionLineId: l.id, kind: l.kind, name: l.name, qty: l.qty, unitPrice: money(l.unitPrice), optionValueIds: l.optionValueIds, gross: p.gross, discountTotal: p.discountTotal, net: p.net };
   });
   await posV2Repo.insertReceiptLines(tx, lineRows);
   const presetNames = new Map<string, string>();
@@ -303,6 +342,8 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     if (toCentavos(gap) > tolerance) await audit(tx, actor, 'pos.sale_payment_shortfall', o);
     else await audit(tx, actor, 'pos.sale_payment_variance', o);
   }
+  // The manager's trail: this receipt and the earlier ones. No card number and no name (the earlier receipts lead to them). shortcut: at most 50 earlier receipts are listed.
+  if (repeatedCard) await audit(tx, actor, 'pos.senior_id_repeat', { storeId, entityId: receiptId, pairingId, at: issuedAt, after: { receiptId, earlierReceiptIds: [...earlierReceipts].slice(0, 50) } });
   await audit(tx, actor, 'pos.sale_completed', {
     storeId, entityId: receiptId, pairingId, at: issuedAt,
     after: { sessionId, receiptNo: printed, offline, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, payments: rows.length, statutoryDiners: holders.length },

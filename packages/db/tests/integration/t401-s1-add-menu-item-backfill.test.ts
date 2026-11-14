@@ -18,6 +18,8 @@
  *  - "Owner" = ACTIVE admin role + live grants of all six current ones, exactly as 0188 read "all five".
  *  - No other super-only menu capability exists (the seven new ones: only add_menu_item is super-only), so only one grant is written.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,8 +31,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { APP_ROLE } from '../../src/rls/registry';

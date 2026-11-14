@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { countPending, drain, isSnapshotUsable, listPending, listVerifiers, readSnapshot, type CachedSnapshot, type PosEvent, type PosEventResult } from '@/lib/pos-device';
 import { POS_DRAIN_INTERVAL_MS, POS_OFFLINE_ACTOR_KEY, POS_OFFLINE_SNAPSHOT_MAX_AGE_MS, POS_POLL_INTERVAL_MS, POS_SNAPSHOT_REFRESH_MS } from './constants';
 import { makePosSend } from './drain-send';
+import { heldSalesCount, nextHeldOrigins } from './held-sales';
 import { POS_STATE_REFRESH_EVENT } from './use-pos-state';
 import { browserPromoteJar, promoteAfterTabletSignIn } from './pending-verifier';
 import { showNeedsInternetOnce } from './offline-band';
@@ -27,6 +28,8 @@ export interface SnapshotOrdersPart {
   nextChangeAt?: string | null;
   /** T-539 S3: minutes before a table tile turns red. Null when the cached snapshot is older than the rule (no tile turns red until the next refresh). */
   tableWarnMinutes?: number | null;
+  /** T-576: the store asks for a manager PIN on a line cancel / line discount. False when the cached snapshot is older than the rule (nothing is asked until the next refresh). */
+  requirePinLineActions?: boolean;
   /** T-528: what the Payment screen prices and pays with. Null when the cached snapshot is older than the fields it needs (the tablet must go online once). */
   payment?: SnapshotPaymentPart | null;
 }
@@ -49,6 +52,8 @@ export interface DeviceSync {
   pending: number;
   sending: boolean;
   conflicts: number;
+  /** T-563: waiting sales made under another store's pairing that the server refused to take here (0 when none). */
+  heldSales: number;
   clearConflicts: () => void;
   refreshPending: () => Promise<void>;
   drainNow: () => Promise<void>;
@@ -64,7 +69,8 @@ function ordersPartOf(s: CachedSnapshot | null): SnapshotOrdersPart | null {
   const b = s?.body as (Partial<SnapshotOrdersPart> & Record<string, unknown>) | undefined;
   if (!b || !Array.isArray(b.stands) || !b.menu) return null;
   const warn = (b.rules as { tableWarnMinutes?: unknown } | undefined)?.tableWarnMinutes;
-  return { stands: b.stands, menu: b.menu, nextChangeAt: snapshotNextChangeAt(s), tableWarnMinutes: typeof warn === 'number' ? warn : null, payment: paymentPartOf(b) };
+  const requirePin = (b.rules as { requirePinLineActions?: unknown } | undefined)?.requirePinLineActions === true;
+  return { stands: b.stands, menu: b.menu, nextChangeAt: snapshotNextChangeAt(s), tableWarnMinutes: typeof warn === 'number' ? warn : null, requirePinLineActions: requirePin, payment: paymentPartOf(b) };
 }
 
 const sameEvents = (a: PosEvent[], b: PosEvent[]): boolean => a.length === b.length && a.every((e, i) => e.seq === b[i]!.seq);
@@ -80,6 +86,7 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
   const [pendingLoaded, setPendingLoaded] = useState(false);
   const [sending, setSending] = useState(false);
   const [conflicts, setConflicts] = useState(0);
+  const [heldOrigins, setHeldOrigins] = useState<string[]>([]);
   const [actor, setActor] = useState<OfflineActor | null>(null);
   const draining = useRef(false);
   const again = useRef(false);
@@ -121,6 +128,7 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
       });
       if (report.stopped === 'http' && report.status === 401) setUnpaired(true);
       if (report.conflicts.length > 0) setConflicts((n) => n + report.conflicts.length);
+      setHeldOrigins((prev) => nextHeldOrigins(prev, report));
       // Ask the poll to answer at once. The Orders tab keeps a dropped event on screen until that answer and the table's body have both landed (settle.ts).
       if (report.removed > 0) document.dispatchEvent(new CustomEvent(POS_STATE_REFRESH_EVENT, { detail: { waits: [] } }));
     } finally {
@@ -242,6 +250,7 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
     pending,
     sending,
     conflicts,
+    heldSales: heldSalesCount(pendingEvents, heldOrigins, (snapshot?.body as Partial<SnapshotBody> | undefined)?.device?.pairingId ?? null),
     clearConflicts: () => setConflicts(0),
     refreshPending,
     drainNow,

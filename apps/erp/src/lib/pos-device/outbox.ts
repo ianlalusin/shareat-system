@@ -12,18 +12,23 @@
 import {
   COUNTER_NEXT_SEQ,
   COUNTER_NEXT_TERMINAL_SEQ,
+  META_PAIRING_ID,
   META_STORE,
   OUTBOX_STORE,
   openDeviceDb,
 } from './db';
-import type {
-  DrainReport,
-  NewPosEvent,
-  PosEvent,
-  PosEventKind,
-  PosEventResult,
-  SendOutcome,
+import {
+  POS_PAIRING_MISMATCH,
+  type DrainReport,
+  type NewPosEvent,
+  type PosEvent,
+  type PosEventKind,
+  type PosEventResult,
+  type SendOutcome,
 } from './types';
+
+/** T-563: said when a till action is queued before the first snapshot told this tablet which pairing it is. */
+export const NO_PAIRING_BOUND_MESSAGE = 'This tablet has no pairing on record yet. Connect it to the internet and open the POS once, then sell.';
 
 /** The server's protocol limit for one `POST /api/pos/events` batch. */
 export const MAX_BATCH_SIZE = 100;
@@ -105,6 +110,10 @@ export async function enqueue(event: NewPosEvent): Promise<PosEvent> {
       const meta = tx.objectStore(META_STORE);
       const outbox = tx.objectStore(OUTBOX_STORE);
 
+      // T-563: the event is made under the pairing this tablet is bound to right now, read in the same transaction that numbers it.
+      const pairingId = await asPromise<string | undefined>(meta.get(META_PAIRING_ID));
+      if (typeof pairingId !== 'string' || pairingId === '') throw new Error(NO_PAIRING_BOUND_MESSAGE);
+
       const current = await asPromise<number | undefined>(meta.get(COUNTER_NEXT_SEQ));
       // `nextSeq` is the number to hand out next; absent means the queue has never been used.
       const seq = typeof current === 'number' ? current : 1;
@@ -112,6 +121,7 @@ export async function enqueue(event: NewPosEvent): Promise<PosEvent> {
 
       const stored: PosEvent = {
         seq,
+        pairingId,
         kind: event.kind,
         personId: event.personId,
         occurredAtDevice: event.occurredAtDevice,
@@ -253,6 +263,10 @@ let inFlight: Promise<DrainReport> | null = null;
 /**
  * Sends pending events, oldest first, in batches of at most 100, until the queue is empty or the
  * server says stop. Every stop keeps whatever the server did not accept.
+ *
+ * T-563: a batch holds events of ONE pairing (the one they were made under), the oldest pairing first. A server answer of 409
+ * POS_PAIRING_MISMATCH holds that pairing's events for this drain (they stay in the outbox; the next drain asks again, which is how a pair-back
+ * releases them) and the drain goes on to the next pairing. A row with no pairing (made before T-563) is never sent.
  */
 export function drain(
   send: (events: PosEvent[]) => Promise<SendOutcome>,
@@ -277,26 +291,39 @@ async function drainOnce(
   let removed = 0;
   let stateVersion: number | null = null;
   const conflicts: PosEventResult[] = [];
+  const held = new Set<string>();
+  const report = (stopped: DrainReport['stopped'], status?: number): DrainReport => ({
+    stopped,
+    ...(status === undefined ? {} : { status }),
+    sent,
+    removed,
+    conflicts,
+    stateVersion,
+    heldOrigins: [...held],
+  });
 
   for (;;) {
-    const batch = await listPending(batchSize);
-    if (batch.length === 0) {
-      return { stopped: 'empty', sent, removed, conflicts, stateVersion };
-    }
+    const sendable = (await listPending(Number.MAX_SAFE_INTEGER)).filter((e) => typeof e.pairingId === 'string' && !held.has(e.pairingId));
+    const first = sendable[0];
+    if (!first) return report('empty');
+    const origin = first.pairingId;
+    const batch = sendable.filter((e) => e.pairingId === origin).slice(0, batchSize);
 
     let outcome: SendOutcome;
     try {
       outcome = await send(batch);
     } catch {
-      return { stopped: 'network', sent, removed, conflicts, stateVersion };
+      return report('network');
     }
 
     if (outcome.kind === 'http') {
-      return { stopped: 'http', status: outcome.status, sent, removed, conflicts, stateVersion };
+      if (outcome.status === 409 && outcome.code === POS_PAIRING_MISMATCH && origin !== undefined) {
+        held.add(origin);
+        continue;
+      }
+      return report('http', outcome.status);
     }
-    if (outcome.kind === 'network') {
-      return { stopped: 'network', sent, removed, conflicts, stateVersion };
-    }
+    if (outcome.kind === 'network') return report('network');
 
     stateVersion = outcome.stateVersion;
     const applied = await applyResults(outcome.results);
@@ -306,8 +333,6 @@ async function drainOnce(
 
     // A retry, or a short answer, means the server did not decide the rest of this batch: stop and
     // let the next drain pick them up. Continuing would resend events it never judged.
-    if (applied.retryFrom !== null || outcome.results.length < batch.length) {
-      return { stopped: 'retry', sent, removed, conflicts, stateVersion };
-    }
+    if (applied.retryFrom !== null || outcome.results.length < batch.length) return report('retry');
   }
 }

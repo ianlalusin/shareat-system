@@ -6,6 +6,7 @@
  *  A5  mergeItems: service <-> non-service refused; differing categories: the winner keeps its own, the audit row records the loser's.
  *  A6  a service is never a variation (createItem, setItemVariantOf, requestItem), and a service is never a variation parent.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
@@ -20,7 +21,7 @@ import { testItemCode } from './_fixtures/item-code';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: database name must contain "_test".');
 const sql = postgres(url, { max: 4 });
 afterAll(async () => {
   await sql.end({ timeout: 5 });

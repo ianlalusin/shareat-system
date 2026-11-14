@@ -16,6 +16,8 @@
  *   registry kind missing / wrong counterparty column -> G1; classification missing / purge -> G2; the stale "only the two shipment tables" comment -> G1b;
  *   CROSS_ORG_BY_DESIGN grows -> N1; NO_FK entry missing -> N1; the ops README row missing -> O1; a table created in the scratch DB differently from the catalog -> L2.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -32,8 +34,8 @@ import { dbUrl, dropDb, MIGRATIONS_FOLDER, withAdmin } from './t398-s3-fixture';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 const sql = postgres(url, { max: 3 });
 afterAll(async () => {
@@ -214,7 +216,7 @@ describe('G -- registrations: RLS registry kind, cutover classification, census,
     expect(e, 'RED today: the session_id declaration is missing').toBeDefined();
     expect(String(e!.kind)).toBe('snapshot');
     expect(e!.reason.length).toBeGreaterThan(20);
-    expect(NO_FK_REFERENCES.length, 'NO_FK_PIN 30 -> 31').toBe(31);
+    expect(NO_FK_REFERENCES.length, 'NO_FK_PIN 31 -> 33 (T-557 0249)').toBe(33);
   });
 
   it.each(TABLES)('G2 %s is classified in CUTOVER_CLASSIFICATION as keep, with a reason (QO-7: configuration / append-only history PG is owed)', (t) => {

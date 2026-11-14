@@ -47,7 +47,8 @@ export function disclosureBlocks(source: string): Array<{ at: number; text: stri
 /** The disclosures that hold nothing but an edit trigger — the defect T-571 removes. */
 export function loneEditDisclosures(source: string): number[] {
   return disclosureBlocks(source)
-    .filter((b) => b.text.includes('<EditableRecord'))
+    // A card that ALSO holds a form of its own (settings/pos-link: an unlinked store shows a Save form) is a real disclosure.
+    .filter((b) => b.text.includes('<EditableRecord') && !b.text.includes('<form') && !b.text.includes('type="submit"'))
     .map((b) => source.slice(0, b.at).split('\n').length);
 }
 
@@ -59,6 +60,8 @@ describe('a card that opens to reveal one button', () => {
     const good = ['<details>', '  <summary>Add</summary>', '  <form><input name="a" /></form>', '</details>'].join('\n');
     expect(loneEditDisclosures(bad)).toEqual([1]);
     expect(loneEditDisclosures(good)).toEqual([]);
+    const mixed = ['<details>', '  <EditableRecord x />', '  <Button type="submit">Save</Button>', '</details>'].join('\n');
+    expect(loneEditDisclosures(mixed)).toEqual([]);
   });
 
   it('no page or component wraps <EditableRecord> in a disclosure', () => {

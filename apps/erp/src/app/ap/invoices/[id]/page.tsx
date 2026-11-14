@@ -8,9 +8,10 @@ import { previewInvoiceDrafts } from '@shareat/domain';
 import { buildDraftsFacts, buildReceiptFacts, buildVerifySupplierFacts } from '@shareat/domain/business-rules';
 import { canViewPhoto, photoKinds } from '../../../../lib/photo-link';
 import { peso } from '../../../../lib/format';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
+import { canReadAtStore } from '@/lib/can-read-at-store';
 import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction, voidPaymentAction, recordInvoiceExpenseAction } from '../../actions';
-import { getInvoice, getSupplier, listCategoriesGrouped, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
+import { AP_STORE_CAPABILITIES, getInvoice, getSupplier, listCategoriesGrouped, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
 import { withOrgPrincipal } from '../../../expenses/lib';
 import { canOverrideClosedMonth } from '../../../expenses/reimbursements/lib';
 import { closedMonthOf, closedMonths } from '../../../../lib/period-override';
@@ -58,11 +59,13 @@ export default async function InvoiceDetailPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/ap/invoices/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/ap/invoices/${id}`);
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
   const invoice = await getInvoice(orgId, id);
-  if (!invoice) notFound();
+  // T-577 (DEF-834): an invoice outside the viewer's stores is the same not-found as a forged id.
+  if (!invoice || !(await withOrgPrincipal(orgId, (tx) => canReadAtStore(tx, actor, invoice.storeId, AP_STORE_CAPABILITIES)))) notFound();
   const supplier = await getSupplier(orgId, invoice.supplierId);
 
   const [capacity, linkedExpenses, categories, moneyLines] = await Promise.all([
@@ -341,7 +344,7 @@ return (
         <section className="space-y-2">
           <h2 className="font-medium">Lines</h2>
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[560px] border-collapse text-sm">
+            <table aria-label="Invoice lines" className="w-full min-w-[560px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th className="px-3 py-2 font-medium">Item</th>
@@ -381,7 +384,7 @@ return (
             instant you verify.
           </p>
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+            <table aria-label="What verifying will post" className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th className="px-3 py-2 font-medium">Category</th>

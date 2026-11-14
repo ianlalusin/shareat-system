@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-558 R1 (TESTER) - `readPosRules` carries the tolerance, and the writer enforces the ceiling. docs/tasks/558-pos-sale-variance-tolerance.md R1.
  *   - `readPosRules` returns `saleVarianceToleranceCentavos: bigint` (default 1n = PHP 0.01), dated like every other rule;
@@ -15,8 +17,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { closeDb, RefusalError } from '@shareat/db';

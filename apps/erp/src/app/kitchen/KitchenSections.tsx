@@ -105,7 +105,7 @@ export function KitchenSections({
                       <Input name="name" defaultValue={s.name} className="mt-1 w-full" />
                     </Field>
                     <Field label="Minutes to cook" hint="How long a ticket may wait before it shows as late.">
-                      <Input name="slaMinutes" defaultValue={String(s.slaMinutes)} className="mt-1 w-full tabular-nums" />
+                      <Input name="slaMinutes" inputMode="numeric" defaultValue={String(s.slaMinutes)} className="mt-1 w-full tabular-nums" />
                     </Field>
                     <Field label="Print if the screen is down" hint="Prints the ticket on paper when the kitchen screen cannot be reached.">
                       <Select name="printOnOutage" defaultValue={s.printOnOutage ? 'yes' : 'no'} className="mt-1 w-full">
@@ -114,7 +114,7 @@ export function KitchenSections({
                       </Select>
                     </Field>
                     <Field label="Order on the screen" hint="Smaller numbers come first.">
-                      <Input name="sortOrder" defaultValue={String(s.sortOrder)} className="mt-1 w-full tabular-nums" />
+                      <Input name="sortOrder" inputMode="numeric" defaultValue={String(s.sortOrder)} className="mt-1 w-full tabular-nums" />
                     </Field>
                   </FormGrid>
                   <p className="mt-3 text-xs text-neutral-500">Retire is refused while any item still cooks at this station. Move those items first.</p>
@@ -132,7 +132,7 @@ export function KitchenSections({
               <Input name="name" placeholder="Grill, Drinks, Dessert…" className="mt-1 w-full" />
             </Field>
             <Field label="Minutes to cook" hint="Leave blank for 10.">
-              <Input name="slaMinutes" className="mt-1 w-full tabular-nums" />
+              <Input name="slaMinutes" inputMode="numeric" className="mt-1 w-full tabular-nums" />
             </Field>
           </FormGrid>
           <Button type="submit" variant="secondary">

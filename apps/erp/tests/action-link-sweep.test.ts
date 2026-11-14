@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 112 FAIL / 50 UNRESOLVED', () => {
+  it('accepted-baseline totals: 103 FAIL / 53 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -238,8 +238,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 116 -> 115 FAIL, T-520 (5 Nov, BOSS approved): /ap's invoice table replaced the amber banner's 20px inline link; baseline entry app/ap/page.tsx removed. UNRESOLVED unmoved at 51.
     // 51 -> 50 UNRESOLVED, T-511 S6a: app/channel-settlements/SettlementForm.tsx lost its intrinsic checkbox (baseline entry removed); FAIL unmoved at 115; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
     // 115 -> 113 FAIL, 50 -> 49 UNRESOLVED, T-550 (row 452): the retired /inventory/pos-map and /inventory/pos-usage pages left the baseline (two 20px FAIL entries, one intrinsic-checkbox UNRESOLVED entry).
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 112, unresolved: 50 });
-    // 113 -> 112 FAIL, T-571 (12 Nov 2026): the /ap/suppliers/[id] collapsed card holding one pencil button went; its 20px <summary> left the census (baseline entry trimmed). UNRESOLVED unmoved at 50.
+    // 113 -> 104 FAIL, 50 -> 53 UNRESOLVED, T-568 S1 (groups pass): the Inventory landing's eight inline 20px shortcut links became nav pills (baseline entry app/inventory/page.tsx removed, -8, one more left the census); the shared Table surface moved three controls (the Users Manage link, the findings summary, the staff roster) out of static reach into UNRESOLVED (baselined). No control became smaller; re-measured by runCensus(), 12 Nov 2026.
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 103, unresolved: 53 });
+    // 104 -> 103 FAIL, T-571 (12 Nov 2026): the /ap/suppliers/[id] collapsed card holding one pencil button went; its 20px <summary> left the census (baseline entry trimmed). UNRESOLVED unmoved at 53.
     // FAIL unmoved at 113, 49 -> 50 UNRESOLVED, T-546 Tills (+7 controls, +1 radio box in app/admin/pos-tablets/TillsSection.tsx baselined in touch-target-baseline.json); re-measured after rebase on main, 8 Nov 2026, BOSS approved.
   });
 
@@ -532,8 +533,14 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1595 -> 1602, T-546 Tills (+7 controls); re-measured after rebase on main, 8 Nov 2026, BOSS approved.
     // 1602 -> 1614, +12 T-529 Kitchen/Refills controls; re-measured after rebase on main, 8 Nov 2026, BOSS approved.
     // 1614 -> 1626, +12 T-531 till and day-close controls, all PASS (FAIL/UNRESOLVED buckets unmoved); re-measured on main ff553f6, 11 Nov 2026, BOSS approved.
-    // 1626 -> 1625, T-571 (12 Nov 2026): that same <summary> left the census; measured by runCensus().
-    expect(results.length).toBe(1625);
+    // 1626 -> 1631, +5 T-569 POS data page controls, all PASS
+    // 1631 -> 1632, T-566 (P-007, Ian 11 Nov): +1 compliant control, the refill flavour pill <button aria-pressed> on /pos Refills (48 px); FAIL/UNRESOLVED unmoved at 113/50 (asserted above); measured by CI runCensus().
+    // 1626 -> 1628, T-568 S1 (groups pass): +2 net controls across the table/card pass; FAIL/UNRESOLVED moved as noted above; re-measured by runCensus(), 12 Nov 2026.
+    // 1628 -> 1629, T-568 S2: the admin PIN confirmation dialog adds two buttons (Cancel, Yes) and the PIN row's Button became a SubmitButton (not a census candidate), net +1, all PASS at 44px; FAIL/UNRESOLVED unmoved; re-measured by runCensus().
+    // 1635 -> 1636, T-575 (13 Nov 2026): +1 compliant control, the On/Off <select> the business-rules screen shows for a `flag` rule (T-576 will be its first key); FAIL/UNRESOLVED unmoved; re-measured by runCensus().
+    // 1636 -> 1638, T-576 (13 Nov 2026): +2 compliant controls, the manager-PIN box (data-erp-size="free", min-h-12) in LineApprovalField and the confirm button of ManagerPinDialog (min-h-16); FAIL/UNRESOLVED unmoved (asserted above); re-measured by runCensus().
+    // 1638 -> 1637, T-571 (12 Nov 2026): the /ap/suppliers/[id] collapsed-card <summary> left the census; measured by runCensus().
+    expect(results.length).toBe(1637);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

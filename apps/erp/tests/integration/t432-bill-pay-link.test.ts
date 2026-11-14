@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -21,8 +23,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const H = vi.hoisted(() => ({ actor: null as null | { orgId: string; personId: string } }));
@@ -206,7 +208,8 @@ describe('case 19 - the link is gated by record_ap_payment at the bill\'s store 
     const sup = await f.mkSupplier(uid('S19b'));
     const b = await verifiedBill(f, sup, '2000.00');
     expect(payLinks(await renderInvoice(f.staff, b.invoiceId))).toEqual([]);
-    expect(payLinks(await renderInvoice(f.managerB, b.invoiceId))).toEqual([]);
+    // T-577: another store's manager no longer reads the bill at all (the same not-found as a forged id), so there is no link to see.
+    await expect(renderInvoice(f.managerB, b.invoiceId)).rejects.toThrow('NEXT_NOT_FOUND');
   });
 });
 

@@ -4,6 +4,8 @@
  * `column "last_name" of relation "persons" does not exist` (D3's all-NULL leg is the only one that passes before 0207).
  * Fixtures run on any `_test` DB.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -11,8 +13,8 @@ import postgres from 'postgres';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 const sql = postgres(url, { max: 5 });
 let seq = 0;

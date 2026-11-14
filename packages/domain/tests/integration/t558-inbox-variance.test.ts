@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-558 R2 (TESTER) - the T-525 inbox and a short-paid offline sale: P-002. docs/tasks/558-pos-sale-variance-tolerance.md R2 ("The T-525 inbox needs no change: a short payment is
  * no longer a refusal, so it is no longer quarantined"), bible row 453.
@@ -17,21 +19,24 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { applyPosEvents, replayQuarantinedEvent } from '../../src/pos/inbox';
 import {
-  asOrg, closeAll, ev, eventsOf, fixture, linesAddedPayload, newStand, nowIso, receiptOfSession, signedIn, sql, standOpenedPayload, uuid, type Ev, type Fx,
+  asOrg, closeAll, ev, eventsOf, fixture, linesAddedPayload, newStand, receiptOfSession, signedIn, sql, standOpenedPayload, uuid, type Ev, type Fx,
 } from './_fixtures/t525-pos';
-import { auditRowsOf, hundredItem, jsonText, priceOne, ratesWith } from './_fixtures/t558-variance';
+import { auditRowsOf, D1, hundredItem, jsonText, manila, priceOne, ratesWith } from './_fixtures/t558-variance';
 
 afterAll(closeAll);
 
 const VARIANCE = 'pos.sale_payment_variance';
 const SHORTFALL = 'pos.sale_payment_shortfall';
-const RULES = ratesWith(1n);
+// The clock is pinned: the 100.00 offer takes effect at the DATABASE's now(), so an event stamped with the Node clock a few ms earlier (or any pinned past time) found
+// "item not on this store's menu". Every device time below is this instant, on a Manila day after the fixture, as the sibling t558 files do.
+const AT = manila(D1, '12:00');
+const RULES = { ...ratesWith(1n), now: () => AT };
 let terminalSeq = 9000;
 
 /** The inbox world: a test-mode store, the cashier signed in on the tablet, and the 100.00 item. */
@@ -48,14 +53,16 @@ async function dayParts(f: Fx, hundred: Awaited<ReturnType<typeof hundredItem>>,
   const stand = await newStand(f);
   const priced = priceOne('100.00', 1, lineId);
   const sale = {
-    sessionId, receiptId: uuid(), terminalNo: 1, terminalSeq: ++terminalSeq, issuedAtDevice: nowIso(), offline: true,
+    sessionId, receiptId: uuid(), terminalNo: 1, terminalSeq: ++terminalSeq, issuedAtDevice: AT.toISOString(), offline: true,
     device: { subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, lines: priced.lines.map((l) => ({ lineId: l.lineId, gross: l.gross, discountTotal: l.discountTotal, net: l.net })) },
     payments: [{ tenderId: f.cash, amount: cash, toCheck: false }],
     seniors: [],
   };
-  const open = ev(firstSeq, 'stand.opened', f.counterId, standOpenedPayload(sessionId, stand.id));
-  const lines = ev(firstSeq + 1, 'lines.added', f.counterId, linesAddedPayload(sessionId, [{ lineId, item: hundred, qty: 1 }]));
-  const saleEvent = ev(firstSeq + 2, 'sale.completed', f.counterId, sale);
+  const stamp = AT.toISOString();
+  const open = ev(firstSeq, 'stand.opened', f.counterId, { ...standOpenedPayload(sessionId, stand.id), openedAtDevice: stamp }, AT);
+  const added = linesAddedPayload(sessionId, [{ lineId, item: hundred, qty: 1 }]);
+  const lines = ev(firstSeq + 1, 'lines.added', f.counterId, { ...added, lines: added.lines.map((l) => ({ ...l, addedAtDevice: stamp })) }, AT);
+  const saleEvent = ev(firstSeq + 2, 'sale.completed', f.counterId, sale, AT);
   return { sessionId, receiptId: sale.receiptId, open, lines, saleEvent };
 }
 const send = (f: Fx, events: Ev[]) => applyPosEvents({ pairing: { pairingId: f.pairingId, orgId: f.orgId, storeId: f.storeId }, events }, RULES);
@@ -104,7 +111,7 @@ describe('R2 inbox - the replay of the P-002 case is applied, not refused again'
     expect(await receiptOfSession(d.sessionId)).toBeUndefined();
 
     // The table arrives (the later events of the queue).
-    const later = await send(f, [ev(10, 'stand.opened', f.counterId, d.open.payload), ev(11, 'lines.added', f.counterId, d.lines.payload)]);
+    const later = await send(f, [ev(10, 'stand.opened', f.counterId, d.open.payload, AT), ev(11, 'lines.added', f.counterId, d.lines.payload, AT)]);
     expect(statuses(later)).toEqual(['applied', 'applied']);
 
     const [row] = (await eventsOf(f)).filter((x) => x.kind === 'sale.completed');

@@ -130,7 +130,7 @@ async function seatAndDiscount(twoDiners: boolean): Promise<Table> {
     }),
     ...discounts.map((d: { kind: string; personId: string; occurredAtDevice: string; payload: Record<string, unknown> }, i: number) => ({ seq: i + 2, ...d })),
   ];
-  const res = await callRoute(EVENTS, 'POST', tabletCookie(f), { events });
+  const res = await callRoute(EVENTS, 'POST', tabletCookie(f), { pairingId: f.pairingId, events });
   expect(res.status).toBe(200);
   expect(((await res.json()) as { results: { status: string }[] }).results.map((r) => r.status)).toEqual(events.map(() => 'applied'));
   return { f, sessionId, cookies: `${tabletCookie(f)}; ${SESSION_COOKIE}=${session}`, lineIds, presetId: birthday!.id };
@@ -176,7 +176,7 @@ async function pay(t: Table, o: { seniors: unknown[]; online?: boolean; terminal
   });
   o.tweak?.(event.payload);
   // The drain sends the outbox in order: the pending changes first, the sale last.
-  const res = await callRoute(EVENTS, 'POST', tabletCookie(t.f), { events: [...pending, { seq: 100, ...event }] });
+  const res = await callRoute(EVENTS, 'POST', tabletCookie(t.f), { pairingId: t.f.pairingId, events: [...pending, { seq: 100, ...event }] });
   expect(res.status).toBe(200);
   const all = ((await res.json()) as { results: { seq: number; status: string; error?: string }[] }).results;
   for (const r of all.slice(0, -1)) expect(r.status, `a pending change was applied: ${JSON.stringify(r)}`).toBe('applied');
@@ -354,7 +354,7 @@ describe('a bundle sold to more heads than it covers, paid offline (T-528 extra-
 
     const receiptId = uuid();
     const sale = saleCompletedEvent({ personId: f.counterId, sessionId, receiptId, terminalNo: 1, terminalSeq: 4301, now: new Date(), online: false, priced, tenders: snapshot.tenders, seniors: [], rows: [{ tenderId: f.cash, amount: '1600.00' }] });
-    const res = await callRoute(EVENTS, 'POST', tabletCookie(f), { events: [opened, { seq: 2, ...sale }] });
+    const res = await callRoute(EVENTS, 'POST', tabletCookie(f), { pairingId: f.pairingId, events: [opened, { seq: 2, ...sale }] });
     expect(res.status).toBe(200);
     const results = ((await res.json()) as { results: { status: string; error?: string }[] }).results;
     expect(results.map((r) => r.status), JSON.stringify(results)).toEqual(['applied', 'applied']);

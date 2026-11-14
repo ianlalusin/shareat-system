@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -12,8 +14,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} — name must contain "_test".`);
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
@@ -36,6 +38,7 @@ import {
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import { testItemCode } from './_fixtures/item-code';
+import { heldRace } from './_fixtures/held-race';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -474,6 +477,23 @@ describe('internal — §4, T-173 backwards', () => {
     expect(legs.find((l) => l.code === '1250')).toMatchObject({ credit: '400.00' });
     // ⛔ Asserted by absence — the tempting implementation treats every return the same way.
     expect(legs.filter((l) => ['4950', '2140', '1110', '1140'].includes(l.code))).toHaveLength(0);
+  });
+
+  it('⭐ T-574: two returns of 6 against an internal transfer of 10 → exactly one succeeds (an internal transfer has no charge to queue on)', async () => {
+    const f = await fixture('internalrace');
+    const t = await transferAndReceive(f, { qty: '10', rate: '100' });
+    // Plenty of other stock at the branch, so on-hand never refuses: only the line cap can.
+    await stock(f, f.otherStoreId, f.otherLocationId, t.itemId, '30');
+    const ret = (tx: Tx) =>
+      recordCustomerReturn(tx, { tradeOrderId: t.orderId, returnedOn: '2026-01-15', reason: 'Overstocked.', lines: [{ tradeOrderLineId: t.lineId, quantity: '6' }], actor: f.manager });
+
+    const results = await heldRace(asOrg, f.orgId, ret, ret);
+
+    expect(results.filter((r) => r.ok), JSON.stringify(results)).toHaveLength(1);
+    const refused = results.find((r) => !r.ok);
+    expect(refused && !refused.ok && refused.reason).toBe('only 4.000 of this line is left to return.');
+    const [cnt] = await sql<{ n: string }[]>`select count(*)::text as n from customer_return_lines l join customer_returns r on r.id = l.return_id where r.org_id = ${f.orgId}`;
+    expect(cnt!.n).toBe('1');
   });
 
   it('11. ⛔ a store_credit settlement on an internal return is refused BY THE DATABASE', async () => {

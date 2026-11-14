@@ -3,11 +3,12 @@
  * database: 50 wrong PINs stop a store (a correct PIN is then refused), a manager reopens it, and the
  * correct PIN works again. Refuses to run unless TEST_DATABASE_URL names a `_test` database.
  */
+import { isTestDatabaseUrl } from './lib/test-db-name.mjs';
 import { config } from 'dotenv';
 config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
-if (!url || !/shareat_test|_test(\?|$)/.test(url)) {
+if (!url || !isTestDatabaseUrl(url)) {
   console.error('TEST_DATABASE_URL must be set and name a "_test" database. Refusing to run.');
   process.exit(1);
 }

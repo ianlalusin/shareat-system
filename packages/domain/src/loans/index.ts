@@ -15,7 +15,7 @@ import { compare, decimal, money, subtract, ZERO, type Decimal, type Money } fro
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
-import { refuse } from '../shared/refusal';
+import { gone, refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { LOAN_ADD_RULES, LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REPAYMENT_RULES } from '../field-rules/loans';
 import { postEntry } from '../ledger/post-entry';
@@ -120,9 +120,13 @@ export async function disburseLoan(
   input: { requestId: string; loanId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string }> {
   const run = async (trx: Tx) => {
-    const loan = await loansRepo.getById(trx, actor.orgId, input.loanId);
+    const seen = await loansRepo.getById(trx, actor.orgId, input.loanId);
+    if (!seen) throw gone(`disburseLoan: loan ${input.loanId} does not exist.`, 'loan');
+    await authorize(trx, actor, 'record_ap_payment', { storeId: seen.storeId });
+    // T-573: serialise on the loan BEFORE its position is read - after authorize, so a non-holder learns nothing.
+    // Re-read UNDER the lock: a writer that queued ahead may have changed `status`, and `FOR UPDATE` returns its committed row.
+    const loan = await loansRepo.lockForPayment(trx, actor.orgId, seen.id);
     if (!loan) throw new Error(`disburseLoan: loan ${input.loanId} does not exist.`);
-    await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
     // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
     assertFieldRules(LOAN_DRAW_RULES, { amount: input.amount, intoMoneyAccountId: input.intoMoneyAccountId, on: input.on });
     const requestId = requireRequestId('disburseLoan', input.requestId);
@@ -212,9 +216,14 @@ export async function recordLoanPayment(
   },
 ): Promise<RecordPaymentResult> {
   const run = async (trx: Tx) => {
-    const loan = await loansRepo.getById(trx, actor.orgId, input.loanId);
+    const seen = await loansRepo.getById(trx, actor.orgId, input.loanId);
+    if (!seen) throw gone(`recordLoanPayment: loan ${input.loanId} does not exist.`, 'loan');
+    await authorize(trx, actor, 'record_ap_payment', { storeId: seen.storeId });
+    // T-573 (DEF-840): two payments at once must not read the same balance and the same "since" date. The lock is held to
+    // commit, so the second waits, then reads the first's payment. After authorize (DEF-556 order), before positionOf.
+    // Re-read UNDER the lock: a writer that queued ahead may have changed `status`, and `FOR UPDATE` returns its committed row.
+    const loan = await loansRepo.lockForPayment(trx, actor.orgId, seen.id);
     if (!loan) throw new Error(`recordLoanPayment: loan ${input.loanId} does not exist.`);
-    await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
     // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
     assertFieldRules(LOAN_PAYMENT_RULES, { amount: input.amount, fromMoneyAccountId: input.fromMoneyAccountId, on: input.on });
 
@@ -241,7 +250,7 @@ export async function recordLoanPayment(
     const accrued = accruedInterest({
       outstanding,
       principal: money(loan.principalAmount),
-      ratePercent: Number(loan.interestRate),
+      ratePercent: loan.interestRate,
       ratePeriod: loan.ratePeriod,
       method: loan.interestMethod,
       since,
@@ -349,9 +358,13 @@ export async function reverseLoanEntry(
   input: { loanId: string; entryId: string; reason: string },
 ): Promise<{ reversalEntryId: string; /** false: the entry was already reversed, nothing new was written (T-412). */ created: boolean }> {
   const run = async (trx: Tx) => {
-    const loan = await loansRepo.getById(trx, actor.orgId, input.loanId);
+    const seen = await loansRepo.getById(trx, actor.orgId, input.loanId);
+    if (!seen) throw gone(`reverseLoanEntry: loan ${input.loanId} does not exist.`, 'loan');
+    await authorize(trx, actor, 'record_ap_payment', { storeId: seen.storeId });
+    // T-573: the same lock as a payment - the status flip below reads the position this reversal changes.
+    // Re-read UNDER the lock: a writer that queued ahead may have changed `status`, and `FOR UPDATE` returns its committed row.
+    const loan = await loansRepo.lockForPayment(trx, actor.orgId, seen.id);
     if (!loan) throw new Error(`reverseLoanEntry: loan ${input.loanId} does not exist.`);
-    await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
 
     const reason = input.reason.trim();
     if (!reason) throw new Error('reverseLoanEntry: a reason is required.');

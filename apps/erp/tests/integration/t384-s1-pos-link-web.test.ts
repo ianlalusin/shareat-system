@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -29,8 +31,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const h = vi.hoisted(() => ({
@@ -199,11 +201,11 @@ async function render(f: F, params: Record<string, string> = {}, methods: string
   return renderToStaticMarkup(el as never);
 }
 
-/** The markup of one store's card: from its <section id="store-ID"> to the next card (or the end). */
+/** The markup of one store's card: from its <details id="store-ID"> to the next card (or the end). */
 function cardOf(html: string, storeId: string): string {
-  const start = html.indexOf(`<section id="store-${storeId}"`);
+  const start = html.indexOf(`<details id="store-${storeId}"`);
   if (start < 0) return '';
-  const next = html.indexOf('<section id="store-', start + 10);
+  const next = html.indexOf('<details id="store-', start + 10);
   return html.slice(start, next < 0 ? undefined : next);
 }
 const hiddenValue = (body: string, n: string): string | undefined => {
@@ -328,7 +330,7 @@ describe('W2 - only accounts a wallet can use (R6, DEF-611)', () => {
 
 // ---------------------------------------------------------------------------------------------------------------
 describe('W3 - feedback lands on the store card (R7, DEF-612)', () => {
-  const head = (html: string) => plain(html.slice(0, html.indexOf('<section id="store-')));
+  const head = (html: string) => plain(html.slice(0, html.indexOf('<details id="store-')));
 
   it("W3a: an error for store A renders inside A's card with role=alert, not at the top and not on another card", async () => {
     const f = await fixture('w3a');
@@ -511,7 +513,8 @@ describe('W6 - every tender is an EditableRecord (A0 L1, L2, L6)', () => {
     const f = await fixture('w6e');
     await sql`update tenders set is_active = false, updated_at = now() where id = ${f.qrTender}`;
     const card = cardOf(await render(f), f.storeId);
-    const det = /<details\b(?![^>]*\bopen\b)[^>]*>[\s\S]*?<\/details>/.exec(card)?.[0];
+    // Anchored on its summary: the store card is itself a closed <details> (T-568), so "first closed details" is the card.
+    const det = /<details\b(?![^>]*\bopen\b)[^>]*>\s*<summary[^>]*>Retired tenders[\s\S]*?<\/details>/.exec(card)?.[0];
     expect(det, 'a closed <details> for retired tenders').toBeDefined();
     expect(plain(det!)).toMatch(/Retired tenders \(1\)/);
     expect(plain(det!)).toContain('Restore');

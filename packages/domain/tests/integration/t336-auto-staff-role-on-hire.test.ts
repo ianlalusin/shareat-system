@@ -11,6 +11,8 @@
  * contrast is still useful (cases b, d) it is kept as an explicit, clearly-labeled "what the guard
  * prevents" call to `accessRepo.insertRole` made AFTER the real hire, never inside it.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -22,8 +24,8 @@ import { createEmployment } from '../../src/people';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} — name must contain "_test".`);
 }
 const sql = postgres(url, { max: 5 });
 let seq = 0;

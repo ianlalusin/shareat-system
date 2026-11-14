@@ -18,6 +18,8 @@ import {
 } from '@shareat/db';
 import { compare, money, ZERO as ZERO_MONEY } from '@shareat/core/money';
 import { withOrgPrincipal } from '../expenses/lib';
+import { heldStoreIdsOrAll } from '../../lib/held-stores';
+import type { Actor, Capability } from '@shareat/auth';
 
 export { peso } from '../../lib/format';
 export { listStores, listActivePersons, withOrgPrincipal } from '../expenses/lib';
@@ -35,13 +37,21 @@ export interface CashRequestListRow extends CashRequestRow {
   float: FloatPosition;
 }
 
-export async function listRegister(orgId: string): Promise<CashRequestListRow[]> {
+/** T-577 (DEF-834): the store-scoped capabilities this screen's own actions check (the ask, the decision). A viewer reads requests at stores where they hold one. */
+export const CASH_REQUEST_CAPABILITIES: readonly Capability[] = ['create_expense', 'approve_expense'];
+
+/** The store ids the register may show; `undefined` = every store (no filtering). See `heldStoreIdsOrAll`. */
+export async function cashRequestStoreIds(actor: Actor): Promise<readonly string[] | undefined> {
+  return withOrgPrincipal(actor.orgId, (tx) => heldStoreIdsOrAll(tx, actor, CASH_REQUEST_CAPABILITIES));
+}
+
+export async function listRegister(orgId: string, storeIds?: readonly string[]): Promise<CashRequestListRow[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const [rows, floats] = await Promise.all([
       cashRequestsRepo.listRequests(tx, orgId),
       cashRequestsRepo.floatsByRequest(tx, orgId),
     ]);
-    return rows.map((r) => ({ ...r, float: floats.get(r.id) ?? ZERO }));
+    return rows.filter((r) => !storeIds || storeIds.includes(r.storeId)).map((r) => ({ ...r, float: floats.get(r.id) ?? ZERO }));
   });
 }
 

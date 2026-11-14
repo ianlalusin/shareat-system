@@ -5,6 +5,8 @@
  * rewritten gross identity exist, and `stored_files_purpose_check` still lists the 5 original purposes.
  * Every test below fails on THAT, not on a typo: the column/table names are the ones the spec names.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -16,8 +18,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const sql = postgres(url, { max: 5 });

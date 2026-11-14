@@ -17,6 +17,7 @@
  *   P6 the same name twice in one file -> second row 'duplicate_in_file'; blocks Confirm.
  *   P7 a retired (inactive) category is "category_not_found". An item name starting = + - @ is 'invalid' (never stored).
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
@@ -37,7 +38,7 @@ const d = domain as unknown as {
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: database name must contain "_test".');
 const sql = postgres(url, { max: 4 });
 afterAll(async () => {
   await sql.end({ timeout: 5 });

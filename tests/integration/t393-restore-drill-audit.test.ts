@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../helpers/redact-db-url';
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import net from 'node:net';
@@ -27,8 +29,8 @@ config({ path: '.env.local' });
 
 const adminUrl = process.env.TEST_DATABASE_URL;
 if (!adminUrl) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(adminUrl)) {
-  throw new Error(`Refusing to run against ${adminUrl.replace(/:\/\/[^@]*@/, '://***@')} - name must contain "_test".`);
+if (!isTestDatabaseUrl(adminUrl)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(adminUrl)} - name must contain "_test".`);
 }
 
 import { closeDb, withOrgPrincipal } from '@shareat/db';

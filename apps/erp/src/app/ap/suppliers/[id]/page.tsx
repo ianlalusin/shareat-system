@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation';
 import { peso } from '../../../../lib/format';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { editSupplierAction, recordPaymentAction, autoAllocatePaymentAction } from '../../actions';
-import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor, storesWithOpenItems, today } from '../../lib';
+import { apStoreIds, getSupplier, getPosition, getPositionInScope, listOpenItems, listInvoices, moneyAccountsFor, storesWithOpenItems, today } from '../../lib';
 import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } from '@shareat/db';
 import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL, maskAccountNumber } from '../../lib';
 import { Page } from '@/components/shell/Page';
@@ -36,16 +36,19 @@ export default async function SupplierDetailPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/ap/suppliers/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/ap/suppliers/${id}`);
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
   const supplier = await getSupplier(orgId, id);
   if (!supplier) notFound();
 
+  // T-577 (DEF-834): the supplier is org-level; its balance, invoices and open items are the viewer's stores' only (undefined = every store).
+  const storeIds = await apStoreIds(actor);
   const [balance, invoices, storeOptions] = await Promise.all([
-    getPosition(orgId, id),
-    listInvoices(orgId, { supplierId: id }),
-    storesWithOpenItems(orgId, id),
+    getPositionInScope(orgId, id, storeIds),
+    listInvoices(orgId, { supplierId: id, ...(storeIds ? { storeIds } : {}) }),
+    storesWithOpenItems(orgId, id, storeIds),
   ]);
   // T-389: the typing (or the "too long to keep" notice) for THIS supplier's edit record, from the signed flash.
   const typed = typedFor(sp, SUPPLIER_EDIT, supplier.id, actor.personId);
@@ -261,7 +264,7 @@ export default async function SupplierDetailPage({
         </h2>
         {openItems.length > 0 ? (
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+            <table aria-label="Open items" className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th className="px-3 py-2 font-medium">Expense</th>
@@ -318,7 +321,7 @@ export default async function SupplierDetailPage({
         <h2 className="font-medium">Invoices</h2>
         {invoicesNewestFirst.length > 0 ? (
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+            <table aria-label="Invoices" className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th className="px-3 py-2 font-medium">Invoice no.</th>

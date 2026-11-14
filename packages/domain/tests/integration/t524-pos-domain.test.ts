@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import { sql as dsql } from 'drizzle-orm';
@@ -41,8 +43,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
@@ -57,7 +59,7 @@ import { insDaypart, insDaypartOffer, insOptionOffer, insRule, menuFixture, newI
 // ------------------------------------------------------------------------------------------------------------------------------
 // The subject, loaded lazily so a missing module fails each case with its own message instead of killing the file at import.
 // ------------------------------------------------------------------------------------------------------------------------------
-type Deps = { readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number; saleVarianceToleranceCentavos?: bigint }>; now?: () => Date };
+type Deps = { readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number; saleVarianceToleranceCentavos?: bigint; requirePinLineActions?: boolean }>; now?: () => Date };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type W<R = any> = (tx: Tx, actor: Actor, input: any, deps?: Deps) => Promise<R>;
 interface PosApi {
@@ -97,7 +99,7 @@ const uuid = (): string => globalThis.crypto.randomUUID();
 const nowIso = () => new Date().toISOString();
 const actorOf = (orgId: string, personId: string): Actor => ({ personId, orgId });
 // BOSS ruling 6 Nov: one injectable reader; percents are basis points (12% = 1200n); the business day starts at an integer hour (4 = 04:00).
-const RATES: Deps = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, saleVarianceToleranceCentavos: 1n }) };
+const RATES: Deps = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false }) };
 const HOLDER = 'Zyxwv Quillfeather'; // a senior's name: must appear in statutory_discount_records and NOWHERE else
 const IDNO = 'OSCA-9990042';
 const SAME_ID_SENTENCE = 'This change was already recorded differently on the till.';

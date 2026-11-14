@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { authorize } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { apRepo } from '@shareat/db';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { listStores, peso, withOrgPrincipal } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -24,7 +24,8 @@ const TYPE_LABEL = new Map<string | null, string>(TYPES.map((t) => [t.key, t.lab
 
 export default async function VatListPage({ searchParams }: { searchParams: Promise<{ store?: string; month?: string }> }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/ap/vat');
+  const { actor, refusal } = await requirePageAccess('/ap/vat');
+  if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.month ?? '') ? sp.month! : toBusinessDate().slice(0, 7);
   // Only a store of this org is ever queried: a garbage or foreign id is treated as "no store chosen" (T-408 audit #2).
@@ -76,7 +77,7 @@ export default async function VatListPage({ searchParams }: { searchParams: Prom
           <section className="space-y-2">
             <h2 className="font-medium">Summary</h2>
             <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-              <table className="w-full min-w-[600px] border-collapse text-sm">
+              <table aria-label="VAT summary" className="w-full min-w-[600px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                     <th className="px-3 py-2 font-medium">VAT type</th>
@@ -114,7 +115,7 @@ export default async function VatListPage({ searchParams }: { searchParams: Prom
             <h2 className="font-medium">Invoices</h2>
             {data.invoices.length > 0 ? (
               <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-                <table className="w-full min-w-[720px] border-collapse text-sm">
+                <table aria-label="Invoices" className="w-full min-w-[720px] border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                       <th className="px-3 py-2 font-medium">Date</th>

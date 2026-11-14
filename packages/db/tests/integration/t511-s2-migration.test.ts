@@ -16,6 +16,8 @@
  * (org, platform); two current lines per channel-day; a bare single-column FK; a missing finite check or a wrong body; a purpose CHECK not widened or widened
  * to anything; the function still listing 120 capabilities; no column comment on order_value; wrong journal number / when.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -28,8 +30,8 @@ import { APP_ROLE } from '../../src/rls/registry';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 const sql = postgres(url, { max: 5 });
 afterAll(async () => {

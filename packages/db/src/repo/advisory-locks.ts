@@ -18,7 +18,8 @@
  *     return credit, keyed on the supplier id), 369003 (inter-store pair settlement, keyed on the
  *     UNORDERED pair of store ids), 392001 (dual-run store-week, keyed on org:store:week), 436001 (a
  *     person's leave: caps, SIL balance, one-leave-day-per-date, keyed on the person id), 511001
- *     (settlement upload, keyed on the channel id), 511002 (a booked period charge being netted by a payout, keyed on the charge id), 531001 (a store's POS day close / backlog close, keyed on the store id).
+ *     (settlement upload, keyed on the channel id), 511002 (a booked period charge being netted by a payout, keyed on the charge id), 574001 (one delivery line's returnable quantity, keyed on the line id), 574002 (customer returns on a charge-less trade order, keyed on the order id), 531001 (a store's POS day close / backlog close, keyed on the store id).
+ *     575001 (one senior/PWD card at one store, keyed on org:store:normalised card number).
  *   - Migration 0211: namespace 443001 (item family structure, keyed on org id).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
@@ -148,4 +149,34 @@ const POS_DAY_CLOSE_LOCK_NAMESPACE = 531001;
 /** Serialises the closes of one store (a Z, or a backlog run): the second reads the receipts and the sales day the first committed, so no receipt is in two Zs. */
 export async function lockPosDayClose(tx: Tx, storeId: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(${POS_DAY_CLOSE_LOCK_NAMESPACE}::int4, hashtext(${storeId}))`);
+}
+
+/** Namespace (first int4) for the per-delivery-line return lock. T-574 / DEF-838. */
+const DELIVERY_LINE_LOCK_NAMESPACE = 574001;
+
+/** Serialises everything that reads or moves how much of ONE delivery line has been returned (a supplier return, and the void of one),
+ *  taken BEFORE the "received minus already returned" read: two returns of the same line queue, and the second reads the first's
+ *  committed quantity and is refused past the cap. Keyed on the line id. ⚠️ A multi-line caller must take these in SORTED id order. */
+export async function lockDeliveryLine(tx: Tx, deliveryLineId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(${DELIVERY_LINE_LOCK_NAMESPACE}::int4, hashtext(${deliveryLineId}::text))`);
+}
+
+/** Namespace (first int4) for the per-trade-order customer-return lock. T-574 / DEF-838 (verifier note). */
+const TRADE_ORDER_RETURN_LOCK_NAMESPACE = 574002;
+
+/** Serialises customer returns on ONE trade order that has no receivable charge to lock (an internal transfer), so two returns cannot both
+ *  pass "received minus already returned" per order line. Keyed on the order id. */
+export async function lockTradeOrderReturn(tx: Tx, tradeOrderId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(${TRADE_ORDER_RETURN_LOCK_NAMESPACE}::int4, hashtext(${tradeOrderId}::text))`);
+}
+
+/** Namespace (first int4) for the per-card senior/PWD repeat-use lock. T-575 follow-up (audit 14 Nov 2026). */
+const SENIOR_CARD_LOCK_NAMESPACE = 575001;
+
+/** Serialises sales that use ONE senior/PWD card at one store, taken BEFORE the register row is written and re-read: the later sale queues, then sees the earlier one's
+ *  committed row and writes the repeat trail. Keyed on org:store:normalised card number (same normalisation as the register lookup). ⚠️ A multi-card caller must take these in SORTED order. */
+export async function lockSeniorCard(tx: Tx, orgId: string, storeId: string, idNumber: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${SENIOR_CARD_LOCK_NAMESPACE}::int4, hashtext(${orgId}::text || ':' || ${storeId}::text || ':' || lower(btrim(${idNumber}::text))))`,
+  );
 }
