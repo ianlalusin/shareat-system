@@ -1,5 +1,5 @@
 import { can } from '@shareat/auth';
-import { getReviewDayDetail, listReviewDays, type ReviewDayDetail, type SettlementReviewRow } from '@shareat/domain';
+import { getReviewDayDetail, listPeriodCharges, listReviewDays, type PeriodChargeView, type ReviewDayDetail, type SettlementReviewRow } from '@shareat/domain';
 import { requirePageAccess } from '../../../lib/page-access';
 import { ACTION_LINK } from '@/components/action-link';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
@@ -8,10 +8,10 @@ import { Badge, Banner, Button, Checkbox, Field, FlashBanner, Input, LinkRow, Nu
 import { withFlash } from '@/lib/flash';
 import { peso } from '@/lib/format';
 import { listActiveLoans, withOrgPrincipal, type LoanOption } from '../lib';
-import { DayDetail, FilterFields, type DayDetailAccess } from './DayDetail';
+import { ChargeList, DayDetail, FilterFields, type DayDetailAccess } from './DayDetail';
 import { reopenDayAction } from './actions';
 import { listMissingFileDays, listReviewStores } from './lib';
-import { attentionWords, differenceShort, isNonZero, listLoanWord, listStateWord, pageNumber, pageSlice, paidWord, platformWord, reviewHref, shortDate, type ReviewFilterValues } from './words';
+import { attentionWords, differenceShort, isNonZero, listLoanWord, listStateWord, pageNumber, pageSlice, paidWord, parseAck, platformWord, reviewHref, shortDate, type ReviewFilterValues } from './words';
 
 export const metadata = { title: 'Review settlement days — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -25,6 +25,7 @@ interface SearchParams {
   period?: string;
   needs?: string;
   page?: string;
+  ack?: string;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,9 +34,9 @@ const PERIOD = /^\d{4}-\d{2}$/;
 const one = (v: string | string[] | undefined): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
 
 /**
- * T-511 S5b - the review screen: every staged Grab and Foodpanda day with what the file says, what staff recorded, the difference and what stops it. A manager reads
- * it on a phone or a desktop. Nothing is booked from here; rejecting is the only decision (booking comes in slice 7). The route is gated by `record_ar_collection`
- * (ROUTE_CAPABILITY) and the domain narrows every list and every day to the stores the person may review.
+ * T-511 S5b, S7b - the review screen: every staged Grab and Foodpanda day with what the file says, what staff recorded, the difference and what stops it. A manager reads
+ * it on a phone or a desktop. The decisions are approve (which books the day), reject and, for an administrator, reopen; a charge that belongs to no day is booked from the
+ * section below the list. The route is gated by `record_ar_collection` (ROUTE_CAPABILITY) and the domain narrows every list and every day to the stores the person may review.
  */
 export default async function ReviewSettlementDaysPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -58,6 +59,7 @@ export default async function ReviewSettlementDaysPage({ searchParams }: { searc
   const data = await withOrgPrincipal(actor.orgId, async (tx) => {
     const list = await listReviewDays(tx, actor, { needsAttention: filters.needs, storeId: filters.store, platform: filters.platform, period: filters.period });
     const isAdminReopen = await can(tx, actor, 'override_period_lock');
+    const charges: PeriodChargeView[] = await listPeriodCharges(tx, actor);
     let detail: ReviewDayDetail | null = null;
     let access: DayDetailAccess = { canReject: false, canReopen: false, canOverrideLoans: false };
     if (dayParam && UUID.test(dayParam)) {
@@ -70,7 +72,7 @@ export default async function ReviewSettlementDaysPage({ searchParams }: { searc
         };
       }
     }
-    return { list, isAdminReopen, detail, access };
+    return { list, isAdminReopen, detail, access, charges };
   });
   const loans: LoanOption[] = data.access.canOverrideLoans ? await listActiveLoans(actor.orgId) : [];
 
@@ -88,13 +90,13 @@ export default async function ReviewSettlementDaysPage({ searchParams }: { searc
       title="Review settlement days"
       description={
         'Each row is one store, one platform and one sales day, read from the Grab and Foodpanda files. ' +
-        'Check the file against what staff recorded. Nothing is booked from this screen yet.'
+        'Check the file against what staff recorded, then approve each day.'
       }
     >
       <FlashBanner flash={sp} />
 
       {dayParam && !data.detail ? <Banner tone="warning">That day was not found, or it belongs to a store you cannot review. Pick a day from the list.</Banner> : null}
-      {data.detail ? <DayDetail detail={data.detail} access={data.access} loans={loans} backHref={listHref} filters={filters} /> : null}
+      {data.detail ? <DayDetail detail={data.detail} access={data.access} loans={loans} backHref={listHref} filters={filters} ack={data.detail.reviewState === 'pending' ? parseAck(sp.ack) : null} /> : null}
 
       <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filter the days">
         <Field label="Store">
@@ -178,6 +180,14 @@ export default async function ReviewSettlementDaysPage({ searchParams }: { searc
           </>
         )}
       </section>
+
+      {data.charges.length > 0 ? (
+        <section className="space-y-2" aria-label="Charges not tied to a day">
+          <h2 className="text-lg font-semibold">Charges not tied to a day</h2>
+          <p className="text-sm">Foodpanda takes these from a payout, but they belong to the whole statement, not to one sales day. Book each one on its own.</p>
+          <ChargeList charges={data.charges} filters={pageFilters} />
+        </section>
+      ) : null}
 
       {data.list.pandagoOnly.length > 0 ? (
         <section className="space-y-2" aria-label="PandaGO only invoices">

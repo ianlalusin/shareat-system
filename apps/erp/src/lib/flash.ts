@@ -125,6 +125,8 @@ const NAV_SHAPES = {
   // T-511 S5b: the review page's platform filter (a closed word) and its "needs attention" flag, so a refused action returns to the same list.
   platform: /^(grab|foodpanda)$/,
   needs: /^1$/,
+  // T-511 S7b: the approve screen's reason round trip: which way and how much the payout differs from the day (the figure the person saw; the domain computes it again).
+  ack: /^(short|over)-[0-9]{1,12}\.[0-9]{2}$/,
 } as const satisfies Record<string, RegExp>;
 
 export type NavKey = keyof typeof NAV_SHAPES;

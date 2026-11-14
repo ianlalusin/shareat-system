@@ -2,7 +2,7 @@
  * T-511 S5b - the words the review screens print instead of stored values. A person never sees a code such as `not_paid` or `waiting_for_other_stores`;
  * every state, platform and kind is turned into a short plain phrase here. Pure; shared by page.tsx and DayDetail.tsx.
  */
-import type { ReviewDayDetail, SettlementReviewRow } from '@shareat/domain';
+import type { PeriodChargeState, ReviewDayDetail, SettlementReviewRow } from '@shareat/domain';
 import type { Tone } from '@/components/ui';
 
 export const platformWord = (platform: 'grab' | 'foodpanda'): string => (platform === 'grab' ? 'Grab' : 'Foodpanda');
@@ -52,6 +52,12 @@ const BLOCKER_SHORT: readonly (readonly [RegExp, string])[] = [
   [/already has a posted settlement/, 'Already posted'],
   [/^An earlier day of this channel/, 'Waiting for earlier days'],
   [/^A newer file has replaced/, 'Replaced by a newer file'],
+  // T-511 S7b: the blockers approve added
+  [/^This payout deducts for loans, but the loan check has not placed/, 'Loan not placed'],
+  [/^The file shows an order value of 0\.00/, 'Nothing to settle'],
+  [/^Staff recorded no sales for this day/, 'Sales not posted'],
+  [/^A charge on the same statement has not been booked/, 'Charge not booked'],
+  [/^Every month up to today is closed/, 'No open month'],
 ];
 const LOAN_BLOCKER_SHORT: Record<keyof typeof LOAN, string> = {
   ok: 'Loan check',
@@ -165,4 +171,22 @@ export function reviewHref(filters: ReviewFilterValues, day?: string): string {
   if (day) q.set('day', day);
   const s = q.toString();
   return s ? `/channel-settlements/review?${s}` : '/channel-settlements/review';
+}
+
+/** What a staged charge's state is called on screen (never the stored word). */
+const CHARGE_STATE: Record<PeriodChargeState, { label: string; tone: Tone }> = {
+  not_booked: { label: 'Not booked yet', tone: 'warning' },
+  booked: { label: 'Booked', tone: 'success' },
+  replaced: { label: 'Replaced by a newer file', tone: 'closed' },
+  cannot_book: { label: 'Cannot be booked', tone: 'danger' },
+};
+export const chargeStateWord = (state: PeriodChargeState) => CHARGE_STATE[state];
+
+/**
+ * The `ack` address key of the reason round trip, `short-3000.00` or `over-3000.00`, as a figure and a direction; anything else is null. It only says what the person
+ * was shown: the domain works the difference out again when the form is posted and refuses if it changed.
+ */
+export function parseAck(raw: string | undefined): { sign: 'short' | 'over'; difference: string } | null {
+  const m = raw === undefined ? null : /^(short|over)-([0-9]{1,12}\.[0-9]{2})$/.exec(raw);
+  return m ? { sign: m[1] as 'short' | 'over', difference: m[2]! } : null;
 }

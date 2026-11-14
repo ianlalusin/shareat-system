@@ -788,3 +788,75 @@ export async function otherLineWithUpload(tx: Tx, orgId: string, id: string): Pr
     .limit(1);
   return row ?? null;
 }
+
+// ---------------------------------------------------------------------------------------------
+// T-511 S7b: the period charges (staged, no sales day) the review screen lists and the invoice panel shows. Read only.
+// ---------------------------------------------------------------------------------------------
+export interface PeriodChargeFact {
+  otherLineId: string;
+  storeId: string;
+  channelId: string;
+  invoiceNumber: string | null;
+  lineDate: string | null;
+  description: string | null;
+  net: string;
+  vat: string | null;
+  isCurrent: boolean;
+  /** the line's upload was replaced by a newer one */
+  uploadReplaced: boolean;
+  /** who uploaded the file; the uploader rule reads it and it never leaves the server */
+  uploadedBy: string;
+  /** the booked charge of THIS line, when there is one */
+  booked: { totalAmount: string } | null;
+  /** another booked charge with the same store, channel, date, net amount and description (the copy a re-uploaded file stages again) */
+  copy: { totalAmount: string; chargeDate: string } | null;
+}
+
+/**
+ * Every staged period charge (kind period_charge, no day) of the given stores, or of the given invoices (channel + invoice number, whichever upload brought them), at most
+ * `limit`: the ones still waiting to be booked first (so an old unbooked charge never falls off the cap), then the rest, each group newest first. Posted or not. One statement.
+ */
+export async function periodChargeFacts(
+  tx: Tx,
+  orgId: string,
+  filter: { storeIds?: readonly string[]; invoices?: readonly { channelId: string; invoiceNumber: string }[]; limit?: number },
+): Promise<PeriodChargeFact[]> {
+  if ((filter.storeIds && filter.storeIds.length === 0) || (filter.invoices && filter.invoices.length === 0)) return [];
+  const where = [sql`ol.org_id = ${orgId}`, sql`ol.kind = 'period_charge'`, sql`ol.day_line_id is null`];
+  if (filter.storeIds) where.push(sql`u.store_id in (${sql.join(filter.storeIds.map((id) => sql`${id}::uuid`), sql`, `)})`);
+  if (filter.invoices) where.push(sql`(u.channel_id, u.invoice_number) in (${sql.join(filter.invoices.map((i) => sql`(${i.channelId}::uuid, ${i.invoiceNumber})`), sql`, `)})`);
+  const rows = (await tx.execute(sql`
+    select ol.id::text as other_line_id, u.store_id::text as store_id, u.channel_id::text as channel_id, u.invoice_number, ol.line_date::text as line_date,
+           ol.description, ol.amount::text as net, ol.vat_amount::text as vat, ol.is_current, (u.superseded_by is not null) as upload_replaced,
+           u.uploaded_by::text as uploaded_by, c.total_amount::text as booked_total, cp.total_amount::text as copy_total, cp.charge_date::text as copy_date
+      from settlement_other_lines ol
+      join settlement_uploads u on u.org_id = ol.org_id and u.id = ol.upload_id
+      left join channel_period_charges c on c.org_id = ol.org_id and c.other_line_id = ol.id
+      left join lateral (
+        select c2.total_amount, c2.charge_date from channel_period_charges c2
+         where c2.org_id = ol.org_id and c2.store_id = u.store_id and c2.channel_id = u.channel_id and c2.charge_date = ol.line_date
+           and c2.net_amount = ol.amount and c2.description is not distinct from ol.description and c2.other_line_id <> ol.id
+         limit 1) cp on true
+     where ${sql.join(where, sql` and `)}
+     order by (c.id is null and ol.is_current and u.superseded_by is null and cp.total_amount is null) desc, ol.line_date desc nulls last, ol.id desc
+     limit ${filter.limit ?? 200}
+  `)) as unknown as {
+    other_line_id: string; store_id: string; channel_id: string; invoice_number: string | null; line_date: string | null; description: string | null; net: string; vat: string | null;
+    is_current: boolean; upload_replaced: boolean; uploaded_by: string; booked_total: string | null; copy_total: string | null; copy_date: string | null;
+  }[];
+  return rows.map((r) => ({
+    otherLineId: r.other_line_id,
+    storeId: r.store_id,
+    channelId: r.channel_id,
+    invoiceNumber: r.invoice_number,
+    lineDate: r.line_date,
+    description: r.description,
+    net: r.net,
+    vat: r.vat,
+    isCurrent: r.is_current,
+    uploadReplaced: r.upload_replaced,
+    uploadedBy: r.uploaded_by,
+    booked: r.booked_total === null ? null : { totalAmount: r.booked_total },
+    copy: r.copy_total === null || r.copy_date === null ? null : { totalAmount: r.copy_total, chargeDate: r.copy_date },
+  }));
+}

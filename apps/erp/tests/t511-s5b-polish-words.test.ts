@@ -9,12 +9,14 @@ import { RejectReasonHint } from '../src/app/channel-settlements/review/RejectRe
 import {
   REVIEW_PAGE_SIZE,
   attentionWords,
+  chargeStateWord,
   listLoanWord,
   listStateWord,
   loanLineDetails,
   ordersHint,
   pageNumber,
   pageSlice,
+  parseAck,
   reviewHref,
   shortBlocker,
   shortDate,
@@ -53,8 +55,29 @@ describe('the list is short, the detail keeps the sentence', () => {
       ['Grab Lipa already has a posted settlement for 2026-10-19. Void that one first.', 'Already posted'],
       ['An earlier day of this channel has not been booked or rejected yet. Decide the earlier days first.', 'Waiting for earlier days'],
       ['A newer file has replaced this day. Open the newer line instead.', 'Replaced by a newer file'],
+      // T-511 S7b: the five blockers approve added (the words of day-checks.ts; the test below reads them from the source)
+      ['This payout deducts for loans, but the loan check has not placed all of it on the open loans. Match the loan check first.', 'Loan not placed'],
+      ['The file shows an order value of 0.00 for this day, so there is nothing to settle. Ask the owner to handle it by hand.', 'Nothing to settle'],
+      ['Staff recorded no sales for this day, so the file figure cannot replace anything yet.', 'Sales not posted'],
+      ['A charge on the same statement has not been booked yet. Book it first, because the platform took it out of this payout.', 'Charge not booked'],
+      ['Every month up to today is closed, so this day cannot be booked yet. Ask an administrator to open a month.', 'No open month'],
     ];
     for (const [sentence, words] of cases) expect(shortBlocker(sentence, null), sentence).toBe(words);
+  });
+
+  it('S7b: the five new phrases match the sentences the domain really writes, none falls to "Needs a look", each is a few words [kills: a reworded blocker that quietly loses its short phrase]', () => {
+    const src = readFileSync(resolve(__dirname, '..', '..', '..', 'packages', 'domain', 'src', 'settlement-intake', 'day-checks.ts'), 'utf8') + readFileSync(resolve(__dirname, '..', '..', '..', 'packages', 'domain', 'src', 'settlement-intake', 'settlement-input.ts'), 'utf8');
+    for (const [fragment, words] of [
+      ['This payout deducts for loans, but the loan check has not placed', 'Loan not placed'],
+      ['The file shows an order value of 0.00', 'Nothing to settle'],
+      ['Staff recorded no sales for this day', 'Sales not posted'],
+      ['A charge on the same statement has not been booked', 'Charge not booked'],
+      ['Every month up to today is closed', 'No open month'],
+    ] as const) {
+      expect(src, fragment).toContain(fragment);
+      expect(shortBlocker(`${fragment} and more words.`, null)).toBe(words);
+      expect(words.split(' ').length).toBeLessThanOrEqual(3);
+    }
   });
 
   it('the loan blocker is told by the loan check it came from, per status [kills: three loan sentences all reading "Needs a look"]', () => {
@@ -82,6 +105,26 @@ describe('the list is short, the detail keeps the sentence', () => {
     const earlier = 'An earlier day of this channel has not been booked or rejected yet. Decide the earlier days first.';
     expect(attentionWords({ blockers: [earlier, earlier], loanCheck: null, changedSinceBooked: false })).toEqual(['Waiting for earlier days']);
     expect(attentionWords({ blockers: [], loanCheck: null, changedSinceBooked: true })).toEqual(['Changed since it was booked']);
+  });
+});
+
+describe('S7b charge states and the reason question key', () => {
+  it('every charge state is a plain phrase, never the stored word [kills: not_booked on the page]', () => {
+    expect(chargeStateWord('not_booked').label).toBe('Not booked yet');
+    expect(chargeStateWord('booked').label).toBe('Booked');
+    expect(chargeStateWord('replaced').label).toBe('Replaced by a newer file');
+    expect(chargeStateWord('cannot_book').label).toBe('Cannot be booked');
+    for (const s of ['not_booked', 'booked', 'replaced', 'cannot_book'] as const) expect(chargeStateWord(s).label).not.toMatch(/_/);
+  });
+
+  it('the day detail and the words print no accounting jargon: no tolerance, no settlement variance, no settlement gain [kills: words a beginner cannot read on the reason question]', () => {
+    for (const f of ['DayDetail.tsx', 'words.ts', 'page.tsx']) expect(codeOnly(read(f)), f).not.toMatch(/\btolerance\b|settlement variance|settlement gain/i);
+  });
+
+  it('parseAck reads short-3000.00 and over-0.50, and nothing else [kills: free text believed as a figure]', () => {
+    expect(parseAck('short-3000.00')).toEqual({ sign: 'short', difference: '3000.00' });
+    expect(parseAck('over-0.50')).toEqual({ sign: 'over', difference: '0.50' });
+    for (const bad of [undefined, '', 'short', 'short-3000', 'short--3.00', 'sideways-3.00', 'short-3.00x', 'x short-3.00', 'over-1234567890123.00']) expect(parseAck(bad), String(bad)).toBeNull();
   });
 });
 
