@@ -390,7 +390,7 @@ function FieldShell({ label, hint, children }: { label: string; hint?: string; c
     <label className="flex flex-col gap-1">
       <span className={LABEL}>{label}</span>
       {children}
-      {hint && <span className="text-[11px] text-neutral-500">{hint}</span>}
+      {hint && <span className="text-xs text-neutral-500">{hint}</span>}
     </label>
   );
 }
@@ -491,7 +491,7 @@ function CheckField({
       <input type="checkbox" name={name} defaultChecked={defaultChecked} className="mt-0.5" />
       <span>
         <span className="block text-xs font-medium">{label}</span>
-        {hint && <span className="block text-[11px] text-neutral-500">{hint}</span>}
+        {hint && <span className="block text-xs text-neutral-500">{hint}</span>}
       </span>
     </label>
   );

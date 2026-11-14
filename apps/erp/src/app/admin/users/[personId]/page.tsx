@@ -244,7 +244,7 @@ export default async function UserAccessPage({
                         also {positionProvenanceLine(source)}
                       </span>
                     ))}
-                    <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                    <span className="block font-mono text-xs text-neutral-500 dark:text-neutral-400">
                       {g.grantName}
                     </span>
                   </span>
@@ -342,7 +342,7 @@ export default async function UserAccessPage({
                     {capabilityTitle(g.grantName)} — revoked{' '}
                     {g.revokedAt?.toLocaleDateString('en-PH', MANILA)}
                   </span>
-                  <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                  <span className="block font-mono text-xs text-neutral-500 dark:text-neutral-400">
                     {g.grantName}
                   </span>
                   <span className="block text-neutral-500 dark:text-neutral-400">
@@ -531,7 +531,7 @@ function GrantPicker({ personId, offerable }: { personId: string; offerable: rea
                 <input type="checkbox" name="capability" value={c} className="mt-0.5" />
                 <span>
                   <span>{capabilityTitle(c)}</span>
-                  <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">{c}</span>
+                  <span className="block font-mono text-xs text-neutral-500 dark:text-neutral-400">{c}</span>
                 </span>
               </label>
             ))}

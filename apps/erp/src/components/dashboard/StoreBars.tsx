@@ -12,14 +12,14 @@ export function StoreBars({
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <div className="flex items-center gap-4 border-t-2 border-ink pt-3">
-        <h2 className="m-0 font-display text-[28px] font-bold leading-none">By store</h2>
-        <span className="text-[13px] text-muted">{subtitle}</span>
+        <h2 className="m-0 font-display text-3xl font-bold leading-none">By store</h2>
+        <span className="text-sm text-muted">{subtitle}</span>
       </div>
       {rows.map((r, i) => {
         const pct = total > 0 ? (r.value / total) * 100 : 0;
         return (
           <div key={r.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1.5">
-            <span className="font-display text-[26px] font-bold leading-none">{r.name}</span>
+            <span className="font-display text-2xl font-bold leading-none">{r.name}</span>
             <span className="text-base font-bold tabular-nums">
               ₱{r.text} <span className="font-medium text-muted">· {pct.toFixed(0)}%</span>
             </span>

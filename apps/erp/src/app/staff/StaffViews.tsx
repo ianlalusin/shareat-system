@@ -218,7 +218,7 @@ export function CardWall({
                         </span>
                       </div>
                     </div>
-                    <div className="mt-auto flex items-center justify-between border-t border-surface-border px-4 py-2 text-[11px] uppercase tracking-wide text-muted">
+                    <div className="mt-auto flex items-center justify-between border-t border-surface-border px-4 py-2 text-xs uppercase tracking-wide text-muted">
                       <span>ID card</span>
                       <span className="normal-case tracking-normal text-brand-ink">View profile →</span>
                     </div>

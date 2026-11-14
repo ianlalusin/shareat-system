@@ -180,17 +180,17 @@ export default async function ExpenseCategoriesSettingsPage({
                         <Td data-card-heading={c.category}>
                           <span className="font-medium">{c.category}</span>
                           {isUnmapped && (
-                            <span className="ml-2 rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning-ink">
+                            <span className="ml-2 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-ink">
                               unmapped
                             </span>
                           )}
                           {c.isSystem && (
-                            <span className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-[11px] text-muted">
+                            <span className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">
                               seeded
                             </span>
                           )}
                           {!c.isActive && (
-                            <span className="ml-2 rounded-full bg-closed-soft px-2 py-0.5 text-[11px] text-closed">
+                            <span className="ml-2 rounded-full bg-closed-soft px-2 py-0.5 text-xs text-closed">
                               retired
                             </span>
                           )}

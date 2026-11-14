@@ -158,7 +158,7 @@ export function SidebarNav({
               aria-expanded={isRailReactive ? false : open}
               aria-label={group.label}
               aria-current={isCurrentOnRail ? 'true' : undefined}
-              className={`shell-nav-row flex items-center gap-2 rounded-md px-2 text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 aria-[current=true]:bg-brand aria-[current=true]:text-white dark:hover:bg-neutral-900 ${FOCUS_RING}`}
+              className={`shell-nav-row flex items-center gap-2 rounded-md px-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 aria-[current=true]:bg-brand aria-[current=true]:text-white dark:hover:bg-neutral-900 ${FOCUS_RING}`}
             >
               <Icon className="h-4 w-4 shrink-0" />
               <span className="shell-sidebar-expanded-only flex-1 text-left">{group.label}</span>
