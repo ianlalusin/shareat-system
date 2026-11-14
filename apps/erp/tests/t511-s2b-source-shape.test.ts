@@ -78,7 +78,9 @@ describe('T-511 S2b - settings/sales-channels/actions.ts: setPlatformCodeAction'
     expect(update).not.toMatch(/platform/i);
     expect(update).not.toMatch(/'code'/);
     const typed = read('app/settings/sales-channels/typed-forms.ts');
-    expect(count(typed, 'defineTypedForm('), 'no second typed form for the CheckedForm').toBe(1);
+    // T-564 added two typed forms for its own EditableRecords (settlement wiring, bank names); the platform CheckedForm still has none.
+    expect(count(typed, 'defineTypedForm('), 'one typed form for the shared edit + the two T-564 records, none for the platform CheckedForm').toBe(3);
+    expect(typed).not.toMatch(/platform|'code'/i);
     expect(typed).not.toMatch(/platform|'code'/i);
   });
 
@@ -111,13 +113,18 @@ describe('T-511 S2b - settings/sales-channels/page.tsx: the Platform and store c
     expect(pageAndLib, 'asks edit_platform_store_code with a store').toMatch(/can\([^)]*'edit_platform_store_code'[^)]*storeId/s);
   });
 
-  it('adds no second EditableRecord (there is still exactly one: the shared edit form) and the shared form has no platform control', () => {
-    expect(count(text, '<EditableRecord')).toBe(1);
-    // the one EditableRecord block must not name platform or the code box
-    const start = text.indexOf('<EditableRecord');
-    const end = text.indexOf('</EditableRecord>', start);
-    expect(end).toBeGreaterThan(start);
-    expect(text.slice(start, end)).not.toMatch(/SETTINGS_PLATFORM_CODE_RULES|name="platform"|name="code"/);
+  it('platform stays out of every EditableRecord: three records now (shared edit form + T-564 settlement wiring + T-564 bank names), none names platform or the code box', () => {
+    // T-564 added two differently-purposed records (store settlement wiring, a channel's bank names); the intent is unchanged: no platform control in any EditableRecord.
+    expect(count(text, '<EditableRecord')).toBe(3);
+    const blocks: string[] = [];
+    for (let i = text.indexOf('<EditableRecord'); i !== -1; i = text.indexOf('<EditableRecord', i + 1)) {
+      const end = text.indexOf('</EditableRecord>', i);
+      expect(end).toBeGreaterThan(i);
+      blocks.push(text.slice(i, end));
+    }
+    for (const b of blocks) expect(b).not.toMatch(/SETTINGS_PLATFORM_CODE_RULES|name="platform"|name="code"/);
+    const actions = blocks.map((b) => /action=\{(\w+)\}/.exec(b)?.[1]).sort();
+    expect(actions).toEqual(['saveStoreSettlementAction', 'setBankHintsAction', 'updateSalesChannelAction']);
   });
 
   it('keeps the platform inputs out of the add-a-channel form too', () => {

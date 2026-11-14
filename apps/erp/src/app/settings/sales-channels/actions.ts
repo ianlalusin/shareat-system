@@ -22,7 +22,7 @@ import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
-import { SALES_CHANNEL_EDIT } from './typed-forms';
+import { BANK_HINTS_EDIT, SALES_CHANNEL_EDIT, STORE_SETTLEMENT_EDIT } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -133,7 +133,7 @@ export async function saveStoreSettlementAction(fd: FormData): Promise<void> {
     );
     wrote = result.wrote;
   } catch (err) {
-    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err), typed: keepTyping(fd, STORE_SETTLEMENT_EDIT, storeId, { actorId: actor.personId }) });
   }
   revalidatePath('/settings/sales-channels');
   revalidatePath('/channel-settlements');
@@ -153,7 +153,7 @@ export async function setBankHintsAction(fd: FormData): Promise<void> {
     );
     wrote = result.wrote;
   } catch (err) {
-    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err) });
+    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err), typed: keepTyping(fd, BANK_HINTS_EDIT, str(fd, 'channelId'), { actorId: actor.personId }) });
   }
   revalidatePath('/settings/sales-channels');
   return await redirectWithFlash('/settings/sales-channels', { store: storeId }, {

@@ -18,7 +18,7 @@ import { SETTINGS_BANK_HINTS_RULES, SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES
 import { Banner, Button, Checkbox, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { SALES_CHANNEL_EDIT } from './typed-forms';
+import { BANK_HINTS_EDIT, SALES_CHANNEL_EDIT, STORE_SETTLEMENT_EDIT } from './typed-forms';
 import { accountLabel } from '@/lib/account-label';
 
 export const metadata = { title: 'Sales channels — Shareat System' };
@@ -131,7 +131,7 @@ export default async function SalesChannelsSettingsPage({
         </Banner>
       )}
 
-      <SettlementWiring storeId={storeId} config={settlement} />
+      <SettlementWiring storeId={storeId} config={settlement} sp={sp} actorId={actor.personId} />
 
       {active.map((c) => (
         <ChannelCard key={c.id} channel={c} storeId={storeId} accounts={accounts} walletNames={walletNames} sp={sp} actorId={actor.personId} canSetPlatformCode={canSetPlatformCode} />
@@ -290,7 +290,7 @@ function ChannelCard({
 
       {canSetPlatformCode && <PlatformCodeForm channel={channel} storeId={storeId} />}
 
-      <BankHintsForm channel={channel} storeId={storeId} />
+      <BankHintsForm channel={channel} storeId={storeId} sp={sp} actorId={actorId} />
 
       <form action={setSalesChannelActiveAction}>
         <input type="hidden" name="storeId" value={storeId} />
@@ -312,7 +312,7 @@ function ChannelCard({
  * T-564: the store's settlement wiring. Stored for the day a payout statement is matched to a store by name or file; nothing matches
  * on it yet, and the panel says so. The key is fixed once saved (the box is read-only then and the domain refuses a change).
  */
-function SettlementWiring({ storeId, config }: { storeId: string; config: Awaited<ReturnType<typeof settlementConfigForStore>> }) {
+function SettlementWiring({ storeId, config, sp, actorId }: { storeId: string; config: Awaited<ReturnType<typeof settlementConfigForStore>>; sp: Parameters<typeof typedFor>[0]; actorId: string }) {
   return (
     <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
       <div className="flex flex-wrap items-center gap-2">
@@ -323,7 +323,7 @@ function SettlementWiring({ storeId, config }: { storeId: string; config: Awaite
         The short name and the labels that will let a Foodpanda or Grab payout statement be matched to this branch. They are{' '}
         <strong>saved for later and not used to match anything yet</strong>. The platform and its store code are set on each channel below.
       </p>
-      <EditableRecord action={saveStoreSettlementAction} label="settlement wiring" hidden={{ storeId }} typed={null} rules={SETTINGS_STORE_SETTLEMENT_RULES}>
+      <EditableRecord action={saveStoreSettlementAction} label="settlement wiring" hidden={{ storeId }} typed={typedFor(sp, STORE_SETTLEMENT_EDIT, storeId, actorId)} rules={SETTINGS_STORE_SETTLEMENT_RULES}>
         <FormGrid>
           <Field
             label={<span className="text-neutral-600 dark:text-neutral-400">Store key</span>}
@@ -362,9 +362,9 @@ function SettlementWiring({ storeId, config }: { storeId: string; config: Awaite
 }
 
 /** T-564: a channel's bank hints, in their own small form. Saved for the payout parser; nothing reads them yet. */
-function BankHintsForm({ channel, storeId }: { channel: SalesChannelAdminRow; storeId: string }) {
+function BankHintsForm({ channel, storeId, sp, actorId }: { channel: SalesChannelAdminRow; storeId: string; sp: Parameters<typeof typedFor>[0]; actorId: string }) {
   return (
-    <EditableRecord action={setBankHintsAction} label={`${channel.name} bank names`} hidden={{ storeId, channelId: channel.id }} typed={null} rules={SETTINGS_BANK_HINTS_RULES}>
+    <EditableRecord action={setBankHintsAction} label={`${channel.name} bank names`} hidden={{ storeId, channelId: channel.id }} typed={typedFor(sp, BANK_HINTS_EDIT, channel.id, actorId)} rules={SETTINGS_BANK_HINTS_RULES}>
       <Field
         label={<span className="text-neutral-600 dark:text-neutral-400">Bank names on this channel&apos;s payouts, separated by commas</span>}
         hint="At most 20, each at most 60 characters. Saved for the payout reader; nothing uses it yet."
