@@ -97,6 +97,8 @@ async function world(): Promise<World> {
   };
   const pkg = await sellable('package', 'Unli Grill daypart', '449.00', '549.00');
   const dish = await sellable('a_la_carte', 'Pork special daypart', '100.00', '150.00');
+  // the offers are stored at now() (microseconds) and the menu is read at now() cut to the millisecond: wait (at most ~2 ms, on the database clock) until the offers are past (t565, 411d50e)
+  await sql`select pg_sleep(greatest(0, extract(epoch from (select max(effective_from) from menu_offers where store_id = ${f.storeId}) + interval '2 milliseconds' - clock_timestamp())))`;
   const res = await callRoute(SNAPSHOT, 'GET', tabletCookie(f));
   expect(res.status).toBe(200);
   const snapshot = (await res.json()) as World['snapshot'];
