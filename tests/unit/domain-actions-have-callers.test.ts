@@ -303,14 +303,6 @@ const EXEMPT: Record<string, string> = {
   authorizeWith:
     'INTERNAL — the gate with a sentence of the settlement review screen own: `rejectDay`, `reopenDay`, `overrideLoanAllocation`, `bookPeriodCharge` (review.ts) and `approveDay` (approve.ts) call it; it is exported only so approve.ts shares it (S7a).',
 
-  // ---- T-511 S7a — approve a settlement day (domain only; the screen is S7b) -----------------
-  approveDay:
-    'UNWIRED — S7b calls it: the Approve button of the settlement review screen (`approveDayAction`). The domain action is built and tested in S7a, one slice ahead of its screen (S7 spec, 8 Nov 2026; precedent: correctPlatformSales). ' +
-    'Delete this row in S7b, when `apps/` reaches it.',
-
-  authorizeWith:
-    'INTERNAL — the gate with a sentence of the settlement review screen own: `rejectDay`, `reopenDay`, `overrideLoanAllocation` (review.ts) and `approveDay` (approve.ts) call it; it is exported only so approve.ts shares it (S7a).',
-
   // ---- T-511 S5b — the settlement review stage ---------------------------------------------
   loanCheckForDay:
     'INTERNAL — `dayBlockers`, `dayBlockersForLines` and `getReviewDayDetail` / `listReviewDays` (`settlement-intake/review.ts`) call it; the screens read the loan check through ' +
