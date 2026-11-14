@@ -42,3 +42,21 @@ password, host or query, and an unparseable URL. Never connect to a database to 
 
 No destructive test or script can run against a database whose NAME is not a test name, whatever the user, host or query
 says. Legitimate worker clones are accepted. DEF-818 and GT-001 close after merge.
+
+## 6. Follow-up (AUDIT verify run, 14 Nov 2026) - five copies came back
+
+**Found:** after #235 merged (61ac9d3), five integration files that reached main while T-562 was in the queue still carry
+the whole-URL regex: `packages/domain/tests/integration/t575-rules.test.ts:17`, `t575-seed-matches-registry.test.ts:21`,
+`t575-senior-id-repeat.test.ts:24`, `t576-rules.test.ts:17`, `t576-seed-matches-registry.test.ts:21`. Nothing stops a new
+copy, because section 3 swept the tree once but added no guard against the regex returning.
+
+**Changes (no new number, no migration):**
+
+1. Those five files call `isTestDatabaseUrl(url)` from `scripts/lib/test-db-name.mjs`, imported the way
+   `t512-duplicate-item-lines.test.ts` does. Message and throw unchanged.
+2. A unit guard `tests/unit/t562-no-whole-url-guard.test.ts`: scans tracked `.ts`, `.tsx`, `.mjs`, `.js` files (via
+   `git ls-files`) for the whole-URL regex source and fails naming each file. Allow-list only the files that quote the
+   old regex on purpose (the redact helper, its test, this guard). Written first: red on main with exactly the five files.
+
+**Checks:** the new guard red (5 files) before, green after; `t562-test-db-name` green; root typecheck clean; unit guard and
+census files pass; the five integration files pass on a fresh `_test` DB.
