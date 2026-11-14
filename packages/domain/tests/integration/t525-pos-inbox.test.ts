@@ -633,7 +633,7 @@ describe('R3 - a PIN never lands in a table', () => {
     const sessionId = uuid();
     const r = await send(f, [
       ev(1, 'heads.set', f.counterId, { sessionId, headsCashier: 3, pin: '482913' }),
-      ev(2, 'line.cancelled', f.counterId, { lineId: uuid(), reason: 'Changed mind', approval: { pin: '482913' } }),
+      ev(2, 'refill.requested', f.counterId, { sessionId, lines: [], approval: { pin: '482913' } }), // T-576: line.cancelled now carries an optional approval, so a kind that never does
     ]);
     expect(statuses(r)).toEqual(['quarantined', 'quarantined']);
     for (const x of r.results) expectQuarantined(x, 'POS_EVENT_INVALID: ');
@@ -1065,7 +1065,7 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     const f = await fixture();
     await putRule(sql, f.orgId, 'pos.table_warn_minutes', '30.000000', '2000-01-02');
     expect(((await snapshot(f, {})).body.rules as Record<string, unknown>).tableWarnMinutes).toBe(30);
-    const injected = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 45, saleVarianceToleranceCentavos: 1n }) };
+    const injected = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 45, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false }) };
     expect(((await snapshot(f, injected)).body.rules as Record<string, unknown>).tableWarnMinutes).toBe(45);
   });
 
@@ -1124,6 +1124,8 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     const b = await snapshot(f);
     expect(b.etag).toBe(a.etag);
     await insOffer(f, f.menu.pork.variantId, '275.00'); // a newer store offer for the pork: its price is now 275.00
+    // The offer is stored at now() (microseconds); the snapshot reads the menu at now() cut to the millisecond (a JS Date). Taken in the same millisecond the new offer is still "upcoming" and the ETag is unchanged, so wait (at most ~2 ms, on the database clock) until it is past.
+    await sql`select pg_sleep(greatest(0, extract(epoch from (select max(effective_from) from menu_offers where variant_id = ${f.menu.pork.variantId}) + interval '2 milliseconds' - clock_timestamp())))`;
     const c = await snapshot(f);
     expect(c.etag).not.toBe(a.etag);
     expect((c.body.menu as { contentHash: string }).contentHash).not.toBe((a.body.menu as { contentHash: string }).contentHash);

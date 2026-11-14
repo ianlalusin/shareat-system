@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -15,7 +16,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(
     `Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`,
   );
@@ -422,5 +423,123 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
         recordLoanPayment(tx, f.admin, { loanId: f.loanId, amount: '0.004', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
       ),
     ).rejects.toMatchObject({"name":"RefusalError","message":"loans.recordLoanPayment.amount: money check failed","userMessage":"The payment amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
+  });
+});
+
+/**
+ * T-573 (DEF-840) — two payments on one loan at the same moment must not both read the same balance and the same
+ * "since" date. Each call is its own real transaction on its own pooled connection (like t414's release race).
+ */
+describe('⛔ T-573: concurrent payments on one loan serialise on the loan row (DEF-840)', () => {
+  it('two parallel payments book the accrued interest ONCE; the second starts from the first\'s payment', async () => {
+    const f = await fixture('race-interest');
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    const pay = () =>
+      asOrg(f.orgId, (tx) =>
+        recordLoanPayment(tx, f.admin, { loanId: f.loanId, amount: '5000.00', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+      );
+    const results = await Promise.all([pay(), pay()]);
+
+    // One day of straight interest on 200,000 at 2%/month is 133.33 — booked by exactly one of the two.
+    const interest = results.map((r) => r.split.interest).sort();
+    expect(interest).toEqual(['0.00', '133.33']);
+    // 10,000 paid in all, less the one interest charge, retired principal.
+    expect((await position(f)).outstanding).toBe('190133.33');
+  });
+
+  it('a payment that would overpay once the first has committed is refused, and the debt is paid exactly once', async () => {
+    const f = await fixture('race-overpay');
+    // The shared safe is funded by the fixture loan so the account can cover both draws.
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    const small = await asOrg(f.orgId, (tx) =>
+      createLoan(tx, f.admin, {
+        storeId: f.storeId, lenderName: 'Grab', name: 'Small loan', principalAmount: '1000.00', interestRate: '2',
+        ratePeriod: 'month', interestMethod: 'straight', paymentFrequency: 'daily', termPeriods: 90, startDate: '2026-05-11',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    // 1,000 principal + 0.67 interest (1,000 × 2% / 30, one day) clears it. Two of them cannot both be right.
+    const clear = () =>
+      asOrg(f.orgId, (tx) =>
+        recordLoanPayment(tx, f.admin, { loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+      );
+    const results = await Promise.allSettled([clear(), clear()]);
+    expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected']);
+    const pos = await asOrg(f.orgId, (tx) => loansRepo.positionOf(tx, f.orgId, small.id));
+    expect(pos.outstanding).toBe('0.00');
+  });
+
+  it('a payment queued behind a reversal re-reads the loan under the lock: paid_off at 0.00, never "active" with nothing owed', async () => {
+    const f = await fixture('race-reverse');
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    const small = await asOrg(f.orgId, (tx) =>
+      createLoan(tx, f.admin, {
+        storeId: f.storeId, lenderName: 'Grab', name: 'Reopen loan', principalAmount: '1000.00', interestRate: '2',
+        ratePeriod: 'month', interestMethod: 'straight', paymentFrequency: 'daily', termPeriods: 90, startDate: '2026-05-11',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    const first = await asOrg(f.orgId, (tx) =>
+      recordLoanPayment(tx, f.admin, { loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+    );
+    expect(first.paidOff).toBe(true);
+    const statusNow = async () => (await asOrg(f.orgId, (tx) => loansRepo.getById(tx, f.orgId, small.id)))!.status;
+    expect(await statusNow()).toBe('paid_off');
+
+    // Hold the reversal OPEN (uncommitted, holding the loan lock), start a payment that reads the loan while it still says
+    // paid_off and then queues on the lock, and only then let the reversal commit. The payment must act on the REOPENED loan.
+    let queued: Promise<{ ok: boolean }> | undefined;
+    await asOrg(f.orgId, async (tx) => {
+      await reverseLoanEntry(tx, f.admin, { loanId: small.id, entryId: first.entryId, reason: 'race test' });
+      queued = asOrg(f.orgId, (tx2) =>
+        recordLoanPayment(tx2, f.admin, { loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+      ).then(() => ({ ok: true }), () => ({ ok: false }));
+      await new Promise((r) => setTimeout(r, 500));
+    });
+    expect(await queued).toEqual({ ok: true });
+    const pos = await asOrg(f.orgId, (tx) => loansRepo.positionOf(tx, f.orgId, small.id));
+    expect(pos.outstanding).toBe('0.00');
+    expect(await statusNow()).toBe('paid_off');
+  });
+
+  it('a payment queued behind an open reversal waits for it and reads the reversed balance (the reversal holds the loan lock)', async () => {
+    const f = await fixture('race-reverse-lock');
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    const small = await asOrg(f.orgId, (tx) =>
+      createLoan(tx, f.admin, {
+        storeId: f.storeId, lenderName: 'Grab', name: 'Partial loan', principalAmount: '1000.00', interestRate: '2',
+        ratePeriod: 'month', interestMethod: 'straight', paymentFrequency: 'daily', termPeriods: 90, startDate: '2026-05-11',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    // A part-payment: the loan stays active, so reversing it flips no status and takes no row lock as a side effect.
+    const part = await asOrg(f.orgId, (tx) =>
+      recordLoanPayment(tx, f.admin, { loanId: small.id, amount: '500.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+    );
+    let queued: Promise<{ ok: boolean }> | undefined;
+    await asOrg(f.orgId, async (tx) => {
+      await reverseLoanEntry(tx, f.admin, { loanId: small.id, entryId: part.entryId, reason: 'race test' });
+      // 1,000.67 clears the loan only AFTER the reversal; against the un-reversed 500.00 balance it would be an overpayment.
+      queued = asOrg(f.orgId, (tx2) =>
+        recordLoanPayment(tx2, f.admin, { loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+      ).then(() => ({ ok: true }), () => ({ ok: false }));
+      await new Promise((r) => setTimeout(r, 500));
+    });
+    expect(await queued).toEqual({ ok: true });
+    expect((await asOrg(f.orgId, (tx) => loansRepo.positionOf(tx, f.orgId, small.id))).outstanding).toBe('0.00');
   });
 });

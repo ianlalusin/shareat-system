@@ -32,6 +32,7 @@
  *   - OPEN_DEF_491 not emptied, or an unlisted/unguarded derived FK -> D8
  *   - 0214 without lock_timeout first / budget / pre-flight -> L1
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -49,7 +50,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
@@ -86,7 +87,8 @@ const REGISTRY_BEFORE_S4 = 100;
 // T-524 (0240): +3 (pos_sales_receipt_lines_append_guard, pos_sales_receipt_payments_append_guard, pos_sales_receipt_line_discounts_append_guard). 63 -> 66; re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
 // T-511 S6a (0242): +3 (two deferred leg-sum validators, channel_settlement_loan_legs_append_only). 66 -> 69; S6b (0243): +1 (sales_day_platform_corrections_append_only). 69 -> 70; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
 // T-511 S6c (0244): +2 (channel_period_charges_append_only, channel_settlement_charge_links_append_only history guards), 70 -> 72; re-measured after rebase on main (0238-0243 present), 8 Nov 2026, BOSS approved.
-const REGISTRY_ADDED_AFTER_S4 = 72;
+// T-565 (0253): +3 (menu_daypart_versions_append_guard history guard; menu_dayparts_version_insert_trg and _update_trg derivations), 72 -> 75; re-measured as Object.keys(TRIGGER_REGISTRY).length = 230 on a tree with 0253 applied.
+const REGISTRY_ADDED_AFTER_S4 = 75;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;

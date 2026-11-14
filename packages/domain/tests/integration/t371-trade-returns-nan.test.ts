@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -13,7 +14,7 @@ import postgres from 'postgres';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run against a database whose name does not contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run against a database whose name does not contain "_test".');
 
 import { arRepo, closeDb, tradeRepo } from '@shareat/db';
 import { applyCredit, createCustomer, createTradeOrder, dispatchTradeOrder, recordCollection } from '@shareat/domain';

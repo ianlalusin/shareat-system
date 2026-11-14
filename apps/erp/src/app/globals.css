@@ -844,7 +844,14 @@ html { scrollbar-gutter: stable; }
     gap: 1rem;
   }
   .erp-page[data-view="detail"][data-sectioned] > * { grid-column: 1 / -1; margin-block: 0; min-width: 0; }
-  .erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)) { grid-column: auto; }
+  /* ⭐ T-571 — a card may share the row only with ANOTHER CARD beside it. A table-less section with no
+     table-less neighbour on either side (the first rule: one with a table-less next sibling; the second:
+     one with a table-less previous sibling) spans both columns instead of leaving the second column empty.
+     Ian, on the supplier page: "the details card may use full width of the page". Runs of three or more
+     keep the old placement; a pair, a lone card and two pairs are all correct. A card marked data-fullwidth (the
+     supplier details card) never takes part in a pair, so it spans the row even beside the multi-store picker. */
+  .erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)):not([data-fullwidth]):has(+ section:not(:has(table)):not([data-fullwidth])),
+  .erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)):not([data-fullwidth]) + section:not(:has(table)):not([data-fullwidth]) { grid-column: auto; }
 }
 @media (min-width: 1024px) and (pointer: fine) {
   .erp-page tbody > tr {

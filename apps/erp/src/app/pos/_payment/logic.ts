@@ -8,6 +8,7 @@ import { fromCentavos, money, toCentavos, type Money } from '@shareat/core/money
 import { checkAll, POS_PAYMENT_REFERENCE_RULES } from '@shareat/domain/field-rules';
 import { priceSession, type PriceLineInput, type PricedSession } from '@shareat/domain/pos/price';
 import type { NewPosEvent, PosEvent } from '@/lib/pos-device';
+import type { ApprovalFields } from '../_shell/line-approval';
 import { printAmount } from '@/lib/pos-print/layout';
 import { formatReceipt } from '@/lib/pos-print/receipt-text';
 import type { PrintLayout, ReceiptDiner, ReceiptHeader, ReceiptLine, ReceiptView } from '@/lib/pos-print/types';
@@ -302,7 +303,7 @@ export function saleCompletedEvent(i: SaleInput & { personId: string }): NewPosE
   return { kind: 'sale.completed', personId: i.personId, occurredAtDevice: i.now.toISOString(), payload: buildSalePayload(i) };
 }
 
-export function discountAddedEvent(d: { personId: string; now: Date; discountId: string; lineId: string; kind: DiscountAdd['kind']; qty: number; presetId?: string; valueType?: 'percent' | 'fixed'; value?: string; dinerNo?: number }): NewPosEvent {
+export function discountAddedEvent(d: { personId: string; now: Date; discountId: string; lineId: string; kind: DiscountAdd['kind']; qty: number; presetId?: string; valueType?: 'percent' | 'fixed'; value?: string; dinerNo?: number; /** T-576: the manager PIN, or offline: true. */ approval?: ApprovalFields }): NewPosEvent {
   const at = d.now.toISOString();
   return {
     kind: 'discount.added',
@@ -318,18 +319,19 @@ export function discountAddedEvent(d: { personId: string; now: Date; discountId:
       qty: d.qty,
       ...(d.dinerNo !== undefined ? { dinerNo: d.dinerNo } : {}),
       appliedAtDevice: at,
+      ...d.approval,
     },
   };
 }
 
-export function discountRemovedEvent(i: { personId: string; now: Date; discountId: string }): NewPosEvent {
+export function discountRemovedEvent(i: { personId: string; now: Date; discountId: string; approval?: ApprovalFields }): NewPosEvent {
   const at = i.now.toISOString();
-  return { kind: 'discount.removed', personId: i.personId, occurredAtDevice: at, payload: { discountId: i.discountId, removedAtDevice: at } };
+  return { kind: 'discount.removed', personId: i.personId, occurredAtDevice: at, payload: { discountId: i.discountId, removedAtDevice: at, ...i.approval } };
 }
 
-export function applyToAllEvent(i: { personId: string; now: Date; sessionId: string; presetId: string; applyId: string }): NewPosEvent {
+export function applyToAllEvent(i: { personId: string; now: Date; sessionId: string; presetId: string; applyId: string; approval?: ApprovalFields }): NewPosEvent {
   const at = i.now.toISOString();
-  return { kind: 'discount.applied_to_all', personId: i.personId, occurredAtDevice: at, payload: { sessionId: i.sessionId, presetId: i.presetId, applyId: i.applyId, appliedAtDevice: at } };
+  return { kind: 'discount.applied_to_all', personId: i.personId, occurredAtDevice: at, payload: { sessionId: i.sessionId, presetId: i.presetId, applyId: i.applyId, appliedAtDevice: at, ...i.approval } };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

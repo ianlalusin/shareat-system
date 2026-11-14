@@ -157,6 +157,8 @@ async function extras(f: Fx) {
   await sql`insert into menu_offers (org_id, store_id, variant_id, channel, daypart_id, amount, bundle_heads, extra_head_amount, withdrawn, created_by)
             values (${f.orgId}, ${f.storeId}, ${family.variantId}, 'store', ${null}, '1000.00', 4, '100.00', false, ${f.personId})`;
   await sql`insert into kitchen_routes (org_id, store_id, menu_item_id, station_id, created_by) values (${f.orgId}, ${f.storeId}, ${family.itemId}, ${f.grill}, ${f.personId})`;
+  // the offers are stored at now() (microseconds) and the menu is read at now() cut to the millisecond: wait (at most ~2 ms, on the database clock) until the offers are past (t565, 411d50e)
+  await sql`select pg_sleep(0.003)`;
   return { largeVariantId, optA: a.valueId, optB: b, family };
 }
 

@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +9,7 @@ import { asOrg, buyer, fixture, freezeClock, orderWorth, thawClock, type Fx } fr
 
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
-if (!url || !/shareat_test|_test(\?|$)/.test(url)) throw new Error('A test PostgreSQL database is required.');
+if (!url || !isTestDatabaseUrl(url)) throw new Error('A test PostgreSQL database is required.');
 const sql = postgres(url, { max: 5 });
 const current = vi.hoisted(() => ({ actor: null as Actor | null }));
 class Outcome extends Error {

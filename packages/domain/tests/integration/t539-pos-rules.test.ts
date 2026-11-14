@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -20,7 +21,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
@@ -63,10 +64,10 @@ describe('T-539 readPosRules - the reader', () => {
   it('a fresh org (no rows) reads exactly { vat 1200n, senior/PWD 2000n, start hour 4, table warning 90 } [kills: an absent row read as zero; a wrong default; hour as bigint]', async () => {
     const w = await ruleWorld(sql, 'pos-fresh');
     const r = await read(w.orgId, '2026-11-06');
-    expect(r).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
+    expect(r).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false });
     expect(typeof r.businessDayStartHour).toBe('number');
     expect(typeof r.tableWarnMinutes).toBe('number');
-    expect(Object.keys(r).sort()).toEqual(['businessDayStartHour', 'saleVarianceToleranceCentavos', 'scPwdPercentBasisPoints', 'tableWarnMinutes', 'vatPercentBasisPoints']);
+    expect(Object.keys(r).sort()).toEqual(['businessDayStartHour', 'requirePinLineActions', 'saleVarianceToleranceCentavos', 'scPwdPercentBasisPoints', 'tableWarnMinutes', 'vatPercentBasisPoints']);
   });
 
   it('after setBusinessRule(senior/PWD, 25, from 2026-12-01 equivalent) the day before reads 2000n and the start day reads 2500n; the other two stay [kills: a change applied early; a change applied late]', async () => {
@@ -75,8 +76,8 @@ describe('T-539 readPosRules - the reader', () => {
     const from = daysFromToday(1);
     const before = daysFromToday(0);
     await set(w, w.admin, { key: SC, value: '25', effectiveFrom: from, reason: 'Law changed' });
-    expect(await read(w.orgId, before)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
-    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2500n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
+    expect(await read(w.orgId, before)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false });
+    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2500n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false });
     expect(await read(w.orgId, daysFromToday(30))).toMatchObject({ scPwdPercentBasisPoints: 2500n });
   });
 
@@ -91,17 +92,17 @@ describe('T-539 readPosRules - the reader', () => {
     const w = await ruleWorld(sql, 'pos-each');
     await putRule(sql, w.orgId, VAT, '11.000000', '2026-12-01');
     await putRule(sql, w.orgId, HOUR, '6.000000', '2026-12-10');
-    expect(await read(w.orgId, '2026-11-30')).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
-    expect(await read(w.orgId, '2026-12-01')).toEqual({ vatPercentBasisPoints: 1100n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
-    expect(await read(w.orgId, '2026-12-10')).toEqual({ vatPercentBasisPoints: 1100n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 6, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
+    expect(await read(w.orgId, '2026-11-30')).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false });
+    expect(await read(w.orgId, '2026-12-01')).toEqual({ vatPercentBasisPoints: 1100n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false });
+    expect(await read(w.orgId, '2026-12-10')).toEqual({ vatPercentBasisPoints: 1100n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 6, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false });
   });
 
   it('S3: a dated change of the table warning: 90 before its start day, 30 from it; the other three stay [kills: a change applied early or late; tableWarnMinutes read from the wrong row]', async () => {
     const w = await ruleWorld(sql, 'pos-table-dated');
     const from = daysFromToday(1);
     await set(w, w.admin, { key: TABLE, value: '30', effectiveFrom: from, reason: 'Check on tables sooner' });
-    expect(await read(w.orgId, daysFromToday(0))).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
-    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 30, saleVarianceToleranceCentavos: 1n });
+    expect(await read(w.orgId, daysFromToday(0))).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false });
+    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 30, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false });
     expect(await auditCount(sql, w.orgId)).toBe(1);
   });
 
@@ -160,7 +161,7 @@ describe('T-539 setBusinessRule - the POS keys through the existing writer', () 
       ].sort(),
     );
     expect(await auditCount(sql, w.orgId)).toBe(2);
-    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2500n, businessDayStartHour: 6, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
+    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2500n, businessDayStartHour: 6, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false });
   });
 
   it('a whole hour is accepted at both ends: 0 and 23 [kills: an off-by-one on the hour bounds]', async () => {

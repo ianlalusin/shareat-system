@@ -23,7 +23,7 @@
  * `returnableQuantity` caps an internal line at `receivedQuantity` and an external line at
  * `fulfilledQuantity`/`quantity` (what was actually sold) — reported here, not silently assumed.
  */
-import { arRepo, commissaryRepo, customerReturnsRepo, customersRepo, interEntityRepo, itemsRepo, journalRepo, moneyAccountsRepo, moneyTransfersRepo, stockLayersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, arRepo, commissaryRepo, customerReturnsRepo, customersRepo, interEntityRepo, itemsRepo, journalRepo, moneyAccountsRepo, moneyTransfersRepo, stockLayersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import type {
   CustomerReturnSettlement,
@@ -183,6 +183,9 @@ export async function recordCustomerReturn(
     // franchise shortage credit take - so a collection or credit committing meanwhile cannot leave this return splitting on a stale figure. Lock
     // order everywhere: the charge row first, then shipment / discrepancy / stock rows. (Without a charge - an internal transfer - nothing to lock.)
     if (order.arChargeId) await arRepo.lockChargesForAllocation(trx, input.orgId, [order.arChargeId]);
+    // T-574 (DEF-838, verifier note): with no charge there is nothing above to queue on, so two returns of one internal transfer both passed the cap
+    // (each read "already returned" before the other committed). Same order-level queue, taken at the same point (before any stock or cap read).
+    else await advisoryLocksRepo.lockTradeOrderReturn(trx, order.id);
 
     const customer = await customersRepo.getById(trx, input.orgId, order.customerId);
     if (!customer) return { ok: false, reason: 'the order names a customer that no longer exists.' };

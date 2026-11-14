@@ -15,6 +15,7 @@
  * MUTANT: purge.ts's step-1 check goes back to `fk.childColumns.every(c => clearColumns.includes(c))` (counting
  * org_id) -> "C2 performer"-free refusal "not in clearColumns" -> every `it` here goes red.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -27,7 +28,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 

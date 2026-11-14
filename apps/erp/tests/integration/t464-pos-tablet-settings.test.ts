@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
@@ -16,7 +17,7 @@ import postgres from 'postgres';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: the database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: the database name must contain "_test".');
 
 import { currentJar, RedirectSignal } from '../../../../tests/helpers/flash-jar-core';
 import { outcomeOf } from '../../../../tests/helpers/flash-jar';

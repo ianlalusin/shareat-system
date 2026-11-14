@@ -19,6 +19,7 @@
  * (items_kind_check); once S1 lands the refusals below must hold too. A control (non-service) row is inserted first in every test so
  * a green result proves the refusal is about the service kind, not about a malformed fixture.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
@@ -29,7 +30,7 @@ import { APP_ROLE, itemsRepo, transaction, type Tx } from '@shareat/db';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: database name must contain "_test".');
 
 const sql = postgres(url, { max: 4 });
 afterAll(async () => {

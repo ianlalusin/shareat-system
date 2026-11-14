@@ -13,6 +13,7 @@
  * the outer connection. The `DATABASE_URL` username is logged as a report line only — a lane run
  * with `INTEGRATION_RESTRICTED_ROLE=0` must not be falsely failed.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -28,7 +29,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`);
 }
 

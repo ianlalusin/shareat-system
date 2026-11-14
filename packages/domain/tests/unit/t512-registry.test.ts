@@ -26,7 +26,7 @@ describe('T-512 registry - closed set', () => {
   it('holds the five T-512 keys, unchanged in name (T-539 adds the POS keys on top, pinned in t539-pos-rule-keys; T-519 adds its own later) [kills: a missing or renamed T-512 key]', () => {
     const have = Object.keys(RULE_REGISTRY);
     for (const k of KEYS) expect(have, k).toContain(k);
-    expect(have.filter((k) => !(KEYS as readonly string[]).includes(k)).sort()).toEqual(['pos.business_day_start_hour', 'pos.sale_variance_tolerance', 'pos.senior_pwd_discount_percent', 'pos.table_warn_minutes']);
+    expect(have.filter((k) => !(KEYS as readonly string[]).includes(k)).sort()).toEqual(['pos.business_day_start_hour', 'pos.require_pin_line_actions', 'pos.sale_variance_tolerance', 'pos.senior_id_repeat_days', 'pos.senior_pwd_discount_percent', 'pos.table_warn_minutes']); // T-575 added pos.senior_id_repeat_days; T-576 added pos.require_pin_line_actions
   });
 
   it('every entry carries label, help, unit, default, min, max, capability and namespace', () => {
@@ -64,7 +64,7 @@ describe('T-512 registry - closed set', () => {
       const min = Number(e.min);
       const max = Number(e.max);
       const def = Number(e.default);
-      expect(min, `${key} min`).toBe(key === 'pos.table_warn_minutes' ? 1 : 0); // T-539 S3: a warning after 0 minutes would be red at once
+      expect(min, `${key} min`).toBe(key === 'pos.table_warn_minutes' || key === 'pos.senior_id_repeat_days' ? 1 : 0); // T-539 S3: a warning after 0 minutes would be red at once; T-575: a repeat window of 0 days would never warn
       expect(Number.isFinite(max), `${key} max finite`).toBe(true);
       expect(def, `${key} default >= min`).toBeGreaterThanOrEqual(min);
       expect(def, `${key} default <= max`).toBeLessThanOrEqual(max);

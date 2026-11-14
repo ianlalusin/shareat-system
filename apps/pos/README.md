@@ -47,3 +47,45 @@ re-run, re-apply those edits and diff.
 The normal copy points at live Firestore. Do not sign in, start a session or press any button that writes there.
 Runtime writes are allowed only in the explicit local demo profile above. Never substitute a TEST store in the live
 project. A successful build alone is not a completed runtime smoke check.
+
+<!-- EGM contract start -->
+
+# Shareat POS contract
+
+## Overview
+
+Shareat POS application: Next.js floor screens, protected POS2 HTTP operations and a Capacitor Android shell. The package scripts reserve port 9009.
+
+## Interface
+
+- [capacitor.config.ts](./capacitor.config.ts) — `default export`.
+- [next.config.mjs](./next.config.mjs) — `default export`.
+- [postcss.config.mjs](./postcss.config.mjs) — `default export`.
+- [tailwind.config.ts](./tailwind.config.ts) — `default export`.
+- [android](./android/README.md) — Android host hierarchy leading to the Capacitor activity and native ThermalPrinter implementation.
+- [config](./config/README.md) — Explicit local-only Firebase emulator profile.
+- [public](./public/README.md) — Service worker lifecycle and request/background-sync event hooks.
+- [scripts](./scripts/README.md) — APK/emulator build entry points, reproducible v1 copy, and human-run audit/soak/seed tools.
+- [src](./src/README.md) — POS source entry point with APK API CORS middleware and the application, component, state and service boundaries.
+
+## Invariants
+
+- The original runbook and production-write smoke restriction above remain binding.
+- The package owns its Vitest configuration and @ alias; root unit tests exclude POS.
+- The default build serves Next.js; BUILD_TARGET=capacitor selects static export for the APK.
+
+## Side Effects
+
+- Configuration reads package version and environment flags during build.
+- At runtime the child application uses Firebase Auth/Firestore/Storage, HTTP APIs, browser storage and native printers; see each child contract for ownership.
+
+## Verification
+
+- From the repository root: `npm test -w @shareat/pos` (the package script uses `vitest.config.mts`, Node environment, `src/**/*.test.ts`).
+- Root unit tests exclude POS; they do not establish this package's test coverage. This documentation pass did not run the suite.
+
+## Inspection scope
+
+Inspected 4 direct source files (5933 UTF-8 bytes), at most 300 lines per file. Long-file tails are outside this bounded contract inventory; consult source before changing a workflow.
+
+<!-- EGM contract end -->

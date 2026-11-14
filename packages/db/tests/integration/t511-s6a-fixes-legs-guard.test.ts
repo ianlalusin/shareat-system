@@ -4,6 +4,7 @@
  * (SQLSTATE 23001), even with session_replication_role = replica; the app role never gets the privilege (42501). Real Postgres via TEST_DATABASE_URL.
  * MUTANTS are named in each title `[kills: ...]`.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import postgres from 'postgres';
@@ -15,7 +16,7 @@ import { TRIGGER_REGISTRY } from '../../src/triggers/registry';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 const sql = postgres(url, { max: 5 });

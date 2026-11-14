@@ -3,6 +3,7 @@
  * they may open (/pos/kitchen, /pos/refills), not on /pos where `record_sale` refuses them. This drives the REAL `signInWithTabletPinAction`
  * with a fake cookie jar and a real pairing, and reads the redirect. Runs on any `_test` database; names none.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { readFileSync } from 'node:fs';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -10,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: the database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: the database name must contain "_test".');
 
 class RedirectSignal extends Error {
   constructor(public to: string) {

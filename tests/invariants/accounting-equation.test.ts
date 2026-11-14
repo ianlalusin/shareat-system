@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../helpers/redact-db-url';
 import { randomUUID } from 'node:crypto';
 import fc from 'fast-check';
@@ -34,7 +35,7 @@ const url = process.env.TEST_DATABASE_URL;
 if (!url) {
   throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 }
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(
     `Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`,
   );

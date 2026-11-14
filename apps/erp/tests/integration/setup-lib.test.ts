@@ -16,6 +16,7 @@
  * Postgres. `systemIsAlreadySetUp` needs a real database and the restricted-role harness, so it
  * belongs here, in `apps/erp/tests/integration/` (the glob T-247/DEF-221 added for exactly this).
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -25,7 +26,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} — name must contain "_test".`);
 }
 

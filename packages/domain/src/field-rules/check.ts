@@ -14,7 +14,7 @@
 import { parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { compare, money as exactMoney } from '@shareat/core/money';
 import { screenSentence } from '@shareat/core/sentence';
-import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
+import { parseDecimalInput, parseMoneyInput, ungroupThousands } from '../shared/money-input';
 
 export type FieldKind = 'text' | 'digits' | 'pattern' | 'number' | 'money' | 'date';
 
@@ -217,15 +217,19 @@ export function checkField(rule: FieldRule, raw: string | null | undefined): Fie
       return { ok: true, value: v };
     }
     case 'number': {
-      if (!(rule.integer ? /^-?\d+$/.test(v) : /^-?\d+(\.\d+)?$/.test(v))) {
+      // ⭐ T-570 — the number boxes GROUP what is typed ("1,200" minutes, "12,500" units), so the live rule has to read
+      // a correct grouping exactly as the parser does (T-504 item 7) and hand on the plain digits. A wrong grouping
+      // is left alone and refused by the grammar below, never re-read (DEF-383).
+      const plain = ungroupThousands(v) ?? v;
+      if (!(rule.integer ? /^-?\d+$/.test(plain) : /^-?\d+(\.\d+)?$/.test(plain))) {
         return bad(rule, numberSentence(rule), rule.integer ? 'Whole numbers only' : 'Numbers only');
       }
-      const n = Number(v);
+      const n = Number(plain);
       // "-0" / "-00" read as zero but are a minus sign in front of nothing: not a number of days (or anything else).
       if (Object.is(n, -0) || (rule.min !== undefined && lt(n, rule.min)) || (rule.max !== undefined && lt(rule.max, n))) {
         return bad(rule, numberSentence(rule), Object.is(n, -0) && rule.min === undefined ? 'Numbers only' : numberRangeProgress(rule), rule.rangeSays);
       }
-      return { ok: true, value: v };
+      return { ok: true, value: plain };
     }
     case 'money': {
       let money: string;

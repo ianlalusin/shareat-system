@@ -1,8 +1,10 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
+import { grantPositionCapability } from '../helpers/grant-position-capability';
 import { sql as dsql } from 'drizzle-orm';
 
 /**
@@ -23,7 +25,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`);
 }
 
@@ -410,8 +412,11 @@ describe('AUDIT A — the photo thumbnail is shown ONLY to people who hold the f
       return renderToStaticMarkup((await InvoicePage({ params: Promise.resolve({ id: inv.id }), searchParams: Promise.resolve({}) })) as never);
     };
     expect(links(await render(f.manager)), 'positive control: the holder sees the link').toBe(1);
+    // T-577: reading the invoice needs a capability at its store; give staff the payer's (record_ap_payment), NOT record_supplier_invoice, so the thumbnail rule is still what is tested.
+    await grantPositionCapability(sql, { orgId: f.orgId, storeId: f.storeId, personId: f.staffId, setBy: f.managerId, capability: 'record_ap_payment' });
     expect(links(await render(f.staff)), 'a viewer without the capability was handed a /files/ link').toBe(0);
-    expect(links(await render(f.otherManager)), "a manager of ANOTHER store was handed a /files/ link").toBe(0);
+    // ...and another store's manager no longer reads the invoice at all (the same not-found as a forged id).
+    await expect(render(f.otherManager), 'a manager of ANOTHER store').rejects.toThrow(/notFound\(\)/);
   });
 
   it('delivery page: the proof photo thumbnail shows for the holder and NOT for staff or another store\'s manager', async () => {

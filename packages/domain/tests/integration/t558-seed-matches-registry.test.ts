@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-558 R1 (TESTER) - the seed pin for migration 0248, and every key. docs/tasks/558-pos-sale-variance-tolerance.md R1: "Migration 0248_t558_pos_sale_variance_tolerance.sql: data only,
@@ -20,7 +21,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
@@ -96,8 +97,8 @@ describe('T-558 seed pin - migration 0248', () => {
     expect(rows[0]!.reason).toBe('Starting value');
   });
 
-  it('0239, 0241, 0245 and 0248 for one org write exactly one row per registry key, and every value IS the registry default [kills: drift between the seed and the registry; a registry key with no seed row anywhere]', async () => {
-    const rows = await replay([fileOf('0239_'), fileOf('0241_'), fileOf('0245_'), fileOf('0248_')]);
+  it('0239, 0241, 0245, 0248 and 0255 (T-575) and 0256 (T-576) for one org write exactly one row per registry key, and every value IS the registry default [kills: drift between the seed and the registry; a registry key with no seed row anywhere]', async () => {
+    const rows = await replay([fileOf('0239_'), fileOf('0241_'), fileOf('0245_'), fileOf('0248_'), fileOf('0255_'), fileOf('0256_')]);
     expect(rows.map((r) => r.key)).toEqual(Object.keys(RULE_REGISTRY).sort());
     for (const r of rows) {
       const want = (RULE_REGISTRY as Record<string, { default: unknown }>)[r.key]!.default;
@@ -108,8 +109,8 @@ describe('T-558 seed pin - migration 0248', () => {
     }
   });
 
-  it('the four files name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key]', () => {
-    const named = [...new Set(['0239_', '0241_', '0245_', '0248_'].flatMap((p) => namedKeys(text(fileOf(p)))))].sort();
+  it('the six files (0255 = T-575, 0256 = T-576) name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key]', () => {
+    const named = [...new Set(['0239_', '0241_', '0245_', '0248_', '0255_', '0256_'].flatMap((p) => namedKeys(text(fileOf(p)))))].sort();
     expect(named).toEqual(Object.keys(RULE_REGISTRY).sort());
   });
 

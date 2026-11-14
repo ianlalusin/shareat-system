@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -18,7 +19,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: database name must contain "_test".');
 
 const ROOT = join(__dirname, '..', '..', '..', '..');
 const BANAY = 'iGOW7q2pZbeHWV832UNh';

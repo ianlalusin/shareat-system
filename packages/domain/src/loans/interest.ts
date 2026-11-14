@@ -36,7 +36,8 @@ function daysBetween(from: string, to: string): number {
 export interface AccruedInput {
   /** What is still owed — ⚠️ the CURRENT balance, not the original principal. */
   outstanding: Money;
-  ratePercent: number;
+  /** The rate as STORED (`loans.interest_rate`, e.g. `'2.0000'`). ⛔ A string on purpose: a `number` is a float, and a float rate is how a centavo moved (DEF-841). */
+  ratePercent: string;
   ratePeriod: RatePeriod;
   method: InterestMethod;
   /** Original principal. Only `straight` needs it (see below). */
@@ -48,6 +49,9 @@ export interface AccruedInput {
 
 /**
  * Interest accrued between two dates.
+ *
+ * ⭐ **Exact (T-573, DEF-841):** `base × rate% × days ÷ (100 × days-in-period)` in scaled bigint — centavos × the rate's digits —
+ * with ONE rounding step at the end, **half-up to the centavo** (a tie such as 0.365 becomes 0.37). No float touches the money or the rate.
  *
  * ⭐ **The methods differ in what the rate is charged ON, and that is the whole distinction:**
  *
@@ -65,8 +69,12 @@ export function accruedInterest(input: AccruedInput): Money {
   // T-371 C4: ordered in scaled bigint on the brand, never as a float.
   if (compare(base, ZERO) <= 0) return money('0');
 
-  const amount = Number(base) * dailyRate(input.ratePercent, input.ratePeriod) * days;
-  return money(amount.toFixed(2));
+  const rate = /^(\d+)(?:\.(\d+))?$/.exec(input.ratePercent);
+  if (!rate) throw new Error(`accruedInterest: the rate "${input.ratePercent}" is not a plain non-negative decimal.`);
+  const [, whole = '0', fraction = ''] = rate;
+  const numerator = toCentavos(base) * BigInt(whole + fraction) * BigInt(days);
+  const denominator = 100n * 10n ** BigInt(fraction.length) * BigInt(DAYS_IN[input.ratePeriod]);
+  return fromCentavos((2n * numerator + denominator) / (2n * denominator)); // half-up: floor(n/d + 1/2)
 }
 
 export interface SplitInput {
