@@ -219,7 +219,8 @@ describe('T-576 rule ON - a token that does not fit is refused (the event quaran
     const t = await table();
     await on(t.f);
     const g = await managerGrant(t, 'line.cancelled', t.a);
-    const bad = { ...g, token: g.token.slice(0, -1) + (g.token.endsWith('A') ? 'B' : 'A') };
+    // the FIRST character: all 6 bits count. (The last carries 2 padding bits; changing only those left the bytes alone and flaked 1 run in 16 - DEF-866.)
+    const bad = { ...g, token: (g.token.startsWith('A') ? 'B' : 'A') + g.token.slice(1) };
     sentence(await cancel(t, t.a, { approval: bad }));
     expect(await lineStatus(t.a)).toBe('queued');
   });

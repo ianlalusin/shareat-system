@@ -191,6 +191,16 @@ export function signSetupIdentity(encodedPayload: string): string {
 }
 
 /**
+ * DEF-866 (T-580): the signature's bytes, only when it is the canonical base64url of its own bytes. `Buffer.from(x, 'base64url')` drops the unused padding bits of
+ * the last character (a 43-char HMAC has 2), so up to four strings decoded to the same bytes and all verified. Anything else is null.
+ */
+function canonicalSignatureBytes(signature: unknown): Buffer | null {
+  if (typeof signature !== 'string') return null;
+  const bytes = Buffer.from(signature, 'base64url');
+  return bytes.toString('base64url') === signature ? bytes : null;
+}
+
+/**
  * Constant-time verification of {@link signSetupIdentity}.
  *
  * ⚠️ Returns false rather than throwing for a malformed signature: the caller answers absent,
@@ -199,8 +209,8 @@ export function signSetupIdentity(encodedPayload: string): string {
  */
 export function setupIdentitySignatureMatches(encodedPayload: string, signature: string): boolean {
   const expected = Buffer.from(signSetupIdentity(encodedPayload), 'base64url');
-  const actual = Buffer.from(signature, 'base64url');
-  if (actual.length !== expected.length || actual.length === 0) return false;
+  const actual = canonicalSignatureBytes(signature);
+  if (!actual || actual.length !== expected.length || actual.length === 0) return false;
   return timingSafeEqual(actual, expected);
 }
 
@@ -225,8 +235,8 @@ export function signFlash(encodedPayload: string): string {
 /** Constant-time verification of {@link signFlash}. False (never a throw) for any malformed value. */
 export function flashSignatureMatches(encodedPayload: string, signature: string): boolean {
   const expected = Buffer.from(signFlash(encodedPayload), 'base64url');
-  const actual = Buffer.from(signature, 'base64url');
-  if (actual.length !== expected.length || actual.length === 0) return false;
+  const actual = canonicalSignatureBytes(signature);
+  if (!actual || actual.length !== expected.length || actual.length === 0) return false;
   return timingSafeEqual(actual, expected);
 }
 
@@ -253,8 +263,8 @@ export function signPosLineApproval(c: PosLineApprovalClaim): string {
 /** Constant-time check of {@link signPosLineApproval}. False (never a throw) for any malformed token. */
 export function posLineApprovalMatches(c: PosLineApprovalClaim, token: string): boolean {
   const expected = Buffer.from(signPosLineApproval(c), 'base64url');
-  const actual = Buffer.from(typeof token === 'string' ? token : '', 'base64url');
-  if (actual.length !== expected.length || actual.length === 0) return false;
+  const actual = canonicalSignatureBytes(token);
+  if (!actual || actual.length !== expected.length || actual.length === 0) return false;
   return timingSafeEqual(actual, expected);
 }
 
