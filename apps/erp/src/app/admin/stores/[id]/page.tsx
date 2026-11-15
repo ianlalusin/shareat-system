@@ -196,7 +196,6 @@ export default async function StoreDetailPage({
                 <input type="hidden" name="mode" value={one(posTypedFields.mode) ?? ''} />
                 <input type="hidden" name="liveFrom" value={one(posTypedFields.liveFrom) ?? ''} />
                 <input type="hidden" name="reason" value={one(posTypedFields.reason) ?? ''} />
-                <input type="hidden" name="confirmed" value="1" />
                 <Banner tone="warning">{sp.needsConfirmation}</Banner>
                 <p className="text-neutral-600 dark:text-neutral-400">Reason: {one(posTypedFields.reason)}</p>
                 <div className="flex flex-wrap items-center gap-3">

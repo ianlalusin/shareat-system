@@ -13,6 +13,7 @@
 import { authorize, can } from '@shareat/auth';
 import {
   assertFieldRules,
+  assertMaySwitchStorePosMode,
   checkModeInput,
   CANONICAL_POSITION_DEFAULTS,
   createDaypart,
@@ -260,34 +261,44 @@ export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
 }
 
 /**
- * ⭐ T-533 S1 — switch a store between the old and the new POS, in TWO steps like the opening date. The first send (no `confirmed`) changes nothing: it checks the
- * form and answers with a plain sentence saying exactly what would happen, which the page shows as the confirm step. The second send (`confirmed=1`) calls
- * `setStorePosMode`, which decides who may (admin or super-admin only), the date, an existing sales day, the pre-flight and the roll-back rule, and says why in a
- * sentence. The mode comes from the form, the actor from the session.
+ * ⭐ T-533 S1 — switch a store between the old and the new POS, in TWO steps like the opening date, as TWO actions. The server trusts no flag from the form:
+ * the second action ALWAYS performs the switch, and what guards it is who the actor is, the field rules and `setStorePosMode`'s own checks.
+ *
+ * Step 1, `reviewStorePosModeAction`: changes nothing. Admin or super-admin only (a manager is refused here, in words), then it checks the form and answers with
+ * a plain sentence saying exactly what would happen, which the page shows as the confirm step.
+ * Step 2, `setStorePosModeAction`: authorizes first, checks the form, then calls `setStorePosMode`, which decides who may, the date, an existing sales day, the
+ * pre-flight and the roll-back rule, and says why in a sentence. The mode comes from the form, the actor from the session.
  */
+export async function reviewStorePosModeAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/admin/stores');
+  const storeId = str(fd, 'storeId');
+  const here = `/admin/stores/${storeId}`;
+  let sentence: string;
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => assertMaySwitchStorePosMode(tx, actor));
+    assertFieldRules(ADMIN_STORE_POS_MODE_RULES, fd);
+    const want = checkModeInput({ mode: str(fd, 'mode'), liveFrom: str(fd, 'liveFrom'), reason: str(fd, 'reason') });
+    const step = await posModeStepFor(actor, storeId);
+    sentence = posModeConsequence({ mode: want.mode, liveFrom: want.liveFrom, storeName: step.storeName, wasLive: step.wasLive });
+  } catch (err) {
+    return await redirectWithFlash(here, {}, { error: errorMessage(err), typed: keepTyping(fd, STORE_POS_MODE, storeId, { actorId: actor.personId }) });
+  }
+  return await redirectWithFlash(here, {}, { needsConfirmation: sentence, typed: keepTyping(fd, STORE_POS_MODE, storeId, { actorId: actor.personId }) });
+}
+
 export async function setStorePosModeAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
   const here = `/admin/stores/${storeId}`;
-  const typed = () => keepTyping(fd, STORE_POS_MODE, storeId, { actorId: actor.personId });
-  const input = { mode: str(fd, 'mode'), liveFrom: str(fd, 'liveFrom'), reason: str(fd, 'reason') };
-  if (str(fd, 'confirmed') !== '1') {
-    let sentence: string;
-    try {
-      assertFieldRules(ADMIN_STORE_POS_MODE_RULES, fd);
-      const want = checkModeInput(input);
-      const step = await posModeStepFor(actor, storeId);
-      sentence = posModeConsequence({ mode: want.mode, liveFrom: want.liveFrom, storeName: step.storeName, wasLive: step.wasLive });
-    } catch (err) {
-      return await redirectWithFlash(here, {}, { error: errorMessage(err), typed: typed() });
-    }
-    return await redirectWithFlash(here, {}, { needsConfirmation: sentence, typed: typed() });
-  }
   let done: Awaited<ReturnType<typeof setStorePosMode>>;
   try {
-    done = await withOrgPrincipal(actor.orgId, (tx) => setStorePosMode(tx, actor, { storeId, ...input }, { keyFilePresent }));
+    done = await withOrgPrincipal(actor.orgId, async (tx) => {
+      await assertMaySwitchStorePosMode(tx, actor);
+      assertFieldRules(ADMIN_STORE_POS_MODE_RULES, fd);
+      return setStorePosMode(tx, actor, { storeId, mode: str(fd, 'mode'), liveFrom: str(fd, 'liveFrom'), reason: str(fd, 'reason') }, { keyFilePresent });
+    });
   } catch (err) {
-    return await redirectWithFlash(here, {}, { error: errorMessage(err), typed: typed() });
+    return await redirectWithFlash(here, {}, { error: errorMessage(err), typed: keepTyping(fd, STORE_POS_MODE, storeId, { actorId: actor.personId }) });
   }
   const said = done.mode === 'live' ? `The new POS is live from ${niceDate(done.liveFrom ?? '')}.` : done.mode === 'test' ? 'The new POS is in test mode: no sales day is booked.' : 'The new POS is off.';
   return await redirectWithFlash(here, {}, { ok: done.changed ? said : 'Nothing changed: the store already has that mode.' });

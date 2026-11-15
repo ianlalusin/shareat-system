@@ -7,7 +7,7 @@ import { EditableRecord } from '@/components/forms';
 import { Field, FormGrid, Input, Select, Textarea } from '@/components/ui';
 import { ADMIN_STORE_POS_MODE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import type { TypedView } from '@/lib/keep-typing';
-import { setStorePosModeAction } from '../actions';
+import { reviewStorePosModeAction } from '../actions';
 
 type Mode = 'off' | 'test' | 'live';
 const LABEL: Record<Mode, string> = { off: 'Off (sales days come from v1)', test: 'Test (practice, no sales day is booked)', live: 'Live (from the date below)' };
@@ -24,7 +24,7 @@ export interface PosModeFormProps {
 
 export function PosModeForm({ storeId, storeName, currentMode, today, typed }: PosModeFormProps) {
   return (
-    <EditableRecord action={setStorePosModeAction} label={`POS mode of ${storeName}`} editText="Change POS mode" hidden={{ storeId }} typed={typed} rules={ADMIN_STORE_POS_MODE_RULES}>
+    <EditableRecord action={reviewStorePosModeAction} label={`POS mode of ${storeName}`} editText="Change POS mode" hidden={{ storeId }} typed={typed} rules={ADMIN_STORE_POS_MODE_RULES}>
       <FormGrid className="text-sm">
         <Field label="Mode" rule={ADMIN_STORE_POS_MODE_RULES.mode}>
           <Select {...nativeAttrs(ADMIN_STORE_POS_MODE_RULES.mode)} defaultValue={currentMode} className="w-full">
