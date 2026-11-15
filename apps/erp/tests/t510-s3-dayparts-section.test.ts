@@ -64,6 +64,20 @@ describe('DaypartsSection', () => {
     expect(html.match(/name="days"/g)?.length).toBe(7 * 3); // two edit forms and the add form, seven day boxes each
   });
 
+  it('T-587 S4: the help is plain, with no made-up example times; Retire hours is a quiet button, not a red one', () => {
+    const empty = plain(draw(true, []));
+    expect(empty).toContain('Hours a price can follow. A price tied to hours is only on sale in them, and the cashier sees when it opens next.');
+    expect(empty).toContain('For hours that run past midnight, end earlier than you start.');
+    for (const t of ['08:00', '17:00', 'Lunch from']) expect(empty).not.toContain(t);
+    const html = draw(true);
+    const retire = [...html.matchAll(/<button[^>]*>(?:<svg[\s\S]*?<\/svg>)?Retire hours<\/button>/g)];
+    expect(retire).toHaveLength(2);
+    for (const m of retire) {
+      expect(m[0]).not.toContain('danger'); // no red outline, no red text
+      expect(m[0]).not.toContain('<svg'); // no warning triangle on the trigger
+    }
+  });
+
   it('no hours yet says every price is all day', () => {
     expect(plain(draw(false, []))).toContain('No hours yet. Every price here applies all day.');
   });

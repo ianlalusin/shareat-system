@@ -407,7 +407,7 @@ describe('O4 — storeReadiness: openingDate is manual and non-blocking, three e
     await sql`update stores set opening_date = '2099-01-01' where id = ${storeId}`;
     const check = openingCheck(await readinessFor(f, storeId));
     expect(check?.blocking).toBe(false);
-    expect(check?.detail).toBe('Opens 2099-01-01');
+    expect(check?.detail).toBe('Opens January 1, 2099');
   });
 
   it('a past date — "Opened {date}"', async () => {
@@ -416,6 +416,6 @@ describe('O4 — storeReadiness: openingDate is manual and non-blocking, three e
     await sql`update stores set opening_date = '2020-01-01' where id = ${storeId}`;
     const check = openingCheck(await readinessFor(f, storeId));
     expect(check?.blocking).toBe(false);
-    expect(check?.detail).toBe('Opened 2020-01-01');
+    expect(check?.detail).toBe('Opened January 1, 2020');
   });
 });

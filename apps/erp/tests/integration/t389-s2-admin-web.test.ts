@@ -139,7 +139,7 @@ const openingDate: FormCase<StoreCtx> = {
   stored: (_ctx, seg, m) => expect(m.inputValue(seg, 'openingDate')).toBe('2026-02-01'),
   tooLong: { openingDate: LONG },
   good: (ctx) => openingDate.refused(ctx, { openingDate: '2026-03-01' }),
-  ok: /Opening date set to 2026-03-01/,
+  ok: /Opening date set to March 1, 2026/,
   siblings: async (ctx) => storeSiblings(ctx, 'openingDate'),
   note: 'plain-error branch only; the confirm branch keeps its keep keys',
 };

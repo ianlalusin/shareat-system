@@ -121,7 +121,7 @@ const rows: Row[] = [
   { file: 'app/staff/[employmentId]/credentials/page.tsx', tier: 'R', label: 'Revoke credential', danger: true, visible: 'Revoke credential', action: 'revokeCredentialAction', actionFile: 'app/staff/[employmentId]/credentials/actions.ts', mutation: 'revokeCredential' },
   { file: 'app/inventory/locations/page.tsx', tier: 'R', label: 'Deactivate room', danger: false, visible: 'Deactivate room', action: 'deactivateLocationAction', actionFile: 'app/inventory/locations/actions.ts', mutation: 'deactivateLocation' },
   // ---- AUDIT ROUND H1 / H2 (orchestrator ruling): the two CONDITIONAL danger buttons `variant={x ? 'danger' : ...}` ----
-  { file: 'app/admin/stores/[id]/page.tsx', tier: 'R', label: 'Close this branch', danger: true, conditional: true, visibleRe: /Close this branch|Deactivate/, action: 'deactivateStoreAction', actionFile: 'app/admin/stores/actions.ts', mutation: 'deactivateStore' },
+  { file: 'app/admin/stores/[id]/page.tsx', tier: 'R', label: 'Close this store', danger: true, conditional: true, visibleRe: /Close this store|Deactivate/, action: 'deactivateStoreAction', actionFile: 'app/admin/stores/actions.ts', mutation: 'deactivateStore' },
   { file: 'app/admin/users/[personId]/page.tsx', tier: 'R', label: 'In scope - remove', danger: true, conditional: true, visibleRe: /remove/i, action: 'setStoreScopeAction', actionFile: 'app/admin/users/actions.ts', mutation: 'revokeStoreScope' },
   // ---- Tier W (10): workflow steps on unposted documents, unguarded (Ian Q2, recommended) ----
   { file: 'app/attendance/lane/page.tsx', tier: 'W', label: 'Discard event', danger: true, action: 'discardEventAction', actionFile: 'app/attendance/lane/actions.ts' },
