@@ -1,6 +1,6 @@
 import { can, isStoreManagerOrAbove } from '@shareat/auth';
-import { accessRepo, personsRepo, posV2Repo, storesRepo } from '@shareat/db';
-import { listDayCloses, xReading } from '@shareat/domain';
+import { accessRepo, organizationsRepo, personsRepo, posV2Repo, storesRepo } from '@shareat/db';
+import { listDayCloses, receiptIdentityOf, xReading } from '@shareat/domain';
 import { requirePageAccess, StoreNotAvailable } from '@/lib/page-access';
 import { formatZSlip } from '@/lib/pos-print';
 import { Banner } from '@/components/ui';
@@ -36,8 +36,10 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
     const me = await personsRepo.getPersonById(tx, actor.orgId, actor.personId);
     const isManager = isStoreManagerOrAbove((await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId))?.role) && (await can(tx, actor, 'approve_pos_correction', at));
     const taxType = await posV2Repo.getOrgTaxType(tx, actor.orgId);
+    const org = await organizationsRepo.identityOf(tx, actor.orgId);
+    const identity = org && store ? receiptIdentityOf(org, store) : undefined; // T-585: the issuer on every slip, read once per page load
     const till = await posV2Repo.getTerminalForPairing(tx, actor.orgId, storeId, pairing.pairingId);
-    return { storeId, reading, closes, receiptPaperMm: till?.receiptPaperMm === 80 ? (80 as const) : (58 as const), receiptCopies: till?.receiptCopies ?? 1, storeName: store?.name ?? 'Store', vatRegistered: taxType === 'vat', cashierName: me?.displayName?.trim() || 'Signed in', isManager };
+    return { storeId, reading, closes, receiptPaperMm: till?.receiptPaperMm === 80 ? (80 as const) : (58 as const), receiptCopies: till?.receiptCopies ?? 1, storeName: store?.name ?? 'Store', vatRegistered: taxType === 'vat', identity, cashierName: me?.displayName?.trim() || 'Signed in', isManager };
   });
   if (!data) {
     return (
@@ -48,7 +50,7 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
   }
 
   const print = printSettingsOf({ receiptPaperMm: data.receiptPaperMm, receiptCopies: data.receiptCopies });
-  const ctx = { storeName: data.storeName, vatRegistered: data.vatRegistered, printedBy: data.cashierName };
+  const ctx = { storeName: data.storeName, vatRegistered: data.vatRegistered, identity: data.identity, printedBy: data.cashierName };
   const history = data.closes.map((c) => ({
     id: c.id,
     zNo: c.zNo,
@@ -64,7 +66,7 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
         reading={JSON.parse(JSON.stringify(data.reading)) as ReadingJson}
         history={history}
         isManager={data.isManager}
-        store={{ name: data.storeName, vatRegistered: data.vatRegistered, receiptPaperMm: data.receiptPaperMm, receiptCopies: data.receiptCopies }}
+        store={{ name: data.storeName, vatRegistered: data.vatRegistered, identity: data.identity, receiptPaperMm: data.receiptPaperMm, receiptCopies: data.receiptCopies }}
         cashierName={data.cashierName}
         tillCountsHref={`/till?store=${encodeURIComponent(data.storeId)}`}
       />
