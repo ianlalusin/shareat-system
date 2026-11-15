@@ -53,6 +53,8 @@ export default async function DualRunWeekPage({
   const sp = await withFlash(searchParams, { getKeys: ['version'] });
 
   const scope = await reportScope(`/reports/dual-run/${storeParam}/${weekParam}`, 'view_financial_reports', undefined);
+
+  if ('refusal' in scope) return scope.refusal;
   const store = scope.stores.find((s) => s.code === code);
   if (!store) notFound();
 

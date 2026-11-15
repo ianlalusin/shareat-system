@@ -34,7 +34,8 @@ import { accessRepo, type Tx } from '@shareat/db';
 import { authorize, can, type Actor, type Capability } from '@shareat/auth';
 import { asc, eq } from 'drizzle-orm';
 import { schema } from '@shareat/db';
-import { requireSession } from '../../lib/session';
+import type { ReactNode } from 'react';
+import { requirePageAccess } from '../../lib/page-access';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { withOrgPrincipal } from '../expenses/lib';
@@ -58,8 +59,14 @@ export interface ReportScope {
   coversWholeOrg: boolean;
 }
 
+/** What `reportScope` hands back when the route's capability is missing: the card a page returns as it is. */
+export interface ReportRefusal {
+  refusal: ReactNode;
+}
+
 /**
- * Resolves who is asking, what they may see, and refuses if they may not.
+ * Resolves who is asking, what they may see, and refuses if they may not. A caller early-returns the result when
+ * `'refusal' in scope` (a page returns `scope.refusal`; a CSV route answers 403).
  *
  * `capability` is the one this report needs — `view_trial_balance` (org-scoped) or
  * `view_financial_reports` (store-scoped).
@@ -74,8 +81,11 @@ export async function reportScope(
   path: string,
   capability: Capability,
   requestedStoreId: string | undefined,
-): Promise<ReportScope> {
-  const { actor } = await requireSession(path);
+): Promise<ReportScope | ReportRefusal> {
+  // DEF-867: the page-level gate FIRST, so a person without the route's capability gets the standard refusal card, not the error
+  // boundary. `authorizeForScope` below stays the data gate (defence in depth) and still throws for a route the map leaves open.
+  const { actor, refusal } = await requirePageAccess(path);
+  if (refusal) return { refusal };
 
   return withOrgPrincipal(actor.orgId, async (tx) => {
     const [org] = await tx

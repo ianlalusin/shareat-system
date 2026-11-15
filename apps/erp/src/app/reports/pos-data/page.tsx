@@ -35,6 +35,7 @@ function firstOfMonth(businessDate: string): string {
 export default async function PosDataPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
   const scope = await reportScope('/reports/pos-data', 'view_financial_reports', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   // A download is for ONE store: someone who covers the whole org still starts on their first store, never "all".
   const storeId = scope.storeId ?? scope.stores[0]?.id;
   const today = toBusinessDate();

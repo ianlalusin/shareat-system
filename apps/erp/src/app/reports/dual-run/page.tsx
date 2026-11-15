@@ -23,6 +23,7 @@ interface SearchParams {
 export default async function DualRunOverviewPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
   const scope = await reportScope('/reports/dual-run', 'view_financial_reports', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   const storeIds = scope.storeId ? [scope.storeId] : scope.stores.map((s) => s.id);
   const rows = await runReport(scope.actor.orgId, (tx) => dualRunOverview(tx, scope.actor, { storeIds }));
 

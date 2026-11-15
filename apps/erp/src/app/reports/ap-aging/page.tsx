@@ -31,6 +31,7 @@ export default async function ApAgingPage({
   // AR/AP aging is a store-operational report — the income statement's audience
   // (view_financial_reports), not the trial balance's admin-only one (T-209b spec).
   const scope = await reportScope('/reports/ap-aging', 'view_financial_reports', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
   const storeRows = scope.stores;
   const storeId = scope.storeId;

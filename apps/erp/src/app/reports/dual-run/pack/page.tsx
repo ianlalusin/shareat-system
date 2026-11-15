@@ -24,6 +24,7 @@ interface SearchParams {
 export default async function DualRunPackPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
   const scope = await reportScope('/reports/dual-run/pack', 'view_financial_reports', undefined);
+  if ('refusal' in scope) return scope.refusal;
 
   if (!scope.coversWholeOrg) {
     return (

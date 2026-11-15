@@ -39,6 +39,7 @@ export default async function TrialBalancePage({
   // ⛔ DEF-064. The org comes from the SESSION and is never read from the URL, and the store
   // list is what this person is actually scoped to. `sp.org` is deliberately ignored.
   const scope = await reportScope('/reports/trial-balance', 'view_trial_balance', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
   const storeRows = scope.stores;
   const storeId = scope.storeId;
