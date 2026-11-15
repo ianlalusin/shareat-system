@@ -21,10 +21,12 @@
  *    (notice). A gap beyond the 7-day window IS said, as a failure (a notice on the org's first-ever run).
  *  - T-551 (row 452 b): the v1 day feed ends on `V1_DAY_FEED_LAST_DATE`. The last date imported is `min(yesterday, that)`, and the
  *    gap notice never counts a later date, so after the window passes 31 Dec a run has nothing to do and says so cleanly.
+ *  - T-533: a store whose new-POS switch is LIVE owns every date from `live_from` on (the 0247 trigger refuses a v1 feed day there). Those dates are SKIPPED here,
+ *    counted as skipped and never failed, and POS is not asked; a roll-back (`setStorePosMode`) makes them importable again. The trigger stays as the backstop.
  *  - A dry run fetches and imports inside a rolled-back transaction, skips the recheck, and writes no `scheduler_runs` row.
  */
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { posV1Repo, salesDaysRepo, schedulerRepo, withOrgPrincipal, type SchedulerFailure } from '@shareat/db';
+import { posV1Repo, posV2Repo, salesDaysRepo, schedulerRepo, withOrgPrincipal, type SchedulerFailure } from '@shareat/db';
 import { toBusinessDate } from '@shareat/core';
 import { addDays as addBusinessDays, parseBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
@@ -193,6 +195,9 @@ async function importForOrg(
     });
     const actor: Actor = { personId: link.updatedBy ?? link.createdBy, orgId: org.id };
     const linkDate = toBusinessDate(link.createdAt);
+    // T-533: the first date the new POS owns for this store, or null (off, test, or no switch row yet).
+    const posStore = await withOrgPrincipal(org.id, (tx) => posV2Repo.getPosStore(tx, org.id, link.storeId));
+    const liveFrom = posStore?.mode === 'live' ? posStore.liveFrom : null;
 
     // A gap beyond the window: dates with no sales day (any status) that the timer will never reach. Said on every run until
     // each exists, never silent - computed from the data, not from when the job last ran.
@@ -201,7 +206,9 @@ async function importForOrg(
     const gapFrom = prevCleanDate && prevCleanDate.localeCompare(linkDate) > 0 ? prevCleanDate : linkDate;
     if (gapFrom.localeCompare(capStart) < 0) {
       const dayBeforeWindow = addDays(capStart, -1);
-      const gapEnd = dayBeforeWindow.localeCompare(V1_DAY_FEED_LAST_DATE) > 0 ? V1_DAY_FEED_LAST_DATE : dayBeforeWindow;
+      const feedEnd = dayBeforeWindow.localeCompare(V1_DAY_FEED_LAST_DATE) > 0 ? V1_DAY_FEED_LAST_DATE : dayBeforeWindow;
+      // A date the new POS owns is never "missing" from the v1 feed.
+      const gapEnd = liveFrom && addDays(liveFrom, -1).localeCompare(feedEnd) < 0 ? addDays(liveFrom, -1) : feedEnd;
       const have = await withOrgPrincipal(org.id, (tx) => salesDaysRepo.datesWithAnyDay(tx, org.id, link.storeId, gapFrom, gapEnd));
       const gap = dateRange(gapFrom, gapEnd).filter((d) => !have.has(d));
       if (gap.length > 0) {
@@ -225,6 +232,10 @@ async function importForOrg(
     let storeStopped = false;
 
     for (const date of dates) {
+      if (liveFrom && date.localeCompare(liveFrom) >= 0) {
+        skipped += 1;
+        continue;
+      }
       if (existing.has(date)) {
         skipped += 1;
         continue;

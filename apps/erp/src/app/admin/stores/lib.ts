@@ -5,8 +5,8 @@
  * capability gate — the gate belongs to the WRITE, not to looking at a list — and every mutation
  * runs through `packages/domain/src/stores/service.ts`'s own `authorize()` via the actions file.
  */
-import { daypartsRepo, manilaToday, storesRepo, stockLocationsRepo, type StoreRow } from '@shareat/db';
-import { listKitchenSetup, storeReadiness, type KitchenSetup, type ReadinessCheck } from '@shareat/domain';
+import { daypartsRepo, manilaToday, personsRepo, posV2Repo, refuse, storesRepo, stockLocationsRepo, type StoreRow } from '@shareat/db';
+import { assertMaySwitchStorePosMode, listKitchenSetup, posPreflight, storeReadiness, type KitchenSetup, type PreflightResult, type ReadinessCheck } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { type Actor, can } from '@shareat/auth';
 import type { DaypartView } from '../../menu/lib';
@@ -89,5 +89,53 @@ export async function daypartsForStore(actor: Actor, storeId: string): Promise<{
       canManage,
       dayparts: rows.map((d) => ({ id: d.id, name: d.name, days: [...d.days], start: d.startTime.slice(0, 5), end: d.endTime.slice(0, 5), status: d.status })),
     };
+  });
+}
+
+/** Whether the bridge key-file setting is configured: yes or no, never the value. The one probe the pre-flight and the mode switch share. */
+export const keyFilePresent = (): boolean => Boolean(process.env.POS_FIREBASE_SA_KEY_FILE?.trim());
+
+/**
+ * T-533 S3: the POS pre-flight for one store. `posPreflight` authorizes `manage_stores` itself. The bridge key-file setting is asked as a yes or no
+ * and its value is never read into the page.
+ */
+export async function posPreflightFor(actor: Actor, storeId: string): Promise<PreflightResult> {
+  return withOrgPrincipal(actor.orgId, (tx) => posPreflight(tx, actor, { storeId }, { keyFilePresent }));
+}
+
+export interface PosModeView {
+  /** `off` when the store has no switch row yet. */
+  readonly mode: 'off' | 'test' | 'live';
+  readonly liveFrom: string | null;
+  /** Null until the first change. */
+  readonly changedAt: Date | null;
+  readonly changedByName: string | null;
+  readonly today: string;
+  readonly preflight: PreflightResult;
+}
+
+/** T-533 S1: what the POS card on the store page shows: the stored mode, who set it and when, and the pre-flight counts. Admin only (the pre-flight authorizes). */
+export async function posModeFor(actor: Actor, storeId: string): Promise<PosModeView> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const row = await posV2Repo.getPosStore(tx, actor.orgId, storeId);
+    const who = row ? await personsRepo.getPersonById(tx, actor.orgId, row.changedBy) : undefined;
+    return {
+      mode: row?.mode ?? 'off',
+      liveFrom: row?.liveFrom ?? null,
+      changedAt: row?.changedAt ?? null,
+      changedByName: who?.displayName ?? null,
+      today: await manilaToday(tx),
+      preflight: await posPreflight(tx, actor, { storeId }, { keyFilePresent }),
+    };
+  });
+}
+
+/** T-533 S1: what the confirm step needs to name the store and to know whether this is a roll-back from live. Admin or super-admin only (the same gate as the switch), so a manager is refused at step 1; it changes nothing. */
+export async function posModeStepFor(actor: Actor, storeId: string): Promise<{ storeName: string; wasLive: boolean }> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    await assertMaySwitchStorePosMode(tx, actor);
+    const store = await storesRepo.getById(tx, actor.orgId, storeId);
+    if (!store) throw refuse(`posModeStepFor: store ${storeId} not in org`, 'That store does not exist.');
+    return { storeName: store.name, wasLive: (await posV2Repo.getPosStore(tx, actor.orgId, storeId))?.mode === 'live' };
   });
 }

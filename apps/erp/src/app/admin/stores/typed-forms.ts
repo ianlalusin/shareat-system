@@ -21,6 +21,12 @@ export const STORE_STOCK_MODEL = defineTypedForm({
   fields: ['stockModel'],
 });
 
+/** T-533 S1: the Set POS mode form (record = store id). Kept after a refused switch so the reason is not retyped. */
+export const STORE_POS_MODE = defineTypedForm({
+  form: 'store.posMode',
+  fields: ['mode', 'liveFrom', 'reason'],
+});
+
 /** T-508 S2b: a kitchen station's edit form (record = station id) and the routing picker family (record = store id). */
 export const KITCHEN_STATION_EDIT = defineTypedForm({
   form: 'kitchen.station',

@@ -55,6 +55,7 @@ const COMMANDS: Record<string, string> = {
   'Approve and book': 'T-511 S7b (BOSS approved): approves one settlement day and books its payout (money in the books); audited; the uploader rule and the blockers are re-checked in the domain',
   'Book this charge': 'T-511 S7b (BOSS approved): books one platform charge that belongs to no sales day (money out for good); audited; the uploader rule is applied in the domain',
   'Add cash register': 'T-546 (BOSS approved), T-582 rename: adds a cash register (a till in code; the receipt-number identity of a store); audited',
+  'Confirm and switch': 'T-533 S1, BOSS approved 15 Nov 2026: switches a store between the old and the new POS (decides where its sales days come from; admin or super-admin only; audited pos.store_mode_set)',
   'Set tablet': 'T-546 (BOSS approved): chooses which paired tablet acts as a till, or none; audited',
   'Save printer': "T-546 (BOSS approved): sets the till's receipt paper and copies, which the tablet then prints with; audited",
   'Register tablet': 'T-505: links a POS tablet to the store so it can ask a manager for a refund approval (grants access); audited',
