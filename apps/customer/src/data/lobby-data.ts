@@ -9,7 +9,6 @@ import type { LobbyBirthday, LobbyClaim, LobbyClaimInput, LobbyCheckInInput, Lob
 export interface LobbyStoreView {
   storeCode: string;
   storeName: string;
-  partiesWaiting: number;
   accepting: boolean;
 }
 
