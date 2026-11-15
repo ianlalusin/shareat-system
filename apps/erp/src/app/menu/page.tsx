@@ -214,7 +214,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
                     Retiring a category hides it, and every item in it, from every store menu. It is refused while the category still holds active items.
                   </HelpTip>
                 </div>
-                <EditableRecord action={editCategoryAction} rules={MENU_CATEGORY_RULES} label={c.name} hidden={{ id: c.id }} typed={typedFor(sp, MENU_CATEGORY, c.id, actor.personId)}>
+                <EditableRecord action={editCategoryAction} rules={MENU_CATEGORY_RULES} label={c.name} summary={[{ label: 'Name', value: c.name }, { label: 'Sort order', value: String(c.sortOrder) }]} hidden={{ id: c.id }} typed={typedFor(sp, MENU_CATEGORY, c.id, actor.personId)}>
                   <FormGrid layout="fields">
                     <Field label="Name" width="name" rule={MENU_CATEGORY_RULES.name}>
                       <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} defaultValue={c.name} />
