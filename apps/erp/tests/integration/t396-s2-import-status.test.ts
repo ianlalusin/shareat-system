@@ -194,17 +194,10 @@ describe('S2-5 / S2-5b who sees what', () => {
     const f = await fixture('staff');
     await insertRun(f, { failures: [{ subjectId: f.storeA, subjectName: 'Store Alpha, 14 Oct', reason: 'ZZ-STAFF-REASON no wallet.' }] });
     expect(await renderPageAs(f, f.admin)).toContain('ZZ-STAFF-REASON');
-    // DEF-809: /sales-days is gated by submit_sales_day, so staff are refused outright and no part of the run is rendered.
-    const refusal = await renderPageAs(f, f.staff).then(
-      html => ({ html }),
-      (e: unknown) => ({ error: e }),
-    );
-    expect('html' in refusal ? refusal.html : '').not.toContain('ZZ-STAFF-REASON');
-    expect('error' in refusal).toBe(true);
-    const err = (refusal as { error: unknown }).error as { name?: string; capability?: string; message?: string };
-    expect(err.name).toBe('AuthorizationError');
-    expect(err.capability).toBe('submit_sales_day');
-    expect(String(err.message)).not.toContain('ZZ-STAFF-REASON');
+    // DEF-809: staff are refused outright and no part of the run is rendered. T-589 B3a: /sales-days is on the route map now, so the refusal is the card, not a thrown error.
+    const html = await renderPageAs(f, f.staff);
+    expect(html).toContain('You do not have access to this screen');
+    expect(html).not.toContain('ZZ-STAFF-REASON');
   }, 30_000);
 
   it('a manager scoped to store A sees A lines (failure and notice), none of store B - kills: shows every store refusals org-wide', async () => {

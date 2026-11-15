@@ -97,7 +97,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect } from 'vitest';
 import { sql as dsql } from 'drizzle-orm';
 
-import type { Actor } from '@shareat/auth';
+import { CAPABILITY_LABEL, type Actor, type Capability } from '@shareat/auth';
 import { captureRedirect, outcomeOf, pageParamsOf, resetJar, type Outcome } from '../helpers/flash-jar';
 
 export { cast, rawItem, rawRule, rawOption, asOrg, sql, uid, type Cast } from '../../../../packages/domain/tests/integration/_fixtures/t401-s2-menu';
@@ -173,7 +173,8 @@ export async function render(
 export function expectAccessRefused(html: string, capability: string): void {
   const t = plain(html);
   expect(t, 'the access-refused card is drawn').toContain('You do not have access to this screen');
-  expect(t, 'it names the capability').toContain(capability);
+  expect(t, 'it says what the screen is for, in words').toContain(`This screen is for people who can ${CAPABILITY_LABEL[capability as Capability]}.`);
+  expect(t, 'no raw capability key').not.toContain(capability);
 }
 
 /** A refusal in a sentence: shown to the person, nothing raw from the database. */

@@ -188,12 +188,12 @@ describe('the review screen says nothing internal', () => {
 
 describe('render 2 fixes (6 Nov 2026)', () => {
   const ctx = (blocked: boolean) =>
-    ({ active: true, blocked, summary: blocked ? 'Save is off until: A rejection needs a reason.' : null, failing: [], blockers: new Map(), warnings: new Map(), values: {}, setVerdict: () => {}, track: () => () => {}, result: () => undefined, touched: () => false, applies: () => true }) as never;
+    ({ active: true, blocked, summary: blocked ? 'To save: A rejection needs a reason.' : null, failing: [], blockers: new Map(), warnings: new Map(), values: {}, setVerdict: () => {}, track: () => () => {}, result: () => undefined, touched: () => false, applies: () => true }) as never;
   const inForm = (blocked: boolean, node: ReturnType<typeof h>) => renderToStaticMarkup(h(CheckContext.Provider, { value: ctx(blocked) }, node));
 
   it('the hint is not a p[role=status], the shared line is: the form hides the shared one only [kills: the hint hidden by its own rule]', () => {
     const hint = inForm(true, h(RejectReasonHint));
-    const shared = inForm(true, h(CheckSummary, { active: true, summary: 'Save is off until: A rejection needs a reason.' }));
+    const shared = inForm(true, h(CheckSummary, { active: true, summary: 'To save: A rejection needs a reason.' }));
     expect(shared).toMatch(/^<p\b[^>]*role="status"/);
     expect(hint).not.toMatch(/^<p\b/);
     expect(hint).toMatch(/^<div\b[^>]*role="status"/);

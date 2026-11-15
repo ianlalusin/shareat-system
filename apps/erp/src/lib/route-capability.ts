@@ -86,6 +86,14 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/reports/expense-items': 'view_financial_reports',
   '/reports/sales-rollup': 'view_financial_reports',
   '/reports/pos-data': 'view_financial_reports',
+  // T-589 B3a: these routes had no key, so a refused person hit the error boundary (`reportScope`'s data gate throws). Each key is the word the page's own
+  // `reportScope(...)` gate uses, so the route gate and the data gate cannot disagree. Children inherit (dual-run/pack, dual-run/[store]/[week]).
+  '/reports/journal-lines': 'view_trial_balance',
+  '/reports/dual-run': 'view_financial_reports',
+
+  // T-589 B3a: the day list shows every day's totals and cash (DEF-809: managers and up, never staff). Any-of the two words `sales-days/[id]` and `/edit` already
+  // read by (`canReadAtStore`), so nobody who reads a day is locked out of its list. `/` is deliberately NOT keyed: everyone lands there (the page shows a plain welcome).
+  '/sales-days': ['submit_sales_day', 'verify_sales_day'],
 
   // --- What the business owes and owns, and what people are paid ------------------------------
   // ⚠️ `/payroll` is the one people react to most strongly when it is visible on a counter
