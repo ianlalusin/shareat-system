@@ -78,7 +78,7 @@ describe('R2 listTerminals', () => {
     const got = await list(f, f.manager);
     expect(got.terminals.map((t) => t.terminalNo)).toEqual([1, 2]);
     const label = (await sql<{ label: string }[]>`select label from pos_tablet_pairings where id = ${f.pairingId}`)[0]!.label;
-    expect(got.terminals[0]).toMatchObject({ terminalNo: 1, pairingId: f.pairingId, pairingLabel: label, receiptPaperMm: 58, receiptCopies: 1 });
+    expect(got.terminals[0]).toMatchObject({ terminalNo: 1, pairingId: f.pairingId, pairingLabel: label, receiptPaperMm: 58, receiptCopies: 1, identity: expect.objectContaining({ addressLines: [], tin: null }) });
     expect(got.terminals[1]).toMatchObject({ id: t2, terminalNo: 2, pairingId: null, pairingLabel: null, receiptPaperMm: 80, receiptCopies: 2 });
     expect(got.freePairings, 'the revoked pairing, the linked one and the other store\'s are not offered').toEqual([]);
   });
@@ -115,7 +115,7 @@ describe('R2 createTerminal', () => {
     expect(a).toHaveLength(1);
     expect(a[0]).toMatchObject({ actor_person_id: f.managerId, store_id: f.storeId, entity_id: terminalId });
     expect(a[0]!.before).toBeNull();
-    expect(a[0]!.after).toMatchObject({ terminalNo: 3, receiptPaperMm: 58, receiptCopies: 1 });
+    expect(a[0]!.after).toMatchObject({ terminalNo: 3, receiptPaperMm: 58, receiptCopies: 1, identity: expect.objectContaining({ addressLines: [], tin: null }) });
     expect(await stateVersionOf(f)).toBe(v0 + 1);
   });
 
@@ -250,7 +250,7 @@ describe('R2 setTerminalPrinter', () => {
     const a = await auditRows(f, 'pos.terminal_printer_set');
     expect(a).toHaveLength(1);
     expect(a[0]).toMatchObject({ actor_person_id: f.managerId, store_id: f.storeId, entity_id: t1 });
-    expect(a[0]!.before).toMatchObject({ receiptPaperMm: 58, receiptCopies: 1 });
+    expect(a[0]!.before).toMatchObject({ receiptPaperMm: 58, receiptCopies: 1, identity: expect.objectContaining({ addressLines: [], tin: null }) });
     expect(a[0]!.after).toMatchObject({ receiptPaperMm: 80, receiptCopies: 3 });
     expect(await stateVersionOf(f)).toBe(v0 + 1);
   });
@@ -340,7 +340,7 @@ describe('R3 the snapshot carries the till\'s printer settings', () => {
 
   it('store has receiptPaperMm and receiptCopies (58 and 1 by default)', async () => {
     const f = await fixture();
-    expect((await snapshot(f)).body.store).toEqual({ storeId: f.storeId, name: f.storeName, mode: 'test', terminalNo: 1, vatRegistered: true, receiptPaperMm: 58, receiptCopies: 1 });
+    expect((await snapshot(f)).body.store).toEqual({ storeId: f.storeId, name: f.storeName, mode: 'test', terminalNo: 1, vatRegistered: true, receiptPaperMm: 58, receiptCopies: 1, identity: expect.objectContaining({ addressLines: [], tin: null }) });
   });
 
   it('changing the printer changes the settings AND the ETag; changing it back restores the ETag', async () => {
