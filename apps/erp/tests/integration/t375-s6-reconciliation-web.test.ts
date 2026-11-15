@@ -249,7 +249,7 @@ describe('W1 - the T-210 page: stored feeds, no POS call at render, Check POS ag
     expect(c1.atImport, 'what was posted does not move').toContain('₱1,050.00');
     expect(c1.atImport).not.toContain('₱1,000.00');
     expect(c1.latest, 'the new figures').toContain('₱1,000.00');
-    expect(after).toMatch(/Delta[^₱]*-₱50\.00/);
+    expect(after).toMatch(/Difference[^₱]*-₱50\.00/);
   });
 });
 
@@ -279,7 +279,7 @@ describe('W1 (T-377 S1, DEF-596) - the page after a posted correction says "Post
     const page = text(renderToStaticMarkup(await PosReconciliationPage({ searchParams: Promise.resolve({ store: f.storeId, date: DAY }) })));
 
     expect(page).toContain('Posted basis');
-    expect(page).toContain('What the ledger holds: the import, or the latest correction.');
+    expect(page).toContain('What the books hold: the import, or the latest correction.');
     expect(page).not.toContain('At import');
     const a = page.indexOf('Posted basis');
     const l = page.indexOf('Latest check');

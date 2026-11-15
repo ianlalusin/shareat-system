@@ -2,7 +2,7 @@ import { can } from '@shareat/auth';
 import { getPosDayReconciliation } from '@shareat/domain';
 import { reportScope, runReport } from '../lib';
 import { recheckPosDayAction } from '../../sales-days/actions';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { PosReconciliationCard } from '@/components/reports/PosReconciliationCard';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -59,8 +59,8 @@ export default async function PosReconciliationPage({
       <div>
         <h1 className="text-2xl font-semibold">POS Reconciliation</h1>
         <PageDescription>
-          What POS said about the day, from the feeds this system stored, beside Shareat System&apos;s own
-          sales-day record. Nothing here calls POS: the check button below stores a fresh reading.
+          What POS reported for the day, next to this system&apos;s own sales record. Where it is
+          offered, Check POS again takes a fresh reading.
         </PageDescription>
       </div>
 
@@ -100,7 +100,7 @@ export default async function PosReconciliationPage({
             {' · '}
             {currentStore ? `${currentStore.name} (${currentStore.code})` : storeId}
             {' · '}
-            {businessDate}
+            {formatBusinessDayLong(businessDate)}
           </p>
           <PosReconciliationCard postedBasis={result.postedBasis} latest={result.latest} ledger={result.ledger} matches={result.matches} delta={result.delta} />
           {canRecheck && result.salesDayId && (

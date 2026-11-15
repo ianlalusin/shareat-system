@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { peso } from '../../../../lib/format';
 import { requirePageAccess } from '@/lib/page-access';
 import { editSupplierAction, recordPaymentAction, autoAllocatePaymentAction } from '../../actions';
@@ -156,7 +157,7 @@ export default async function SupplierDetailPage({
               <span>
                 Issues an <strong>Official Receipt</strong> (BIR)
                 <span className="block text-xs text-neutral-500">
-                  Defaults the document type when an invoice is logged against this supplier. ⚠️
+                  Sets the document type when an invoice is logged for this supplier.
                   Changing it does not alter invoices already recorded.
                 </span>
               </span>
@@ -278,7 +279,7 @@ export default async function SupplierDetailPage({
                     <td className="px-3 py-2">
                       <RowLink href={`/expenses/${i.expenseId}`}>{i.particulars}</RowLink>
                     </td>
-                    <td className="px-3 py-2">{i.businessDate}</td>
+                    <td className="px-3 py-2">{formatBusinessDayLong(i.businessDate)}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(i.outstanding)}</td>
                   </LinkRow>
                 ))}
@@ -297,7 +298,7 @@ export default async function SupplierDetailPage({
             title="Record a payment"
             size="lg"
             defaultOpen={Boolean(prefillBill)}
-            description="Name the open items this settles (bible §16.10) — check the ones this payment covers and how much of each, or press “Auto-allocate” to fill the empty boxes most-overdue-first (T-330) and edit from there. Paying more than allocated routes the rest to advances to suppliers."
+            description="Tick the open items this payment covers and enter how much goes to each. Or press “Auto-allocate” to fill the empty boxes, most overdue first, and edit from there. Anything paid beyond the items is kept as an advance to the supplier."
           >
           <AutoAllocatePaymentForm
             postAction={recordPaymentAction}
@@ -339,16 +340,16 @@ export default async function SupplierDetailPage({
                     <td className="px-3 py-2">
                       <RowLink
                         href={`/ap/invoices/${inv.id}`}
-                        aria-label={`Open invoice ${inv.invoiceNo ?? 'with no number'} of ${inv.invoiceDate}`}
+                        aria-label={`Open invoice ${inv.invoiceNo ?? 'with no number'} of ${formatBusinessDayLong(inv.invoiceDate)}`}
                         className="inline-flex min-h-6 items-center"
                       >
                         {inv.invoiceNo ?? 'No number'}
                       </RowLink>
                     </td>
-                    <td className="px-3 py-2">{inv.invoiceDate}</td>
+                    <td className="px-3 py-2">{formatBusinessDayLong(inv.invoiceDate)}</td>
                     <td className="px-3 py-2">
                       <span className="inline-flex flex-wrap items-center gap-1.5">
-                        <Badge status={inv.status} />
+                        {inv.status === 'pending' ? <Badge tone="warning" label="Not verified" /> : <Badge status={inv.status} />}
                         {inv.selfVerified && <Badge tone="warning" label="Verified by its own creator" />}
                       </span>
                     </td>

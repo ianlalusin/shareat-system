@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '@/lib/page-access';
 import { canReadAtStore } from '@/lib/can-read-at-store';
 import { cancelAction, decideAction, releaseAction, settleAction } from '../actions';
@@ -77,7 +78,7 @@ export default async function CashRequestPage({
         <h1 className="mt-2 text-2xl font-semibold">{req.purpose}</h1>
         <PageDescription>
           {holder?.displayName ?? 'Unknown holder'} · {store?.name ?? '—'} ·{' '}
-          {STATUS_LABEL[req.status] ?? req.status} · asked {req.requestedOn}
+          {STATUS_LABEL[req.status] ?? req.status} · asked {formatBusinessDayLong(req.requestedOn)}
         </PageDescription>
       </div>
 
@@ -98,9 +99,8 @@ export default async function CashRequestPage({
               <Figure label="Still out" value={peso(req.float.outstanding)} emphasis />
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-500">
-              <strong>Still out</strong> is the cash the custodian of this request still holds. The
-              other four are the same balance broken up by what happened to the money — which is why
-              they cannot disagree with it.{' '}
+              <strong>Still out</strong> is the cash the holder still has. The other four show what
+              happened to the money.{' '}
               {req.isSettled && req.float.released !== '0.00' && (
                 <>
                   It has reached <strong>zero</strong>, so the request is closed.
@@ -117,9 +117,9 @@ export default async function CashRequestPage({
           <div>
             <h2 className="font-medium">Decide</h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Asked for <strong>{peso(req.requestedAmount)}</strong>. ⚠️ Approving is{' '}
-              <strong>not</strong> handing over — the money moves at release, and this decision
-              cannot be revisited once it is made.
+              Asked for <strong>{peso(req.requestedAmount)}</strong>. Approving is{' '}
+              <strong>not</strong> handing over: the money moves when you hand it over, and this
+              decision cannot be changed once it is made.
             </p>
           </div>
 
@@ -163,8 +163,8 @@ export default async function CashRequestPage({
           <div>
             <h2 className="font-medium">Hand the cash over</h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Approved for <strong>{peso(req.approvedAmount ?? '0')}</strong>. This is the posting
-              that moves money: it leaves the account below and becomes a float charged to{' '}
+              Approved for <strong>{peso(req.approvedAmount ?? '0')}</strong>. This is the step that
+              moves the money: it leaves the account below and is charged to{' '}
               {holder?.displayName ?? 'the holder'}.
             </p>
           </div>
@@ -179,7 +179,7 @@ export default async function CashRequestPage({
                     className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
                   />
                 </Field>
-                <Field label="From" hint="Balances shown are derived from the ledger." rule={CASH_REQUEST_RELEASE_RULES.fromMoneyAccountId}>
+                <Field label="From" hint="Balances shown are the current balances." rule={CASH_REQUEST_RELEASE_RULES.fromMoneyAccountId}>
                   <Select {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.fromMoneyAccountId)} defaultValue="" className="w-full">
                     <option value="" disabled>
                       Choose…
@@ -209,18 +209,18 @@ export default async function CashRequestPage({
       {canSettle && (
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <div>
-            <h2 className="font-medium">Close the float</h2>
+            <h2 className="font-medium">Close this request</h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               <strong>{peso(req.float.outstanding)}</strong> is still out.{' '}
               {/* ⚠️ Says where the spending goes, because the absence of a field here looks like an
                   omission. Expenses paid from a float already credit 1120; recording them twice is
                   the mistake this sentence exists to prevent. */}
-              ⚠️ Money <em>spent</em> is not entered here — record it as an expense paid from this
-              request, and the float reduces itself. This form is for what comes{' '}
+              Money <em>spent</em> is not entered here. Record it as an expense paid from this
+              request and the amount still out goes down by itself. This form is for what comes{' '}
               <strong>back</strong>, and what does not.
             </p>
           </div>
-          <FormModal trigger="Close the float" title="Close the float" size="lg">
+          <FormModal trigger="Close this request" title="Close this request" size="lg">
             <CheckedForm rules={CASH_REQUEST_SETTLE_RULES} action={settleAction} className="space-y-4">
               <input type="hidden" name="requestId" value={req.id} />
               <div className="grid gap-4 sm:grid-cols-2">
@@ -239,7 +239,7 @@ export default async function CashRequestPage({
                 </Field>
                 <Field
                   label="Short"
-                  hint="Unaccounted-for. Becomes a receivable from the holder, not a write-off."
+                  hint="Money not accounted for. It is owed back by the holder, not written off."
                   rule={CASH_REQUEST_SETTLE_RULES.shortAmount}
                 >
                   <input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.shortAmount)} className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
@@ -267,8 +267,8 @@ export default async function CashRequestPage({
           <div>
             <h2 className="font-medium">Withdraw</h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              No longer needed. Nothing has posted, so there is nothing to undo — and any approval
-              is cleared rather than left behind.
+              No longer needed. No money has moved, so there is nothing to undo. Any approval is
+              cleared.
             </p>
           </div>
           <form action={cancelAction} className="flex flex-wrap items-end gap-3">
@@ -287,14 +287,14 @@ export default async function CashRequestPage({
       <section className="space-y-2 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
         <h2 className="font-medium">Trail</h2>
         <dl className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
-          <Row label="Asked for" value={`${peso(req.requestedAmount)} on ${req.requestedOn}`} />
+          <Row label="Asked for" value={`${peso(req.requestedAmount)} on ${formatBusinessDayLong(req.requestedOn)}`} />
           <Row
             label="Decision"
             value={
               req.decidedOn
                 ? req.status === 'rejected'
-                  ? `Refused on ${req.decidedOn} — ${req.rejectReason ?? ''}`
-                  : `Approved for ${peso(req.approvedAmount ?? '0')} on ${req.decidedOn}`
+                  ? `Refused on ${formatBusinessDayLong(req.decidedOn)}: ${req.rejectReason ?? ''}`
+                  : `Approved for ${peso(req.approvedAmount ?? '0')} on ${formatBusinessDayLong(req.decidedOn)}`
                 : '—'
             }
           />
@@ -302,7 +302,7 @@ export default async function CashRequestPage({
             label="Released"
             value={
               req.releasedOn
-                ? `${peso(req.float.released)} on ${req.releasedOn} from ${
+                ? `${peso(req.float.released)} on ${formatBusinessDayLong(req.releasedOn)} from ${
                     accounts.find((a) => a.id === req.releasedFromMoneyAccountId)?.name ?? '—'
                   }`
                 : '—'

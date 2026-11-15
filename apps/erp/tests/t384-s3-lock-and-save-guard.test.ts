@@ -142,7 +142,7 @@ const COMMANDS: Record<string, string> = {
   'Dispute — flag for review, does not stop the 15-day clock': 'moves a status',
   'Override': 'overrides a verified day',
   '\u2192 Move to reviewing': 'moves a status',
-  'Open branch': 'opening a store is a status change',
+  'Add store': 'opening a store is a status change',
   'Create the missing month': 'creates a period',
   'Make default': 'changes which record is default',
   'Discard': 'discards a record',
@@ -188,7 +188,7 @@ const COMMANDS: Record<string, string> = {
   'Assign role': 'grants access',
   'Cancel order': 'moves a status',
   'Issue PIN': 'issues a credential',
-  'Provision terminal': 'issues a device credential',
+  'Set up terminal': 'issues a device credential',
   'Reinstate': 'moves a status',
   'Retire this channel': 'moves a status',
   // T-434 staff photo/signature (managers only; bible rows 353/355)

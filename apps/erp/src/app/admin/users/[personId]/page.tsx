@@ -37,8 +37,6 @@ import { withFlash } from '@/lib/flash';
 export const metadata = { title: 'User access — Shareat System' };
 export const dynamic = 'force-dynamic';
 
-const MANILA = { timeZone: 'Asia/Manila' } as const;
-
 /**
  * T-291 §C2 / spec T2 — the seam to T-290's screen. Rendered as plain text while T-290 was not
  * yet on main (a page-to-page link is not covered by `nav-route-reachability`'s direction-A check,
@@ -98,7 +96,7 @@ export default async function UserAccessPage({
           {person.role ? (
             <>
               {ROLE_LABEL[person.role]}
-              {person.grantedAt && ` since ${person.grantedAt.toLocaleDateString('en-PH', MANILA)}`}
+              {person.grantedAt && ` since ${formatBusinessDateTime(person.grantedAt, { dateStyle: 'long' })}`}
             </>
           ) : (
             'No role — authorized for nothing'
@@ -158,19 +156,19 @@ export default async function UserAccessPage({
               </Button>
             </CheckedForm>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Appointing an <strong>admin</strong> requires super-admin, and grants them scope for
-              every active store at that moment. A role change is recorded as a revoke plus a new
-              grant, so &ldquo;what was their role in March&rdquo; stays answerable.
+              Appointing an <strong>admin</strong> needs the Super admin role, and gives them access to every
+              active store at that moment. A role change keeps the old role on record, so you can
+              still see what their role was in March.
             </p>
           </>
         )}
       </section>
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Store scope</h2>
+        <h2 className="font-medium">Store access</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Holding a capability is never enough on its own — a store-scoped action also needs the
-          store. Admin has no bypass here; their access is these rows.
+          To act at a store, a person needs both the permission and access to that store. Even an
+          admin only has the stores listed here.
         </p>
         {stores.length === 0 ? (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -334,13 +332,13 @@ export default async function UserAccessPage({
 
         {revokedGrants.length > 0 && (
           <details className="text-xs text-neutral-500 dark:text-neutral-400">
-            <summary className="cursor-pointer">{revokedGrants.length} revoked grant(s)</summary>
+            <summary className="cursor-pointer">{revokedGrants.length} revoked {revokedGrants.length === 1 ? 'grant' : 'grants'}</summary>
             <ul className="mt-2 space-y-1">
               {revokedGrants.map((g) => (
                 <li key={g.id}>
                   <span>
                     {capabilityTitle(g.grantName)} — revoked{' '}
-                    {g.revokedAt?.toLocaleDateString('en-PH', MANILA)}
+                    {g.revokedAt ? formatBusinessDateTime(g.revokedAt, { dateStyle: 'long' }) : null}
                   </span>
                   <span className="block font-mono text-xs text-neutral-500 dark:text-neutral-400">
                     {g.grantName}
@@ -406,7 +404,7 @@ export default async function UserAccessPage({
                           tell two accounts apart. A PIN's hashes are never on this page. */}
                       {c.externalId ? <span className="font-mono">{c.externalId}</span> : null}
                       {c.externalId ? ' · ' : ''}
-                      added {c.createdAt.toLocaleDateString('en-PH', MANILA)}
+                      added {formatBusinessDateTime(c.createdAt, { dateStyle: 'long' })}
                     </span>
                   </span>
                   {c.kind === 'firebase' && (
@@ -446,15 +444,15 @@ export default async function UserAccessPage({
         <CheckedForm rules={ADMIN_LINK_FIREBASE_RULES} action={linkFirebaseAction} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="personId" value={personId} />
           <Field label="Link an email account" rule={ADMIN_LINK_FIREBASE_RULES.uid} className="flex-1">
-            <Input {...nativeAttrs(ADMIN_LINK_FIREBASE_RULES.uid)} placeholder="Firebase uid" className="w-full font-mono" />
+            <Input {...nativeAttrs(ADMIN_LINK_FIREBASE_RULES.uid)} placeholder="Account ID" className="w-full font-mono" />
           </Field>
           <Button type="submit" variant="secondary">
             Link
           </Button>
         </CheckedForm>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          From the Firebase console — this is not an email address. The person signs in with their
-          own email and password; this only says which person that account is.
+          Paste the account ID from the sign-in system. It is not an email address. The person signs in
+          with their own email and password; this only says which person that account belongs to.
         </p>
       </section>
     </Page>
@@ -490,10 +488,12 @@ export default async function UserAccessPage({
 const SCOPE_ORDER = ['store', 'org', 'platform'] as const;
 
 const SCOPE_NOTE: Record<(typeof SCOPE_ORDER)[number], string> = {
-  store: 'Also needs the store in scope above — holding the capability is never sufficient alone.',
-  org: 'Applies across the whole organisation. No store scope is consulted.',
-  platform: 'Crosses organisations. Super-admin territory — grant with care.',
+  store: 'Also needs access to the store (see Store access above).',
+  org: 'Works across the whole organization, in every store.',
+  platform: 'Works across organizations. Super admin only. Grant with care.',
 };
+
+const SCOPE_TITLE: Record<(typeof SCOPE_ORDER)[number], string> = { store: 'Per store', org: 'Whole organization', platform: 'Platform' };
 
 function GrantPicker({ personId, offerable }: { personId: string; offerable: readonly Capability[] }) {
   const byScope = SCOPE_ORDER.map((scope) => ({
@@ -519,7 +519,7 @@ function GrantPicker({ personId, offerable }: { personId: string; offerable: rea
       {byScope.map((group) => (
         <fieldset key={group.scope} className="space-y-2">
           <legend className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-            {group.scope}-scoped ({group.items.length})
+            {SCOPE_TITLE[group.scope]} ({group.items.length})
           </legend>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">{SCOPE_NOTE[group.scope]}</p>
           <div className="grid gap-1 sm:grid-cols-2">

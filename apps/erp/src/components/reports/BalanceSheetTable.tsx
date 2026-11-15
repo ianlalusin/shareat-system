@@ -127,7 +127,7 @@ export function BalanceSheetTieIndicator({
       </p>
       {!ties ? (
         <p className="mt-2 text-sm text-danger">
-          This should never happen — bible §16.1 invariant 9. Stop and investigate before
+          Assets should always equal liabilities plus equity. Stop and ask for help before
           trusting any other figure on this screen.
         </p>
       ) : null}

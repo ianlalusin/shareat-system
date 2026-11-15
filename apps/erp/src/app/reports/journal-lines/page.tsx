@@ -1,4 +1,5 @@
 import { reportsRepo } from '@shareat/db';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { add, money } from '@shareat/core/money';
 import { reportScope, runReport } from '../lib';
 import { EmptyState } from '@/components/reports/EmptyState';
@@ -40,7 +41,7 @@ export default async function JournalLinesPage({
     return (
       <Page density="wide">
         <h1 className="text-2xl font-semibold">Journal Lines</h1>
-        <EmptyState message="Reached from an account row on another report — no account or date range was given." />
+        <EmptyState message="Open this from an account row on another report, so it knows which account and dates to show." />
       </Page>
     );
   }
@@ -86,8 +87,7 @@ export default async function JournalLinesPage({
           Journal Lines{sp.code ? ` — ${sp.code}` : ''} {sp.name ?? ''}
         </h1>
         <PageDescription>
-          Every line posted to this account for the range below — the drill-down behind a report
-          line.
+          Every entry posted to this account in the dates below, behind a line on a report.
         </PageDescription>
       </div>
 
@@ -96,7 +96,7 @@ export default async function JournalLinesPage({
         {' · '}
         {currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
         {' · '}
-        {sp.from} to {sp.to}
+        {formatBusinessDayLong(sp.from)} to {formatBusinessDayLong(sp.to)}
         {' · '}
         year-close entry {includeYearClose ? 'included' : 'excluded'}
       </p>
@@ -104,7 +104,7 @@ export default async function JournalLinesPage({
       {lines.length > 0 ? (
         <JournalLinesTable rows={lines} totalDebit={totalDebit} totalCredit={totalCredit} />
       ) : (
-        <EmptyState message={`No entries on this account for ${sp.from} to ${sp.to}.`} />
+        <EmptyState message={`No entries on this account for ${formatBusinessDayLong(sp.from)} to ${formatBusinessDayLong(sp.to)}.`} />
       )}
     </Page>
   );

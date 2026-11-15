@@ -36,7 +36,7 @@ function fmt(d: Date | null): string {
 function stateOf(t: ClockTerminalRow): { text: string; ready: boolean } {
   return isReady(t)
     ? { text: `Active — paired ${fmt(t.activatedAt)}`, ready: true }
-    : { text: 'Provisioned — not yet paired. Cannot punch.', ready: false };
+    : { text: 'Set up — not yet paired. Cannot punch.', ready: false };
 }
 
 /*
@@ -65,7 +65,7 @@ export default async function TerminalsPage({
       <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Clock terminals</h1>
         <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-400">
-          This organisation has no stores yet.
+          This organization has no stores yet.
         </p>
       </Page>
     );
@@ -78,10 +78,9 @@ export default async function TerminalsPage({
       <div>
         <h1 className="text-2xl font-semibold">Clock terminals</h1>
         <PageDescription>
-          Provision a device to punch attendance at a store, and see its one-time pairing token —
-          as text and as a QR code — while it is still online. ⭐ Provisioning, re-pairing and
-          revoking need <strong>admin or super-admin</strong>; everyone with manage-attendance
-          (manager and up) can read this list.
+          Set up a device to punch attendance at a store, and see its one-time pairing token, as
+          text and as a QR code, while it is still online. Setting up, re-pairing and revoking need
+          an <strong>admin or super admin</strong>. Managers can see this list.
         </PageDescription>
       </div>
 
@@ -101,12 +100,11 @@ export default async function TerminalsPage({
       </FilterRow>
 
       <section className="space-y-3 rounded-lg border border-surface-border p-4">
-        <h2 className="font-medium">Provision a new terminal</h2>
+        <h2 className="font-medium">Set up a new terminal</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          The pairing token is shown <strong>once</strong>, right after provisioning — never
-          written to a log and never re-fetchable from this screen afterwards. If it is lost before
-          pairing finishes, use &ldquo;Re-pair&rdquo; on the terminal&rsquo;s row below rather than
-          provisioning a duplicate.
+          The pairing token is shown <strong>once</strong>, right after setting up, and cannot be
+          shown again. If it is lost before pairing finishes, use &ldquo;Re-pair&rdquo; on the
+          terminal&rsquo;s row below instead of setting up a duplicate.
         </p>
         <ProvisionForm storeId={storeId} action={provisionTerminalAction} />
       </section>
@@ -117,7 +115,7 @@ export default async function TerminalsPage({
         </h2>
         {terminals.length === 0 ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            No terminal provisioned here yet.
+            No terminal is set up here yet.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-surface-border">
@@ -177,9 +175,8 @@ export default async function TerminalsPage({
           </div>
         )}
         <p className="text-xs text-neutral-500 dark:text-neutral-500">
-          ⚠️ A revoked terminal stops appearing above — it still exists in Postgres, marked revoked
-          with its reason, just not in this live list. Provision a new one rather than trying to
-          revive it; its history stays intact under its own id.
+          A revoked terminal stops appearing above. Its history is kept, marked revoked with the
+          reason. Set up a new terminal instead of trying to revive it.
         </p>
       </section>
     </Page>

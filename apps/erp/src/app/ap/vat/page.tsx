@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { authorize } from '@shareat/auth';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { apRepo } from '@shareat/db';
 import { requirePageAccess } from '@/lib/page-access';
 import { listStores, peso, withOrgPrincipal } from '../lib';
@@ -9,7 +9,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { Button, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { ACTION_LINK } from '@/components/action-link';
 
-export const metadata = { title: 'Invoices by VAT type and OR — Shareat System' };
+export const metadata = { title: 'Invoices by VAT type and official receipt — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 /** T-408 R4. The rows of the grid, in reading order; `null` is "not recorded". */
@@ -46,7 +46,7 @@ export default async function VatListPage({ searchParams }: { searchParams: Prom
         <Link href="/ap" className={ACTION_LINK}>
           ← Accounts payable
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Invoices by VAT type and OR</h1>
+        <h1 className="mt-1 text-2xl font-semibold">Invoices by VAT type and official receipt</h1>
         <PageDescription>
           Supplier invoices for one store and month, by invoice date. Voided invoices are left out. Use it to match the
           paper receipt file.
@@ -124,13 +124,13 @@ export default async function VatListPage({ searchParams }: { searchParams: Prom
                       <th className="px-3 py-2 text-right font-medium">Total</th>
                       <th className="px-3 py-2 text-right font-medium">VAT</th>
                       <th className="px-3 py-2 font-medium">VAT type</th>
-                      <th className="px-3 py-2 font-medium">OR</th>
+                      <th className="px-3 py-2 font-medium">Official receipt</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.invoices.map((i) => (
                       <LinkRow key={i.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                        <td className="px-3 py-2">{i.invoiceDate}</td>
+                        <td className="px-3 py-2">{formatBusinessDayLong(i.invoiceDate)}</td>
                         <td className="px-3 py-2">{i.supplierName}</td>
                         <td className="px-3 py-2">
                           <RowLink href={`/ap/invoices/${i.id}`}>

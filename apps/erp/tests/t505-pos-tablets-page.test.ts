@@ -72,7 +72,7 @@ describe('P9 and the page states', () => {
     H.view = { active: null, revoked: [], terminals: [] };
     const html = await render();
     expect(html).toContain('data-no-terminal');
-    expect(html).toMatch(/Firebase console/);
+    expect(html).toMatch(/system administrator/);
     expect(html).not.toContain('name="deviceId"');
     expect(html).not.toContain('Register tablet');
   });

@@ -1,6 +1,6 @@
 import { getTrialBalance } from '@shareat/domain';
 import { reportScope, runReport } from '../lib';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { ReportFilters } from '@/components/reports/ReportFilters';
 import { ReportBasis } from '@/components/reports/ReportBasis';
@@ -63,7 +63,7 @@ export default async function TrialBalancePage({
     <Page
       density="wide"
       title="Trial Balance"
-      description="Every figure below is computed live from journal_lines — nothing here is a stored total."
+      description="The debit and credit total of every account for the dates you pick."
     >
       <ReportFilters
         basePath="/reports/trial-balance"
@@ -74,7 +74,7 @@ export default async function TrialBalancePage({
         fromDate={fromDate}
         toDate={toDate}
         includeYearClose={includeYearClose}
-        yearCloseHelp="Defaults to included — a trial balance is a balance-sheet-as-of view (ADR-006)."
+        yearCloseHelp="Included by default, because a trial balance shows balances as of the end date."
       />
 
       <div className="flex items-center justify-between gap-4">
@@ -90,10 +90,13 @@ export default async function TrialBalancePage({
         />
       </div>
 
-      <TieIndicator ties={result.ties} totalDebit={result.totalDebit} totalCredit={result.totalCredit} />
+      {/* An empty report claims nothing; a mismatch is still shown, since it is a real fault. */}
+      {result.lines.length > 0 || !result.ties ? (
+        <TieIndicator ties={result.ties} totalDebit={result.totalDebit} totalCredit={result.totalCredit} />
+      ) : null}
 
       {result.lines.length === 0 ? (
-        <EmptyState message={`No entries for ${fromDate} to ${toDate}.`} />
+        <EmptyState message={`No entries for ${formatBusinessDayLong(fromDate)} to ${formatBusinessDayLong(toDate)}.`} />
       ) : (
         <TrialBalanceTable
           lines={result.lines}

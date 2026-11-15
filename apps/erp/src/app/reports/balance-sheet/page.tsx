@@ -1,6 +1,6 @@
 import { getBalanceSheet } from '@shareat/domain';
 import { reportScope, runReport } from '../lib';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { add } from '@shareat/core/money';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { ReportBasis } from '@/components/reports/ReportBasis';
@@ -52,7 +52,7 @@ export default async function BalanceSheetPage({
     <Page
       density="wide"
       title="Balance Sheet"
-      description="Every figure below is computed live from journal_lines — nothing here is a stored total. “Current period earnings” is the running total of unclosed revenue and expense, folded into Equity so the equation ties on any date, not only right after a year-close."
+      description="What the business owns and owes as of one date. “Current period earnings” adds the sales and spending not yet closed into Equity, so the sheet balances on any date."
     >
       <BalanceSheetFilters
         basePath="/reports/balance-sheet"
@@ -77,11 +77,14 @@ export default async function BalanceSheetPage({
         />
       </div>
 
-      <BalanceSheetTieIndicator
-        ties={result.ties}
-        assets={result.assets}
-        liabilitiesAndEquity={add(result.liabilities, result.equity)}
-      />
+      {/* An empty report claims nothing; a mismatch is still shown, since it is a real fault. */}
+      {hasAnyActivity || !result.ties ? (
+        <BalanceSheetTieIndicator
+          ties={result.ties}
+          assets={result.assets}
+          liabilitiesAndEquity={add(result.liabilities, result.equity)}
+        />
+      ) : null}
 
       {hasAnyActivity ? (
         <BalanceSheetTable
@@ -96,7 +99,7 @@ export default async function BalanceSheetPage({
           includeYearClose={includeYearClose}
         />
       ) : (
-        <EmptyState message={`No entries as of ${asOfDate}.`} />
+        <EmptyState message={`No entries as of ${formatBusinessDayLong(asOfDate)}.`} />
       )}
     </Page>
   );
