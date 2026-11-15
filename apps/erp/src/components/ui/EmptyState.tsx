@@ -63,10 +63,10 @@ function Illustration({ name, size }: { readonly name: EmptyStateIllustration; r
 export function EmptyState({ illustration, title, body, action, size = 'md' }: EmptyStateProps) {
   const sm = size === 'sm';
   return (
-    <div className={sm ? 'flex flex-col items-center gap-1 rounded-[20px] border border-dashed border-surface-border p-4 text-center' : 'flex flex-col items-center gap-2 rounded-[20px] border border-dashed border-surface-border p-8 text-center'}>
+    <div className={sm ? 'flex flex-col items-center gap-1 p-4 text-center' : 'flex flex-col items-center gap-2 rounded-[20px] border border-dashed border-surface-border p-8 text-center'}>
       <Illustration name={illustration} size={sm ? 'sm' : 'md'} />
       <b className={sm ? 'text-sm font-bold text-ink' : 'text-lg font-bold text-ink'}>{title}</b>
-      {body ? <p className={sm ? 'text-xs text-muted' : 'text-sm text-muted'}>{body}</p> : null}
+      {body ? <p className={sm ? 'text-xs text-muted text-balance' : 'text-sm text-muted'}>{body}</p> : null}
       {action ?? null}
     </div>
   );

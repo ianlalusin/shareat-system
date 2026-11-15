@@ -168,7 +168,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
               return (
                 <li
                   key={loc.id}
-                  className={`flex flex-col gap-3 rounded-[20px] border border-surface-border bg-surface p-4${inactive ? ' opacity-70' : ''}`}
+                  className="flex flex-col gap-3 rounded-[20px] border border-surface-border bg-surface p-4"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
