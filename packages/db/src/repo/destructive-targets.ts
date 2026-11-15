@@ -79,6 +79,9 @@ export const DESTRUCTIVE_TARGETS = {
     name: sql`(select p.display_name from employments e join persons p on p.id = e.person_id where e.id = t.employment_id)`,
   },
   stock_location: { table: 'stock_locations', store: sql`t.store_id`, name: sql`t.name` },
+  // T-589 B3d: retiring a category or a sales channel (both can be reinstated) now asks for the name to be retyped.
+  expense_category: { table: 'expense_categories', store: null, name: sql`t.category` },
+  sales_channel: { table: 'sales_channels', store: sql`t.store_id`, name: sql`t.name` },
 } as const satisfies Record<string, TargetDef>;
 
 export type DestructiveEntity = keyof typeof DESTRUCTIVE_TARGETS;

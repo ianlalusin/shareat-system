@@ -22,6 +22,8 @@ import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 import { BANK_HINTS_EDIT, SALES_CHANNEL_EDIT, STORE_SETTLEMENT_EDIT } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
@@ -167,6 +169,11 @@ export async function setSalesChannelActiveAction(fd: FormData): Promise<void> {
   const isActive = str(fd, 'isActive') === 'true';
   const name = str(fd, 'name');
   try {
+    // T-412 Tier R (T-589 B3d): retiring asks for the channel's name, loaded here from the database. Reinstating needs no confirm.
+    if (!isActive) {
+      const target = await loadDestructiveTarget(actor, 'sales_channel', str(fd, 'channelId'), ['manage_store_settings']);
+      if (!retypeMatches(str(fd, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
+    }
     await withOrgPrincipal(actor.orgId, (tx) =>
       setSalesChannelActive(tx, actor, { channelId: str(fd, 'channelId'), isActive }),
     );

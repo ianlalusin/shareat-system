@@ -14,7 +14,7 @@ import { M, expectAbsent, expectNotAvailable, expectPresent, expectRefusalCard, 
  *    livePinFor(actor, personId), otherOpenBranchesFor(actor, personId, excludeStoreId). A store the actor does not hold is an
  *    AuthorizationError for enrol_staff/manage_attendance; a by-id loader authorizes on the ROW's store.
  *  - an employment the viewer cannot reach is the same notFound() as a forged id (DEF-497).
- *  - otherOpenBranchesFor names only branches the viewer holds; the rest render as "and N other branch(es)" so the T-302 PIN
+ *  - otherOpenBranchesFor names only branches the viewer holds; the rest render as "and N other store(s)" so the T-302 PIN
  *    warning still fires.
  *
  * Mutants (spec): M23 delete the /staff entry; M24 /staff maps to enrol_staff alone; M25 listStores instead of scopedStores;
@@ -163,18 +163,18 @@ describe('T-435 S3 staff - case 28: an employment at another store does not exis
 });
 
 describe('T-435 S3 staff - cases 29, 31: the PIN warning names only the branches the viewer holds (M29, M31)', () => {
-  it('M1 on F1\'s S1 employment: "and 1 other branch", never S2\'s name', async () => {
+  it('M1 on F1\'s S1 employment: "and 1 other store", never S2\'s name', async () => {
     const w = await world();
     const html = await render(detailPage, w.M1, { params: { employmentId: w.f1EmpS1 } });
     expectPresent(html, 'M1 F1', M.f1Name);
-    expect(plain(html), 'the warning still fires, anonymously').toMatch(/and 1 other branch/i);
+    expect(plain(html), 'the warning still fires, anonymously').toMatch(/and 1 other store/i);
     expectAbsent(html, 'M1 F1', M.s2Name, w.s2);
   });
   it('A on the same employment sees S2 named in the warning (M31: over-filtering)', async () => {
     const w = await world();
     const html = await render(detailPage, w.A, { params: { employmentId: w.f1EmpS1 } });
     expectPresent(html, 'A F1', M.f1Name, M.s2Name);
-    expect(plain(html)).not.toMatch(/and \d+ other branch/i);
+    expect(plain(html)).not.toMatch(/and \d+ other store/i);
   });
   it('A sees both rosters (S1 and S2)', async () => {
     const w = await world();

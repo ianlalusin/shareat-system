@@ -120,6 +120,9 @@ const rows: Row[] = [
   { file: 'app/liabilities/[id]/page.tsx', tier: 'R', label: 'Retire liability', danger: false, visible: 'Retire', action: 'retireAction', actionFile: 'app/liabilities/actions.ts', mutation: 'retireLiability' },
   { file: 'app/staff/[employmentId]/credentials/page.tsx', tier: 'R', label: 'Revoke credential', danger: true, visible: 'Revoke credential', action: 'revokeCredentialAction', actionFile: 'app/staff/[employmentId]/credentials/actions.ts', mutation: 'revokeCredential' },
   { file: 'app/inventory/locations/page.tsx', tier: 'R', label: 'Deactivate room', danger: false, visible: 'Deactivate room', action: 'deactivateLocationAction', actionFile: 'app/inventory/locations/actions.ts', mutation: 'deactivateLocation' },
+  // T-589 B3d (Ian approved): retiring a category or a sales channel (both reinstatable) asks for the name; the quiet trigger is not a danger button.
+  { file: 'app/settings/expense-categories/page.tsx', tier: 'R', label: 'Retire expense category', danger: false, visible: 'Retire category', action: 'setCategoryActiveAction', actionFile: 'app/settings/expense-categories/actions.ts', mutation: 'setCategoryActive' },
+  { file: 'app/settings/sales-channels/page.tsx', tier: 'R', label: 'Retire sales channel', danger: false, visible: 'Retire this channel', action: 'setSalesChannelActiveAction', actionFile: 'app/settings/sales-channels/actions.ts', mutation: 'setSalesChannelActive' },
   // ---- AUDIT ROUND H1 / H2 (orchestrator ruling): the two CONDITIONAL danger buttons `variant={x ? 'danger' : ...}` ----
   { file: 'app/admin/stores/[id]/page.tsx', tier: 'R', label: 'Close this store', danger: true, conditional: true, visibleRe: /Close this store|Deactivate/, action: 'deactivateStoreAction', actionFile: 'app/admin/stores/actions.ts', mutation: 'deactivateStore' },
   { file: 'app/admin/users/[personId]/page.tsx', tier: 'R', label: 'In scope - remove', danger: true, conditional: true, visibleRe: /remove/i, action: 'setStoreScopeAction', actionFile: 'app/admin/users/actions.ts', mutation: 'revokeStoreScope' },
@@ -219,8 +222,8 @@ const FORM_READ = /formData|\bfd\b|str\(|opt\(|requireId\(|\.get\(/;
 describe('the census arithmetic (green today: the literal map matches the spec + the audit-round conditionals)', () => {
   it('69 controls: P 33 (36 - the 3 T-418 draft deletes), R 19 (18 + T-464 Un-pair tablet), W 13 (10 + the 3 T-418 draft deletes), X 4; 64 are danger (2 conditional), in 50 files', () => {
     const by = (t: Tier) => rows.filter((r) => r.tier === t).length;
-    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([34, 22, 13, 4]); // T-550: P 34 -> 33 (the retired POS usage pull page's Void this pull; BOSS approved), then +1 (Void POS pull moved to usage/[id], net 34, pending BOSS approval); T-510 S3: +1 R (Retire hours, NEEDS BOSS APPROVAL 21 -> 22); T-508 S2b: +1 R (Retire station); T-418: three draft deletes moved P -> W; T-464: +1 R; T-505: +1 R (Revoke tablet link)
-    expect(rows).toHaveLength(73); // T-550: 73 -> 72 (BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: +Retire hours (72 -> 73); T-505: +Revoke tablet link; T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
+    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([34, 24, 13, 4]); // T-550: P 34 -> 33 (the retired POS usage pull page's Void this pull; BOSS approved), then +1 (Void POS pull moved to usage/[id], net 34, pending BOSS approval); T-510 S3: +1 R (Retire hours, NEEDS BOSS APPROVAL 21 -> 22); T-508 S2b: +1 R (Retire station); T-418: three draft deletes moved P -> W; T-464: +1 R; T-505: +1 R (Revoke tablet link)
+    expect(rows).toHaveLength(75); // T-550: 73 -> 72 (BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: +Retire hours (72 -> 73); T-505: +Revoke tablet link; T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
     expect(rows.filter((r) => r.danger)).toHaveLength(68); // T-550: 68 -> 67 (BOSS approved), then +1 Void POS pull (net 68, pending BOSS approval); T-510 S3: 67 -> 68
     expect(rows.filter((r) => r.conditional)).toHaveLength(2);
     expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(53); // T-550: 54 -> 53 (app/inventory/pos-usage/page.tsx is gone; BOSS approved); T-510 S3: 53 -> 54 (menu/DaypartsSection.tsx)
@@ -305,7 +308,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       const src = readFileSync(abs, 'utf8');
       total += count(src, DANGER) + confirmWindows(src).length;
     }
-    expect(total).toBe(73); // T-550: 73 -> 72 (the retired POS usage pull page's Void this pull, BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: 72 -> 73 (Retire hours); T-193 S5: +Void payment (statutory payments); T-505: +Revoke tablet link
+    expect(total).toBe(75); // T-550: 73 -> 72 (the retired POS usage pull page's Void this pull, BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: 72 -> 73 (Retire hours); T-193 S5: +Void payment (statutory payments); T-505: +Revoke tablet link
   });
 });
 

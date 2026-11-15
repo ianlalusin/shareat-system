@@ -117,9 +117,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         <div>
           <h1 className="text-2xl font-semibold">Staff and positions</h1>
           <PageDescription className="mt-1">
-            Who is on the roster at this store, which position they hold, and where they are in the
-            day. Every attendance, payroll and credential screen points at an employment created
-            here.
+            Who is on the roster at this store, which position they hold, and where they are in the day.
           </PageDescription>
         </div>
         <Link href={`/staff/hire?store=${storeId}`} className="inline-flex min-h-11 items-center rounded-full border border-transparent bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover">
@@ -150,8 +148,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Positions</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          The canonical six belong to the organisation and cannot be renamed here. A store may add
-          its own beyond them.
+          The six standard positions are shared by every store and cannot be renamed here. A store may add its own.
         </p>
         <ul className="space-y-2 text-sm">
           {positions.map((p) => {
@@ -161,7 +158,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                 <details>
                   <summary className="flex min-h-11 cursor-pointer items-center px-3 py-1.5">
                     {p.name}
-                    {p.isCanonical && <span className="ml-1 text-xs text-muted">(canonical)</span>}
+                    {p.isCanonical && <span className="ml-1 text-xs text-muted">(standard)</span>}
                     <span className="ml-1">· {holders.length}</span>
                   </summary>
                   {holders.length === 0 ? (

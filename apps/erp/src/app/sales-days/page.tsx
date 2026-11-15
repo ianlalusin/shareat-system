@@ -2,7 +2,7 @@ import { can } from '@shareat/auth';
 import { posBridgeRepo, salesDaysRepo } from '@shareat/db';
 import { SchedulerStatus } from '../../components/scheduler-status';
 import { formatMoney, money } from '@shareat/core/money';
-import { addDays, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
+import { addDays, formatBusinessDayLong, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { receiptCheckLine } from './receipt-check';
 import { reportScope } from '../reports/lib';
 import { withOrgPrincipal } from '../expenses/lib';
@@ -78,8 +78,8 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
         <div>
           <h1 className="text-2xl font-semibold">Sales days</h1>
           <PageDescription>
-            A day&apos;s selling, per store. <strong>Verifying is what recognises the revenue</strong> —
-            an unverified day posts nothing (docs/tasks/123-sales-day.md).
+            A day&apos;s selling, per store. <strong>Verifying a day is what counts its revenue.</strong>{' '}
+            An unverified day posts nothing.
           </PageDescription>
         </div>
         <a
@@ -106,12 +106,12 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
 
       {oldestUnverified && (
         <Banner tone="warning">
-          <strong className="font-medium">{oldestUnverified.businessDate}</strong> is still{' '}
-          {oldestUnverified.status} and recognises no revenue.{' '}
+          <strong className="font-medium">{formatBusinessDayLong(oldestUnverified.businessDate)}</strong> is still{' '}
+          {oldestUnverified.status} and its revenue is not counted yet.{' '}
           <a href={`/sales-days/${oldestUnverified.id}?${carry.toString()}`} className="underline hover:no-underline">
             Verify it
-          </a>{' '}
-          — a newer day cannot be created for that store until it is done (admins excepted).
+          </a>
+          . A newer day cannot be created for that store until it is done (admins excepted).
         </Banner>
       )}
 
@@ -167,16 +167,14 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
                 <LinkRow key={d.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2 font-mono">
                     <RowLink href={`/sales-days/${d.id}?${carry.toString()}`}>
-                      {d.businessDate}
+                      {formatBusinessDayLong(d.businessDate)}
                     </RowLink>
                   </td>
                   <td className="px-3 py-2">{storeById.get(d.storeId)?.code ?? d.storeId}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatMoney(money(d.totalSales))}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatMoney(money(d.cashCollected))}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatMoney(money(d.onlineCollected))}</td>
-                  {/* Provenance, kept from v1: a pulled figure and a typed one are not equally
-                      trustworthy, and a reader that cannot tell them apart treats them as if
-                      they were. */}
+                  {/* Provenance: a pulled figure and a typed one are not equally trustworthy. */}
                   <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
                     {d.source === 'legacy_typed' ? 'Typed' : 'POS'}
                   </td>
@@ -191,7 +189,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
       )}
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        {toBusinessDate()} today (Asia/Manila)
+        Today is {formatBusinessDayLong(toBusinessDate())}.
       </p>
     </Page>
   );

@@ -1,7 +1,7 @@
 import { getApAgingReport, getArAgingReport, getBalanceSheet, getIncomeStatement, getSalesRollup, usageCheckScorecard } from '@shareat/domain';
 import { attendanceDaysRepo, cashRequestsRepo, commissaryKpisRepo, lowStockRepo } from '@shareat/db';
 import { add, compare, isZero, money, negate, subtract, ZERO } from '@shareat/core/money';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDateTime, formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { reportScope, runReport } from './reports/lib';
 import { monthWords, statutoryTileFor } from './payroll/statutory-payments/lib';
@@ -212,8 +212,7 @@ export default async function DashboardPage({
           <div>
             <h1 className="text-2xl font-semibold">Dashboard</h1>
             <PageDescription className="mt-1">
-              {scope.orgName} ({scope.orgCode}) · {storeLabel}. Every figure is a live query, the same one its own
-              report page runs.
+              {scope.orgName} · {storeLabel}
             </PageDescription>
           </div>
           <RangeForm
@@ -286,7 +285,7 @@ export default async function DashboardPage({
           ) : (
             <div className="flex flex-col gap-4">
               <h2 className="m-0 border-t-2 border-ink pt-3 font-display text-3xl font-bold leading-none">By channel</h2>
-              <EmptyState message={`No sales ${fromDate} to ${toDate}.`} />
+              <EmptyState message={`No sales from ${formatBusinessDayLong(fromDate)} to ${formatBusinessDayLong(toDate)}.`} />
             </div>
           )}
           <div className="min-w-0 space-y-4">
@@ -305,7 +304,7 @@ export default async function DashboardPage({
             <span className="text-sm text-muted">tap a number to deal with it</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-            <OutlineCount href="/findings" count={hardFindingsOpen} label="Findings" hint={`hard, open · ${period}`} />
+            <OutlineCount href="/findings" count={hardFindingsOpen} label="Findings" hint={`serious, open · ${formatBusinessDateTime(new Date(`${period}-01T00:00:00+08:00`), { month: 'long', year: 'numeric' })}`} />
             <OutlineCount href="/inventory/low-stock" count={lowStock} label="Low stock" hint="items below reorder" />
             <OutlineCount href="/commissary/discrepancies" count={disputes.count} label="Open disputes" hint={disputeHint} />
             <OutlineCount href="/cash-requests" count={openFloats} label="Open floats" hint="cash requests awaiting liquidation" />
@@ -362,7 +361,7 @@ export default async function DashboardPage({
                 <thead>
                   <tr className="text-left text-muted">
                     <th className="py-1 pr-4 font-medium">Store</th>
-                    <th className="py-1 pr-4 text-right font-medium">Pull drafts</th>
+                    <th className="py-1 pr-4 text-right font-medium">Drafts from POS</th>
                     <th className="py-1 pr-4 text-right font-medium">Posted by a manager</th>
                     <th className="py-1 pr-4 text-right font-medium">Auto-posted</th>
                     <th className="py-1 text-right font-medium">Auto-posted %</th>

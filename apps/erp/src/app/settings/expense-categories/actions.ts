@@ -22,6 +22,8 @@ import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
+import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME, EXPENSE_SUBCATEGORY_RENAME } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
@@ -104,6 +106,11 @@ export async function setCategoryActiveAction(formData: FormData): Promise<void>
   const label = str(formData, 'categoryLabel') || 'That category';
   const isActive = str(formData, 'isActive') === 'true';
   try {
+    // T-412 Tier R (T-589 B3d): retiring asks for the category's name, loaded here from the database. Reinstating needs no confirm.
+    if (!isActive) {
+      const target = await loadDestructiveTarget(actor, 'expense_category', categoryId, ['manage_chart_of_accounts']);
+      if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
+    }
     await withOrgPrincipal(actor.orgId, (tx) =>
       setCategoryActive(tx, actor, { categoryId, isActive }),
     );

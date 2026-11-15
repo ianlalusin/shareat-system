@@ -1,3 +1,4 @@
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess, StoreNotAvailable } from '../../../lib/page-access';
 import { SEPARATION_CAUSES } from '@shareat/db/schema';
 import { postSeparationAction, voidSeparationAction } from './actions';
@@ -77,12 +78,11 @@ export default async function SeparationsPage({
       <div>
         <h1 className="text-2xl font-semibold">Separations</h1>
         <PageDescription>
-          Final pay&rsquo;s wages are just a regular pay run whose period ends on the last worked
-          day — use <a href="/payroll" className="underline">/payroll</a> for that. This screen
-          prices the pro-rated 13th month and gates the payout on clearance. ⚠️{' '}
-          <b>Separation pay is a decision, not a calculation</b> — the amount below is never
-          pre-filled from the cause; PH law owes it only for specific authorized causes, and this
-          build does not guess which.
+          Final wages are a regular pay run that ends on the last day worked. Use{' '}
+          <a href="/payroll" className="underline">Payroll</a> for that. This screen works out the pro-rated 13th month and
+          holds the payout until clearance is confirmed.{' '}
+          <b>Separation pay is your decision.</b> The amount below is never filled in for you, because the law owes it only
+          for certain causes.
         </PageDescription>
       </div>
 
@@ -115,7 +115,7 @@ export default async function SeparationsPage({
             {worklist.map((w) => (
               <li key={w.employmentId} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <span>
-                  {w.personName} <span className="text-neutral-500">— {w.employmentStatus}{w.endedOn ? `, ended ${w.endedOn}` : ''}</span>
+                  {w.personName} <span className="text-neutral-500">— {w.employmentStatus.replace(/-/g, ' ')}{w.endedOn ? `, ended ${formatBusinessDayLong(w.endedOn)}` : ''}</span>
                 </span>
                 <a
                   href={`/payroll/separations?store=${storeId}&employmentId=${w.employmentId}${w.endedOn ? `&separationDate=${w.endedOn}` : ''}`}
@@ -154,7 +154,7 @@ export default async function SeparationsPage({
               <input type="hidden" name="separationDate" value={separationDate} />
 
               <p className="text-xs text-neutral-500">
-                Pro-rated 13th month: basic pay earned {peso(Number(pvResult.preview.thirteenthMonthBasicPayEarned))} →
+                Pro-rated 13th month: basic pay earned {peso(Number(pvResult.preview.thirteenthMonthBasicPayEarned))}, so
                 gross <b className="text-neutral-700 dark:text-neutral-300">{peso(Number(pvResult.preview.thirteenthMonthGross))}</b>.
                 Outstanding advance: {peso(Number(pvResult.preview.outstandingAdvance))}.
               </p>
@@ -169,7 +169,7 @@ export default async function SeparationsPage({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Separation pay (₱)" hint="A decision, not a calculation — see above." rule={PAYROLL_SEPARATION_RULES.separationPayAmount}>
+                <Field label="Separation pay (₱)" hint="Your decision. See the note at the top." rule={PAYROLL_SEPARATION_RULES.separationPayAmount}>
                   <Input {...nativeAttrs(PAYROLL_SEPARATION_RULES.separationPayAmount)} defaultValue="0" className="mt-1 w-full" />
                 </Field>
                 <Field label="Pay from">
@@ -188,7 +188,7 @@ export default async function SeparationsPage({
                 <span>
                   <span className="block text-xs font-medium">Clearance confirmed</span>
                   <span className="block text-xs text-neutral-500">
-                    No outstanding accountabilities. ⛔ Required — posting refuses without this.
+                    No outstanding accountabilities. Required: you cannot post without it.
                   </span>
                 </span>
               </label>
@@ -216,9 +216,9 @@ export default async function SeparationsPage({
             <div key={s.id} className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="text-sm font-medium">{s.personName}</span>
-                <span className="text-xs text-neutral-500">{CAUSE_LABELS[s.cause] ?? s.cause} · {s.separationDate}</span>
+                <span className="text-xs text-neutral-500">{CAUSE_LABELS[s.cause] ?? s.cause} · {formatBusinessDayLong(s.separationDate)}</span>
                 <Badge status={s.status} />
-                {s.voidReason && <span className="text-xs text-neutral-500">voided — {s.voidReason}</span>}
+                {s.voidReason && <span className="text-xs text-neutral-500">Voided: {s.voidReason}</span>}
               </div>
               <p className="text-xs text-neutral-600 dark:text-neutral-400">
                 13th month {peso(Number(s.thirteenthMonthGross))} + separation pay {peso(Number(s.separationPayAmount))} −

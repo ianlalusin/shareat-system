@@ -7,7 +7,7 @@
  * no error, no visual difference, wrong money."* That cache exists to dodge 375 billed Firestore
  * reads per page load. **Postgres does not have that problem, so the landmine is not ported.**
  */
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { deductionAgreementsRepo, payrollRepo, type PayRunRow, type PayslipRow } from '@shareat/db';
 import { derivePeriods, previewPayRun, type PayPeriod, type PayRunPreview } from '@shareat/domain';
 import { authorize, type Actor } from '@shareat/auth';
@@ -147,5 +147,5 @@ export function currentPeriod(
 
 /** ⚠️ A run's period, as one readable string. Dates only — a period has no time of day. */
 export function periodLabel(run: { periodStart: string; periodEnd: string }): string {
-  return `${run.periodStart} → ${run.periodEnd}`;
+  return `${formatBusinessDayLong(run.periodStart)} to ${formatBusinessDayLong(run.periodEnd)}`;
 }

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { ENDED_STATUSES } from '@shareat/db/schema';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDateTime, formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import {
   endEmploymentAction,
@@ -73,13 +73,12 @@ export default async function EmploymentDetailPage({
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           <span className="font-mono text-xs">{detail.employment.staffCode}</span> ·{' '}
           {detail.storeName} · {detail.employment.employmentStatus.replace(/-/g, ' ')} · started{' '}
-          {detail.employment.startedOn}
-          {isEnded && ` · ended ${detail.employment.endedOn}`}
+          {formatBusinessDayLong(detail.employment.startedOn)}
+          {isEnded && ` · ended ${formatBusinessDayLong(detail.employment.endedOn!)}`}
         </p>
         {isEnded && (
           <p className="mt-2 inline-block rounded bg-neutral-100 px-2 py-1 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
-            This employment has ended. The record stays visible — ending is not deleting (T-154
-            invariant 4).
+            This employment has ended. The record stays visible; ending is not deleting.
           </p>
         )}
       </div>
@@ -91,7 +90,7 @@ export default async function EmploymentDetailPage({
           <h2 className="font-medium">Name</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             {detail.nameParts.lastName === null
-              ? `Saved as "${detail.personName}" (one box, from before names were split). Type the last, first and middle name once to fix it; it then reads "Last, First M.".`
+              ? `Saved as "${detail.personName}" in one box. Type the last, first and middle name to split it; it then reads "Last, First M.".`
               : 'Shown everywhere as "Last, First M.". Saving rewrites it.'}
           </p>
           <EditableRecord action={renamePersonAction} label="name"
@@ -176,8 +175,8 @@ export default async function EmploymentDetailPage({
         <h2 className="font-medium">Sign-in PIN</h2>
         {livePin ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Issued {livePin.issuedAt.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })}. One
-            PIN per person — it signs them in at every branch they work at, not only{' '}
+            Issued {formatBusinessDateTime(livePin.issuedAt, { dateStyle: 'long' })}. One
+            PIN per person. It signs them in at every store they work at, not only{' '}
             {detail.storeName}.
           </p>
         ) : (
@@ -193,15 +192,15 @@ export default async function EmploymentDetailPage({
         */}
         {!isEnded && otherBranches.branches.length + otherBranches.hiddenCount > 0 && (
           <Banner tone="warning">
-            ⚠️ This person works at{' '}
+            This person works at{' '}
             <strong>
               {[detail.storeName, ...otherBranches.branches.map((b) => b.storeName)].join(', ')}
               {otherBranches.hiddenCount > 0 &&
-                ` and ${otherBranches.hiddenCount} other branch${otherBranches.hiddenCount === 1 ? '' : 'es'}`}
+                ` and ${otherBranches.hiddenCount} other ${otherBranches.hiddenCount === 1 ? 'store' : 'stores'}`}
             </strong>. They have one PIN
             for the whole business, so issuing a new one here{' '}
-            <strong>changes the PIN they use there too</strong> — tell them the new digits before
-            their next shift at either branch.
+            <strong>changes the PIN they use there too</strong>. Tell them the new digits before
+            their next shift at any of these stores.
           </Banner>
         )}
         {!isEnded && (
@@ -217,8 +216,7 @@ export default async function EmploymentDetailPage({
         )}
         {livePin && (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Re-issuing replaces the current PIN and ends this person&rsquo;s live sessions
-            everywhere, right now — not only at {detail.storeName}.
+            Re-issuing replaces the current PIN and signs this person out everywhere right now, not only at {detail.storeName}.
           </p>
         )}
       </section>
@@ -227,8 +225,7 @@ export default async function EmploymentDetailPage({
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Government numbers</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Payroll deducts SSS, PhilHealth and Pag-IBIG only for an agency whose number is filled in here. A blank box means that agency is
-            not deducted from this person&rsquo;s payslips (and nothing is caught up later). Digits only; dashes and spaces are ignored.
+            Payroll deducts SSS, PhilHealth and Pag-IBIG only for an agency whose number is filled in here. Digits only; dashes and spaces are ignored.
           </p>
           <EditableRecord action={setGovernmentIdsAction} label="government numbers"
             // Personal data: the page never shows these numbers while locked, so the summary says only whether one is on file.
@@ -262,9 +259,7 @@ export default async function EmploymentDetailPage({
       <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Role and access</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          A sign-in PIN lets this person authenticate; their <em>role</em> is what decides whether
-          any screen will serve them. Role, store scope and capability grants belong to the person,
-          not to this employment (one person can hold two), so they live on their own screen.
+          The role decides which screens this person can open. It belongs to the person, not to this job, so it has its own screen.
         </p>
         <a
           href={`/admin/users/${detail.employment.personId}`}
@@ -277,7 +272,7 @@ export default async function EmploymentDetailPage({
       <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Clock-in credentials</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Card and fingerprint enrolment live on their own screen (T-203).
+          Card and fingerprint enrolment are on their own screen.
         </p>
         <a href={`/staff/${employmentId}/credentials`} className="text-sm underline underline-offset-4">
           Manage credentials →
@@ -355,7 +350,7 @@ export default async function EmploymentDetailPage({
         <h2 className="font-medium">End employment</h2>
         {isEnded ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Ended {detail.employment.endedOn} as {detail.employment.employmentStatus.replace(/-/g, ' ')}.
+            Ended {formatBusinessDayLong(detail.employment.endedOn!)} as {detail.employment.employmentStatus.replace(/-/g, ' ')}.
           </p>
         ) : (
           <CheckedForm rules={STAFF_END_RULES} action={endEmploymentAction} className="flex flex-wrap items-end gap-3">

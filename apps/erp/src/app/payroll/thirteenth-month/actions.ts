@@ -39,7 +39,7 @@ export async function post13thMonthRunAction(formData: FormData): Promise<void> 
   return await redirectWithFlash(
     '/payroll/thirteenth-month',
     { store, year },
-    { ok: `Posted ${out.payouts} payout(s), ${out.totalNet} net.` },
+    { ok: `Posted ${out.payouts} payout${out.payouts === 1 ? '' : 's'}, ${out.totalNet} net.` },
   );
 }
 
@@ -64,6 +64,6 @@ export async function void13thMonthRunAction(formData: FormData): Promise<void> 
   return await redirectWithFlash(
     '/payroll/thirteenth-month',
     { store, year },
-    { ok: `Voided — ${out.reversed} entry(s) reversed. That year is payable again.` },
+    { ok: `Voided. ${out.reversed} ${out.reversed === 1 ? 'entry' : 'entries'} reversed. That year is payable again.` },
   );
 }
