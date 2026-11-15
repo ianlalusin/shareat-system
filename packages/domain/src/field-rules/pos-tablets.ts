@@ -19,7 +19,7 @@ export const POS_TABLET_REGISTER_RULES = defineFieldRules('posTablets.register',
 /** T-546: adding a till (`createTerminal` checks the same range again and owns the sentence). */
 export const POS_TILL_ADD_RULES = defineFieldRules('posTablets.addTill', {
   terminalNo: {
-    label: 'The till number', kind: 'number', integer: true, min: 1, max: 99,
-    requires: 'The till number must be a whole number from 1 to 99.', rangeSays: 'The till number must be a whole number from 1 to 99.',
+    label: 'The cash register number', kind: 'number', integer: true, min: 1, max: 99,
+    requires: 'The cash register number must be a whole number from 1 to 99.', rangeSays: 'The cash register number must be a whole number from 1 to 99.',
   },
 });

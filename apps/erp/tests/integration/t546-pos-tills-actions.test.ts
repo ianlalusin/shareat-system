@@ -156,13 +156,13 @@ describe('the whole round trip as the store manager', () => {
 });
 
 describe('refusals show the domain\'s own sentence and write nothing', () => {
-  it('a number already used: "Till 1 already exists at this store."', async () => {
+  it('a number already used: "Cash register 1 already exists at this store."', async () => {
     const { createTillAction } = await actions();
     const f = await fixture();
     await f.signedInAs(f.managerA);
     await run(createTillAction, form({ storeId: f.storeA, terminalNo: '1' }));
     const out = await run(createTillAction, form({ storeId: f.storeA, terminalNo: '1' }));
-    expect(out.flash.error).toBe('Till 1 already exists at this store.');
+    expect(out.flash.error).toBe('Cash register 1 already exists at this store.');
     expect(await tills(f)).toHaveLength(1);
   });
 
@@ -178,7 +178,7 @@ describe('refusals show the domain\'s own sentence and write nothing', () => {
     expect(await tills(f)).toHaveLength(0);
   });
 
-  it('a tablet that already acts as another till: "That tablet already acts as till 1."; another store\'s tablet and a revoked one: "That tablet is not paired to this store."', async () => {
+  it('a tablet that already acts as another cash register: "That tablet already acts as cash register 1."; another store\'s tablet and a revoked one: "That tablet is not paired to this store."', async () => {
     const { createTillAction, linkTillAction } = await actions();
     const f = await fixture();
     await f.signedInAs(f.managerA);
@@ -186,7 +186,7 @@ describe('refusals show the domain\'s own sentence and write nothing', () => {
     await run(createTillAction, form({ storeId: f.storeA, terminalNo: '2' }));
     const [t1, t2] = await tills(f);
     await run(linkTillAction, form({ storeId: f.storeA, terminalId: t1!.id, pairingId: f.tablet1 }));
-    expect((await run(linkTillAction, form({ storeId: f.storeA, terminalId: t2!.id, pairingId: f.tablet1 }))).flash.error).toBe('That tablet already acts as till 1.');
+    expect((await run(linkTillAction, form({ storeId: f.storeA, terminalId: t2!.id, pairingId: f.tablet1 }))).flash.error).toBe('That tablet already acts as cash register 1.');
     expect((await run(linkTillAction, form({ storeId: f.storeA, terminalId: t2!.id, pairingId: f.tabletB }))).flash.error).toBe('That tablet is not paired to this store.');
     expect((await run(linkTillAction, form({ storeId: f.storeA, terminalId: t2!.id, pairingId: f.tabletRevoked }))).flash.error).toBe('That tablet is not paired to this store.');
     expect((await tills(f))[1]!.pairing_id).toBeNull();
