@@ -66,6 +66,18 @@ Decisions (mine, flagged to BOSS/Ian in the hand-back):
    the S3 rounding line, report it, do not hide it. Negative controls: C lists a document not on file → blocked; C amount ≠ charge totals →
    blocked; re-run approve → no second netting.
 
+8. **Late charge or adjustment, which month? (Ian, 15 Nov, binding).** Ian: block until the earlier file is uploaded (item 5 stands). And:
+   when a charge or adjustment (including a reversal / credit note) arrives AFTER its own date's month was settled, book it in that charge's
+   own month if that month's accounting period is still OPEN; if that month is CLOSED, book it in the CURRENT month (today, Manila) instead.
+   If the current month is also closed, refuse in plain words (existing `no_open_period` wording; nothing ever posts into a closed period).
+   Applies to `postPlatformCharge` (so also `bookPeriodCharge` / `bookChargeAction` and the netting prerequisites): the posting date =
+   charge date when its period is open, else today. Use the repo's existing period-open check (the same one posting uses); do not invent one.
+   Record why on the entry (memo/audit sentence "dated {today} instead of {charge date}: {month} is closed") and show it on the charges
+   panel and in the success message in plain words. Idempotency key and duplicate-copy rules stay per charge, not per date. The "same copy"
+   heuristic must not depend on the chosen posting date. Tests: open month keeps the charge date; closed month moves to today with the
+   sentence; both months closed refuses; a reversal follows the same rule; the money (amount, VAT, accounts) is identical either way.
+   This changes `postPlatformCharge` (S6c) on purpose: update only the pins/tests that assert the old refusal for a closed charge month.
+
 ## Out of scope / accepted
 Day lines still replace by sales date without the invoice number (existing S4 design, noted); reading the PDF; a UI for Appendix C items that
 are not charges (blocked → reject the day); renders (sign-in blocked; Ian looks after merge).
