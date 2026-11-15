@@ -119,7 +119,7 @@ describe('R3 posPreflight - each blocking item fires on its own', () => {
 
   it('no person at the store who may sell (record_sale): the only seller\'s employment ended', async () => {
     const f = await ready();
-    await sql`update employments set ended_on = '2025-06-01' where person_id = ${f.counterId}`;
+    await sql`update employments set ended_on = '2025-06-01', employment_status = 'resigned' where person_id = ${f.counterId}`;
     expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_record_sale_person'] });
   });
 
