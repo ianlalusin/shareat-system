@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { PREPAID_CATEGORIES } from '@shareat/db';
 import { add, ZERO } from '@shareat/core/money';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { SchedulerStatus } from '../../components/scheduler-status';
 import { requirePageAccess } from '../../lib/page-access';
 import { createPrepaidItemAction } from './actions';
@@ -59,9 +60,8 @@ export default async function PrepaidPage({
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Prepaid expenses</h1>
           <PageDescription>
-            Things already paid for but not yet used up — a year of insurance, a mayor&apos;s permit,
-            rent paid in advance. Each sits on the balance sheet and is released into the month it
-            actually covers.
+            Things already paid for but not yet used up: a year of insurance, a mayor&apos;s permit,
+            rent paid in advance. Each one is spread over the months it covers.
           </PageDescription>
         </div>
         {/* T-448: the add form is a modal opened from the header. */}
@@ -143,7 +143,7 @@ export default async function PrepaidPage({
 
       {/* ⭐ Is anybody keeping these books? Reads scheduler_runs, not the ledger — a run that
           posts nothing looks exactly like a run that never happened (T-140, DEF-044). */}
-      <SchedulerStatus orgId={actor.orgId} job="amortisation" label="Amortisation" />
+      <SchedulerStatus orgId={actor.orgId} job="amortisation" label="Prepaid release" />
 
       {/*
         ⭐ THE REVIEW COUNTER IS THE WHOLE DESIGN (§11.2).
@@ -223,7 +223,7 @@ export default async function PrepaidPage({
                   </Td>
                   <Td>{storeById.get(i.storeId)?.code ?? '—'}</Td>
                   <Td className="whitespace-nowrap">
-                    {i.coverageStartDate} · {i.coverageMonths} mo
+                    {formatBusinessDayLong(i.coverageStartDate)} · {i.coverageMonths} {i.coverageMonths === 1 ? 'month' : 'months'}
                   </Td>
                   <NumTd className="font-mono">{peso(i.totalCost)}</NumTd>
                   <NumTd className="font-mono">{peso(i.amortised)}</NumTd>

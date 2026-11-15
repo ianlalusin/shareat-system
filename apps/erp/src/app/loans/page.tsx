@@ -39,12 +39,11 @@ export default async function LoansPage({
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Loans</h1>
           <PageDescription>
-            What the business has borrowed, what it has repaid, and what is left. Every figure here is
-            summed from the ledger — <strong>there is no stored balance to go stale</strong>.
+            What the business has borrowed, what it has repaid, and what is left.
           </PageDescription>
         </div>
         <FormModal trigger="+ Record loan" title="Record a loan" size="lg"
-          description="This records the agreement. No money moves until it is drawn: a signed loan that has not been drawn is a commitment, not a debt.">
+          description="This records the agreement. No money moves until the loan is drawn.">
             <CheckedForm rules={LOAN_ADD_RULES} action={createLoanAction} className="space-y-4">
               <>
                 <FormSection title="Loan and lender">

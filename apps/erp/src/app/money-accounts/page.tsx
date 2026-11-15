@@ -1,5 +1,6 @@
 import { accountLabel } from '@/lib/account-label';
 import Link from 'next/link';
+import { peso } from '@/lib/format';
 import { CUSTODIANS, MONEY_INSTRUMENTS } from '@shareat/db';
 import { requirePageAccess } from '../../lib/page-access';
 import {
@@ -80,11 +81,9 @@ export default async function MoneyAccountsPage({
       <div>
         <h1 className="text-2xl font-semibold">Money accounts</h1>
         <PageDescription>
-          Every place money sits — a drawer, a safe, each e-wallet and bank account — and{' '}
-          <strong>who holds it</strong>. Five are marked{' '}
-          <em>always present</em>: every store has them from the day it opens and cannot close
-          them while it trades — but you can call them whatever you call them here. The books group these by account; you group them by
-          custodian. Same ledger, two views.{' '}
+          Every place money sits (a drawer, a safe, each e-wallet and bank account) and{' '}
+          <strong>who holds it</strong>. Five are marked <em>always present</em>: every store has
+          them from the day it opens and cannot close them while it trades, but you can rename them.{' '}
           <Link href="/money-transfers" className="underline underline-offset-2">
             Move money between them
           </Link>
@@ -187,7 +186,7 @@ export default async function MoneyAccountsPage({
                               <CustodianBadge custodian={a.custodian} />
                             </Td>
                             <Td className="text-xs text-muted">{accountLabel(a.glAccountCode)}</Td>
-                            <NumTd>{a.custodian === 'cashier' ? a.overdraftLimit : '—'}</NumTd>
+                            <NumTd>{a.custodian === 'cashier' ? peso(a.overdraftLimit) : '—'}</NumTd>
                             <Td className="text-right whitespace-nowrap">
                               <div data-card-ignore className="flex items-center justify-end gap-1">
                               {a.isActive && a.isFoundation && (
@@ -207,7 +206,7 @@ export default async function MoneyAccountsPage({
                                         label="May go to −"
                                         width="short"
                                         rule={MONEY_ACCOUNT_RENAME_RULES.overdraftLimit}
-                                        hint="How far below zero this drawer may go before a draw is refused. Entered positive; 0 means never."
+                                        hint="How far below zero this drawer may go before a withdrawal is refused. Enter a positive number; 0 means it may never go below zero."
                                       >
                                         <Input {...nativeAttrs(MONEY_ACCOUNT_RENAME_RULES.overdraftLimit)} defaultValue={a.overdraftLimit} className="w-full" />
                                       </Field>
@@ -273,7 +272,7 @@ export default async function MoneyAccountsPage({
                 <Field
                   label="Held by"
                   width="code"
-                  hint="A staff float is per person — the ledger names which one on each line"
+                  hint="A staff float belongs to one person. Each line shows whose it is."
                 >
                   <Select name="custodian" defaultValue="cashier" className="w-full">
                     {CUSTODIANS.map((c) => (

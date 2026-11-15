@@ -1,5 +1,5 @@
 import { accountLabel } from '@/lib/account-label';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { auditLogRepo } from '@shareat/db';
 import { logger } from '@shareat/core/logger';
@@ -150,10 +150,8 @@ export default async function ChannelSettlementsPage({
       <div>
         <h1 className="text-2xl font-semibold">Channel settlements</h1>
         <PageDescription>
-          Foodpanda and Grab sell today and pay days later, so every verified platform day raises a
-          receivable on <span>due from delivery platforms</span>. This is the screen that clears it —
-          the platform&apos;s gross, every deduction it made as its own signed line, and what
-          actually reached the bank.
+          Foodpanda and Grab sell today and pay days later. Record here what each platform paid: its
+          gross, every deduction it made, and what actually reached the bank.
         </PageDescription>
       </div>
 
@@ -172,9 +170,9 @@ export default async function ChannelSettlementsPage({
               {unwired.length === 1 ? 'One channel has' : `${unwired.length} channels have`} nowhere
               to bank a payout.
             </strong>{' '}
-            A settlement debits the account the channel pays into, so it cannot be recorded until
-            that account is named. Pick it here — it is the store&apos;s own wallet, and money
-            reaching another store&apos;s account is a transfer, not a setting.
+            A settlement is paid into one account, so it cannot be recorded until that account is
+            named. Pick the store&apos;s own wallet here. Money reaching another store&apos;s account
+            is a transfer, not a setting.
           </div>
           <div className="space-y-2">
             {unwired.map((c) =>
@@ -231,7 +229,7 @@ export default async function ChannelSettlementsPage({
         <h2 className="font-medium">What the platforms owe us</h2>
         {channels.length === 0 ? (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            No channel raises a receivable yet.
+            No platform owes us anything yet.
           </p>
         ) : (
           <>
@@ -312,9 +310,8 @@ export default async function ChannelSettlementsPage({
               ))}
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              {peso(owed)} outstanding across every channel — summed from{' '}
-              <span>due from delivery platforms</span> by party on this request, never from a stored
-              balance. A negative would mean more was settled than was ever owed.
+              {peso(owed)} outstanding across every channel. A negative would mean more was settled
+              than was ever owed.
             </p>
           </>
         )}
@@ -325,8 +322,7 @@ export default async function ChannelSettlementsPage({
         <h2 className="font-medium">Days waiting to be settled</h2>
         {waiting.length === 0 ? (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Nothing waiting. Only a <strong>verified</strong> sales day appears here — an
-            unverified one has posted nothing, so it has raised no receivable to clear.
+            Nothing waiting. Only a <strong>verified</strong> sales day appears here.
           </p>
         ) : (
           <>
@@ -348,7 +344,7 @@ export default async function ChannelSettlementsPage({
                       key={`${d.salesDayId}:${d.channelId}`}
                       className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                     >
-                      <td className="px-3 py-2 whitespace-nowrap">{d.businessDate}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatBusinessDayLong(d.businessDate)}</td>
                       <td className="px-3 py-2">{d.storeName}</td>
                       <td className="px-3 py-2">{d.channelName}</td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums">
@@ -424,9 +420,9 @@ export default async function ChannelSettlementsPage({
                     }`}
                   >
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {s.businessDate}
+                      {formatBusinessDayLong(s.businessDate)}
                       <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                        settled {s.settledOn}
+                        settled {formatBusinessDayLong(s.settledOn)}
                       </div>
                     </td>
                     <td className="px-3 py-2">
@@ -499,8 +495,8 @@ export default async function ChannelSettlementsPage({
             </table>
           </div>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Voiding writes an opposite entry and puts the receivable back — it never deletes the
-            original. A correction is void and re-post, because a posted settlement is immutable.
+            Voiding cancels a settlement and puts the amount back on what the platform owes. To correct
+            one, void it and record it again.
           </p>
         </section>
       )}

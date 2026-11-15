@@ -35,10 +35,9 @@ export default async function PriceListsPage({
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">Price lists</h1>
           <PageDescription>
-            What the business charges, per item. A customer names one, and an order line takes its
-            rate. ⛔ <strong>No volume breaks or dated promotions</strong> — one rate per item per
-            list is what the business does today, and a pricing-rule engine is generality nothing has
-            asked for yet.
+            What the business charges, per item. A customer is given one list, and an order line takes
+            its rate. Each item has <strong>one rate per list</strong>: no volume discounts or dated
+            promotions.
           </PageDescription>
         </div>
         {/* T-448: the add form opens from the header instead of sitting under the list. */}

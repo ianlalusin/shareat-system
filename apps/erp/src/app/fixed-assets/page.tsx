@@ -1,6 +1,5 @@
 import { formatMoney, money } from '@shareat/core/money';
-import { toBusinessDate } from '@shareat/core/datetime';
-import { ASSET_CATEGORIES } from '@shareat/db';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../lib/page-access';
 import { SchedulerStatus } from '../../components/scheduler-status';
 import { runDepreciationAction } from './actions';
@@ -72,9 +71,7 @@ export default async function FixedAssetsPage({
         <div>
           <h1 className="text-2xl font-semibold">Fixed assets</h1>
           <PageDescription>
-            The register. <strong>Accumulated depreciation and book value are computed from the
-            ledger on every view</strong> — they are not stored anywhere, so they cannot drift from
-            the entries that produced them (docs/tasks/124-fixed-assets-and-depreciation.md §3).
+            Everything the business owns that lasts: what it cost and what it is worth now.
           </PageDescription>
         </div>
         <a
@@ -111,7 +108,7 @@ export default async function FixedAssetsPage({
             {reviewCount} asset{reviewCount === 1 ? '' : 's'} still carry default terms nobody has
             confirmed.
           </strong>{' '}
-          They were capitalised automatically from an expense, so their life and salvage are a
+          They were added automatically from an expense, so their life and scrap value are a
           guess.{' '}
           <a
             href={`/fixed-assets?${new URLSearchParams({ ...Object.fromEntries(carry), review: '1' }).toString()}`}
@@ -222,7 +219,7 @@ export default async function FixedAssetsPage({
                   </td>
                   <td className="px-3 py-2">{CATEGORY_LABEL[r.category] ?? r.category}</td>
                   <td className="px-3 py-2">{storeById.get(r.storeId)?.code ?? '—'}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{r.acquiredOn ?? '—'}</td>
+                  <td className="px-3 py-2 text-xs">{r.acquiredOn ? formatBusinessDayLong(r.acquiredOn) : '—'}</td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {r.cost ? formatMoney(money(r.cost)) : '—'}
                   </td>
@@ -274,9 +271,9 @@ export default async function FixedAssetsPage({
       )}
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        {toBusinessDate()} today (Asia/Manila). Capitalisation threshold{' '}
-        {policy ? formatMoney(money(policy.capitalizationThreshold)) : '₱5,000.00 (default — no policy set)'}.
-        Categories: {ASSET_CATEGORIES.length}.
+        Today is {formatBusinessDayLong(toBusinessDate())}. A purchase of{' '}
+        {policy ? formatMoney(money(policy.capitalizationThreshold)) : '₱5,000.00 (the standard amount)'} or more
+        is recorded as an asset.
       </p>
     </Page>
   );

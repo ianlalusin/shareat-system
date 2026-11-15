@@ -1,4 +1,4 @@
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, ZERO } from '@shareat/core/money';
@@ -70,7 +70,7 @@ export default async function PrepaidItemPage({
         <h1 className="mt-2 text-2xl font-semibold">{item.name}</h1>
         <PageDescription>
           {CATEGORY_LABEL[item.category] ?? item.category} · {STATUS_LABEL[item.status]} · covers{' '}
-          {item.coverageMonths} months from {item.coverageStartDate}
+          {item.coverageMonths} months from {formatBusinessDayLong(item.coverageStartDate)}
         </PageDescription>
       </div>
 
@@ -87,13 +87,7 @@ export default async function PrepaidItemPage({
               <Figure label="Released so far" value={peso(item.amortised)} />
               <Figure label="Still unused" value={peso(item.remaining)} emphasis />
             </div>
-            {/* ⛔ None of these is a column. "Released" is summed from the ledger and "still unused"
-                is cost minus that — so they cannot drift from the books, which is exactly what v1's
-                stored amortizedToDate / remainingBookValue pair did. */}
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Released and still-unused are summed from the ledger on load, never stored — so they
-              cannot disagree with the books they describe.
-            </p>
+            {/* None of these is a stored column: "released" is summed from the ledger, "still unused" is cost minus that. */}
           </section>
         }
       >
@@ -197,7 +191,7 @@ export default async function PrepaidItemPage({
                   className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                 >
                   <td className="px-3 py-2 font-mono">{p.period}</td>
-                  <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400">{p.entryDate}</td>
+                  <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400">{formatBusinessDayLong(p.entryDate)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(p.amount)}</td>
                   <td className="px-3 py-2 text-xs">
                     {p.posted ? (
@@ -245,7 +239,7 @@ export default async function PrepaidItemPage({
             triggerVariant="danger"
             title="End it early"
             size="md"
-            description="Whatever is left is recognised now. If some money came back, say how much — a refund is cash returning, not income."
+            description="The unused amount is counted as a cost now. If some money came back, say how much."
             defaultOpen={sp.reason !== undefined || sp.refundAmount !== undefined || sp.writtenOffOn !== undefined}
           >
           <CheckedForm rules={PREPAID_WRITE_OFF_RULES} action={writeOffAction} className="space-y-4">
@@ -291,8 +285,8 @@ export default async function PrepaidItemPage({
                 the refund as income double-counts the cancellation — and the entry still balances,
                 so nothing would catch it. */}
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Only the part that did <strong>not</strong> come back reaches the P&amp;L. The refund
-              moves from one balance-sheet account to another.
+              Only the part that did <strong>not</strong> come back counts as a cost. A refund is not
+              income.
             </p>
             <DialogActions>
               <ConfirmDestructive

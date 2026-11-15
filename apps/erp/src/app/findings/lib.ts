@@ -12,6 +12,7 @@ import {
   logFindingView,
   managerScorecard,
 } from '@shareat/domain';
+import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { storesRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 
@@ -108,6 +109,20 @@ export const KIND_LABEL: Record<string, string> = {
   openingDateContradicted: 'Opening date contradicted by recorded sales',
   assetHeldPastOpening: 'Asset waiting on its store to open',
 };
+
+/** A finding's plain title; an id with no label becomes readable words ("someNewCheck" shows "Some new check"), never the raw id. */
+export function findingTitle(kind: string): string {
+  const known = KIND_LABEL[kind];
+  if (known) return known;
+  const words = kind.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** "2026-10" as "October 2026" (Manila). Falls back to the raw text when it is not a year-month. */
+export function monthLabel(period: string): string {
+  if (!/^\d{4}-\d{2}$/.test(period)) return period;
+  return formatBusinessDateTime(new Date(`${period}-01T00:00:00+08:00`), { month: 'long', year: 'numeric' });
+}
 
 /**
  * ⭐ T-214 — record that someone opened this screen.
