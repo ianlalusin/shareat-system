@@ -6,7 +6,7 @@
  *
  * ⛔ A signature IMAGE is never selected by a list. `getSignatureForServing` is the one read of a stored file path, and the domain gates it.
  */
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import {
   documentTemplates,
@@ -15,6 +15,7 @@ import {
   issuedDocumentVersions,
   issuedDocumentSignatures,
   type DocumentKind,
+  type DocumentLetterhead,
   type SignatureSlot,
 } from '../../schema/documents';
 import { employmentPositions, employments, positions } from '../../schema/employment';
@@ -246,10 +247,11 @@ export interface StoreFacts {
   name: string;
   address: string | null;
   tinBranchCode: string | null;
+  contactNumber: string | null;
 }
 export async function getStoreFacts(tx: Tx, orgId: string, storeId: string): Promise<StoreFacts | null> {
   const [row] = await tx
-    .select({ id: stores.id, name: stores.name, address: stores.address, tinBranchCode: stores.tinBranchCode })
+    .select({ id: stores.id, name: stores.name, address: stores.address, tinBranchCode: stores.tinBranchCode, contactNumber: stores.contactNumber })
     .from(stores)
     .where(and(eq(stores.orgId, orgId), eq(stores.id, storeId)))
     .limit(1);
@@ -325,7 +327,7 @@ export async function insertDocument(
 
 export async function insertDocumentVersion(
   tx: Tx,
-  input: { orgId: string; issuedDocumentId: string; versionNo: number; body: string; reason: string | null; createdBy: string },
+  input: { orgId: string; issuedDocumentId: string; versionNo: number; body: string; reason: string | null; letterhead: DocumentLetterhead; createdBy: string },
 ): Promise<string> {
   const [row] = await tx.insert(issuedDocumentVersions).values(input).returning({ id: issuedDocumentVersions.id });
   return row!.id;
@@ -333,7 +335,7 @@ export async function insertDocumentVersion(
 
 export async function insertSignature(
   tx: Tx,
-  input: { orgId: string; issuedDocumentVersionId: string; slot: SignatureSlot; personId: string; fileId: string },
+  input: { orgId: string; issuedDocumentVersionId: string; slot: SignatureSlot; personId: string; signerName: string; fileId: string },
 ): Promise<string> {
   const [row] = await tx.insert(issuedDocumentSignatures).values(input).returning({ id: issuedDocumentSignatures.id });
   return row!.id;
@@ -432,10 +434,13 @@ export interface DocumentFilter {
 
 export async function listDocuments(tx: Tx, orgId: string, f: DocumentFilter): Promise<DocumentRow[]> {
   if (f.storeIds && f.storeIds.length === 0 && !f.includeOrgWide) return [];
+  // An empty store list never reaches `in ()`: with org-wide documents allowed it means only the ones with no store; without them the early return above already answered.
   const scope = f.storeIds
-    ? f.includeOrgWide
-      ? sql`(${issuedDocuments.storeId} is null or ${issuedDocuments.storeId} in (${sql.join(f.storeIds.map((s) => sql`${s}`), sql`, `)}))`
-      : inArray(issuedDocuments.storeId, [...f.storeIds])
+    ? f.storeIds.length === 0
+      ? isNull(issuedDocuments.storeId)
+      : f.includeOrgWide
+        ? or(isNull(issuedDocuments.storeId), inArray(issuedDocuments.storeId, [...f.storeIds]))
+        : inArray(issuedDocuments.storeId, [...f.storeIds])
     : undefined;
   const rows = await documentSelect(tx)
     .where(
@@ -458,6 +463,7 @@ export interface DocumentVersionRow {
   versionNo: number;
   body: string;
   reason: string | null;
+  letterhead: DocumentLetterhead;
   createdBy: string;
   createdByName: string;
   createdAt: Date;
@@ -469,6 +475,7 @@ export async function listDocumentVersions(tx: Tx, orgId: string, documentId: st
       versionNo: issuedDocumentVersions.versionNo,
       body: issuedDocumentVersions.body,
       reason: issuedDocumentVersions.reason,
+      letterhead: issuedDocumentVersions.letterhead,
       createdBy: issuedDocumentVersions.createdBy,
       createdByName: persons.displayName,
       createdAt: issuedDocumentVersions.createdAt,
@@ -495,12 +502,11 @@ export async function listDocumentSignatures(tx: Tx, orgId: string, documentId: 
       versionId: issuedDocumentSignatures.issuedDocumentVersionId,
       slot: issuedDocumentSignatures.slot,
       personId: issuedDocumentSignatures.personId,
-      personName: persons.displayName,
+      personName: issuedDocumentSignatures.signerName,
       signedAt: issuedDocumentSignatures.signedAt,
     })
     .from(issuedDocumentSignatures)
     .innerJoin(issuedDocumentVersions, eq(issuedDocumentVersions.id, issuedDocumentSignatures.issuedDocumentVersionId))
-    .innerJoin(persons, eq(persons.id, issuedDocumentSignatures.personId))
     .where(and(eq(issuedDocumentSignatures.orgId, orgId), eq(issuedDocumentVersions.issuedDocumentId, documentId)))
     .orderBy(asc(issuedDocumentSignatures.signedAt));
   return rows;

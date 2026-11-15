@@ -315,3 +315,22 @@ describe('T-584 s7 - the signature image is shown only on its own document, to s
     await sentenceOf(asOrg(b.f.orgId, (tx) => documentSignatureImage(tx, b.f.admin.actor, sigId)));
   });
 });
+
+describe('T-584 R7 - a signature keeps the signer\'s name as it was', () => {
+  it('renaming the signer after signing changes neither the history nor the print [kills: names read live]', async () => {
+    const w = await world('signername');
+    await sign(w, w.f.managerA.actor, 'issuer', w.f.managerA);
+    await sign(w, w.f.managerA.actor, 'employee', w.f.employee);
+    await sql`update persons set display_name = 'Someone Else', first_name = null, middle_name = null, last_name = null where id in (${w.f.managerA.personId}, ${w.f.employee.personId})`;
+    const p = await asOrg(w.f.orgId, (tx) => documentPrintData(tx, w.f.admin.actor, w.documentId, 1));
+    expect(p.slots.map((s) => s.name)).toEqual(['Manager A', 'Employee, Staffer']);
+    expect((await view(w)).versions[0]!.signatures.map((s) => s.personName).sort()).toEqual(['Employee, Staffer', 'Manager A']);
+  });
+
+  it('a void reason over 500 characters is refused in plain words [kills: an unbounded reason]', async () => {
+    const w = await world('voidcap');
+    const v = (reason: string) => asOrg(w.f.orgId, (tx) => voidDocument(tx, w.f.managerA.actor, { documentId: w.documentId, reason }));
+    expect(await sentenceOf(v('z'.repeat(501)))).toMatch(/500/);
+    await v('z'.repeat(500));
+  });
+});

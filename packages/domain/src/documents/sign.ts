@@ -15,7 +15,7 @@
 import { authorize, verifySignerPin, AuthenticationError, type Actor } from '@shareat/auth';
 import { auditLogRepo, documentsRepo, personsRepo, withOrgPrincipal, type Tx } from '@shareat/db';
 import { SIGNATURE_SLOTS, type SignatureSlot } from '@shareat/db/schema';
-import { DOCUMENT_SIGN_RULES } from '../field-rules/documents';
+import { DOCUMENT_REASON_RULES, DOCUMENT_SIGN_RULES } from '../field-rules/documents';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { gone, internalFault, refuse } from '../shared/refusal';
 import { resolveStorageDriver } from '../files/driver';
@@ -106,6 +106,7 @@ export async function signDocument(tx: Tx, actor: Actor, input: SignInput): Prom
     issuedDocumentVersionId: locked.currentVersionId,
     slot: input.slot,
     personId: expectedPersonId,
+    signerName: signer.displayName,
     fileId: savedFile,
   });
   await auditLogRepo.append(tx, actor.orgId, {
@@ -128,11 +129,9 @@ export async function signDocument(tx: Tx, actor: Actor, input: SignInput): Prom
 export async function voidDocument(tx: Tx, actor: Actor, input: { documentId: string; reason: string }): Promise<void> {
   const doc = await documentsRepo.getDocument(tx, actor.orgId, input.documentId);
   if (!doc) throw gone('documents: document not found', 'document');
-  if (doc.storeId) await authorize(tx, actor, 'issue_documents', { storeId: doc.storeId });
-  else await authorize(tx, actor, 'manage_document_templates', {});
+  await authorize(tx, actor, doc.storeId ? 'issue_documents' : 'manage_document_templates', doc.storeId ? { storeId: doc.storeId } : {});
 
-  const reason = String(input.reason ?? '').trim();
-  if (reason === '') throw refuse('voidDocument: blank reason', 'Say why the document is being voided. The reason stays on the document.');
+  const reason = assertFieldRules(DOCUMENT_REASON_RULES, { reason: input.reason }).reason ?? '';
   const locked = await documentsRepo.lockDocument(tx, actor.orgId, input.documentId);
   if (!locked) throw gone('documents: document not found', 'document');
   if (locked.voided) throw refuse('voidDocument: already void', 'This document is already void.');

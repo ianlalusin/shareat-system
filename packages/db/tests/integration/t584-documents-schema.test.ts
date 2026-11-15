@@ -28,6 +28,7 @@ const sql = postgres(url, { max: 5 });
 let seq = 0;
 const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 const MIGRATIONS = join(__dirname, '..', '..', 'migrations');
+const LETTERHEAD = { orgLegalName: 'Test Org Incorporated', orgTradingName: 'Test Org', orgTin: '123456789', tinBranchCode: '00001', storeName: 'Test Store', storeAddress: '1 Test Street', storeContact: null, templateName: 'Test COE', templateKind: 'coe' };
 const TABLES = ['document_templates', 'document_template_versions', 'issued_documents', 'issued_document_versions', 'issued_document_signatures'];
 
 afterAll(async () => {
@@ -78,16 +79,16 @@ async function document(f: F, number: string) {
     insert into issued_documents (org_id, store_id, number, template_version_id, employment_id, issued_by)
     values (${f.orgId}, ${f.storeId}, ${number}, ${f.templateVersionId}, ${f.employmentId}, ${f.issuer}) returning id`;
   const [v] = await sql<{ id: string }[]>`
-    insert into issued_document_versions (org_id, issued_document_id, version_no, body, created_by)
-    values (${f.orgId}, ${d!.id}, 1, 'Text one', ${f.issuer}) returning id`;
+    insert into issued_document_versions (org_id, issued_document_id, version_no, body, letterhead, created_by)
+    values (${f.orgId}, ${d!.id}, 1, 'Text one', ${sql.json(LETTERHEAD)}, ${f.issuer}) returning id`;
   return { id: d!.id, v1: v!.id };
 }
 const revise = (f: F, docId: string, no: number, reason: string | null = 'because') =>
-  sql`insert into issued_document_versions (org_id, issued_document_id, version_no, body, reason, created_by)
-      values (${f.orgId}, ${docId}, ${no}, ${`Text ${no}`}, ${reason}, ${f.issuer}) returning id`;
+  sql`insert into issued_document_versions (org_id, issued_document_id, version_no, body, reason, letterhead, created_by)
+      values (${f.orgId}, ${docId}, ${no}, ${`Text ${no}`}, ${reason}, ${sql.json(LETTERHEAD)}, ${f.issuer}) returning id`;
 const sign = (f: F, versionId: string, slot: 'issuer' | 'employee') =>
-  sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, file_id)
-      values (${f.orgId}, ${versionId}, ${slot}, ${slot === 'issuer' ? f.issuer : f.employee}, ${f.fileId}) returning id`;
+  sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, signer_name, file_id)
+      values (${f.orgId}, ${versionId}, ${slot}, ${slot === 'issuer' ? f.issuer : f.employee}, 'Test Signer', ${f.fileId}) returning id`;
 
 describe('T-584 migration 0259 - journal and tables', () => {
   it('the journal has idx 259, a tag naming one existing file, and a when later than every earlier entry [kills: an unregistered file; a clock-time when]', () => {
@@ -111,7 +112,7 @@ describe('T-584 migration 0259 - journal and tables', () => {
     expect(pol.map((p) => p.tablename).sort()).toEqual([...TABLES].sort());
   });
 
-  it('the immutability triggers are ENABLE ALWAYS (they still fire under session_replication_role = replica) [kills: a trigger that a restore script switches off]', async () => {
+  it('the four history guards are ENABLE ALWAYS and the two validators are plain (origin), as triggers/registry.ts says [kills: a guard a restore script switches off; a validator that blocks a replay]', async () => {
     const rows = await sql<{ tgname: string; tgenabled: string }[]>`
       select tgname, tgenabled from pg_trigger where not tgisinternal and tgrelid::regclass::text in ${sql(TABLES)}`;
     const names = rows.map((r) => r.tgname).sort();
@@ -125,7 +126,8 @@ describe('T-584 migration 0259 - journal and tables', () => {
         'issued_documents_guard',
       ].sort(),
     );
-    for (const r of rows) expect(r.tgenabled, r.tgname).toBe('A');
+    const validators = new Set(['issued_document_versions_sequence', 'issued_document_signatures_current_version']);
+    for (const r of rows) expect(r.tgenabled, r.tgname).toBe(validators.has(r.tgname) ? 'O' : 'A');
   });
 });
 
@@ -237,9 +239,32 @@ describe('T-584 signatures belong to ONE version, and only the current version o
   it('a slot other than issuer or employee is refused [kills: an invented slot]', async () => {
     const f = await fixture('slot');
     const d = await document(f, 'DOC-2026-0001');
-    const e = await caught(sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, file_id)
-      values (${f.orgId}, ${d.v1}, 'witness', ${f.issuer}, ${f.fileId})`);
+    const e = await caught(sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, signer_name, file_id)
+      values (${f.orgId}, ${d.v1}, 'witness', ${f.issuer}, 'Test Signer', ${f.fileId})`);
     expect(e?.constraint_name).toBe('issued_document_signatures_slot_check');
+  });
+});
+
+describe('T-584 reasons are capped, and a version freezes its letterhead and its signers\' names (R7)', () => {
+  it('a revision reason or a void reason over 500 characters is refused by the table [kills: an unbounded reason]', async () => {
+    const f = await fixture('cap');
+    const d = await document(f, 'DOC-2026-0001');
+    expect((await caught(revise(f, d.id, 2, 'x'.repeat(501))))?.constraint_name).toBe('issued_document_versions_reason_check');
+    expect(await caught(revise(f, d.id, 2, 'x'.repeat(500)))).toBeUndefined();
+    const e = await caught(sql`update issued_documents set voided_at = now(), voided_by = ${f.issuer}, void_reason = ${'y'.repeat(501)} where id = ${d.id}`);
+    expect(e?.constraint_name).toBe('issued_documents_void_all_or_nothing_check');
+  });
+
+  it('a version must carry a letterhead object, and a signature a signer name [kills: a version printed from live records; a nameless signature]', async () => {
+    const f = await fixture('frozen');
+    const [d] = await sql<{ id: string }[]>`insert into issued_documents (org_id, store_id, number, template_version_id, employment_id, issued_by) values (${f.orgId}, ${f.storeId}, 'DOC-2026-0001', ${f.templateVersionId}, ${f.employmentId}, ${f.issuer}) returning id`;
+    const bad = await caught(sql`insert into issued_document_versions (org_id, issued_document_id, version_no, body, letterhead, created_by) values (${f.orgId}, ${d!.id}, 1, 'x', '[]'::jsonb, ${f.issuer})`);
+    expect(bad?.constraint_name).toBe('issued_document_versions_letterhead_check');
+    const none = await caught(sql`insert into issued_document_versions (org_id, issued_document_id, version_no, body, created_by) values (${f.orgId}, ${d!.id}, 1, 'x', ${f.issuer})`);
+    expect(none?.code).toBe('23502');
+    const dd = await document(f, 'DOC-2026-0002');
+    const e = await caught(sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, signer_name, file_id) values (${f.orgId}, ${dd.v1}, 'issuer', ${f.issuer}, '  ', ${f.fileId})`);
+    expect(e?.constraint_name).toBe('issued_document_signatures_signer_name_check');
   });
 });
 
@@ -262,8 +287,8 @@ describe('T-584 same-org keys and the template rules', () => {
     const a = await fixture('fa');
     const b = await fixture('fb');
     const d = await document(a, 'DOC-2026-0001');
-    const e = await caught(sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, file_id)
-      values (${a.orgId}, ${d.v1}, 'issuer', ${a.issuer}, ${b.fileId})`);
+    const e = await caught(sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, signer_name, file_id)
+      values (${a.orgId}, ${d.v1}, 'issuer', ${a.issuer}, 'Test Signer', ${b.fileId})`);
     expect(e?.constraint_name).toBe('issued_document_signatures_file_same_org_fk');
   });
 

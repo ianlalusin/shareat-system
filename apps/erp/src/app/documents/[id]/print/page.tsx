@@ -76,6 +76,7 @@ export default async function DocumentPrintPage({ params, searchParams }: { para
           )}
           {lh.storeName && <p>{lh.storeName}</p>}
           {lh.storeAddress && <p>{lh.storeAddress}</p>}
+          {lh.storeContact && <p>{lh.storeContact}</p>}
         </header>
 
         <div className="flex flex-wrap items-baseline justify-between gap-2">

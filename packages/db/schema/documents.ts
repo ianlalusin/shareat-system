@@ -15,7 +15,7 @@
  * NOTE: `*_org_id_id_unique` and every `*_same_org_fk` below are mirrored in 0259 as the house same-org pattern (T-398 S1).
  */
 import { sql } from 'drizzle-orm';
-import { check, foreignKey, index, integer, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, foreignKey, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { employments } from './employment';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -27,6 +27,25 @@ export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
 
 export const SIGNATURE_SLOTS = ['issuer', 'employee'] as const;
 export type SignatureSlot = (typeof SIGNATURE_SLOTS)[number];
+
+/** Longest reason kept with a revision or a void (a DB CHECK says the same). */
+export const DOCUMENT_REASON_MAX = 500;
+
+/**
+ * The facts a printed page needs, copied onto EVERY version when it is written (R7: a version is kept as it was). Print reads this, never the live records, so a
+ * later change to the company's registered name or a store's address cannot change a document already issued. Every value may be null (a store with no address).
+ */
+export interface DocumentLetterhead {
+  orgLegalName: string | null;
+  orgTradingName: string;
+  orgTin: string | null;
+  tinBranchCode: string | null;
+  storeName: string | null;
+  storeAddress: string | null;
+  storeContact: string | null;
+  templateName: string;
+  templateKind: DocumentKind;
+}
 
 export const documentTemplates = pgTable(
   'document_templates',
@@ -126,7 +145,7 @@ export const issuedDocuments = pgTable(
     check(
       'issued_documents_void_all_or_nothing_check',
       sql`(${t.voidedAt} is null and ${t.voidedBy} is null and ${t.voidReason} is null)
-        or (${t.voidedAt} is not null and ${t.voidedBy} is not null and coalesce(btrim(${t.voidReason}), '') <> '')`,
+        or (${t.voidedAt} is not null and ${t.voidedBy} is not null and coalesce(btrim(${t.voidReason}), '') <> '' and length(${t.voidReason}) <= 500)`,
     ),
     foreignKey({
       columns: [t.orgId, t.storeId],
@@ -170,6 +189,8 @@ export const issuedDocumentVersions = pgTable(
     body: text('body').notNull(),
     /** NULL for version 1; a revision (version 2 and later) always says why. */
     reason: text('reason'),
+    /** Frozen at the time of THIS version (see DocumentLetterhead). */
+    letterhead: jsonb('letterhead').$type<DocumentLetterhead>().notNull(),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => persons.id, { onDelete: 'restrict' }),
@@ -182,8 +203,9 @@ export const issuedDocumentVersions = pgTable(
     check('issued_document_versions_body_check', sql`btrim(${t.body}) <> '' and length(${t.body}) <= 50000`),
     check(
       'issued_document_versions_reason_check',
-      sql`(${t.versionNo} = 1 and ${t.reason} is null) or (${t.versionNo} > 1 and coalesce(btrim(${t.reason}), '') <> '')`,
+      sql`(${t.versionNo} = 1 and ${t.reason} is null) or (${t.versionNo} > 1 and coalesce(btrim(${t.reason}), '') <> '' and length(${t.reason}) <= 500)`,
     ),
+    check('issued_document_versions_letterhead_check', sql`jsonb_typeof(${t.letterhead}) = 'object'`),
     foreignKey({
       columns: [t.orgId, t.issuedDocumentId],
       foreignColumns: [issuedDocuments.orgId, issuedDocuments.id],
@@ -211,6 +233,8 @@ export const issuedDocumentSignatures = pgTable(
     personId: uuid('person_id')
       .notNull()
       .references(() => persons.id, { onDelete: 'restrict' }),
+    /** The signer's display name as it was when they signed (frozen; a later rename does not touch a printed document). */
+    signerName: text('signer_name').notNull(),
     /** The person's CURRENT saved signature at signing time, copied by reference. Never updated, so a later change cannot touch it. */
     fileId: uuid('file_id')
       .notNull()
@@ -221,6 +245,7 @@ export const issuedDocumentSignatures = pgTable(
     uniqueIndex('issued_document_signatures_version_slot_unique').on(t.issuedDocumentVersionId, t.slot),
     index('issued_document_signatures_org_idx').on(t.orgId),
     check('issued_document_signatures_slot_check', sql`${t.slot} in ('issuer', 'employee')`),
+    check('issued_document_signatures_signer_name_check', sql`btrim(${t.signerName}) <> ''`),
     foreignKey({
       columns: [t.orgId, t.issuedDocumentVersionId],
       foreignColumns: [issuedDocumentVersions.orgId, issuedDocumentVersions.id],

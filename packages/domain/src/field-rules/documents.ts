@@ -5,6 +5,11 @@
  */
 import { defineFieldRules } from './check';
 
+/** The reason kept with a revision or a void: required, plain text, at most 500 characters (the table says the same). */
+export const DOCUMENT_REASON_RULES = defineFieldRules('documents.reason', {
+  reason: { label: 'The reason', kind: 'text', plainText: true, max: 500, requires: 'Give the reason, in 500 characters or fewer.' },
+});
+
 export const DOCUMENT_SIGN_RULES = defineFieldRules('documents.sign', {
   employeeId: {
     label: 'The Employee ID',

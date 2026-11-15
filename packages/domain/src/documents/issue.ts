@@ -11,8 +11,10 @@
  */
 import { authorize, can, type Actor } from '@shareat/auth';
 import { auditLogRepo, documentsRepo, storesRepo, type Tx } from '@shareat/db';
-import type { DocumentKind, SignatureSlot } from '@shareat/db/schema';
+import type { DocumentKind, DocumentLetterhead, SignatureSlot } from '@shareat/db/schema';
 import { toBusinessDate } from '@shareat/core/datetime';
+import { DOCUMENT_REASON_RULES } from '../field-rules/documents';
+import { assertFieldRules } from '../shared/field-rules-assert';
 import { gone, refuse } from '../shared/refusal';
 import { fillBody, longDate, missingIn, type MergeValues } from './merge-fields';
 import { assertBodyText } from './templates';
@@ -99,6 +101,25 @@ async function mergeValuesFor(tx: Tx, actor: Actor, target: Target): Promise<Mer
   };
 }
 
+/** The letterhead and names as they are NOW, to be copied onto the version being written (R7: every version is kept as it was). */
+async function freezeLetterhead(tx: Tx, actor: Actor, storeId: string | null, template: { name: string; kind: DocumentKind }): Promise<DocumentLetterhead> {
+  const [org, store] = await Promise.all([
+    documentsRepo.getOrgFacts(tx, actor.orgId),
+    storeId ? documentsRepo.getStoreFacts(tx, actor.orgId, storeId) : Promise.resolve(null),
+  ]);
+  return {
+    orgLegalName: org?.legalName ?? null,
+    orgTradingName: org?.tradingName ?? '',
+    orgTin: org?.tin ?? null,
+    tinBranchCode: store?.tinBranchCode ?? null,
+    storeName: store?.name ?? null,
+    storeAddress: store?.address ?? null,
+    storeContact: store?.contactNumber ?? null,
+    templateName: template.name,
+    templateKind: template.kind,
+  };
+}
+
 export interface DocumentDraft {
   template: { id: string; name: string; kind: DocumentKind; versionId: string; versionNo: number; signatureSlots: SignatureSlot[] };
   storeId: string | null;
@@ -166,7 +187,8 @@ export async function issueDocument(
     employmentId: target.employmentId,
     issuedBy: actor.personId,
   });
-  const versionId = await documentsRepo.insertDocumentVersion(tx, { orgId: actor.orgId, issuedDocumentId: doc.id, versionNo: 1, body, reason: null, createdBy: actor.personId });
+  const letterhead = await freezeLetterhead(tx, actor, target.storeId, head);
+  const versionId = await documentsRepo.insertDocumentVersion(tx, { orgId: actor.orgId, issuedDocumentId: doc.id, versionNo: 1, body, reason: null, letterhead, createdBy: actor.personId });
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'document.issued',
@@ -215,6 +237,8 @@ export interface IssuedDocumentVersion {
   createdBy: string;
   createdByName: string;
   createdAt: Date;
+  /** The letterhead and template names as they were when this version was written. */
+  letterhead: DocumentLetterhead;
   signatures: Array<{ id: string; slot: SignatureSlot; personId: string; personName: string; signedAt: Date }>;
 }
 
@@ -263,7 +287,7 @@ export interface PrintData {
   voidReason: string | null;
   kind: DocumentKind;
   body: string;
-  letterhead: { legalName: string | null; tradingName: string; tin: string | null; storeName: string | null; storeAddress: string | null; tinBranchCode: string | null };
+  letterhead: { legalName: string | null; tradingName: string; tin: string | null; storeName: string | null; storeAddress: string | null; tinBranchCode: string | null; storeContact: string | null; templateName: string };
   slots: Array<{ slot: SignatureSlot; name: string | null; signatureId: string | null; signedAt: Date | null }>;
   issuedAt: Date;
   revisionReason: string | null;
@@ -277,10 +301,7 @@ export async function documentPrintData(tx: Tx, actor: Actor, documentId: string
   if (!current) throw gone('documents: document has no version', 'document');
   const v = versionNo === undefined ? current : versions.find((x) => x.versionNo === versionNo);
   if (!v) throw gone('documents: version not found', 'version');
-  const [org, store] = await Promise.all([
-    documentsRepo.getOrgFacts(tx, actor.orgId),
-    document.storeId ? documentsRepo.getStoreFacts(tx, actor.orgId, document.storeId) : Promise.resolve(null),
-  ]);
+  // Everything printed comes from what was frozen on THIS version, never from the live records.
   const names = expectedSignerNames(document, v);
   return {
     number: document.number,
@@ -288,15 +309,17 @@ export async function documentPrintData(tx: Tx, actor: Actor, documentId: string
     isCurrent: v.versionNo === current.versionNo,
     voided: document.voided,
     voidReason: document.voidReason,
-    kind: document.kind,
+    kind: v.letterhead.templateKind,
     body: v.body,
     letterhead: {
-      legalName: org?.legalName ?? null,
-      tradingName: org?.tradingName ?? '',
-      tin: org?.tin ?? null,
-      storeName: store?.name ?? null,
-      storeAddress: store?.address ?? null,
-      tinBranchCode: store?.tinBranchCode ?? null,
+      legalName: v.letterhead.orgLegalName,
+      tradingName: v.letterhead.orgTradingName,
+      tin: v.letterhead.orgTin,
+      storeName: v.letterhead.storeName,
+      storeAddress: v.letterhead.storeAddress,
+      tinBranchCode: v.letterhead.tinBranchCode,
+      storeContact: v.letterhead.storeContact,
+      templateName: v.letterhead.templateName,
     },
     slots: document.signatureSlots.map((slot) => {
       const s = v.signatures.find((x) => x.slot === slot);
@@ -316,8 +339,7 @@ export async function reviseDocument(tx: Tx, actor: Actor, input: { documentId: 
   if (!row) throw gone('documents: document not found', 'document');
   await authorizeAt(tx, actor, 'issue_documents', row.storeId);
 
-  const reason = String(input.reason ?? '').trim();
-  if (reason === '') throw refuse('reviseDocument: blank reason', 'Say why the document is being changed. The reason is kept with the new version.');
+  const reason = assertFieldRules(DOCUMENT_REASON_RULES, { reason: input.reason }).reason ?? '';
   const body = assertBodyText(input.body, 'document');
   assertNoHoles(body);
 
@@ -326,7 +348,8 @@ export async function reviseDocument(tx: Tx, actor: Actor, input: { documentId: 
   if (!locked) throw gone('documents: document not found', 'document');
   if (locked.voided) throw refuse('reviseDocument: document is void', 'This document is void, so it cannot be changed. Issue a new document instead.');
   const versionNo = locked.currentVersionNo + 1;
-  const versionId = await documentsRepo.insertDocumentVersion(tx, { orgId: actor.orgId, issuedDocumentId: input.documentId, versionNo, body, reason, createdBy: actor.personId });
+  const letterhead = await freezeLetterhead(tx, actor, row.storeId, { name: row.templateName, kind: row.kind });
+  const versionId = await documentsRepo.insertDocumentVersion(tx, { orgId: actor.orgId, issuedDocumentId: input.documentId, versionNo, body, reason, letterhead, createdBy: actor.personId });
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'document.revised',

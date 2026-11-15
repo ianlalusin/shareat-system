@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { can } from '@shareat/auth';
 import { getIssuedDocument, documentKindLabel, SLOT_WORDS, type IssuedDocumentVersion } from '@shareat/domain';
-import { DOCUMENT_SIGN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { DOCUMENT_REASON_RULES, DOCUMENT_SIGN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import type { SignatureSlot } from '@shareat/db/schema';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
@@ -40,22 +40,15 @@ export default async function DocumentPage({ params, searchParams }: { params: P
     try {
       got = await getIssuedDocument(tx, actor, id);
     } catch (err) {
-      // Not in this organisation (or not a document): the framework's 404. A permission refusal is shown as itself below.
-      if (err instanceof Error && err.name === 'AuthorizationError') return { refused: (err as { userMessage?: string }).userMessage ?? 'You may not open this document.' } as const;
-      return null;
+      // A permission refusal and a missing document read the same: the framework's 404, so a guessed id learns nothing (the print page does the same).
+      if (err instanceof Error && (err.name === 'AuthorizationError' || err.name === 'RefusalError')) return null;
+      throw err;
     }
     const d = got.document;
     const canIssue = d.storeId ? await can(tx, actor, 'issue_documents', { storeId: d.storeId }) : await can(tx, actor, 'manage_document_templates', {});
     return { got, canIssue } as const;
   });
   if (!loaded) notFound();
-  if ('refused' in loaded) {
-    return (
-      <Page density="table">
-        <FlashBanner flash={{ error: loaded.refused }} />
-      </Page>
-    );
-  }
   const { got, canIssue } = loaded;
   const { document: doc, versions } = got;
   const current = versions[0]!;
@@ -116,13 +109,14 @@ export default async function DocumentPage({ params, searchParams }: { params: P
             label={`${doc.number} wording`}
             hidden={{ documentId: doc.id }}
             editText="Change the wording"
+            rules={DOCUMENT_REASON_RULES}
             typed={typedFor(sp, DOCUMENT_REVISE, doc.id, actor.personId)}
           >
             <Field label="Wording" span="full">
               <Textarea name="body" rows={16} defaultValue={current.body} className="w-full font-mono" />
             </Field>
-            <Field label="Why is it changing?" span="full" hint="Kept with the new version.">
-              <Textarea name="reason" rows={2} defaultValue="" className="w-full" />
+            <Field label="Why is it changing?" span="full" hint="Kept with the new version. At most 500 characters." rule={DOCUMENT_REASON_RULES.reason}>
+              <Textarea {...nativeAttrs(DOCUMENT_REASON_RULES.reason)} rows={2} defaultValue="" className="w-full" />
             </Field>
           </EditableRecord>
         </section>
@@ -132,13 +126,13 @@ export default async function DocumentPage({ params, searchParams }: { params: P
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="text-lg font-semibold">Void this document</h2>
           <p className="text-sm text-muted">Use this when it was issued by mistake. It stays in the register marked void, and its print says VOID. It cannot be changed or signed afterwards.</p>
-          <form action={voidDocumentAction} className="space-y-3 text-sm">
+          <CheckedForm rules={DOCUMENT_REASON_RULES} action={voidDocumentAction} className="space-y-3 text-sm">
             <input type="hidden" name="documentId" value={doc.id} />
-            <Field label="Why is it void?" span="full">
-              <Textarea name="reason" rows={2} defaultValue="" className="w-full" />
+            <Field label="Why is it void?" span="full" hint="At most 500 characters." rule={DOCUMENT_REASON_RULES.reason}>
+              <Textarea {...nativeAttrs(DOCUMENT_REASON_RULES.reason)} rows={2} defaultValue="" className="w-full" />
             </Field>
             <ConfirmDestructive tier="retype" label="Void document" consequence={`${doc.number} will be marked void everywhere. This cannot be undone.`} expectedName={doc.number} />
-          </form>
+          </CheckedForm>
         </section>
       )}
 

@@ -338,3 +338,44 @@ describe('T-584 S3 - what the issue screen may offer', () => {
     await denied(opt(w.f.staff.actor));
   });
 });
+
+describe('T-584 R7 - a version is kept as it was, letterhead included', () => {
+  it('changing the company name and the store address after issue leaves version 1 printing as it was; a revision picks up the new facts [kills: print read from live records]', async () => {
+    const w = await world('letterhead');
+    const r = await issue(w, w.f.managerA.actor, { employmentId: w.f.employee.employmentId, body: 'Frozen letterhead.' });
+    const print = (versionNo?: number) => asOrg(w.f.orgId, (tx) => documentPrintData(tx, w.f.admin.actor, r.documentId, versionNo));
+    const before = (await print(1)).letterhead;
+    expect(before).toMatchObject({ legalName: 'Test Org Incorporated', tin: '123456789', storeName: 'Test Store A', storeAddress: '1 Test Street, Test City', tinBranchCode: '00001', templateName: 'COE' });
+    expect((await print(1)).kind).toBe('coe');
+    await sql`update organizations set legal_name = 'Renamed Company Corp', tin = '987654321' where id = ${w.f.orgId}`;
+    await sql`update stores set address = '99 New Avenue', name = 'Renamed Store', tin_branch_code = '00009', contact_number = '0999' where id = ${w.f.storeA}`;
+    await sql`update document_templates set name = 'Renamed template', kind = 'memo' where id = ${w.coe.templateId}`;
+    expect((await print(1)).letterhead).toEqual(before);
+    expect((await print()).letterhead).toEqual(before);
+    await asOrg(w.f.orgId, (tx) => reviseDocument(tx, w.f.admin.actor, { documentId: r.documentId, body: 'Second version.', reason: 'New facts' }));
+    expect((await print(1)).letterhead).toEqual(before);
+    expect((await print(2)).letterhead).toMatchObject({ legalName: 'Renamed Company Corp', tin: '987654321', storeName: 'Renamed Store', storeAddress: '99 New Avenue', tinBranchCode: '00009', templateName: 'Renamed template' });
+    expect((await print(2)).kind).toBe('memo');
+    expect((await print(1)).kind).toBe('coe');
+  });
+});
+
+describe('T-584 limits and edge cases', () => {
+  it('a revision reason over 500 characters is refused in plain words; exactly 500 is kept [kills: an unbounded reason]', async () => {
+    const w = await world('reasoncap');
+    const r = await issue(w, w.f.managerA.actor, { employmentId: w.f.employee.employmentId, body: 'Original.' });
+    const rev = (reason: string) => asOrg(w.f.orgId, (tx) => reviseDocument(tx, w.f.managerA.actor, { documentId: r.documentId, body: 'New.', reason }));
+    expect(await sentenceOf(rev('x'.repeat(501)))).toMatch(/500/);
+    expect((await rev('x'.repeat(500))).versionNo).toBe(2);
+  });
+
+  it('a person who may read only organisation-wide documents (no store held) can list them, with no empty IN list [kills: a crash on an empty store list]', async () => {
+    const w = await world('storeless');
+    const all = await issue(w, w.f.admin.actor, { body: 'Everyone.' });
+    await issue(w, w.f.admin.actor, { employmentId: w.f.employee.employmentId, body: 'Store A.' });
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${w.f.orgId}, 'Admin Without Scope') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${w.f.orgId}, 'admin')`;
+    const rows = await asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, { personId: p!.id, orgId: w.f.orgId }, {}));
+    expect(rows.map((d) => d.id)).toEqual([all.documentId]);
+  });
+});

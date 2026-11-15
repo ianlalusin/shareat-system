@@ -5,13 +5,15 @@
 -- are kept as versions; an issued document is numbered (DOC-YYYY-NNNN, per organisation per year), keeps every version of its text (R7), and is
 -- signed per version with the owner's saved signature, attached only after the owner enters their own Employee ID and PIN (the domain checks that).
 --
+-- FROZEN (R7: every version is kept as it was). issued_document_versions.letterhead holds the organisation's registered name and TIN, the store's name, address, branch code and contact, and the template's name and kind AS THEY WERE when that version was written; issued_document_signatures.signer_name holds the signer's name as it was when they signed. Print reads these, never the live records.
+--
 -- THE TABLES. document_templates (library entry), document_template_versions (append-only), issued_documents (only the void columns may change,
 -- once), issued_document_versions (append-only; the current version is the highest version_no), issued_document_signatures (append-only; one per
 -- version and slot; file_id (the signer saved signature, from persons) is copied BY REFERENCE at signing, so a later change to the saved signature changes nothing printed).
 --
 -- THE LOCKS (the 0221 / 0239 pattern; no layer is the only lock).
 --   1. RLS ENABLE and FORCE, one policy per table through app_current_org() (DEF-077).
---   2. Triggers (ENABLE ALWAYS): documents_refuse_mutation on the three append-only tables (SQLSTATE 23001); issued_documents_guard (no delete; only
+--   2. Triggers: the four HISTORY GUARDS are ENABLE ALWAYS (they still fire under session_replication_role = replica; registered 'always' in triggers/registry.ts): documents_refuse_mutation on the three append-only tables (SQLSTATE 23001) and issued_documents_guard (no delete; only
 --      the void columns change, once); issued_document_versions_sequence (version_no is exactly the previous + 1; no revision of a void document;
 --      the document row is locked); issued_document_signatures_current_version (only the current version of a live document can be signed).
 --   3. Grants (ADR-012 s5 4a): shareat_app has SELECT + INSERT everywhere; column-level UPDATE only on document_templates (name, kind, retired_at)
@@ -68,7 +70,7 @@ CREATE TABLE "issued_documents" (
 	CONSTRAINT "issued_documents_number_check" CHECK ("number" ~ '^DOC-[0-9]{4}-[0-9]{4,}$'),
 	CONSTRAINT "issued_documents_void_all_or_nothing_check" CHECK (
 		("voided_at" IS NULL AND "voided_by" IS NULL AND "void_reason" IS NULL)
-		OR ("voided_at" IS NOT NULL AND "voided_by" IS NOT NULL AND COALESCE(btrim("void_reason"), '') <> '')
+		OR ("voided_at" IS NOT NULL AND "voided_by" IS NOT NULL AND COALESCE(btrim("void_reason"), '') <> '' AND length("void_reason") <= 500)
 	)
 );
 --> statement-breakpoint
@@ -79,11 +81,13 @@ CREATE TABLE "issued_document_versions" (
 	"version_no" integer NOT NULL,
 	"body" text NOT NULL,
 	"reason" text,
+	"letterhead" jsonb NOT NULL,
 	"created_by" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "issued_document_versions_org_id_id_unique" UNIQUE ("org_id", "id"),
 	CONSTRAINT "issued_document_versions_body_check" CHECK (btrim("body") <> '' AND length("body") <= 50000),
-	CONSTRAINT "issued_document_versions_reason_check" CHECK (("version_no" = 1 AND "reason" IS NULL) OR ("version_no" > 1 AND COALESCE(btrim("reason"), '') <> ''))
+	CONSTRAINT "issued_document_versions_reason_check" CHECK (("version_no" = 1 AND "reason" IS NULL) OR ("version_no" > 1 AND COALESCE(btrim("reason"), '') <> '' AND length("reason") <= 500)),
+	CONSTRAINT "issued_document_versions_letterhead_check" CHECK (jsonb_typeof("letterhead") = 'object')
 );
 --> statement-breakpoint
 CREATE TABLE "issued_document_signatures" (
@@ -92,9 +96,11 @@ CREATE TABLE "issued_document_signatures" (
 	"issued_document_version_id" uuid NOT NULL,
 	"slot" text NOT NULL,
 	"person_id" uuid NOT NULL,
+	"signer_name" text NOT NULL,
 	"file_id" uuid NOT NULL,
 	"signed_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "issued_document_signatures_slot_check" CHECK ("slot" IN ('issuer', 'employee'))
+	CONSTRAINT "issued_document_signatures_slot_check" CHECK ("slot" IN ('issuer', 'employee')),
+	CONSTRAINT "issued_document_signatures_signer_name_check" CHECK (btrim("signer_name") <> '')
 );
 --> statement-breakpoint
 CREATE INDEX "document_templates_org_idx" ON "document_templates" ("org_id");
@@ -294,8 +300,6 @@ CREATE TRIGGER "issued_document_versions_sequence"
 	BEFORE INSERT ON "issued_document_versions"
 	FOR EACH ROW EXECUTE FUNCTION "issued_document_versions_sequence"();
 --> statement-breakpoint
-ALTER TABLE "issued_document_versions" ENABLE ALWAYS TRIGGER "issued_document_versions_sequence";
---> statement-breakpoint
 CREATE OR REPLACE FUNCTION "issued_document_signatures_current_version"() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -322,8 +326,6 @@ REVOKE EXECUTE ON FUNCTION "issued_document_signatures_current_version"() FROM P
 CREATE TRIGGER "issued_document_signatures_current_version"
 	BEFORE INSERT ON "issued_document_signatures"
 	FOR EACH ROW EXECUTE FUNCTION "issued_document_signatures_current_version"();
---> statement-breakpoint
-ALTER TABLE "issued_document_signatures" ENABLE ALWAYS TRIGGER "issued_document_signatures_current_version";
 --> statement-breakpoint
 REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON "document_template_versions" FROM "shareat_app";
 --> statement-breakpoint

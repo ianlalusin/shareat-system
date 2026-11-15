@@ -126,6 +126,19 @@ describe('T-584 issue, sign, revise, void screens - wiring', () => {
     expect(p).not.toMatch(/type="password"[^>]*(defaultValue|value)=/);
   });
 
+  it('the document page answers a missing document and a permission refusal with the same 404, as the print page does [kills: telling a stranger the document exists]', () => {
+    const p = code('[id]/page.tsx');
+    expect(p).toMatch(/AuthorizationError[\s\S]{0,80}return null/);
+    expect(p).not.toMatch(/refused|userMessage/);
+  });
+
+  it('the revise and void reasons are limited by the shared rule set on the screen, and the void form is a CheckedForm [kills: a 500-character cap that only the server knew]', () => {
+    const p = code('[id]/page.tsx');
+    expect(p.match(/nativeAttrs\(DOCUMENT_REASON_RULES\.reason\)/g)).toHaveLength(2);
+    expect(p).toMatch(/rules=\{DOCUMENT_REASON_RULES\}\s+action=\{voidDocumentAction\}/);
+    expect(p).toMatch(/rules=\{DOCUMENT_REASON_RULES\}\s+typed=/);
+  });
+
   it('the print page is A4, hides the navigation on paper, and prints VOID on a void document [kills: a print that looks live]', () => {
     const p = code('[id]/print/page.tsx');
     expect(p).toMatch(/@page \{ size: A4/);
