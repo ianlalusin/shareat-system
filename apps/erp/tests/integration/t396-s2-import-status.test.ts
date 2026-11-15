@@ -9,7 +9,7 @@
  * ASSUMED CONTRACT for the builder (the spec names behaviour, not names):
  *  - `SchedulerStatus` gains an optional prop `cadence?: 'daily' | 'monthly'` (default monthly = today's 2-calendar-month rule).
  *    Daily: stale (a warning Banner, "may have stopped") when the last run started more than 26 h ago, else the quiet `<p>` line.
- *  - The never-run text names the job's own command (`npm run pos-day-import`), not the hard-coded `npm run month-end`.
+ *  - The never-run text tells an admin who to ask (T-589 B3a), with no command in it.
  *  - `/sales-days` embeds `<SchedulerStatus job="pos_day_import" cadence="daily" ...>` (an async server component) ONLY for a person
  *    who holds `submit_sales_day`, and shows each failure/notice line only when the person may `submit_sales_day` AT that line's
  *    store (`SchedulerFailure.subjectId` = the store id, per S1). Failure lines are `<li>` items; notices are not.
@@ -127,12 +127,13 @@ async function renderPageAs(f: Fixture, personId: string) {
 const listItems = (html: string) => [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]).join('\n');
 
 describe('S2-1 never run', () => {
-  it('says the morning import has never run and names its own command - kills: hides the never-run state / reuses the month-end command', async () => {
+  it('says the morning import has never run and tells an admin who to ask, with no command - kills: hides the never-run state / reuses the month-end command', async () => {
     const f = await fixture('never');
     const html = await renderPageAs(f, f.admin);
     expect(html).toMatch(/morning[^<]*import/i);
     expect(html).toMatch(/never run/i);
-    expect(html).toContain('npm run pos-day-import');
+    expect(html).toContain('Ask whoever looks after the server to switch it on.');
+    expect(html).not.toContain('npm run');
     expect(html).not.toContain('month-end');
   }, 30_000);
 });

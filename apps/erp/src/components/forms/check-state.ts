@@ -5,7 +5,7 @@
  *
  * ⛔ Nothing here repeats a typed value in a sentence (government numbers are personal data, Audit A5).
  */
-import { plural } from '../../lib/plural';
+import { countOf } from '@shareat/core/sentence';
 import { checkField, ruleApplies, rulesOf, ruleHint, type FieldCheck, type FieldRule, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 
 export interface CheckedFormState {
@@ -135,7 +135,7 @@ export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState
   const blockerSentences = Object.values(state.blockers ?? NONE);
   // Every failing field already shows its own line under it, so the summary only POINTS at them (no wall of requirements).
   // A business-rule blocker has no field under it, so its sentence prints in full, after the pointer (never hidden behind a count).
-  const fieldPart = failing.length === 0 ? '' : `fix the ${failing.length === 1 ? '' : `${failing.length} `}${plural(failing.length, 'field', 'fields')} marked above.`;
+  const fieldPart = failing.length === 0 ? '' : `fix the ${failing.length === 1 ? 'field' : countOf(failing.length, 'field')} marked above.`;
   const summary =
     failing.length === 0 && blockerSentences.length === 0
       ? null

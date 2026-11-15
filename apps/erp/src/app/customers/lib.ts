@@ -222,7 +222,7 @@ export function today(): string {
 export const TREATMENT_LABEL: Record<string, string> = {
   internal: 'Internal — eliminates, not revenue',
   inter_entity: 'Another company — real revenue',
-  external: 'External — real revenue',
+  external: 'Outside customer',
 };
 
 export const TREATMENT_TONE: Record<string, string> = {
