@@ -29,6 +29,8 @@ export {
   MAX_EVENTS_PER_BATCH,
 } from './inbox';
 export type { PosEventIn, PosEventResult, PosPairing } from './inbox';
+export { receiptIdentityOf } from './receipt-identity';
+export type { ReceiptIdentity } from './receipt-identity';
 export { buildPosSnapshot, loadPosSnapshot, readPosState, NO_TILL_NUMBER } from './snapshot';
 // `listTerminals` is already the clock terminals' (attendance) in this barrel, so only the list is aliased.
 export { listTerminals as listPosTerminals, createTerminal, linkTerminal, setTerminalPrinter } from './terminals';
