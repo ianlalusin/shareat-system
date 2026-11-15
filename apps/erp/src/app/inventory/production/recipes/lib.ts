@@ -29,6 +29,11 @@ export async function canManageRecipes(orgId: string, actor: Actor): Promise<boo
   return withOrgPrincipal(orgId, async (tx) => (await heldCapabilities(tx, actor)).has(MANAGE_RECIPES));
 }
 
+/** T-583: may this viewer post a production run (manager, admin, super)? Gates the Cook tab's Cookbook shortcut and the recipes screens' read. */
+export async function canPostProduction(orgId: string, actor: Actor): Promise<boolean> {
+  return withOrgPrincipal(orgId, async (tx) => (await heldCapabilities(tx, actor)).has('post_production'));
+}
+
 /** Active items a recipe may use (the pickers); each shows its base unit. */
 export async function recipeItemOptions(orgId: string): Promise<RecipeItemOption[]> {
   return withOrgPrincipal(orgId, async (tx) => {
