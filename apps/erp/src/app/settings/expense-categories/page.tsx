@@ -326,7 +326,7 @@ export default async function ExpenseCategoriesSettingsPage({
                                 </form>
                               </FormModal>
                             )}
-                            <form action={setCategoryActiveAction}>
+                            <form action={setCategoryActiveAction} className="contents">
                               <input type="hidden" name="categoryId" value={c.id} />
                               <input type="hidden" name="categoryLabel" value={c.category} />
                               <input type="hidden" name="isActive" value={c.isActive ? 'false' : 'true'} />
