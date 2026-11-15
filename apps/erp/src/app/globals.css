@@ -815,17 +815,19 @@ html { scrollbar-gutter: stable; }
 /* T-448: a named, keyboard-scrollable summary strip becomes a grid when space permits.
    Numbers remain real text: wrap at extreme magnification instead of clipping or ellipsizing. */
 .erp-metric-strip {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   max-width: 100%;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
   border-block: 1px solid var(--surface-border);
 }
+/* T-589 B4a: tiles wrap into rows on a phone (one wide, two from 480px). They used to be an 80%-wide sideways
+   strip, so "GROSS" and "AP OUTSTANDING" arrived cut off at the screen edge with their figures out of sight. */
+@media (min-width: 480px) {
+  .erp-metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .erp-metric-strip > * {
-  flex: 0 0 80%;
   min-width: 0;
-  scroll-snap-align: start;
   overflow-wrap: anywhere;
 }
 .erp-metric-strip:focus-visible {
@@ -843,7 +845,7 @@ html { scrollbar-gutter: stable; }
 .erp-page[data-view="detail"] :where(dt, dd) { overflow-wrap: anywhere; }
 .erp-page[data-view="detail"] :where(h2) { line-height: 1.4; }
 @media (min-width: 768px) {
-  .erp-metric-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .erp-metric-strip { overflow: visible; }
 }
 @media (min-width: 1024px) {
   .erp-metric-strip[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
