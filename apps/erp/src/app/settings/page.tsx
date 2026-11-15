@@ -51,8 +51,8 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Settings</h1>
         <PageDescription>
-          The reference data the rest of the system reads. Changing something here changes what
-          every screen can record against — it does not change anything already recorded.
+          Everything you set up for your stores, your company and your team. Changes apply to what is
+          recorded from now on; past records stay as they are.
         </PageDescription>
       </div>
 
@@ -127,7 +127,7 @@ function Section({ title, held, children }: { title: string; held: ReadonlySet<s
   );
   if (rows.length === 0) return null;
   return (
-    <section className="mb-4 break-inside-avoid rounded-lg border border-neutral-200 dark:border-neutral-800">
+    <section className="mb-4 break-inside-avoid overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
       <h2 className="border-b border-neutral-200 px-4 py-3 text-base font-semibold dark:border-neutral-800">{title}</h2>
       <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
         {rows.map((r) => (
@@ -152,7 +152,7 @@ function SettingsRow({ href, title, hint, also }: { href: string; title: string;
       <span className="min-w-0 flex-1">
         <span className="block font-medium">{title}</span>
         <span className="block text-sm text-neutral-600 dark:text-neutral-400">{hint}</span>
-        {also && <span className="block text-xs text-neutral-500">{`Also called: ${also}`}</span>}
+        {also && <span className="block text-xs text-neutral-600 dark:text-neutral-400">{`Also called: ${also}`}</span>}
       </span>
       <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-neutral-500">
         <path d="M7 5l5 5-5 5" />
