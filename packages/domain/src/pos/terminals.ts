@@ -37,9 +37,9 @@ export async function listTerminals(tx: Tx, actor: Actor, input: { storeId: stri
 
 export async function createTerminal(tx: Tx, actor: Actor, input: { storeId: string; terminalNo: unknown }): Promise<{ terminalId: string }> {
   await authorize(tx, actor, CAPABILITY, { storeId: input.storeId });
-  const terminalNo = wholeNumber(input.terminalNo, { what: 'The till number', min: 1, max: 99 });
+  const terminalNo = wholeNumber(input.terminalNo, { what: 'The cash register number', min: 1, max: 99 });
   if (await posV2Repo.getTerminalByNo(tx, actor.orgId, input.storeId, terminalNo)) {
-    throw refuse(`createTerminal: till ${terminalNo} exists at store ${input.storeId}`, `Till ${terminalNo} already exists at this store.`);
+    throw refuse(`createTerminal: till ${terminalNo} exists at store ${input.storeId}`, `Cash register ${terminalNo} already exists at this store.`);
   }
   const row = await posV2Repo.insertTill(tx, { orgId: actor.orgId, storeId: input.storeId, terminalNo, createdBy: actor.personId });
   await auditLogRepo.append(tx, actor.orgId, {
@@ -57,17 +57,17 @@ export async function createTerminal(tx: Tx, actor: Actor, input: { storeId: str
 
 export async function linkTerminal(tx: Tx, actor: Actor, input: { storeId: string; terminalId: string; pairingId: string | null }): Promise<{ terminalId: string; wrote: boolean }> {
   await authorize(tx, actor, CAPABILITY, { storeId: input.storeId });
-  const terminalId = uuidInput(input.terminalId, 'That till');
+  const terminalId = uuidInput(input.terminalId, 'That cash register');
   const pairingId = input.pairingId === null ? null : uuidInput(input.pairingId, 'That tablet');
   const till = await posV2Repo.getTillForUpdate(tx, actor.orgId, input.storeId, terminalId);
-  if (!till) throw gone(`linkTerminal: till ${terminalId} not in store ${input.storeId}`, 'till');
+  if (!till) throw gone(`linkTerminal: till ${terminalId} not in store ${input.storeId}`, 'cash register');
   if (pairingId !== null) {
     if (!(await posV2Repo.getLivePairing(tx, actor.orgId, input.storeId, pairingId))) {
       throw refuse(`linkTerminal: pairing ${pairingId} is not a live pairing of store ${input.storeId}`, 'That tablet is not paired to this store.');
     }
     const holder = await posV2Repo.getTerminalForPairing(tx, actor.orgId, input.storeId, pairingId);
     if (holder && holder.id !== terminalId) {
-      throw refuse(`linkTerminal: pairing ${pairingId} already acts as till ${holder.terminalNo}`, `That tablet already acts as till ${holder.terminalNo}.`);
+      throw refuse(`linkTerminal: pairing ${pairingId} already acts as till ${holder.terminalNo}`, `That tablet already acts as cash register ${holder.terminalNo}.`);
     }
   }
   // Nothing changes: no write, no audit row, no state_version bump (the tablets would refresh for nothing).
@@ -92,12 +92,12 @@ export async function setTerminalPrinter(
   input: { storeId: string; terminalId: string; receiptPaperMm: unknown; receiptCopies: unknown },
 ): Promise<{ terminalId: string; wrote: boolean }> {
   await authorize(tx, actor, CAPABILITY, { storeId: input.storeId });
-  const terminalId = uuidInput(input.terminalId, 'That till');
+  const terminalId = uuidInput(input.terminalId, 'That cash register');
   if (input.receiptPaperMm !== 58 && input.receiptPaperMm !== 80) throw refuse('setTerminalPrinter: paper is not 58 or 80', 'Paper width must be 58 mm or 80 mm.');
   const receiptPaperMm: number = input.receiptPaperMm;
   const receiptCopies = wholeNumber(input.receiptCopies, { what: 'Copies', min: 1, max: 3 });
   const till = await posV2Repo.getTillForUpdate(tx, actor.orgId, input.storeId, terminalId);
-  if (!till) throw gone(`setTerminalPrinter: till ${terminalId} not in store ${input.storeId}`, 'till');
+  if (!till) throw gone(`setTerminalPrinter: till ${terminalId} not in store ${input.storeId}`, 'cash register');
   if (till.receiptPaperMm === receiptPaperMm && till.receiptCopies === receiptCopies) return { terminalId, wrote: false }; // same values: nothing to write or audit
   await posV2Repo.setTillPrinter(tx, actor.orgId, input.storeId, terminalId, receiptPaperMm, receiptCopies);
   await auditLogRepo.append(tx, actor.orgId, {
