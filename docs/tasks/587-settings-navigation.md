@@ -23,39 +23,39 @@
 
 ## Options
 **A. Tidy.** Fix labels, add the missing cards to the hub, group the hub, add the back link everywhere. Sidebar unchanged. Smallest, safest; the three doors remain.
-**B. One door (recommended).** A, plus: the hub is grouped into four sections — **Your store** (what a manager changes), **Company** (admin), **People and access**, **Devices and connections**; cards are role-aware (hidden if no read right, "View only" tag if read without write); a "Find a setting" box that matches the plain word and the old name ("daypart", "VAT", "stations"); the sidebar Setup group shrinks to **Settings**, **Users and roles**, **Stores** (the rest are reached from the hub). Nav-route-reachability keeps passing because every child stays linked from the hub.
+**B. One door (recommended).** A, plus: the hub is grouped into four sections — **This store** (what a manager changes), **Company** (admin), **People and access**, **Devices and connections**; each entry is a ROW (label, one-line hint, "View only" tag where it applies, chevron; the whole row is the link, 44 px tall; one bordered panel per section, two panels side by side on wide screens), not a card; entries are role-aware (hidden if no read right, "View only" tag if read without write) and show the old name as "also called"; the sidebar Setup group shrinks to **Settings**, **Users and roles**, **Stores** (the rest are reached from the hub). Nav-route-reachability keeps passing because every child stays linked from the hub.
 **C. Store first.** Pick the store once at the top of Settings and every per-store screen follows it. Biggest win for owners of several stores, but it needs T-586's one store screen to land first. Later, not now.
 
 ## Recommended hub (option B), real labels
-| Section | Card (plain label) | Was | Who changes |
+| Section | Row (plain label) | Was | Who changes |
 |---|---|---|---|
-| Your store | Lunch and dinner hours | Menu hours | manager |
-| Your store | Kitchen stations | Kitchen setup | manager |
-| Your store | How this branch sells | Sales channels | manager |
-| Your store | Who reviews wastage | Wastage Monitor | manager |
-| Your store | Attendance and pay rules | Attendance & payroll | manager |
-| Your store | Spending limits | Budgets / Expense budgets | manager |
-| Your store | Recurring bills | Recurring bills | manager |
-| Your store | Store positions | Store positions | manager |
+| This store | Menu hours | Menu hours (T-567 ruling: keep this word) | manager |
+| This store | Kitchen stations | Kitchen setup | manager |
+| This store | Sales channels (walk-in, Grab, Foodpanda) | Sales channels | manager |
+| This store | Who reviews wastage | Wastage Monitor | manager |
+| This store | Attendance and pay rules | Attendance & payroll | manager |
+| This store | Spending limits | Budgets / Expense budgets | manager |
+| This store | Recurring bills | Recurring bills | manager |
+| This store | Store positions | Store positions | manager |
 | Company | Company name, TIN and tax | Organisation | admin |
 | Company | Expense categories | Expense categories | admin |
-| Company | Money checks and tax rates | Business rules | admin |
+| Company | Tax rates and money rules | Business rules | admin |
 | Company | Payroll rates (SSS, PhilHealth, Pag-IBIG, tax) | Payroll rates | admin |
 | Company | Stock usage tolerance | Usage tolerance | admin |
+| Company | Stock usage source | Usage source | admin |
+| Company | Stores (open, close, stock model) | Stores | admin |
 | People and access | Users and roles | Users and roles | admin |
 | People and access | What each position can do | Position access defaults | admin |
-| Devices and connections | Stores (open, close, stock model) | Stores | admin |
-| Devices and connections | POS tablets | POS tablet(s) | manager pairs, admin registers (after T-582) |
+| Devices and connections | POS tablets and cash registers | POS tablet(s) | manager pairs, admin registers (after T-582) |
 | Devices and connections | Clock terminals | Clock terminals | manager sees, admin sets |
-| Devices and connections | Failed clock punches | Clock lane | manager |
+| Devices and connections | Clock punch problems | Clock lane | manager |
 | Devices and connections | Link to POS store | POS link | admin |
-| Devices and connections | Stock usage source | Usage source | admin |
-Labels are proposals for Ian; the old name appears under the card as "also called …".
+Words reviewed by UI UX (15 Nov); the old name appears under the row as "also called …". Rows, not the T-582/T-583 cards: those are records with actions, a hub is navigation. A cookbook entry, if ever added, uses the `post_production` key (#272).
 
 ## Slices (each its own small PR, nav/labels only, freeze-safe 20 Nov–14 Dec)
 - **S1** hub regrouped, missing cards added, plain labels, "also called", back link on every child, spelling. No sidebar change.
 - **S2** role-aware cards (hide / "View only") from ROUTE_CAPABILITY, and give Clock terminals and Clock lane a route key so cashiers stop seeing them.
-- **S3** sidebar Setup group shrinks to three links; "Find a setting" box.
+- **S3** sidebar Setup group shrinks to three links. A "Find a setting" box is deliberately NOT built (UI UX: with four sections, about 21 rows and "also called", the browser's find covers it; add a plain filter later only if Ian asks).
 - Wait for #273 before touching the POS tablet card; wait for #271 before linking to the store page's new POS sections.
 
 ## Pins and guards expected to move (reported as numbers in each PR)
