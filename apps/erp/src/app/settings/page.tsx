@@ -1,5 +1,5 @@
-import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
-import { heldCapabilities } from '@shareat/auth';
+import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react';
+import { heldCapabilities, type Capability } from '@shareat/auth';
 import { withOrgPrincipal } from '../expenses/lib';
 import { requirePageAccess } from '../../lib/page-access';
 import { navHrefAllowed } from '../../lib/route-capability';
@@ -24,9 +24,14 @@ export const dynamic = 'force-dynamic';
  * rendered** (hide, not tease). The test is `navHrefAllowed` over `ROUTE_CAPABILITY` — the very map the sidebar
  * filters by (`AppShell`) and `requirePageAccess` refuses by — so the hub, the sidebar and the page gate cannot
  * drift (T-288; DEF-310's shape). ⛔ Hiding is presentation, never the control: each screen still gates its own
- * read, and every write still runs `authorize()`. A route with NO key in that map (`/attendance/terminals`,
- * `/attendance/lane`, `/menu/usage-source`, `/expenses/recurring`) shows to everyone who reaches the hub; S2 gives
- * the clock pages keys.
+ * read, and every write still runs `authorize()`. A route with NO key in that map (`/menu/usage-source`,
+ * `/expenses/recurring`) shows to everyone who reaches the hub.
+ *
+ * ⭐ **"View only" (T-587 S2).** A row the person can open but not change wears a small "View only" word pill. Each row
+ * declares `writeCap`: the capability (or list, ANY one enough) its save action really authorizes, read from the action and
+ * not assumed. It is the one new datum, and `tests/t587-s2-view-only.test.ts` reads each screen's source to prove the word is
+ * still the one authorized there. Where a route's read key IS its write key the pill can never show (a person without it never
+ * sees the row), which is correct, not a gap.
  *
  * ⚠️ **Three rows are cross-links to screens that live elsewhere and stay there.** Positions in particular:
  * `/staff` already creates them, and moving that form here would be reinventing *towards* v1's layout.
@@ -61,33 +66,34 @@ export default async function SettingsPage() {
           panel never leaves a hole beside a tall one. */}
       <div className="lg:columns-2 lg:gap-4">
         <Section title="This store" held={held}>
-          <SettingsRow href="/menu/hours" title="Menu hours" hint="The lunch and dinner hours a menu price can follow." />
-          <SettingsRow href="/kitchen" title="Kitchen stations" also="Kitchen setup" hint="Which kitchen station cooks each item." />
+          <SettingsRow href="/menu/hours" title="Menu hours" hint="The lunch and dinner hours a menu price can follow." writeCap="manage_store_settings" />
+          <SettingsRow href="/kitchen" title="Kitchen stations" also="Kitchen setup" hint="Which kitchen station cooks each item." writeCap="manage_store_settings" />
           <SettingsRow
             href="/settings/sales-channels"
             title="Sales channels (walk-in, Grab, Foodpanda)"
             hint="Whether a channel’s money arrives that day or waits for the platform to pay."
+            writeCap="manage_store_settings"
           />
-          <SettingsRow href="/settings/wastage-monitor" title="Wastage Monitor" hint="Who answers for a wasted or refunded order at each branch." />
-          <SettingsRow href="/settings/attendance" title="Attendance & payroll" hint="Shift hours, late policy, overtime, holiday pay and the pay period." />
-          <SettingsRow href="/budgets" title="Spending limits" also="Budgets, Expense budgets" hint="A spending cap per category, store and period." />
-          <SettingsRow href="/expenses/recurring" title="Recurring bills" hint="Bills that repeat, kept as templates." />
-          <SettingsRow href="/staff?view=positions" title="Store positions" hint="The jobs this store’s people hold, set up on the Staff screen." />
+          <SettingsRow href="/settings/wastage-monitor" title="Wastage Monitor" hint="Who answers for a wasted or refunded order at each branch." writeCap="manage_store_settings" />
+          <SettingsRow href="/settings/attendance" title="Attendance & payroll" hint="Shift hours, late policy, overtime, holiday pay and the pay period." writeCap="manage_store_settings" />
+          <SettingsRow href="/budgets" title="Spending limits" also="Budgets, Expense budgets" hint="A spending cap per category, store and period." writeCap="manage_expense_budgets" />
+          <SettingsRow href="/expenses/recurring" title="Recurring bills" hint="Bills that repeat, kept as templates." writeCap="manage_recurring_expenses" />
+          <SettingsRow href="/staff?view=positions" title="Store positions" hint="The jobs this store’s people hold, set up on the Staff screen." writeCap="manage_store_settings" />
         </Section>
 
         <Section title="Company" held={held}>
-          <SettingsRow href="/settings/organization" title="Organisation" hint="The registered name, TIN and tax type the books are kept under." />
-          <SettingsRow href="/settings/expense-categories" title="Expense categories" hint="Which account each kind of spend debits." />
-          <SettingsRow href="/settings/business-rules" title="Business rules" hint="Payout tolerance, loan rounding, and the withholding and VAT rates." />
-          <SettingsRow href="/payroll/rates" title="Payroll rates" hint="SSS, PhilHealth, Pag-IBIG and tax tables, and minimum wages." />
-          <SettingsRow href="/settings/usage-tolerance" title="Usage tolerance" hint="How far recorded stock usage may stray from what POS sales imply." />
-          <SettingsRow href="/menu/usage-source" title="Usage source" hint="Whether daily stock usage comes from POS item maps or menu stock rules." />
-          <SettingsRow href="/admin/stores" title="Stores" hint="Open or close a branch and set how it organises stock." />
+          <SettingsRow href="/settings/organization" title="Organisation" hint="The registered name, TIN and tax type the books are kept under." writeCap="manage_chart_of_accounts" />
+          <SettingsRow href="/settings/expense-categories" title="Expense categories" hint="Which account each kind of spend debits." writeCap="manage_chart_of_accounts" />
+          <SettingsRow href="/settings/business-rules" title="Business rules" hint="Payout tolerance, loan rounding, and the withholding and VAT rates." writeCap="manage_business_rules" />
+          <SettingsRow href="/payroll/rates" title="Payroll rates" hint="SSS, PhilHealth, Pag-IBIG and tax tables, and minimum wages." writeCap="manage_payroll_rates" />
+          <SettingsRow href="/settings/usage-tolerance" title="Usage tolerance" hint="How far recorded stock usage may stray from what POS sales imply." writeCap="set_menu_depletion" />
+          <SettingsRow href="/menu/usage-source" title="Usage source" hint="Whether daily stock usage comes from POS item maps or menu stock rules." writeCap={['switch_usage_source', 'manage_pos_map']} />
+          <SettingsRow href="/admin/stores" title="Stores" hint="Open or close a branch and set how it organises stock." writeCap="manage_stores" />
         </Section>
 
         <Section title="People and access" held={held}>
-          <SettingsRow href="/admin/users" title="Users and roles" hint="Who can sign in, their role, their stores and their extra rights." />
-          <SettingsRow href="/admin/access-defaults" title="Position access defaults" hint="What each position can do, store by store." />
+          <SettingsRow href="/admin/users" title="Users and roles" hint="Who can sign in, their role, their stores and their extra rights." writeCap="manage_users" />
+          <SettingsRow href="/admin/access-defaults" title="Position access defaults" hint="What each position can do, store by store." writeCap="grant_capability" />
         </Section>
 
         <Section title="Devices and connections" held={held}>
@@ -96,10 +102,11 @@ export default async function SettingsPage() {
             title="POS tablets and cash registers"
             also="POS tablet, POS tablets"
             hint="Pair a store’s counter tablet so staff sign in with Employee ID and PIN."
+            writeCap="pair_pos_tablet"
           />
-          <SettingsRow href="/attendance/terminals" title="Clock terminals" hint="Register a clock terminal and enrol cards or fingerprints." />
-          <SettingsRow href="/attendance/lane" title="Failed clock punches" also="Clock lane" hint="Punches that did not post, waiting for a manager to look." />
-          <SettingsRow href="/settings/pos-link" title="Link to POS store" also="POS link" hint="Which POS store each branch sells under." />
+          <SettingsRow href="/attendance/terminals" title="Clock terminals" hint="Register a clock terminal and enrol cards or fingerprints." writeCap="provision_clock_terminal" />
+          <SettingsRow href="/attendance/lane" title="Failed clock punches" also="Clock lane" hint="Punches that did not post, waiting for a manager to look." writeCap={['manage_attendance', 'provision_clock_terminal']} />
+          <SettingsRow href="/settings/pos-link" title="Link to POS store" also="POS link" hint="Which POS store each branch sells under." writeCap="manage_chart_of_accounts" />
         </Section>
       </div>
 
@@ -123,7 +130,7 @@ export default async function SettingsPage() {
 /** One bordered panel. Renders only the rows the person may open; renders nothing when none remain. */
 function Section({ title, held, children }: { title: string; held: ReadonlySet<string>; children: ReactNode }) {
   const rows = Children.toArray(children).filter(
-    (c): c is ReactElement<{ href: string }> => isValidElement<{ href: string }>(c) && navHrefAllowed(c.props.href.split('?')[0]!, held),
+    (c): c is ReactElement<RowProps> => isValidElement<RowProps>(c) && navHrefAllowed(c.props.href.split('?')[0]!, held),
   );
   if (rows.length === 0) return null;
   return (
@@ -131,11 +138,18 @@ function Section({ title, held, children }: { title: string; held: ReadonlySet<s
       <h2 className="border-b border-neutral-200 px-4 py-3 text-base font-semibold dark:border-neutral-800">{title}</h2>
       <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
         {rows.map((r) => (
-          <li key={r.props.href}>{r}</li>
+          <li key={r.props.href}>{cloneElement(r, { viewOnly: viewOnly(r.props.writeCap, held) })}</li>
         ))}
       </ul>
     </section>
   );
+}
+
+type RowProps = { href: string; title: string; hint: string; also?: string; writeCap: Capability | readonly Capability[]; viewOnly?: boolean };
+
+/** Read but not change: the person holds none of the capabilities the screen's save action authorizes. A list means ANY one is enough. */
+function viewOnly(writeCap: RowProps['writeCap'], held: ReadonlySet<string>): boolean {
+  return ![writeCap].flat().some((c) => held.has(c));
 }
 
 /**
@@ -143,7 +157,7 @@ function Section({ title, held, children }: { title: string; held: ReadonlySet<s
  * sites** above, which are literal, and that is the honest arrangement: the literal a reader sees in the markup
  * is the href that actually renders.
  */
-function SettingsRow({ href, title, hint, also }: { href: string; title: string; hint: string; also?: string }) {
+function SettingsRow({ href, title, hint, also, viewOnly }: RowProps) {
   return (
     <a
       href={href}
@@ -154,6 +168,9 @@ function SettingsRow({ href, title, hint, also }: { href: string; title: string;
         <span className="block text-sm text-neutral-600 dark:text-neutral-400">{hint}</span>
         {also && <span className="block text-xs text-neutral-600 dark:text-neutral-400">{`Also called: ${also}`}</span>}
       </span>
+      {viewOnly && (
+        <span className="shrink-0 rounded-full border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 dark:border-neutral-600 dark:text-neutral-300">View only</span>
+      )}
       <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-neutral-500">
         <path d="M7 5l5 5-5 5" />
       </svg>
