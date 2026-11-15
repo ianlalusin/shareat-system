@@ -584,6 +584,9 @@ html { scrollbar-gutter: stable; }
 
 /* T-448: (?) help — a toggletip. Hidden until hover, focus or click. */
 .erp-help-tip-wrap { position: relative; display: inline-flex; vertical-align: middle; }
+/* T-589 B4a: the "?" stays a 16px glyph in a 24px button, but the tap area is 44px: an invisible ring around it. */
+.erp-help-tip { position: relative; }
+.erp-help-tip::after { content: ''; position: absolute; inset: -10px; }
 .erp-help-tip-pop {
   position: absolute;
   z-index: 40;
@@ -746,9 +749,10 @@ html { scrollbar-gutter: stable; }
     grid-column: 2; grid-row: 1; font-size: 1rem; font-weight: 600; line-height: 1.4;
     min-width: 0; white-space: normal !important; overflow: visible; overflow-wrap: anywhere;
   }
+  /* T-589 B4a: the subtitle wraps too. One ellipsised line cut "Internal — eliminates, Dem…" and a room name to "Main stoc". */
   [data-phone-table-root] [data-card-slot="subtitle"] {
-    grid-column: 2; grid-row: 2; color: var(--muted); font-size: 0.75rem; line-height: 1.4;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important;
+    grid-column: 2; grid-row: 2; min-width: 0; color: var(--muted); font-size: 0.75rem; line-height: 1.4;
+    overflow: visible; white-space: normal !important; overflow-wrap: anywhere;
   }
   [data-phone-table-root] [data-card-slot="key"] {
     position: relative; z-index: 10; grid-column: 3; grid-row: 1;

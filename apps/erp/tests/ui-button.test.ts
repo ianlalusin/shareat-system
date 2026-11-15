@@ -200,7 +200,7 @@ describe('Button — T-334 slice 2 contract', () => {
       expect(html, words).toContain('<svg');
       expect(html.replace(/<svg.*?<\/svg>/g, '').replace(/<[^>]+>/g, ''), `${words}: the word is visible`).toBe(shown);
       const t = classTokens(html);
-      for (const need of ['rounded-full', 'bg-brand', 'min-h-11', 'px-4']) expect(t.has(need), `${words} ${need}`).toBe(true);
+      for (const need of ['rounded-full', 'bg-brand', 'min-h-11', 'px-4', 'whitespace-nowrap']) expect(t.has(need), `${words} ${need}`).toBe(true);
       expect(t.has('erp-icon-btn') || t.has('w-11'), `${words}: not a round icon button`).toBe(false);
       expect(html, `${words}: the words name it, no data-tip`).not.toContain('data-tip');
     }

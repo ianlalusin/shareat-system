@@ -146,7 +146,7 @@ export function Button({
     <button
       data-erp-control="single"
       type={type}
-      className={`${BASE_CLASSES} ${VARIANT_CLASSES[variant]}${className ? ` ${className}` : ''}`}
+      className={`${BASE_CLASSES} ${VARIANT_CLASSES[variant]}${pill ? ' whitespace-nowrap' : ''}${className ? ` ${className}` : ''}`}
       {...rest}
     >
       {variant === 'danger' ? <WarningTriangleIcon /> : null}

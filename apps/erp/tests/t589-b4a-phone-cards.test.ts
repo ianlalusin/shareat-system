@@ -91,6 +91,20 @@ describe('the key figure beside the name', () => {
   });
 });
 
+describe('help tip tap area', () => {
+  // MUTANT: delete the ::after rule -> the "?" button is a 24px target again (the scan measured ~20px).
+  it('the "?" button keeps its 24px box and 16px glyph but reaches 44px with an invisible ring', () => {
+    const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'app', 'globals.css'), 'utf8');
+    const ring: Record<string, string> = {};
+    postcss.parse(css).walkRules(r => { if (r.selector.trim() === '.erp-help-tip::after') r.walkDecls(d => { ring[d.prop] = d.value; }); });
+    expect(ring['position']).toBe('absolute');
+    expect(ring['inset']).toBe('-10px'); // 24 + 2 x 10 = 44
+    const tip = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'components', 'ui', 'HelpTip.tsx'), 'utf8');
+    expect(tip).toContain('h-6 w-6'); // the box (and so the census reading) is unchanged
+    expect(tip).toContain('h-4 w-4'); // the visible glyph is unchanged
+  });
+});
+
 describe('globals.css phone rules', () => {
   const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'app', 'globals.css'), 'utf8');
   const rule = (selector: string) => {

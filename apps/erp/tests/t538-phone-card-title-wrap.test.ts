@@ -86,14 +86,13 @@ describe('T-538 — phone card title wraps (T-589 B4a: and is never cut)', () =>
     expect(title['font-weight']?.value).toBe('600');
   });
 
-  it('the subtitle still stays on one line', () => {
+  // T-589 B4a: the subtitle wraps too (a room name read "Main stoc"). MUTANT: restore `nowrap` + `ellipsis` and this goes red.
+  it('the subtitle wraps instead of ending in an ellipsis', () => {
     const subtitle = declarationsOf(SUBTITLE);
     expect(Object.keys(subtitle).length, `no rule with selector exactly ${SUBTITLE}`).toBeGreaterThan(0);
 
-    // One line is right for the subtitle: it is the secondary detail, and the title now carries
-    // the extra height.
-    expect(subtitle['white-space']).toEqual({ value: 'nowrap', important: true });
-    expect(subtitle['text-overflow']).toEqual({ value: 'ellipsis', important: false });
+    expect(subtitle['white-space']).toEqual({ value: 'normal', important: true });
+    expect(subtitle['text-overflow']).toBeUndefined();
     // Neither the clamp of revision 1 nor the height cut of revision 2 may have leaked next door.
     expect(subtitle['max-height']).toBeUndefined();
     expect(subtitle['display']).toBeUndefined();
