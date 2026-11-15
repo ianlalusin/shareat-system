@@ -24,15 +24,21 @@ export interface ConfirmDestructiveProps {
   readonly consequence: string;
   /** Required for 'retype': the record's name, shown in the prompt (the server loads its own copy to compare). */
   readonly expectedName?: string;
+  /** The first button is a plain secondary button, not a red one. Only that trigger: the confirm step keeps its danger look. */
+  readonly quiet?: boolean;
 }
 
-export function ConfirmDestructive({ tier, label, consequence, expectedName }: ConfirmDestructiveProps) {
+export function ConfirmDestructive({ tier, label, consequence, expectedName, quiet }: ConfirmDestructiveProps) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
   const [pin, setPin] = useState('');
 
   if (!open) {
-    return (
+    return quiet ? (
+      <Button type="button" variant="secondary" icon={null} onClick={() => setOpen(true)}>
+        {label}
+      </Button>
+    ) : (
       <Button type="button" variant="danger" onClick={() => setOpen(true)}>
         {label}
       </Button>

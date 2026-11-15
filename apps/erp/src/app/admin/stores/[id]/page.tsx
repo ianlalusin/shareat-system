@@ -21,10 +21,27 @@ import { typedFor } from '@/lib/keep-typing';
 import { STORE_DETAILS, STORE_OPENING_DATE, STORE_POS_MODE, STORE_STOCK_MODEL } from '../typed-forms';
 import { PosModeForm } from './PosModeForm';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
-import { formatBusinessDateTime } from '@shareat/core/datetime';
+import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
+import { countOf } from '@shareat/core/sentence';
 
 export const metadata = { title: 'Store — Shareat System' };
 export const dynamic = 'force-dynamic';
+
+/** T-587 S4: what the stored values mean, in words. A value the maps do not know is shown as it is. */
+const STOCK_WORDS: Record<string, string> = { single_room: 'One room', multi_room: 'Several rooms' };
+const CASH_WORDS: Record<string, string> = { daily: 'Cash remitted daily', every_3_days: 'Cash remitted every 3 days', weekly: 'Cash remitted weekly', monthly: 'Cash remitted monthly' };
+const SECTION_LINK = 'inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas';
+
+/** One saved value, or "Not set" in muted text. */
+function Row({ label, value }: { label: string; value: string | null | undefined }) {
+  const text = value?.trim();
+  return (
+    <>
+      <dt className="text-neutral-600 dark:text-neutral-400">{label}</dt>
+      <dd className={text ? 'whitespace-pre-line' : 'text-neutral-500 dark:text-neutral-400'}>{text || 'Not set'}</dd>
+    </>
+  );
+}
 
 /**
  * T-222 — one store, its cash-custody policy, and the readiness checklist.
@@ -65,7 +82,7 @@ export default async function StoreDetailPage({
           {store.code} — {store.name}
         </h1>
         <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          Only an admin or super-admin can open or close a branch. You can see this store in the
+          Only an admin or super-admin can open or close a store. You can see this store in the
           list, but its readiness checklist and settings are not yours to read or change.
         </p>
       </Page>
@@ -78,7 +95,8 @@ export default async function StoreDetailPage({
   const posTyped = typedFor(sp, STORE_POS_MODE, store.id, actor.personId);
   const posTypedFields = posTyped?.kind === 'typed' ? posTyped.fields : {};
   const one = (v: string | string[] | undefined): string | undefined => (Array.isArray(v) ? v[0] : v);
-  const niceDay = (d: string): string => formatBusinessDateTime(new Date(`${d}T00:00:00+08:00`), { dateStyle: 'medium' });
+  const niceDay = formatBusinessDayLong;
+  const failing = readiness.filter((c) => !c.ok).length;
 
   return (
     <Page view="detail" sectioned density="table">
@@ -90,8 +108,8 @@ export default async function StoreDetailPage({
           {store.code} — {store.name}
         </h1>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          {store.isActive ? 'Active' : 'Inactive'} · {store.stockModel} · {store.remittanceCadence}
-          {store.unremittedCeiling ? ` · ceiling ${store.unremittedCeiling}` : ''}
+          {store.isActive ? 'Active' : 'Inactive'} · {STOCK_WORDS[store.stockModel] ?? store.stockModel} · {CASH_WORDS[store.remittanceCadence] ?? store.remittanceCadence}
+          {store.unremittedCeiling ? ` · Cash on hand limit ₱${store.unremittedCeiling}` : ''}
         </p>
       </div>
 
@@ -100,71 +118,62 @@ export default async function StoreDetailPage({
       {blocking.length > 0 && (
         <Banner tone="warning">
           <strong>
-            {blocking.length} thing{blocking.length === 1 ? '' : 's'} still stop this store working.
+            {countOf(blocking.length, 'thing')} still {blocking.length === 1 ? 'stops' : 'stop'} this store working.
           </strong>{' '}
-          They are listed below. Each is a real business fact — a default here would be a guess
-          wearing the costume of a decision.
+          {blocking.length === 1 ? 'It is' : 'They are'} listed below.
         </Banner>
       )}
 
-      <p>
-        <Link href={`/kitchen?store=${id}`} className={ACTION_LINK}>
-          Kitchen setup →
+      <nav aria-label="Store settings" className="flex flex-wrap gap-2">
+        <Link href={`/kitchen?store=${id}`} className={SECTION_LINK}>
+          Kitchen stations
         </Link>
-        {' '}
-        <Link href={`/menu/hours?store=${id}`} className={ACTION_LINK}>
-          Menu hours →
+        <Link href={`/menu/hours?store=${id}`} className={SECTION_LINK}>
+          Menu hours
         </Link>
-        {' '}
-        <Link href={`/settings/sales-channels?store=${id}`} className={ACTION_LINK}>
-          Sales channels and settlement wiring →
+        <Link href={`/settings/sales-channels?store=${id}`} className={SECTION_LINK}>
+          Sales channels and settlement wiring
         </Link>
-        {' '}
-        <Link href={`/settings/pos-link?store=${id}`} className={ACTION_LINK}>
-          POS link →
+        <Link href={`/settings/pos-link?store=${id}`} className={SECTION_LINK}>
+          Link to POS store
         </Link>
-        {' '}
-        <Link href={`/remittance?store=${id}`} className={ACTION_LINK}>
-          Cash settings →
+        <Link href={`/remittance?store=${id}`} className={SECTION_LINK}>
+          Cash settings
         </Link>
-      </p>
-
+      </nav>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="text-sm font-medium">Readiness</h2>
-          <ul className="space-y-3">
-            {readiness.map((c) => (
-              <li key={c.key} className="text-sm">
-                <div className="flex items-start gap-2">
-                  <span className={c.ok ? 'text-success' : 'text-warning-ink'}>
-                    {c.ok ? '✓' : '•'}
-                  </span>
-                  <div>
-                    <div className="font-medium">
-                      {c.label}
-                      <span className="ml-2 text-xs font-normal text-neutral-500">
-                        {c.kind === 'auto' ? 'automatic' : 'business fact'}
-                      </span>
+          {/* Closed when every check passes; open, with the count, when one does not. */}
+          <details open={failing > 0}>
+            <summary className="flex min-h-11 w-full cursor-pointer items-center text-sm font-medium">
+              {failing === 0 ? 'Ready ✓' : `${countOf(failing, 'thing')} ${failing === 1 ? 'needs' : 'need'} attention`}
+            </summary>
+            <ul className="space-y-3 pt-1">
+              {readiness.map((c) => (
+                <li key={c.key} className="text-sm">
+                  <div className="flex items-start gap-2">
+                    <span className={c.ok ? 'text-success' : 'text-warning-ink'}>
+                      {c.ok ? '✓' : '•'}
+                    </span>
+                    <div>
+                      <div className="font-medium">{c.label}</div>
+                      <div className="text-neutral-600 dark:text-neutral-400">{c.detail}</div>
+                      {/* ⭐ T-243 / DEF-216 — one generic renderer replaces what T-230 and T-229
+                          slice 3 each hand-wired for their own check. `remedy` is absent for a check
+                          (`adminScope`) that no single screen clears. */}
+                      {!c.ok && c.remedy && (
+                        <Link href={c.remedy.href} className={ACTION_LINK}>
+                          {c.remedy.label}
+                        </Link>
+                      )}
                     </div>
-                    <div className="text-neutral-600 dark:text-neutral-400">{c.detail}</div>
-                    {/* ⭐ T-243 / DEF-216 — one generic renderer replaces what T-230 and T-229
-                        slice 3 each hand-wired for their own check. `remedy` is absent for a check
-                        (`adminScope`) that no single screen clears. */}
-                    {!c.ok && c.remedy && (
-                      <Link href={c.remedy.href} className={ACTION_LINK}>
-                        {c.remedy.label}
-                      </Link>
-                    )}
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-neutral-500">
-            Recomputed every time this page loads. Nothing here is stored, so it cannot report ready
-            after the thing it checked was deleted.
-          </p>
+                </li>
+              ))}
+            </ul>
+          </details>
         </section>
 
         <section className="space-y-4">
@@ -178,7 +187,7 @@ export default async function StoreDetailPage({
               Mode: <strong>{pos.mode === 'live' && pos.liveFrom ? `Live from ${niceDay(pos.liveFrom)}` : pos.mode === 'test' ? 'Test' : 'Off'}</strong>
             </p>
             <p className="text-xs text-neutral-500">
-              {pos.changedAt ? `Last changed by ${pos.changedByName ?? 'someone'} on ${formatBusinessDateTime(pos.changedAt)}.` : 'Never switched on for this store.'}
+              {pos.changedAt ? `Last changed by ${pos.changedByName ?? 'someone'} on ${formatBusinessDateTime(pos.changedAt, { dateStyle: 'long', timeStyle: 'short' })}.` : 'Never switched on for this store.'}
             </p>
             <p className="text-sm">
               Pre-flight:{' '}
@@ -214,6 +223,13 @@ export default async function StoreDetailPage({
 
           <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="text-sm font-medium">Details</h2>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              <Row label="Name" value={store.name} />
+              <Row label="Trading address" value={store.address} />
+              <Row label="Contact number" value={store.contactNumber} />
+              <Row label="TIN branch code" value={store.tinBranchCode} />
+              <Row label="Timezone" value={store.timezone} />
+            </dl>
             <EditableRecord action={updateStoreAction} label={store.name} hidden={{ storeId: store.id }} typed={typedFor(sp, STORE_DETAILS, store.id, actor.personId)} rules={ADMIN_STORE_DETAILS_RULES}>
               <FormGrid className="text-sm">
                 <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>} rule={ADMIN_STORE_DETAILS_RULES.name}>
@@ -245,11 +261,9 @@ export default async function StoreDetailPage({
                 </Field>
               </FormGrid>
               <p className="mt-3 text-xs text-neutral-500">
-                The code (<code>{store.code}</code>) is not editable. Rename freely — the code is the
-                stable handle other records refer to. The registered name and TIN are the
-                organisation&apos;s —{' '}
+                The store code (<code>{store.code}</code>) cannot be changed, and the registered name and TIN are{' '}
                 <Link href="/settings/organization" className="underline underline-offset-2">
-                  set them once
+                  set once for the whole business
                 </Link>
                 .
               </p>
@@ -269,6 +283,12 @@ export default async function StoreDetailPage({
             */}
           <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="text-sm font-medium">Opening date</h2>
+            {/* No date saved: the add form below IS the read view, so a "Not set" line above it would only repeat its label. */}
+            {store.openingDate !== null && (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 text-sm">
+                <Row label="Opening date" value={formatBusinessDayLong(store.openingDate)} />
+              </dl>
+            )}
             {sp.confirm && (
               <Banner tone="warning">{sp.confirm}</Banner>
             )}
@@ -284,7 +304,7 @@ export default async function StoreDetailPage({
                 <input type="hidden" name="openingDate" value={sp.openingDate} />
                 <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} />
                 <p className="text-neutral-600 dark:text-neutral-400">
-                  Opening date to save: <strong>{sp.openingDate === '' ? 'blank (not opened)' : sp.openingDate}</strong>
+                  Opening date to save: <strong>{sp.openingDate === '' ? 'blank (not opened)' : formatBusinessDayLong(sp.openingDate)}</strong>
                 </p>
                 <Button type="submit" variant="primary">
                   Confirm change
@@ -349,12 +369,14 @@ export default async function StoreDetailPage({
             * it in would route the column past that check.
             */}
           <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <h2 className="text-sm font-medium">How this branch keeps stock</h2>
+            <h2 className="text-sm font-medium">How this store keeps stock</h2>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 text-sm">
+              <Row label="Stock is kept in" value={STOCK_WORDS[store.stockModel] ?? store.stockModel} />
+            </dl>
             <EditableRecord action={setStoreStockModelAction} label="stock model" hidden={{ storeId: store.id }} typed={typedFor(sp, STORE_STOCK_MODEL, store.id, actor.personId)}>
             <div className="space-y-3">
             <p className="text-xs text-neutral-500">
-              A Receiving room never counts toward this — every branch needs somewhere to park a
-              delivery, including one that keeps its stock in a single place.
+              A Receiving room never counts here, because every store needs somewhere to put a delivery.
             </p>
 
             <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-neutral-200 p-3 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900">
@@ -368,8 +390,7 @@ export default async function StoreDetailPage({
               <span>
                 <span className="block text-sm font-medium">One room</span>
                 <span className="block text-xs text-neutral-500 dark:text-neutral-400">
-                  A branch or kiosk. Stock lives in one place, which is also where usage posts
-                  from.
+                  For a kiosk or small store that keeps all its stock in one place.
                 </span>
               </span>
             </label>
@@ -385,8 +406,7 @@ export default async function StoreDetailPage({
               <span>
                 <span className="block text-sm font-medium">Several rooms</span>
                 <span className="block text-xs text-neutral-500 dark:text-neutral-400">
-                  A commissary, or a branch with a separate stockroom and kitchen. Once this is
-                  saved, add the rooms under Inventory / Locations.
+                  For a commissary, or a store with a separate stockroom and kitchen. After saving, add the rooms under Inventory / Locations.
                   {/* ⚠️ Named, not linked. An inline <Link> inside `text-xs` help text models at
                       16px against T-262's 24px touch-target floor, and `action-link-sweep`
                       counted it as a NEW FAIL — a real undersized control, not a bookkeeping
@@ -397,8 +417,7 @@ export default async function StoreDetailPage({
             </label>
 
             <p className="text-xs text-neutral-500">
-              ⚠️ Going back to one room is refused while the branch still has more than one active
-              non-Receiving room — deactivate or merge the extras first.
+              To go back to one room, first deactivate or merge the extra rooms. Receiving does not count.
             </p>
 
             </div>
@@ -406,41 +425,41 @@ export default async function StoreDetailPage({
           </section>
 
           <DaypartsSection storeId={store.id} dayparts={hours.dayparts} canManage={hours.canManage} />
-
-          {store.isActive ? (
-            <form
-              action={deactivateStoreAction}
-              className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
-            >
-              <h2 className="text-sm font-medium">Close this branch</h2>
-              <input type="hidden" name="storeId" value={store.id} />
-              <p className="text-xs text-neutral-500">
-                Deactivating never deletes. Its journal entries, attendance and stock stay queryable.
-              </p>
-              <ConfirmDestructive
-                tier="retype"
-                label="Close this branch"
-                consequence="Closes this branch. Nothing is deleted, but it stops trading until someone reopens it."
-                expectedName={store.name}
-              />
-            </form>
-          ) : (
-            <form
-              action={reactivateStoreAction}
-              className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
-            >
-              <h2 className="text-sm font-medium">Reopen this branch</h2>
-              <input type="hidden" name="storeId" value={store.id} />
-              <p className="text-xs text-neutral-500">
-                Reopening also re-grants store access to every admin — including any appointed while it was closed, who would otherwise not see it.
-              </p>
-              <Button type="submit" variant="secondary">
-                Reactivate
-              </Button>
-            </form>
-          )}
         </section>
       </div>
+
+      {store.isActive ? (
+        <form
+          action={deactivateStoreAction}
+          className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+        >
+          <h2 className="text-sm font-medium">Close this store</h2>
+          <input type="hidden" name="storeId" value={store.id} />
+          <p className="text-xs text-neutral-500">
+            Closing never deletes anything. Its journal entries, attendance and stock stay.
+          </p>
+          <ConfirmDestructive
+            tier="retype"
+            label="Close this store"
+            consequence="Closes this store. Nothing is deleted, but it stops trading until someone reopens it."
+            expectedName={store.name}
+          />
+        </form>
+      ) : (
+        <form
+          action={reactivateStoreAction}
+          className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+        >
+          <h2 className="text-sm font-medium">Reopen this store</h2>
+          <input type="hidden" name="storeId" value={store.id} />
+          <p className="text-xs text-neutral-500">
+            Reopening gives every admin access to this store again, including any admin added while it was closed.
+          </p>
+          <Button type="submit" variant="secondary">
+            Reactivate
+          </Button>
+        </form>
+      )}
     </Page>
   );
 }
