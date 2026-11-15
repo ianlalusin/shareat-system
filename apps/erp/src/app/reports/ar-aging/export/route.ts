@@ -11,6 +11,8 @@ export async function GET(request: Request) {
   const asOfDate = url.searchParams.get('asOf') ?? '';
 
   const scope = await reportScope('/reports/ar-aging', 'view_financial_reports', store);
+
+  if ('refusal' in scope) return new Response('Forbidden', { status: 403 });
   const orgId = scope.actor.orgId;
   if (!(await mayReadCustomerBalances(scope))) {
     return new Response('You do not have access to customer balances (record_ar_collection).', { status: 403 });

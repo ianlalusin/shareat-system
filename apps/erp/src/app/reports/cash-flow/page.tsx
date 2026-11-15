@@ -34,6 +34,7 @@ export default async function CashFlowPage({
 
   // Same audience as the income statement (T-209c) — view_financial_reports.
   const scope = await reportScope('/reports/cash-flow', 'view_financial_reports', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
   const storeRows = scope.stores;
   const storeId = scope.storeId;

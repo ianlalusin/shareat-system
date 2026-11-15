@@ -12,6 +12,8 @@ export async function GET(request: Request) {
   const { from, to } = resolveRange(url.searchParams.get('from'), url.searchParams.get('to'), today);
 
   const scope = await reportScope('/reports/expense-items', 'view_financial_reports', url.searchParams.get('store') ?? undefined);
+
+  if ('refusal' in scope) return new Response('Forbidden', { status: 403 });
   const storeId = scope.storeId ?? null;
   const { report, cols } = await runReport(scope.actor.orgId, async (tx) => {
     const report = await expenseItemsReport(tx, scope.actor, { from, to, storeId });

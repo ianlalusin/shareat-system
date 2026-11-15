@@ -13,6 +13,8 @@ export async function GET(request: Request) {
   const includeYearClose = url.searchParams.get('yearClose') === 'include';
 
   const scope = await reportScope('/reports/store-comparison', 'view_financial_reports', undefined);
+
+  if ('refusal' in scope) return new Response('Forbidden', { status: 403 });
   const orgId = scope.actor.orgId;
   const candidateIds = new Set(scope.stores.map((s) => s.id));
   const selectedIds = (requestedIds.length > 0 ? requestedIds : scope.stores.map((s) => s.id)).filter((id) => candidateIds.has(id));

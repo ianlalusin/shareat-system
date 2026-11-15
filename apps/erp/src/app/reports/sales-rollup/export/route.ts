@@ -20,6 +20,8 @@ export async function GET(request: Request) {
   const groupBy: SalesRollupGrouping = isGrouping(groupByParam) ? groupByParam : 'day';
 
   const scope = await reportScope('/reports/sales-rollup', 'view_financial_reports', store);
+
+  if ('refusal' in scope) return new Response('Forbidden', { status: 403 });
   const orgId = scope.actor.orgId;
   const storeNameById = new Map(scope.stores.map((s) => [s.id, `${s.name} (${s.code})`]));
 

@@ -47,6 +47,8 @@ export default async function DashboardPage({
   const sp = await searchParams;
 
   const scope = await reportScope('/', 'view_financial_reports', sp.store);
+
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
   const storeId = scope.storeId ?? null;
   const storesInScope = scope.storeId ? scope.stores.filter((s) => s.id === scope.storeId) : scope.stores;

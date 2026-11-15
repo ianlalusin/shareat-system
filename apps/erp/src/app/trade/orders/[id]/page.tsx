@@ -145,7 +145,7 @@ export default async function TradeOrderPage({
           <CheckedForm
             rules={TRADE_DISPATCH_RULES}
             action={dispatchOrderAction}
-            className="flex flex-wrap items-end gap-3"
+            className="flex min-w-0 flex-1 basis-72 flex-wrap items-end gap-3"
           >
             <input type="hidden" name="orderId" value={order.id} />
             {preview?.over && (

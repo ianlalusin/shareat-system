@@ -46,6 +46,8 @@ export default async function JournalLinesPage({
   }
 
   const scope = await reportScope('/reports/journal-lines', 'view_trial_balance', sp.store);
+
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
   const storeId = scope.storeId;
   const currentStore = storeId ? scope.stores.find((s) => s.id === storeId) : undefined;

@@ -26,6 +26,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
   // DEF-809: the list shows every day's totals, cash and online money, so it is for people who may submit a sales day (managers
   // and up, never staff), and only at the stores they hold. `reportScope` refuses otherwise and drops a forged ?store=.
   const scope = await reportScope('/sales-days', 'submit_sales_day', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   const { actor, stores } = scope;
   const orgId = actor.orgId;
 
