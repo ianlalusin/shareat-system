@@ -45,7 +45,7 @@ export function RecipeFields({
             ))}
           </Select>
         </Field>
-        <Field label={outputUnit ? `Output quantity, in ${outputUnit}` : "Output quantity, in the item's unit shown above"} className="text-sm">
+        <Field label={outputUnit ? `Output quantity, in ${outputUnit}` : 'Output quantity'} className="text-sm">
           <Input name="outputQuantity" defaultValue={outputQuantity} inputMode="decimal" className="w-full" />
         </Field>
       </FormGrid>
@@ -64,7 +64,7 @@ export function RecipeFields({
                   ))}
                 </Select>
               </Field>
-              <Field label={l.baseUnit ? `Quantity, in ${l.baseUnit}` : 'Quantity, in the unit shown beside the item'} className="text-sm">
+              <Field label={l.baseUnit ? `Quantity, in ${l.baseUnit}` : 'Quantity'} className="text-sm">
                 <Input name="lineQuantity" defaultValue={l.quantity} inputMode="decimal" className="w-full" />
               </Field>
             </FormGrid>

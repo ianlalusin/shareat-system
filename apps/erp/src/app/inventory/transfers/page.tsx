@@ -100,8 +100,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
         </Link>
       </div>
       <PageDescription className="mt-1">
-        Room to room, within one store. ⭐ Posts no journal entry and consumes no FIFO layer — a
-        transfer moves quantity only.
+        Move stock from one room to another within one store. Only the quantity moves; the cost stays the same.
       </PageDescription>
       <FlashBanner flash={sp} />
 
@@ -120,7 +119,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
 
       {locations.length < 2 ? (
         <p className="mt-8 text-sm text-warning-ink">
-          This store needs at least two active rooms before a transfer means anything.
+          This store needs at least two active rooms before you can transfer stock. Add one under Rooms.
         </p>
       ) : (
         <div className="mt-8 flex justify-end">

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { WASTAGE_REASONS, WASTAGE_REASON_LABEL, wastageReasonLabel } from '@shareat/domain';
-import { addDays, toBusinessDate } from '@shareat/core/datetime';
+import { addDays, formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { saveUsageDraftAction } from './actions';
 import { listStores, usageQueueData, usageScreenData } from './lib';
@@ -94,7 +94,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
 
       {/* T-401 S6: the check. Per item the POS plan covers on that day: what the plan expects, what staff recorded, inside or outside the band. */}
       <section>
-        <h2 className="text-lg font-medium">Usage check for {date}</h2>
+        <h2 className="text-lg font-medium">Usage check for {formatBusinessDayLong(date)}</h2>
         {queue.variances.length === 0 ? (
           <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
             Nothing to check for this date: no POS plan covers an item that day.
@@ -130,9 +130,9 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
 
       {/* T-419: display only. Cooking from a recipe took these out of stock when it was posted; they are not recorded or posted from here. */}
       <section>
-        <h2 className="text-lg font-medium">Used in cooking on {date}</h2>
+        <h2 className="text-lg font-medium">Used in cooking on {formatBusinessDayLong(date)}</h2>
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-          Taken from stock when the cooking was posted. Drafts have not taken anything yet. Shown for the full picture; not posted again from here.
+          Taken from stock when the cooking was posted. Drafts have not taken anything yet.
         </p>
         {queue.cooked.length === 0 ? (
           <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">No cooking from a recipe was recorded for this date.</p>
@@ -188,7 +188,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                 <LinkRow key={d.id}>
                   <Td>
                     <RowLink href={`/inventory/usage/${d.id}`}>
-                      {d.usedOn}
+                      {formatBusinessDayLong(d.usedOn)}
                     </RowLink>
                   </Td>
                   <Td>{d.locationName}</Td>
@@ -199,7 +199,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                   <Td>
                     <Badge status={d.status} />
                     {d.pullVoided && (
-                      <span className="ml-2 text-xs text-warning-ink">Pull voided — check this draft against what was really used.</span>
+                      <span className="ml-2 text-xs text-warning-ink">The POS usage import was voided. Check this draft against what was really used.</span>
                     )}
                   </Td>
                 </LinkRow>
@@ -261,7 +261,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                 <LinkRow key={r.id}>
                   <Td>
                     <RowLink href={`/inventory/usage/${r.id}`}>
-                      {r.usedOn}
+                      {formatBusinessDayLong(r.usedOn)}
                     </RowLink>
                   </Td>
                   <Td>{KIND_LABEL[r.kind] ?? r.kind}</Td>

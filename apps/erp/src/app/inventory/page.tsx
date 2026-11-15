@@ -16,7 +16,7 @@ interface SearchParams {
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
 
-  // ⭐ The org comes from the SESSION, never the URL — T-138, and `no-client-supplied-actor`
+  // The org comes from the SESSION, never the URL (T-138), and `no-client-supplied-actor`
   // fails the build if that ever stops being true.
   const { actor } = await requireSession('/inventory');
   const stores = await listStores(actor.orgId);
@@ -41,7 +41,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold">Stock on hand</h1>
           <PageDescription className="mt-1">
-            On-hand is a query over every movement ever recorded — there is no balance column to drift.
+            What is on the shelves at this store, worked out from every delivery, use and count.
           </PageDescription>
         </div>
         {/* The four doors stock actually passes through, plus the two exceptions and the alert. */}
@@ -80,22 +80,22 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       </FilterRow>
 
       {/*
-        ⭐ **Bible invariant 6's inventory arm, on a screen.** It asks that the control accounts
+        **Bible invariant 6's inventory arm, on a screen.** It asks that the control accounts
         equal the subledger "continuously, not at year end" — and until this page, nowhere in the
         product showed it. It lived only inside test assertions.
       */}
       <Card className={`mt-6 ${ties ? '' : 'border-warning bg-warning-soft'}`}>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-semibold">
-            {ties ? 'Inventory ties to the ledger' : 'Inventory does not tie to the ledger'}
+            {ties ? 'Stock matches the books' : 'Stock does not match the books'}
           </h2>
           <span className="text-xs text-muted">
-            {ties ? 'Every peso of stock has a ledger entry.' : 'Investigate the difference before closing.'}
+            {ties ? 'Every peso of stock is on the books.' : 'Find the difference before closing the month.'}
           </span>
         </div>
         <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div>
-            <dt className="text-xs text-muted">FIFO layers</dt>
+            <dt className="text-xs text-muted">Stock value</dt>
             <dd className="mt-1 font-display text-2xl font-extrabold tabular-nums">₱{summary.layerValue}</dd>
           </div>
           <div>
@@ -108,7 +108,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           </div>
           <div>
             {/* Goods on a truck are in no FIFO layer: a layer is a thing on a shelf. */}
-            <dt className="text-xs text-muted">In transit (branch orders)</dt>
+            <dt className="text-xs text-muted">On the way (Branch orders)</dt>
             <dd className="mt-1 font-display text-2xl font-extrabold tabular-nums">₱{summary.inTransitValue}</dd>
           </div>
         </dl>
@@ -158,7 +158,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                 <NumTd>
                   {/* A balance with no open layer is a real state: stock exists that no receipt valued. */}
                   {row.value === null ? (
-                    <span className="text-warning-ink">no layer</span>
+                    <span className="text-warning-ink">no cost yet</span>
                   ) : (
                     `₱${row.value}`
                   )}

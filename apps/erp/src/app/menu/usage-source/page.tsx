@@ -13,7 +13,7 @@ import { linkItemAction, seedLinkAction, switchSourceAction, unlinkItemAction } 
 import { loadUsageSourcePage, type UsageSourcePageData } from './lib';
 import { storesInScope, withOrgPrincipal } from '../lib';
 
-export const metadata = { title: 'Usage source - Shareat System' };
+export const metadata = { title: 'Where stock usage comes from - Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
@@ -53,10 +53,10 @@ export default async function UsageSourcePage({ searchParams }: { searchParams: 
     <Page density="table" className="space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Usage source</h1>
+          <h1 className="text-2xl font-semibold">Where stock usage comes from</h1>
           <PageDescription className="mt-1">
-            Where a store&apos;s daily stock usage comes from: the POS item maps it uses today, or the menu&apos;s stock rules. Link each POS item to
-            its menu item, compare what the two would take out of stock over the last stored days, then switch. Switching back is always one click.
+            A store&apos;s daily stock usage comes from either its POS item maps or the menu&apos;s stock rules. Link each POS item to its menu item,
+            compare the two, then switch. You can switch back at any time.
           </PageDescription>
         </div>
         <Link href="/menu" className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
@@ -85,7 +85,7 @@ export default async function UsageSourcePage({ searchParams }: { searchParams: 
           </FilterRow>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Source in force</h2>
+            <h2 className="text-lg font-semibold">Current source</h2>
             <p>
               <Badge tone={data.source === 'menu_rules' ? 'info' : 'closed'} label={SOURCE_LABEL[data.source]} />
             </p>
@@ -115,7 +115,7 @@ function History({ data }: { data: UsageSourcePageData }) {
       <tbody>
         {data.history.map((r) => (
           <tr key={r.id}>
-            <Td>{formatBusinessDateTime(r.createdAt)}</Td>
+            <Td>{formatBusinessDateTime(r.createdAt, { dateStyle: 'long', timeStyle: 'short' })}</Td>
             <Td>{SOURCE_LABEL[r.source]}</Td>
             <Td>{r.reason ?? ''}</Td>
             <Td className="text-right tabular-nums">{r.differenceCount ?? ''}</Td>
@@ -156,7 +156,7 @@ function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId:
                   {l.posItemName && l.posItemName !== l.posItemKey ? <span className="block text-muted">{l.posItemName}</span> : null}
                 </Td>
                 <Td>{l.variantLabel}</Td>
-                <Td>{l.roomName ?? 'The pull room'}</Td>
+                <Td>{l.roomName ?? 'The default room'}</Td>
                 <Td>
                   {canLink && (
                     <form action={unlinkItemAction}>
@@ -210,7 +210,7 @@ function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId:
             <h3 className="text-sm font-semibold">Link to a menu item that already has a stock rule</h3>
             <input type="hidden" name="storeId" value={storeId} />
             <FormGrid>
-              <Field label="POS item key" className="text-sm">
+              <Field label="POS item code" className="text-sm">
                 <Input name="posItemKey" className="w-full" />
               </Field>
               <Field label="Menu item" className="text-sm">
@@ -222,9 +222,9 @@ function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId:
                   ))}
                 </Select>
               </Field>
-              <Field label="Room (empty = the pull room)" className="text-sm">
+              <Field label="Room (empty = the default room)" className="text-sm">
                 <Select name="locationId" className="w-full" defaultValue="">
-                  <option value="">The pull room</option>
+                  <option value="">The default room</option>
                   {data.rooms.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
@@ -251,7 +251,7 @@ function Compare({ data, storeId, canSwitch }: { data: UsageSourcePageData; stor
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Compare and switch</h2>
       <p className="text-sm text-muted">
-        Compare plans the last 7 stored days both ways, from the POS item maps and from the menu rules, and lists every difference. It changes nothing.
+        Compare checks the last 7 days both ways, with the POS item maps and with the menu rules, and lists every difference. It changes nothing.
       </p>
       <Link href={`/menu/usage-source?store=${storeId}&compare=1`} className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
         Compare now
@@ -259,7 +259,7 @@ function Compare({ data, storeId, canSwitch }: { data: UsageSourcePageData; stor
       {cmp && (
         <div className="space-y-2">
           {cmp.differences.length === 0 ? (
-            <p className="text-sm">{`No differences over the ${cmp.daysCompared.length} stored day${cmp.daysCompared.length === 1 ? '' : 's'} compared.`}</p>
+            <p className="text-sm">{`No differences over the ${cmp.daysCompared.length} day${cmp.daysCompared.length === 1 ? '' : 's'} compared.`}</p>
           ) : (
             <>
               <p className="text-sm">{`${cmp.differenceCount} item${cmp.differenceCount === 1 ? '' : 's'} would use stock differently.`}</p>
@@ -291,7 +291,7 @@ function Compare({ data, storeId, canSwitch }: { data: UsageSourcePageData; stor
           <form action={switchSourceAction} className="space-y-3 rounded-[14px] border border-surface-border p-4">
             <h3 className="text-sm font-semibold">Switch to menu rules</h3>
             <p className="text-sm text-muted">
-              Refused with the first difference unless you accept them and say why. Also refused while a usage pull is still being finished.
+              If the two differ, you must accept the differences and give a reason. Not possible while a day&apos;s usage is still being imported.
             </p>
             <input type="hidden" name="storeId" value={storeId} />
             <input type="hidden" name="source" value="menu_rules" />

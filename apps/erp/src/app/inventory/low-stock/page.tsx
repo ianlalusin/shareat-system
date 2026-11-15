@@ -69,8 +69,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
         </Link>
       </div>
       <PageDescription className="mt-1">
-        Recomputed on every load from the ledger — there is no cached alert list, because a stale
-        low-stock alert is indistinguishable from a real one.
+        Items running low at this store. The list is worked out fresh each time you open the page.
       </PageDescription>
 
       <FlashBanner flash={sp} />
@@ -121,7 +120,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
       )}
 
       {/*
-        ⭐ **This block is the replacement for v1's forcing function.** v1 BLOCKS a usage post
+        **This block is the replacement for v1's forcing function.** v1 BLOCKS a usage post
         until somebody sets the threshold, which puts the demand on a cook at 11pm who cannot
         answer it. Surfacing it here reaches the manager who can. Nag the person who can act;
         never block the person who cannot.
@@ -190,7 +189,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
                         {...nativeAttrs(INVENTORY_THRESHOLD_RULES.threshold)}
                         aria-label={`${item.name} threshold`}
                         defaultValue={thresholdByItem.get(item.id) ?? ''}
-                        placeholder="none"
+                        placeholder="Not set"
                         className="w-28 tabular-nums"
                       />
                     </Field>
@@ -205,7 +204,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
                         {...nativeAttrs(INVENTORY_THRESHOLD_RULES.threshold)}
                         aria-label={`${item.name} threshold`}
                         defaultValue={thresholdByItem.get(item.id) ?? ''}
-                        placeholder="none"
+                        placeholder="Not set"
                         className="w-24 tabular-nums"
                       />
                     </Field>

@@ -160,7 +160,7 @@ export default function ClockTerminalPage() {
     // ── Pairing ─────────────────────────────────────────────────────────────────────────
   async function pair(formData: FormData) {
     const token = String(formData.get('token') ?? '').trim();
-    if (!token) return setPairError('Paste the pairing token from the provisioning screen.');
+    if (!token) return setPairError('Paste the pairing token from the Attendance terminals screen.');
     setPairError(null);
     try {
       const { auth } = terminalFirebase();
@@ -169,8 +169,8 @@ export default function ClockTerminalPage() {
       // ⚠️ T-180 finding 3: a device CANNOT begin authenticating offline. Saying so plainly is the
       // difference between "this terminal is broken" and "plug it in for ten seconds".
       setPairError(
-        `Pairing failed. A terminal must sign in ONCE while online before it can work offline — ` +
-          `check the connection and try again. (${err instanceof Error ? err.message : String(err)})`,
+        `Pairing failed. A terminal must sign in once while online before it can work offline, ` +
+          `so check the connection and try again. (${err instanceof Error ? err.message : String(err)})`,
       );
     }
   }
@@ -290,7 +290,7 @@ export default function ClockTerminalPage() {
         <div>
           <h1 className="text-2xl font-semibold">Pair this terminal</h1>
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-            Paste the pairing token from the provisioning screen. ⚠️ This has to happen{' '}
+            Paste the pairing token from the Attendance terminals screen. ⚠️ This has to happen{' '}
             <strong>while the tablet is online</strong> — a device cannot start authenticating
             offline, and it will not be able to record anything until this succeeds once.
           </p>
@@ -430,7 +430,7 @@ export default function ClockTerminalPage() {
       <p className="text-xs text-neutral-500 dark:text-neutral-500">
         {roster.length} on the roster · {credentials.length} badge
         {credentials.length === 1 ? '' : 's'} known here
-        {config ? '' : ' · ⚠️ no store config has reached this device yet'}
+        {config ? '' : ' · no store settings have reached this device yet'}
       </p>
 
       {/*

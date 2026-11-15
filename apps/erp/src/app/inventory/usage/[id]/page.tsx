@@ -7,6 +7,7 @@ import { wastageReasonLabel } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { Button, ConfirmDestructive, Field, FlashBanner, Input, LinkRow, RowLink, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_POS_VOID_RULES, INVENTORY_USAGE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic';
 const KIND_LABEL: Record<string, string> = { usage: 'Usage', wastage: 'Wastage', adjustment: 'Adjustment', opening: 'Opening' };
 
 function when(d: Date | null): string {
-  return d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '—';
+  return d ? formatBusinessDateTime(new Date(d), { dateStyle: 'long', timeStyle: 'short' }) : '—';
 }
 
 /** The post form's optional reason. A refusal sends back what was typed (the signed flash), so the box comes back filled. */
@@ -58,7 +59,7 @@ export default async function UsageRecordPage({
           {KIND_LABEL[record.kind] ?? record.kind} — {locationName}
         </h1>
         <PageDescription className="mt-1">
-          {record.usedOn} · <strong>{statusLabel(record.status)}</strong>
+          {formatBusinessDayLong(record.usedOn)} · <strong>{statusLabel(record.status)}</strong>
           {record.reasonCode && <> · {wastageReasonLabel(record.reasonCode)}</>}
         </PageDescription>
       </div>
@@ -104,8 +105,7 @@ export default async function UsageRecordPage({
           <div className="grow">
             <h2 className="font-medium">Post</h2>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Manager or admin only. This relieves the FIFO layers at their real cost and posts the
-              entry — nothing has moved until this.
+              Manager or admin only. Posting takes the stock out at its real cost. Nothing moves until you post.
             </p>
           </div>
           <ReasonField kept={sp.reason ?? ''} />
@@ -167,7 +167,7 @@ export default async function UsageRecordPage({
             consequence="Reverses this usage record and restores the stock. An administrator must approve with their own PIN."
           />
           <span className="max-w-xs text-xs text-neutral-500 dark:text-neutral-400">
-            Stock, the FIFO layers and the original journal entry are all reversed together.
+            The stock and the original entry on the books are reversed together.
           </span>
         </CheckedForm>
       )}

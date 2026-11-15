@@ -6,6 +6,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, FlashBanner, LinkRow, RowLink } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 
 export const metadata = { title: 'Shipments to receive — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -68,7 +69,7 @@ export default async function InboundShipmentsPage({
               {shipments.map((s) => (
                 <LinkRow key={s.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2">
-                    <RowLink href={`/inventory/deliveries/inbound/${s.id}`}>{s.shippedOn}</RowLink>
+                    <RowLink href={`/inventory/deliveries/inbound/${s.id}`}>{formatBusinessDayLong(s.shippedOn)}</RowLink>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{s.lines.length}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(s.billedTotal)}</td>
