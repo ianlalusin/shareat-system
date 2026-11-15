@@ -113,7 +113,7 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /remittance | apps/erp/src/app/remittance/page.tsx | 2026-11-15 | fix | G4 |  |
 | /reports/ap-aging | apps/erp/src/app/reports/ap-aging/page.tsx | 2026-11-15 | fix | G1 |  |
 | /reports/ar-aging | apps/erp/src/app/reports/ar-aging/page.tsx | 2026-11-15 | minor | G1 |  |
-| /reports/balance-sheet | apps/erp/src/app/reports/balance-sheet/page.tsx | 2026-11-15 | fix | G1 | T-589 B1 |
+| /reports/balance-sheet | apps/erp/src/app/reports/balance-sheet/page.tsx | 2026-11-15 | fix | G1 | #277 |
 | /reports/cash-flow | apps/erp/src/app/reports/cash-flow/page.tsx | 2026-11-15 | fix | G1 |  |
 | /reports/dual-run | apps/erp/src/app/reports/dual-run/page.tsx | 2026-11-15 | minor | G1 |  |
 | /reports/dual-run/[store]/[week] | apps/erp/src/app/reports/dual-run/[store]/[week]/page.tsx | 2026-11-15 | minor | G1 |  |
@@ -125,7 +125,7 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /reports/pos-reconciliation | apps/erp/src/app/reports/pos-reconciliation/page.tsx | 2026-11-15 | fix | G1 |  |
 | /reports/sales-rollup | apps/erp/src/app/reports/sales-rollup/page.tsx | 2026-11-15 | minor | G1 |  |
 | /reports/store-comparison | apps/erp/src/app/reports/store-comparison/page.tsx | 2026-11-15 | fix | G1 |  |
-| /reports/trial-balance | apps/erp/src/app/reports/trial-balance/page.tsx | 2026-11-15 | fix | G1 | T-589 B1 |
+| /reports/trial-balance | apps/erp/src/app/reports/trial-balance/page.tsx | 2026-11-15 | fix | G1 | #277 |
 | /sales-days | apps/erp/src/app/sales-days/page.tsx | 2026-11-15 | minor | G3 |  |
 | /sales-days/[id] | apps/erp/src/app/sales-days/[id]/page.tsx | 2026-11-15 | minor | G3 |  |
 | /sales-days/[id]/edit | apps/erp/src/app/sales-days/[id]/edit/page.tsx | 2026-11-15 | fix | G3 |  |
@@ -143,14 +143,14 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /settings/wastage-monitor | apps/erp/src/app/settings/wastage-monitor/page.tsx | 2026-11-15 | minor | G3 |  |
 | /setup | apps/erp/src/app/setup/page.tsx | 2026-11-15 | OK | G3 |  |
 | /sign-in | apps/erp/src/app/sign-in/page.tsx | 2026-11-15 | OK | G3 |  |
-| /staff | apps/erp/src/app/staff/page.tsx | 2026-11-15 | fix | G3 | T-589 B1 |
+| /staff | apps/erp/src/app/staff/page.tsx | 2026-11-15 | fix | G3 | #277 |
 | /staff/[employmentId] | apps/erp/src/app/staff/[employmentId]/page.tsx | 2026-11-15 | fix | G3 |  |
 | /staff/[employmentId]/credentials | apps/erp/src/app/staff/[employmentId]/credentials/page.tsx | 2026-11-15 | minor | G3 |  |
 | /staff/hire | apps/erp/src/app/staff/hire/page.tsx | 2026-11-15 | minor | G3 |  |
 | /statutory-discounts | apps/erp/src/app/statutory-discounts/page.tsx | 2026-11-15 | minor | G4 |  |
 | /till | apps/erp/src/app/till/page.tsx | 2026-11-15 | fix | G2 |  |
 | /trade/orders | apps/erp/src/app/trade/orders/page.tsx | 2026-11-15 | fix | G2 |  |
-| /trade/orders/[id] | apps/erp/src/app/trade/orders/[id]/page.tsx | 2026-11-15 | fix | G2 | T-589 B1 |
+| /trade/orders/[id] | apps/erp/src/app/trade/orders/[id]/page.tsx | 2026-11-15 | fix | G2 | #277 |
 | /trade/orders/[id]/print | apps/erp/src/app/trade/orders/[id]/print/page.tsx | 2026-11-15 | not captured | G2 |  |
 | /trade/returns | apps/erp/src/app/trade/returns/page.tsx | 2026-11-15 | fix | G2 |  |
 | /wastage | apps/erp/src/app/wastage/page.tsx | 2026-11-15 | minor | G2 |  |
