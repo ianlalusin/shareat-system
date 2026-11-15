@@ -23,7 +23,8 @@ import { TILL_OPEN_SHIFT_RULES, nativeAttrs, type FieldRule } from '@shareat/dom
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Button, FlashBanner, FormGrid, Input, Select, statusLabel } from '@/components/ui';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Till custody — Shareat System' };
@@ -60,7 +61,7 @@ export default async function TillPage({
   const { open, recent, accounts, chargedLineIds } = await tillOverview(actor.orgId, storeId);
   const people = await listActingPersons(actor.orgId);
 
-  // ⭐ The shift a new one would take over from: the most recent CLOSED shift that nobody has
+  // The shift a new one would take over from: the most recent CLOSED shift that nobody has
   // already inherited. A branching chain is refused by the database; this stops it being offered.
   const inherited = new Set(recent.map((v) => v.shift.prevShiftId).filter(Boolean));
   const handoverFrom = recent.find(
@@ -72,10 +73,8 @@ export default async function TillPage({
       <div>
         <h1 className="text-2xl font-semibold">Till custody</h1>
         <PageDescription>
-          Who is holding the till, and what they counted. ⭐ A count here is a{' '}
-          <strong>physical</strong> figure measured against the ledger — not the ledger measured
-          against a target. Those look identical as a number and mean opposite things, and only
-          this one names somebody who owes money.
+          Who is holding the till, and what they counted. A count here is real cash counted by hand, so a
+          shortage is charged to a named person.
         </PageDescription>
       </div>
 
@@ -102,8 +101,7 @@ export default async function TillPage({
         <section className="space-y-3 rounded-lg border border-dashed border-neutral-300 p-5 dark:border-neutral-700">
           <h2 className="text-sm font-medium">Nobody is holding this till</h2>
           <p className="max-w-2xl text-xs text-neutral-500">
-            ⛔ A store may have only one open shift at a time — the database enforces it, because
-            two open shifts mean two people believe they hold the same cash.
+            A store can have only one open shift at a time. Two open shifts would mean two people think they hold the same cash.
           </p>
           <CheckedForm rules={TILL_OPEN_SHIFT_RULES} action={openShiftAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
@@ -117,7 +115,7 @@ export default async function TillPage({
                 <Select name="prevShiftId" defaultValue="" className="w-full">
                   <option value="">Nobody — first shift of the day</option>
                   <option value={handoverFrom.shift.id}>
-                    Shift {handoverFrom.shift.shiftNo}, {handoverFrom.shift.businessDate} (
+                    Shift {handoverFrom.shift.shiftNo}, {formatBusinessDayLong(handoverFrom.shift.businessDate)} (
                     {handoverFrom.shift.closedByName ?? 'unknown'})
                   </option>
                 </Select>
@@ -165,7 +163,7 @@ function OpenShift({
 }) {
   const { shift, counts } = view;
   const closeCounts = counts.filter((c) => c.moment === 'close');
-  // ⚠️ `null` once every pocket counted in has been counted out — the form then disappears
+  // `null` once every pocket counted in has been counted out — the form then disappears
   // rather than offering a duplicate the database would refuse.
   const nextMoment = nextMomentFor(counts, accounts);
 
@@ -173,10 +171,10 @@ function OpenShift({
     <section className="space-y-4 rounded-lg border border-success p-5">
       <div className="flex flex-wrap items-baseline gap-2">
         <h2 className="text-sm font-medium">
-          Shift {shift.shiftNo} — {shift.businessDate}
+          Shift {shift.shiftNo} — {formatBusinessDayLong(shift.businessDate)}
         </h2>
         <span className="rounded bg-success-soft px-1.5 py-0.5 text-xs text-success">
-          open
+          Open
         </span>
         <span className="text-xs text-neutral-500">
           held by {shift.openedByName ?? 'unknown'}
@@ -194,7 +192,7 @@ function OpenShift({
         <p className="text-xs font-medium">
           {nextMoment === 'open' ? 'Opening count' : 'Closing count'}
           <span className="ml-2 font-normal text-neutral-500">
-            ⚠️ Leave a pocket blank if you did not count it — blank is not zero.
+            Leave a pocket blank if you did not count it. Blank is not zero.
           </span>
         </p>
         <FormGrid>
@@ -245,7 +243,7 @@ function ClosedShift({
   chargedLineIds: ReadonlySet<string>;
 }) {
   const { shift, counts } = view;
-  // ⛔ Already-charged shortages are NOT offered again — the debt is on the books against a
+  // Already-charged shortages are NOT offered again — the debt is on the books against a
   // named person, and a form saying otherwise is worse than no form.
   const shortages = chargeableShortages(counts, chargedLineIds);
   const settled = counts.filter((c) => c.moment === 'close' && chargedLineIds.has(c.id));
@@ -254,10 +252,10 @@ function ClosedShift({
     <div className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
       <div className="flex flex-wrap items-baseline gap-2">
         <span className="text-sm font-medium">
-          Shift {shift.shiftNo} — {shift.businessDate}
+          Shift {shift.shiftNo} — {formatBusinessDayLong(shift.businessDate)}
         </span>
         <span className="rounded bg-closed-soft px-1.5 py-0.5 text-xs text-closed">
-          {shift.status}
+          {statusLabel(shift.status)}
         </span>
         <span className="text-xs text-neutral-500">
           {shift.openedByName ?? 'unknown'} → closed by {shift.closedByName ?? 'unknown'}
@@ -271,7 +269,7 @@ function ClosedShift({
           key={c.id}
           className="rounded border border-neutral-200 p-3 text-xs text-neutral-500 dark:border-neutral-800"
         >
-          {peso(Math.abs(varianceOf(c)))} charged to a named person as an advance to that employee. ⚠️ The office replenishment is a separate transfer.
+          {peso(Math.abs(varianceOf(c)))} charged to a named person as an advance to that employee. Topping up the till from the office is a separate transfer.
         </p>
       ))}
 
@@ -284,7 +282,7 @@ function ClosedShift({
           <input type="hidden" name="storeId" value={storeId} />
           <input type="hidden" name="countLineId" value={c.id} />
           <div className="w-full text-xs text-danger">
-            {/* ⭐ The wording is the guard: a COUNTED short is chargeable, a LEDGER short is not. */}
+            {/* The wording is the guard: a COUNTED short is chargeable, a LEDGER short is not. */}
             {varianceSentence(varianceOf(c), peso)}
           </div>
           <FormGrid className="w-full">
@@ -317,7 +315,7 @@ function CountTable({ counts }: { counts: TillCountRow[] }) {
             <th className="py-1 pr-3 font-medium">Moment</th>
             <th className="py-1 pr-3 font-medium">Pocket</th>
             <th className="py-1 pr-3 text-right font-medium">Counted</th>
-            <th className="py-1 pr-3 text-right font-medium">Ledger</th>
+            <th className="py-1 pr-3 text-right font-medium">Expected</th>
             <th className="py-1 font-medium">Variance</th>
           </tr>
         </thead>
@@ -326,7 +324,7 @@ function CountTable({ counts }: { counts: TillCountRow[] }) {
             const v = varianceOf(c);
             return (
               <tr key={c.id} className="border-t border-neutral-200 dark:border-neutral-800">
-                <td className="py-1.5 pr-3 text-xs text-neutral-500">{c.moment}</td>
+                <td className="py-1.5 pr-3 text-xs text-neutral-500">{c.moment === 'open' ? 'Opening' : 'Closing'}</td>
                 <td className="py-1.5 pr-3">
                   {c.moneyAccountName}
                 </td>

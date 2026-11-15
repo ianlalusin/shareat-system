@@ -29,8 +29,8 @@ describe('plain words', () => {
     expect(daysText([])).toBe('No days');
   });
   it('hours, overnight says next day', () => {
-    expect(windowText('08:00', '17:00')).toBe('08:00 to 17:00');
-    expect(windowText('17:00', '08:00')).toBe('17:00 to 08:00 next day');
+    expect(windowText('08:00', '17:00')).toBe('8:00 AM to 5:00 PM');
+    expect(windowText('17:00', '08:00')).toBe('5:00 PM to 8:00 AM next day');
   });
 });
 
@@ -40,8 +40,8 @@ describe('DaypartsSection', () => {
   it('lists name, hours (overnight shown) and days to anyone; retired ones carry a Retired badge', () => {
     const t = plain(draw(false));
     expect(t).toContain('Menu hours');
-    expect(t).toContain('Lunch 08:00 to 17:00 Every day');
-    expect(t).toContain('Dinner 17:00 to 08:00 next day Mon to Fri');
+    expect(t).toContain('Lunch 8:00 AM to 5:00 PM Every day');
+    expect(t).toContain('Dinner 5:00 PM to 8:00 AM next day Mon to Fri');
     expect(t).toContain('Retired hours (1)');
     expect(t).toContain('Brunch');
     expect(t).toContain('Retired');

@@ -111,8 +111,8 @@ export function chargeableShortages(
  * answers for it. Never soften it into "off by".
  */
 export function varianceSentence(v: number, peso: (n: number) => string): string {
-  if (v === 0) return 'Counted exactly what the ledger says.';
+  if (v === 0) return 'Counted exactly what the books say.';
   return v < 0
     ? `${peso(Math.abs(v))} SHORT on the physical count — chargeable to the cashier who held it.`
-    : `${peso(v)} OVER on the physical count — the tip box. ⛔ Posts nothing at all.`;
+    : `${peso(v)} OVER on the physical count — the tip box. Posts nothing at all.`;
 }

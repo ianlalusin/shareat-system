@@ -14,6 +14,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Button, ConfirmDestructive, exitStepFromTimestamps, FlashBanner, Field, FormGrid, Input, LinkRow, RowAction, RowLink, Select, simpleStepIndexFor, StatusHero, statusLabel, tradeOrderSteps, type StatusIconKind, type Tone } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { typedFor } from '@/lib/keep-typing';
 import { BIR_INVOICE_NO } from '../typed-forms';
 
@@ -40,7 +41,7 @@ const TRADE_HERO: Record<string, { kind: StatusIconKind; tone: Tone }> = {
 };
 
 function when(d: Date | null): string {
-  return d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '—';
+  return d ? formatBusinessDateTime(new Date(d), { dateStyle: 'long', timeStyle: 'short' }) : '—';
 }
 
 export default async function TradeOrderPage({
@@ -65,7 +66,7 @@ export default async function TradeOrderPage({
   const canDispatch = order.status === 'draft' || order.status === 'confirmed';
   // T-398 S5c: another company confirms receipt in its own books, so the seller is not offered the button.
   const canReceive = order.status === 'dispatched' && treatment !== 'inter_entity';
-  // ⛔ Void after receipt on an INTERNAL transfer needs a two-store reverse-transfer that is not
+  // Void after receipt on an INTERNAL transfer needs a two-store reverse-transfer that is not
   // built (T-165) — the domain refuses it, so the button is not offered. A received SALE may
   // still be voided: AR unwinds the charge and the stock comes back.
   const canVoid = order.status !== 'void' && !(order.status === 'received' && isInternal);
@@ -112,7 +113,7 @@ export default async function TradeOrderPage({
           {sellingStore?.name ?? '—'} → {isInternal ? (receivingStore?.name ?? '—') : customer.name}
         </h1>
         <PageDescription className="mt-1">
-          {order.orderDate} · {peso(order.totalAmount)}
+          {formatBusinessDayLong(order.orderDate)} · {peso(order.totalAmount)}
           {order.referenceNo && <> · ref {order.referenceNo}</>}
         </PageDescription>
         <p className={`mt-1 text-xs ${TREATMENT_TONE[treatment] ?? ''}`}>
@@ -121,7 +122,7 @@ export default async function TradeOrderPage({
         {detail.interEntity && (
           <p className="mt-1 text-xs text-violet-700 dark:text-violet-400">
             Inter-entity sale to {detail.interEntity.buyerName}
-            {detail.interEntity.receivedOn && <> · Received by {detail.interEntity.buyerName} on {detail.interEntity.receivedOn}</>}
+            {detail.interEntity.receivedOn && <> · Received by {detail.interEntity.buyerName} on {formatBusinessDayLong(detail.interEntity.receivedOn)}</>}
           </p>
         )}
       </div>
@@ -196,7 +197,7 @@ export default async function TradeOrderPage({
       </StatusHero>
 
       {/*
-        ⭐ For a DISPATCHED internal transfer this table is also the receive form: what the branch
+        For a DISPATCHED internal transfer this table is also the receive form: what the receiving store
         signed for, per line. THREE quantities (T-172) — ordered, packed, signed for — and the gap
         between the last two becomes a transit discrepancy (T-174) the commissary must dispose of.
       */}
@@ -292,8 +293,8 @@ export default async function TradeOrderPage({
               <h2 className="font-medium">Confirm receipt</h2>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 {isInternal
-                  ? 'Who signed for what actually landed. ⭐ This is the event where BOTH stores’ books move — the branch’s stock arrives at the transfer value, the commissary’s in-transit is relieved at cost, and any shortfall opens a transit discrepancy.'
-                  : 'Records who signed for the goods, and when. Nothing further posts for a sale — the value moved at dispatch.'}
+                  ? 'Record what the receiving store actually got. Receiving puts the stock in that store and clears it from the sender’s goods on the way. Any shortfall becomes a transit discrepancy.'
+                  : 'Records who signed for the goods, and when. Nothing more is posted for a sale, because the value moved at dispatch.'}
               </p>
             </div>
             <Field label="Received on" rule={TRADE_RECEIVE_RULES.receivedOn}>
@@ -314,8 +315,8 @@ export default async function TradeOrderPage({
           <h2 className="font-medium">Dispatch</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             {isInternal
-              ? 'The goods leave the commissary: its stock is relieved into in-transit at real FIFO cost. No revenue, no receivable — a branch is not a customer of its own company.'
-              : 'The billing event: the receivable is raised against the customer, wholesale revenue is recognised, and stock is relieved with cost of sales — one act, idempotent.'}
+              ? 'The goods leave the commissary and count as on the way, at cost. No sale is recorded, because a store is not a customer of its own company.'
+              : 'Dispatching bills the customer, records the sale and takes the stock out. It happens once, even if the button is pressed twice.'}
           </p>
         </div>
       )}
@@ -389,7 +390,7 @@ export default async function TradeOrderPage({
           />
           {order.status !== 'draft' && order.status !== 'confirmed' && (
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
-              The posting is <strong>reversed</strong>, never deleted; the ledger keeps both halves.
+              The posting is <strong>reversed</strong>, not deleted. The original and the reversal both stay on record.
             </span>
           )}
         </CheckedForm>

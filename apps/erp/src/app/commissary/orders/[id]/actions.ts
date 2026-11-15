@@ -226,7 +226,7 @@ export async function withdrawOrderAction(fd: FormData): Promise<void> {
     if (approval) await recordApproval(tx, actor, approval, { capability: 'dispatch_branch_order', entityType: 'trade_order', entityId: orderId, storeId: storeOfOrder });
     return result.reversedEntryId
       ? 'Voided. The dispatch posting is reversed — never deleted — and the stock is back on the commissary\'s shelf.'
-      : 'Cancelled. Nothing had moved, so nothing needed reversing. The branch may order again.';
+      : 'Cancelled. Nothing had moved, so nothing needed reversing. The store may order again.';
   }));
 }
 
@@ -300,7 +300,7 @@ export async function rejectOrderAction(fd: FormData): Promise<void> {
     const order = await tradeRepo.getOrderById(tx, actor.orgId, orderId);
     if (order && (await can(tx, actor, 'fulfil_branch_order', { storeId: order.storeId }))) assertFieldRules(COMMISSARY_REJECT_RULES, fd);
     await rejectOrder(tx, actor, { orderId, reason: str(fd, 'reason') });
-    return 'Rejected. The branch sees your reason on the thread and may order again.';
+    return 'Rejected. The store sees your reason on the thread and may order again.';
   }));
 }
 
@@ -330,7 +330,7 @@ export async function proposeLineAction(fd: FormData): Promise<void> {
       replacesLineId: str(fd, 'replacesLineId') || null,
       note: str(fd, 'note') || null,
     });
-    return 'Proposed. It counts toward nothing until the branch approves it, and the order cannot be marked ready until they answer.';
+    return 'Proposed. It does not count until the store approves it, and the order cannot be marked ready until they answer.';
   }));
 }
 
@@ -348,7 +348,7 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
     const result = await dispatchBranchOrder(tx, actor, { orderId });
     return (
       `Dispatched. The goods are in transit at cost and the commissary's stock is relieved` +
-      ` — entry ${result.entryId.slice(0, 8)}…. Both stores' books move when the branch confirms what actually arrived.`
+      ` — entry ${result.entryId.slice(0, 8)}…. Both stores' books move when the store confirms what actually arrived.`
     );
   }));
 }

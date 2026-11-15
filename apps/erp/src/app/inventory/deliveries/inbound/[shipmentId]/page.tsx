@@ -8,6 +8,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 
 export const metadata = { title: 'Receive a shipment — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -42,7 +43,7 @@ export default async function InboundShipmentPage({
           <Badge status={shipment.status} />
         </h1>
         <PageDescription className="mt-1">
-          Shipped {shipment.shippedOn} · billed {peso(shipment.billedTotal)}
+          Shipped {formatBusinessDayLong(shipment.shippedOn)} · billed {peso(shipment.billedTotal)}
           {shipment.receivedTotal !== null && <> · received {peso(shipment.receivedTotal)}</>}
         </PageDescription>
       </div>

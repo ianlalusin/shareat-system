@@ -13,7 +13,7 @@ import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_LOCATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Checkbox, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select, Table, Td, Th } from '@/components/ui';
+import { Button, Checkbox, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select, Table, Td, Th, statusLabel } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -31,7 +31,7 @@ interface SearchParams {
 
 const STOCK_MODEL_EXPLANATION: Record<'single_room' | 'multi_room', string> = {
   single_room:
-    'This store keeps stock in ONE room (a branch or kiosk) — it may hold exactly one active room besides Receiving.',
+    'This store keeps stock in one room (a store or kiosk). It may hold exactly one active room besides Receiving.',
   multi_room:
     'This store manages several rooms (a commissary) — it may hold as many active rooms as it needs.',
 };
@@ -68,8 +68,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
         <div>
           <h1 className="text-2xl font-semibold">Stock locations</h1>
           <PageDescription className="mt-1">
-            The rooms every stock movement is keyed to — Stockroom, Kitchen, Receiving, and so on.
-            No movement in this store can happen without a room to name.
+            The rooms where this store keeps stock, such as Stockroom, Kitchen and Receiving.
           </PageDescription>
         </div>
         <Link href="/inventory" className="text-sm underline underline-offset-4">
@@ -143,7 +142,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                     <Select name="role" defaultValue="storage">
                       {LOCATION_ROLES.map((r) => (
                         <option key={r} value={r}>
-                          {r}
+                          {statusLabel(r)}
                         </option>
                       ))}
                     </Select>
@@ -180,11 +179,11 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                     <div className="font-mono text-xs text-muted">{loc.code}</div>
                   </Td>
                   <Td className="text-muted">
-                    {loc.typeName} · {loc.role}
+                    {loc.typeName} · {statusLabel(loc.role)}
                   </Td>
                   <Td>{loc.purpose === 'receiving' ? 'Receiving' : 'Normal'}</Td>
                   <Td>{loc.isDefault ? 'Default' : ''}</Td>
-                  <Td>{loc.status}</Td>
+                  <Td>{statusLabel(loc.status)}</Td>
                   <Td>
                       <div className="flex flex-wrap items-center gap-2">
                         <EditableRecord
@@ -208,12 +207,12 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                               ))}
                             </Select>
                             {loc.purpose === 'receiving' ? (
-                              <span className="self-center text-xs text-neutral-500">storage (fixed)</span>
+                              <span className="self-center text-xs text-neutral-500">Storage (fixed)</span>
                             ) : (
                               <Select name="role" aria-label="Role" defaultValue={loc.role}>
                                 {LOCATION_ROLES.map((r) => (
                                   <option key={r} value={r}>
-                                    {r}
+                                    {statusLabel(r)}
                                   </option>
                                 ))}
                               </Select>
@@ -231,7 +230,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                             </form>
                           )}
                           {loc.status === 'active' && loc.isDefault ? (
-                            // ⚠️ The default room cannot be retired (the service refuses it —
+                            // The default room cannot be retired (the service refuses it —
                             // review 2026-09-03); say so instead of offering a button that fails.
                             <HelpTip label="Default room">Default room: pick another default to retire this room.</HelpTip>
                           ) : loc.status === 'active' ? (

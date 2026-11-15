@@ -6,6 +6,7 @@ import { productionRecordDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { Banner, Button, ConfirmDestructive, Field, FlashBanner, Input, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_PRODUCTION_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -13,7 +14,7 @@ import { INVENTORY_PRODUCTION_VOID_RULES, nativeAttrs } from '@shareat/domain/fi
 export const metadata = { title: 'Production record — Shareat System' };
 export const dynamic = 'force-dynamic';
 
-const KIND_LABEL: Record<string, string> = { slice: 'Slice (slab -> pieces)', cook: 'Cook (recipe batch)', convert: 'Convert (re-cut, no GL impact)' };
+const KIND_LABEL: Record<string, string> = { slice: 'Slice (slab to pieces)', cook: 'Cook (recipe batch)', convert: 'Convert (re-cut)' };
 
 interface SearchParams {
   error?: string;
@@ -44,7 +45,7 @@ export default async function ProductionRecordPage({
         <div>
           <h1 className="text-2xl font-semibold">{KIND_LABEL[record.kind] ?? record.kind}</h1>
           <PageDescription className="mt-1">
-            {record.producedOn} · {locationName} · revision {record.revision} ·{' '}
+            {formatBusinessDayLong(record.producedOn)} · {locationName} · revision {record.revision} ·{' '}
             <span className="font-medium">{statusLabel(record.status)}</span>
           </PageDescription>
         </div>

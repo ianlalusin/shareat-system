@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../../../lib/session';
 import { deliveryReceiptData, peso } from '../../lib';
@@ -28,7 +29,7 @@ export default async function DeliveryReceiptPage({ params }: { params: Promise<
   const { detail, paid, balanceDue, accountBalance, printedAt } = data;
   const { order, lines, customer, sellingStore } = detail;
   const goods = add(...lines.map((l) => money(l.lineTotal)));
-  const asOf = printedAt.toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
+  const asOf = formatBusinessDateTime(printedAt, { dateStyle: 'long', timeStyle: 'short' });
 
   return (
     <Page density="table">
@@ -57,7 +58,7 @@ export default async function DeliveryReceiptPage({ params }: { params: Promise<
           <dt className="text-neutral-500">Delivered to</dt>
           <dd className="font-medium">{customer.name}</dd>
           <dt className="text-neutral-500">Date</dt>
-          <dd>{order.orderDate}</dd>
+          <dd>{formatBusinessDayLong(order.orderDate)}</dd>
           {order.referenceNo && (
             <>
               <dt className="text-neutral-500">Reference</dt>

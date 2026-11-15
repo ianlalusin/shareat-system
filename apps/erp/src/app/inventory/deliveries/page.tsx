@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { peso } from '../../../lib/format';
 import { deliveryFormData, deliveryRegister, listStores } from './lib';
@@ -49,9 +49,7 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
         <div>
           <h1 className="text-2xl font-semibold">Deliveries</h1>
           <PageDescription className="mt-1">
-            The document goods actually arrive on. Record what is coming, then receive what
-            actually came. Receiving is the only door stock enters by — quantity, cost and the books
-            all follow from that one action.
+            Record what is coming, then receive what actually arrived. Receiving is how stock enters the store.
           </PageDescription>
         </div>
         <div className="flex flex-wrap items-baseline gap-4">
@@ -98,7 +96,7 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
           <EmptyState
             illustration="truck"
             title="Nothing recorded yet"
-            body="A delivery is the document goods arrive on. Record what is coming, then receive what actually came."
+            body="Use New delivery to record goods that are on the way."
           />
         ) : (
           <div className="mt-3">
@@ -119,7 +117,7 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
                   <LinkRow key={d.id}>
                     <Td>
                       <RowLink href={`/inventory/deliveries/${d.id}`}>
-                        {d.deliveredOn}
+                        {formatBusinessDayLong(d.deliveredOn)}
                       </RowLink>
                     </Td>
                     <Td>{KIND_LABEL[d.kind] ?? d.kind}</Td>

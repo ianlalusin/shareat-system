@@ -52,10 +52,10 @@ export async function sellabilityByStore(orgId: string, itemId: string): Promise
   });
 }
 
-/** "retail · wholesale", "wholesale", or "—" — plus "made, not bought" when nobody bills us for it. */
+/** "Retail · Wholesale", "Wholesale", or "—", plus "Made, not bought" when nobody bills us for it. */
 export function soldAsLabel(item: Pick<ItemRow, 'isPurchasable' | 'sellableRetail' | 'sellableWholesale'>): string {
-  const sold = [item.sellableRetail && 'retail', item.sellableWholesale && 'wholesale'].filter(Boolean).join(' · ');
-  const made = item.isPurchasable ? '' : 'made, not bought';
+  const sold = [item.sellableRetail && 'Retail', item.sellableWholesale && 'Wholesale'].filter(Boolean).join(' · ');
+  const made = item.isPurchasable ? '' : 'Made, not bought';
   return [sold || '—', made].filter(Boolean).join(' · ');
 }
 

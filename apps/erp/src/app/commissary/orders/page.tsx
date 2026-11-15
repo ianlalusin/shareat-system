@@ -19,6 +19,7 @@ import { COMMISSARY_ORDER_NEW_RULES, nativeAttrs } from '@shareat/domain/field-r
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 
 export const metadata = { title: 'Branch orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -60,12 +61,11 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
       <div>
         <h1 className="text-2xl font-semibold">Branch orders</h1>
         {/*
-          ⭐ BOTH directions in one list, deliberately. Two screens showing "my orders" from opposite
+          BOTH directions in one list, deliberately. Two screens showing "my orders" from opposite
           ends is how the two sides end up disagreeing about what was sent.
         */}
         <PageDescription className="mt-1">
-          Every internal order this store is on — as the commissary filling one, or as the branch
-          waiting for it.
+          Every internal order this store is on, whether it is filling the order or waiting for it.
         </PageDescription>
       </div>
 
@@ -84,14 +84,13 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
 
       <FlashBanner flash={sp} />
 
-      {/* ⭐ The "New order" panel — only for a store that IS a branch of some commissary. */}
+      {/* The "New order" panel: only for a store that is linked to a commissary. */}
       {choices.length > 0 ? (
         <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">New order from {store.name}</h2>
           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-            One open order per commissary at a time — draft through in-transit blocks a second, until
-            the goods are signed for. Only what the commissary offers can be ordered, at the price the
-            branch will be charged; a line that cannot be priced is refused rather than saved at ₱0.
+            Only one order per commissary can be open at a time, until the goods are signed for. You can only order what the
+            commissary offers, at the price your store will be charged.
           </p>
           <div className="mt-4 space-y-6">
             {choices.map((c) => (
@@ -101,8 +100,8 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
         </section>
       ) : (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          {store.name} is not linked to a commissary as a branch, so it places no orders here. Links,
-          offerings and the item map live under{' '}
+          {store.name} is not linked to a commissary, so it cannot place orders here. Links, offerings and
+          the item map are under{' '}
           <Link href="/commissary/catalogue" className="underline underline-offset-4">
             Commissary catalogue
           </Link>
@@ -112,8 +111,8 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
 
       {orders.length === 0 ? (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          No internal orders yet. A branch below its reorder threshold gets one drafted for it
-          automatically — see <Link href="/inventory/low-stock" className="underline underline-offset-4">low stock</Link>.
+          No internal orders yet. A store that runs low gets one drafted for it
+          automatically. See <Link href="/inventory/low-stock" className="underline underline-offset-4">low stock</Link>.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -135,7 +134,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
                   <LinkRow key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2 tabular-nums">
                       <RowLink href={`/commissary/orders/${o.id}`}>
-                        {o.orderDate}
+                        {formatBusinessDayLong(o.orderDate)}
                       </RowLink>
                     </td>
                     <td className="px-3 py-2">
@@ -145,7 +144,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
                       <Badge tone={statusTone(stage)} label={BRANCH_ORDER_STAGE_LABEL[stage]} />
                       {o.pendingCount > 0 && (
                         <span className="ml-2 rounded bg-warning-soft px-1.5 py-0.5 text-xs text-warning-ink">
-                          {o.pendingCount} awaiting the branch
+                          {o.pendingCount} awaiting the store
                         </span>
                       )}
                     </td>
@@ -216,7 +215,7 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
                   <option key={l.commissaryItemId} value={l.commissaryItemId}>
                     {l.name} ({l.baseUnit})
                     {l.priced ? ` — ₱${l.price}` : ' — no price, state one'}
-                    {l.blocker ? ` — ⚠ ${l.blocker}` : ''}
+                    {l.blocker ? ` — not ready: ${l.blocker}` : ''}
                   </option>
                 ))}
               </Select>
@@ -232,8 +231,8 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
           </div>
         ))}
         <p className="text-xs text-neutral-500 dark:text-neutral-500">
-          ⚠ marks an item that can be drafted but not yet <strong>submitted</strong> — map it under
-          Commissary catalogue first. Whatever rate is used is captured onto the line.
+          &ldquo;Not ready&rdquo; marks an item that can be drafted but not yet <strong>submitted</strong>. Map it under
+          Commissary catalogue first. The rate you use is saved on the line.
         </p>
       </div>
       <DialogActions>

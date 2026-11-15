@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
 import { discrepancyDispositionLabel, lowStockRepo, schema } from '@shareat/db';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { listStores } from '../../inventory/lib';
 import { deferDiscrepancyAction, resolveDiscrepancyAction } from './actions';
 import { requireSession } from '../../../lib/session';
@@ -60,7 +60,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   });
 
   const blocking = rows.filter((r) => r.status !== 'resolved').length;
-  // ⚠️ **The BUSINESS date, not `toISOString()`.** Manila is UTC+8, so at 2am local a UTC
+  // **The BUSINESS date, not `toISOString()`.** Manila is UTC+8, so at 2am local a UTC
   // slice offers YESTERDAY — and a manager deferring "to today" would get a date already past,
   // which blocks again immediately and burns their one allowed deferral. Caught on this
   // screen's first run at 01:50 Manila.
@@ -70,10 +70,9 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
     <Page density="table" className="">
       <h1 className="text-2xl font-semibold">Transit discrepancies</h1>
       <PageDescription className="mt-1">
-        Goods that left this store and did not arrive sit in <strong>stock in transit</strong> at cost — a real
-        asset — until somebody says what happened to them. A branch that counted <em>more</em> than was
-        sent is listed here too: the extra is on nobody&apos;s books until you decide. If you are the branch
-        that counted over, the section below lists it for you to recount and return.
+        Goods that left this store and did not arrive stay counted as stock on the way, at cost, until somebody says
+        what happened to them. A store that counted <em>more</em> than was sent is listed here too. If that is
+        you, the section below lets you recount and return the extra.
       </PageDescription>
 
       <FlashBanner flash={sp} />
@@ -103,7 +102,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
       {blocking > 0 && (
         <Banner tone="warning">
           <strong>
-            ⚠️ {blocking} unresolved discrepanc{blocking === 1 ? 'y' : 'ies'} — this store cannot open a
+            {blocking} unresolved discrepanc{blocking === 1 ? 'y' : 'ies'} — this store cannot open a
             new sales day
           </strong>
           <p className="mt-1">
@@ -116,8 +115,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
 
       {rows.length === 0 ? (
         <p className="mt-8 text-sm text-neutral-600 dark:text-neutral-400">
-          Nothing outstanding. A shortfall appears here on its own when a branch signs for less than
-          this store dispatched — there is no “raise a discrepancy” button, deliberately.
+          Nothing outstanding. A shortfall appears here by itself when a store signs for less than this store sent.
         </p>
       ) : (
         <div className="mt-8 space-y-4">
@@ -136,17 +134,16 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                 <span className="text-xs text-neutral-500">
                   {STATUS_LABEL[row.status] ?? row.status}
                   {row.disposition ? ` · ${discrepancyDispositionLabel(row.disposition)}` : ''}
-                  {row.deferredTo ? ` until ${row.deferredTo}` : ''}
+                  {row.deferredTo ? ` until ${formatBusinessDayLong(row.deferredTo)}` : ''}
                 </span>
               </div>
               {row.direction === 'over' && (
                 <p className="mt-1 text-sm font-medium text-warning-ink">
-                  Counted over — the branch counted more than was sent. The extra is on nobody&apos;s books until you
-                  decide.
+                  Counted over: the store counted more than was sent. Decide what happens to the extra.
                 </p>
               )}
               <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                To {row.branchName ?? 'a branch'} · order {row.orderDate} ·{' '}
+                To {row.branchName ?? 'a store'} · order {formatBusinessDayLong(row.orderDate)} ·{' '}
                 <Link href={`/commissary/orders/${row.orderId}`} className="underline underline-offset-4">
                   view order
                 </Link>
@@ -263,7 +260,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                   {r.quantity} {r.unit} of {r.itemName}
                 </h3>
                 <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                  From {r.fromStoreName} · order {r.orderDate} ·{' '}
+                  From {r.fromStoreName} · order {formatBusinessDayLong(r.orderDate)} ·{' '}
                   <Link href={`/commissary/orders/${r.orderId}`} className={ACTION_LINK}>
                     view order
                   </Link>

@@ -22,7 +22,7 @@ import {
   withdrawPriceAction,
 } from './actions';
 import { loadPricesPage, storesInScope, withOrgPrincipal, type DaypartView, type PricesPageData, type ScheduledOffer } from '../lib';
-import { dayName, windowText } from '../daypart-text';
+import { dayName, time12, windowText } from '../daypart-text';
 
 export const metadata = { title: 'Menu prices - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -200,11 +200,11 @@ const FAULT_SENTENCE: Record<LiveOfferFault['reason'], string> = {
   invalid_instant: 'The time could not be read, so no price can be shown. Reload the page; if it stays, tell an administrator.',
 };
 
-/** "Not offered now, from 17:00"; "from Monday 11:00" when the next opening is more than a day away. */
+/** "Not offered now, from 5:00 PM"; "from Monday 11:00 AM" when the next opening is more than a day away. */
 function notOfferedText(n: { availableFrom: string | null; availableAt: Date | null; availableDay: number | null }, now: Date): string {
   if (n.availableFrom === null) return 'Not offered now.';
   const far = n.availableAt !== null && n.availableDay !== null && n.availableAt.getTime() - now.getTime() > 24 * 3600 * 1000;
-  return `Not offered now, from ${far ? `${dayName(n.availableDay as number)} ` : ''}${n.availableFrom}`;
+  return `Not offered now, from ${far ? `${dayName(n.availableDay as number)} ` : ''}${time12(n.availableFrom)}`;
 }
 
 /** The "When" box of the price form: All day, or one of the store's windows. */
@@ -447,7 +447,7 @@ function Panel({
       {later.map((s) => (
         <div key={s.id} className="flex flex-wrap items-center gap-2 text-sm">
           <Badge tone="info" label="Scheduled" />
-          <span>{`${formatBusinessDateTime(s.effectiveFrom)}: ${scheduledLabel(s)}${figureText(s)}`}</span>
+          <span>{`${formatBusinessDateTime(s.effectiveFrom, { dateStyle: 'long', timeStyle: 'short' })}: ${scheduledLabel(s)}${figureText(s)}`}</span>
           {canPrice && (s.daypartId === null ? !dayparted || canPair : canPair) && (
             <form action={cancelScheduledPriceAction}>
               <input type="hidden" name="storeId" value={storeId} />
@@ -517,7 +517,7 @@ function OptionPrices({ data, storeId, canPrice }: { data: PricesPageData; store
                   {later.map((s) => (
                     <div key={s.id} className="flex flex-wrap items-center gap-2 text-sm">
                       <Badge tone="info" label="Scheduled" />
-                      <span>{`${formatBusinessDateTime(s.effectiveFrom)}: ${s.withdrawn ? 'Withdrawn' : (s.priceDelta ?? '')}`}</span>
+                      <span>{`${formatBusinessDateTime(s.effectiveFrom, { dateStyle: 'long', timeStyle: 'short' })}: ${s.withdrawn ? 'Withdrawn' : (s.priceDelta ?? '')}`}</span>
                       {canPrice && (
                         <form action={cancelScheduledOptionPriceAction}>
                           <input type="hidden" name="storeId" value={storeId} />
