@@ -88,15 +88,10 @@ export function positionText(partiesAhead: number): string {
   return `${partiesAhead} parties ahead of you`;
 }
 
-export function waitingText(partiesWaiting: number): string {
-  return partiesWaiting === 1 ? '1 party waiting' : `${partiesWaiting} parties waiting`;
-}
-
 // ---------- store screen ----------
 
 export interface StoreScreenView {
   title: string;
-  waitingText: string;
   notice: string | null;
   showForm: boolean;
   checkInHref: string | null;
@@ -109,7 +104,6 @@ export function storeScreenView(result: LobbyResult<LobbyStoreView>): StoreScree
     const s = result.value;
     return {
       title: s.storeName,
-      waitingText: waitingText(s.partiesWaiting),
       notice: null,
       showForm: true,
       checkInHref: `/lobby/check-in?s=${encodeURIComponent(s.storeCode)}`,
@@ -117,7 +111,7 @@ export function storeScreenView(result: LobbyResult<LobbyStoreView>): StoreScree
     };
   }
   const name = result.ok ? result.value.storeName : '';
-  return { title: name.length > 0 ? name : 'Shareat', waitingText: '', notice: `${COUNTER_NOTICE}.`, showForm: false, checkInHref: null, showMenu: true };
+  return { title: name.length > 0 ? name : 'Shareat', notice: `${COUNTER_NOTICE}.`, showForm: false, checkInHref: null, showMenu: true };
 }
 
 // ---------- wait screen ----------

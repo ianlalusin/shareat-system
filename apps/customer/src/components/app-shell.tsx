@@ -6,9 +6,11 @@ import type { ReactNode } from 'react';
 import { ClipboardList, Receipt, ShoppingCart, Star, User, Utensils } from 'lucide-react';
 import { useCart, useNotice, useSession } from '@/data/provider';
 import { cartCount } from '@/lib/cart';
+import { showDemoBanner } from '@/lib/demo-banner';
 import { Card } from './ui';
 
 export function DemoBanner() {
+  if (!showDemoBanner(usePathname())) return null;
   return (
     <div className="bg-accent px-4 py-1.5 text-center text-xs font-medium text-accent-foreground">
       Demo - sample data, nothing is sent to the store

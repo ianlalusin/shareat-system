@@ -6,7 +6,7 @@ Reusable diner presentation and session-aware app frame.
 
 ## Interface
 
-- app-shell.tsx exports DemoBanner, NoticeStrip, TabBar, AppShell and RequireSession.
+- app-shell.tsx exports DemoBanner, NoticeStrip, TabBar, AppShell and RequireSession. DemoBanner hides itself on /lobby paths (via showDemoBanner).
 - ui.tsx exports Button, Card, Stars, PageTitle and ErrorLine.
 
 ## Invariants
