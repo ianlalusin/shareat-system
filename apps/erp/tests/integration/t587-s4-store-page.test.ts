@@ -151,7 +151,7 @@ describe('T-587 S4 - store page', () => {
     async () => {
       const f = await storeFixture('d1');
       const html = await renderStorePage(f);
-      expect(html).toMatch(/<details>\s*<summary[^>]*>Ready ✓<\/summary>/);
+      expect(html).toMatch(/<details class="group">\s*<summary[^>]*><span>Ready ✓<\/span>/);
       expect(html).not.toMatch(/<details[^>]*\sopen/);
     },
     60_000,
@@ -161,10 +161,10 @@ describe('T-587 S4 - store page', () => {
     'D2: checks fail -> readiness is open and counts them, with the right plural (1 and 3). Mutant: count blocking only -> red',
     async () => {
       const one = await renderStorePage(await storeFixture('d2a', { manager: false }));
-      expect(one).toMatch(/<details open=""[^>]*>\s*<summary[^>]*>1 thing needs attention<\/summary>/);
+      expect(one).toMatch(/<details open=""[^>]*>\s*<summary[^>]*><span>1 thing needs attention<\/span>/);
       expect(one).toContain('/admin/users'); // the failing check keeps its remedy link
       const three = await renderStorePage(await storeFixture('d2b', { manager: false, pin: false, opened: false }));
-      expect(three).toMatch(/<summary[^>]*>3 things need attention<\/summary>/);
+      expect(three).toMatch(/<summary[^>]*><span>3 things need attention<\/span>/);
       expect(three).toContain('Issue a PIN from Staff');
     },
     60_000,
@@ -195,7 +195,7 @@ describe('T-587 S4 - store page', () => {
         .map((m) => ({ href: /href="([^"]*)"/.exec(m[1]!)?.[1] ?? '', cls: /class="([^"]*)"/.exec(m[1]!)?.[1] ?? '', text: m[2]!.trim() }))
         .filter((l) => l.href.includes(`store=${f.storeId}`));
       const names = links.map((l) => l.text);
-      expect(names).toEqual(['Kitchen stations', 'Menu hours', 'Sales channels and settlement wiring', 'Link to POS store', 'Cash settings']);
+      expect(names).toEqual(['Kitchen stations', 'Menu hours', 'Sales channels and payouts', 'Link to POS store', 'Cash settings']);
       for (const l of links) expect(l.cls, l.text).toMatch(/\bmin-h-11\b/);
       expect(html).toContain(`href="/kitchen?store=${f.storeId}"`);
       expect(html).toContain(`href="/settings/pos-link?store=${f.storeId}"`);
@@ -212,6 +212,25 @@ describe('T-587 S4 - store page', () => {
       expect(html).not.toContain('17:00');
       expect(html).not.toContain('Lunch from');
       expect(plain(html)).toContain('For hours that run past midnight, end earlier than you start.');
+    },
+    60_000,
+  );
+  it(
+    'U1 (UI UX review): the Readiness summary has a chevron and says how to open it; a failing check says it in words with a warning sign; columns do not stretch; Close this store shows its words; Not set is muted',
+    async () => {
+      const ready = await renderStorePage(await storeFixture('u1a'));
+      expect(ready).toMatch(/<summary[^>]*>[\s\S]*Ready ✓[\s\S]*Show the checks[\s\S]*<svg[^>]*aria-hidden="true"/);
+      const unset = await storeFixture('u1b', { manager: false, opened: false });
+      await sql`update stores set address = null where id = ${unset.storeId}`;
+      const notReady = await renderStorePage(unset);
+      expect(notReady).toContain('⚠');
+      expect(plain(notReady)).toMatch(/needs attention/);
+      expect(notReady).toMatch(/— needs attention/);
+      expect(notReady).toContain('items-start');
+      expect(plain(ready)).toContain('Close this store');
+      const close = ready.slice(ready.lastIndexOf('Close this store') - 400);
+      expect(close).not.toMatch(/<svg[^>]*>[\s\S]{0,200}<\/svg>\s*<\/button>/); // the trigger is words, not a lone icon
+      expect(notReady).toMatch(/text-muted italic[^>]*>Not set/);
     },
     60_000,
   );

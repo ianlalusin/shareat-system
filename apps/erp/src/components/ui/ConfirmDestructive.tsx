@@ -26,9 +26,11 @@ export interface ConfirmDestructiveProps {
   readonly expectedName?: string;
   /** The first button is a plain secondary button, not a red one. Only that trigger: the confirm step keeps its danger look. */
   readonly quiet?: boolean;
+  /** The first button is still the red danger button, but shows its words instead of the label's icon (a lone red icon says nothing). */
+  readonly showLabel?: boolean;
 }
 
-export function ConfirmDestructive({ tier, label, consequence, expectedName, quiet }: ConfirmDestructiveProps) {
+export function ConfirmDestructive({ tier, label, consequence, expectedName, quiet, showLabel }: ConfirmDestructiveProps) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
   const [pin, setPin] = useState('');
@@ -39,7 +41,7 @@ export function ConfirmDestructive({ tier, label, consequence, expectedName, qui
         {label}
       </Button>
     ) : (
-      <Button type="button" variant="danger" onClick={() => setOpen(true)}>
+      <Button type="button" variant="danger" {...(showLabel ? { icon: null } : {})} onClick={() => setOpen(true)}>
         {label}
       </Button>
     );

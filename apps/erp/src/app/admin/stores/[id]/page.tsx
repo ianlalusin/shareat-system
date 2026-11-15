@@ -38,7 +38,7 @@ function Row({ label, value }: { label: string; value: string | null | undefined
   return (
     <>
       <dt className="text-neutral-600 dark:text-neutral-400">{label}</dt>
-      <dd className={text ? 'whitespace-pre-line' : 'text-neutral-500 dark:text-neutral-400'}>{text || 'Not set'}</dd>
+      <dd className={text ? 'whitespace-pre-line' : 'text-muted italic'}>{text || 'Not set'}</dd>
     </>
   );
 }
@@ -132,7 +132,7 @@ export default async function StoreDetailPage({
           Menu hours
         </Link>
         <Link href={`/settings/sales-channels?store=${id}`} className={SECTION_LINK}>
-          Sales channels and settlement wiring
+          Sales channels and payouts
         </Link>
         <Link href={`/settings/pos-link?store=${id}`} className={SECTION_LINK}>
           Link to POS store
@@ -142,23 +142,30 @@ export default async function StoreDetailPage({
         </Link>
       </nav>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid items-start gap-6 lg:grid-cols-2">
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="text-sm font-medium">Readiness</h2>
           {/* Closed when every check passes; open, with the count, when one does not. */}
-          <details open={failing > 0}>
-            <summary className="flex min-h-11 w-full cursor-pointer items-center text-sm font-medium">
-              {failing === 0 ? 'Ready ✓' : `${countOf(failing, 'thing')} ${failing === 1 ? 'needs' : 'need'} attention`}
+          <details open={failing > 0} className="group">
+            <summary className="flex min-h-11 w-full cursor-pointer list-none items-center gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+              <span>{failing === 0 ? 'Ready ✓' : `${countOf(failing, 'thing')} ${failing === 1 ? 'needs' : 'need'} attention`}</span>
+              {failing === 0 && <span className="font-normal text-muted group-open:hidden">· Show the checks</span>}
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="ml-auto h-4 w-4 shrink-0 text-neutral-500 transition-transform group-open:rotate-90">
+                <path d="M7 5l5 5-5 5" />
+              </svg>
             </summary>
             <ul className="space-y-3 pt-1">
               {readiness.map((c) => (
                 <li key={c.key} className="text-sm">
                   <div className="flex items-start gap-2">
                     <span className={c.ok ? 'text-success' : 'text-warning-ink'}>
-                      {c.ok ? '✓' : '•'}
+                      {c.ok ? '✓' : '⚠'}
                     </span>
                     <div>
-                      <div className="font-medium">{c.label}</div>
+                      <div className="font-medium">
+                        {c.label}
+                        {!c.ok && <span className="ml-2 text-xs font-normal text-warning-ink">— needs attention</span>}
+                      </div>
                       <div className="text-neutral-600 dark:text-neutral-400">{c.detail}</div>
                       {/* ⭐ T-243 / DEF-216 — one generic renderer replaces what T-230 and T-229
                           slice 3 each hand-wired for their own check. `remedy` is absent for a check
@@ -441,6 +448,7 @@ export default async function StoreDetailPage({
           <ConfirmDestructive
             tier="retype"
             label="Close this store"
+            showLabel
             consequence="Closes this store. Nothing is deleted, but it stops trading until someone reopens it."
             expectedName={store.name}
           />
