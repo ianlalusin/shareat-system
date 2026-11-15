@@ -24,6 +24,7 @@ their own PIN.
 | R4 | A signature is attached to a document only when **its owner enters their own staff PIN**. This applies to the issuer and to the employee. A saved signature is never stamped without the owner's PIN. |
 | R5 | Template wording comes from Ian's current files; admins enter it through the template screen. Nothing is seeded. |
 | R6 | A waiver/quitclaim template is **not** offered until a lawyer has reviewed its wording (Ian's call when it is ready). |
+| R7 | **Every version of an issued document is kept and maintained. Any change to an issued document needs every signature again.** (Ian, 15 Nov.) A revision is a new version of the same document (same number, `v2`, `v3`…); signatures belong to one version; a new version starts unsigned. |
 
 ## 3. Scope
 
@@ -47,8 +48,12 @@ their own PIN.
    letterhead (all from the database), the document number, the body, and the signature slots
    (signed image, or a blank line with the name if unsigned). The same `@media print` / `@page A4`
    approach as `apps/erp/src/app/trade/orders/[id]/print/page.tsx`. "Save as PDF" is the browser's.
-6. **Void**: an issued document can be voided with a reason (admin, or the issuing store's manager).
-   It stays in the register marked VOID, and its print shows VOID. Never deleted, never edited after issue.
+6. **Revise (R7)**: an issued, non-void document can be revised by a holder of `issue_documents` for its store.
+   This needs a reason. The revision creates **version N+1** with the new text, the reviser and the time, and
+   **all signature slots start empty again**. Earlier versions, and their signatures, stay readable and printable as they were.
+   The register and print show the current version, labelled "Version N of DOC-YYYY-NNNN". A "History" list shows every version: who, when, why, and its signatures. A version's text is never edited in place.
+7. **Void**: an issued document can be voided with a reason (admin, or the issuing store's manager).
+   It stays in the register marked VOID, and its print shows VOID. Never deleted.
 
 **Out (deliberately)**
 - Server-side PDF and any headless browser: the 4 GB droplet must not render (never build or render there).
@@ -64,10 +69,14 @@ their own PIN.
 - `document_template_versions` (append-only): id, org_id, template_id, version_no, body,
   signature_slots (subset of `issuer`, `employee`), created_by, created_at. Unique (template_id, version_no).
 - `issued_documents`: id, org_id, store_id (nullable for an org-wide memo), number (unique per org),
-  template_version_id, employment_id (nullable), body_final, issued_by, issued_at, voided_at,
-  voided_by, void_reason. The body is immutable after insert (trigger), except the void columns.
-- `issued_document_signatures` (append-only): id, org_id, issued_document_id, slot, person_id,
-  signature_file_id, signed_at. Unique (issued_document_id, slot).
+  template_version_id, employment_id (nullable), issued_by, issued_at, voided_at, voided_by,
+  void_reason. Only the void columns may change after insert (trigger).
+- `issued_document_versions` (append-only, trigger refuses UPDATE/DELETE): id, org_id,
+  issued_document_id, version_no, body, reason (null for v1), created_by, created_at. Unique
+  (issued_document_id, version_no). The current version is the highest version_no.
+- `issued_document_signatures` (append-only): id, org_id, issued_document_version_id, slot,
+  person_id, signature_file_id, signed_at. Unique (issued_document_version_id, slot). A signature
+  belongs to ONE version, so a new version is unsigned by construction (R7). Signing is refused on any version that is not the current one.
 - Same-org foreign keys on every reference (the house pattern). RLS forced. Classify all four
   tables in `cutover/classification.ts` and the RLS registry. Journal: idx above main's last, `when` above main's last (DEF-039).
 
@@ -121,6 +130,7 @@ Add the new actions to the audit catalogue.
 7. Template edit makes v2; a document issued from v1 still shows v1's text and id.
 8. The `<script>` body prints as text.
 9. Numbering is unique per org per year under two concurrent issues.
+10. R7: revising a signed v1 creates v2 with every slot empty. v1 still prints with its signatures. Signing v1 after v2 exists ✗. Updating or deleting a version row ✗ (trigger). Revise on a voided document ✗. Revise without a reason ✗.
 Each guard gets a mutant. Run the guards that bit recent PRs:
 - t343 throw ratchet;
 - t384 G7/G8 (EditableRecord, Save label);
@@ -133,4 +143,5 @@ The migration is gated on the FULL suite on a fresh DB.
 ## 9. Bible rows owed (wrap-up)
 
 - Ian 15 Nov: the Documents page is built small (R1/R2/R5/R6).
+- Ian 15 Nov: **every version of an issued document is kept; any change needs every signature again** (R7).
 - Ian 15 Nov: **one signature per person, saved in one place, reused across the app, attached only with the owner's PIN** (R3/R4). This is app-wide: future signature uses (payslips, cash advance forms) follow the same rule.
