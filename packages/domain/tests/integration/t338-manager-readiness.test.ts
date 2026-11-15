@@ -128,6 +128,21 @@ describe('T-338 - the `manager` readiness check', () => {
   );
 
   it(
+    'M10 (T-587 S4): a display name that already ends with a full stop gets no second one - "Managed by Y." not "Y..". ' +
+      'Mutant: always append "." -> "Y.." -> red',
+    async () => {
+      const f = await orgFixture('m10');
+      const storeId = await makeStore(f);
+      const p = await person(f.orgId, 'Y.', 'manager');
+      await scope(p, storeId);
+      const c = await managerCheck(f, storeId);
+      expect(c.detail).toBe('Managed by Y.');
+      expect(c.detail).not.toContain('..');
+    },
+    60_000,
+  );
+
+  it(
     'M3: admins do not count - the fanned-out admin and a second admin with a manual scope row leave it not ok. ' +
       'Mutant: role in (manager, admin) -> red',
     async () => {

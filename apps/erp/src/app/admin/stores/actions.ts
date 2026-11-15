@@ -10,6 +10,7 @@
  * second caller cannot skip it — a rule in one route file is a rule the next route file misses,
  * which is how DEF-180 happened.
  */
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { authorize, can } from '@shareat/auth';
 import {
   assertFieldRules,
@@ -256,7 +257,7 @@ export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
   return await redirectWithFlash(
     `/admin/stores/${storeId}`,
     {},
-    { ok: openingDate ? `Opening date set to ${openingDate}.` : 'Opening date cleared.' },
+    { ok: openingDate ? `Opening date set to ${formatBusinessDayLong(openingDate)}.` : 'Opening date cleared.' },
   );
 }
 

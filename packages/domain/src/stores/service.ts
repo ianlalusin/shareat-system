@@ -48,6 +48,8 @@ import {
   type Tx,
 } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
+import { countOf } from '@shareat/core/sentence';
 import { describeStoreReversal, executeReversals, planInServiceReversal, requireConfirmedPlan } from '../fixed-assets/in-service';
 // ⭐ The LEAF module, not `../organizations` — `organizations/index.ts` imports `createStore` from
 // this file, so importing its barrel back would close an import cycle. See `identifiers.ts`.
@@ -642,7 +644,7 @@ export async function storeReadiness(
       kind: 'auto',
       blocking: true,
       detail: rooms.length > 0
-        ? `${rooms.length} active room(s).`
+        ? `${countOf(rooms.length, 'active room')}.`
         : 'A store with no rooms holds no stock at all.',
       remedy: {
         href: `${READINESS_REMEDY_ROUTE.room}?store=${store.id}`,
@@ -659,8 +661,8 @@ export async function storeReadiness(
       blocking: true,
       detail:
         scopedEverywhere.length === adminIds.length
-          ? `${adminIds.length} admin(s) scoped.`
-          : `${adminIds.length - scopedEverywhere.length} admin(s) have no scope row — reactivating the store re-fans them.`,
+          ? `${countOf(adminIds.length, 'admin')} can see this store.`
+          : `${countOf(adminIds.length - scopedEverywhere.length, 'admin')} cannot see this store yet. Reopening the store gives every admin access.`,
     },
     {
       key: 'salesChannel',
@@ -669,11 +671,11 @@ export async function storeReadiness(
       kind: 'manual',
       blocking: true,
       detail: channels > 0
-        ? `${channels} active channel(s).`
+        ? `${countOf(channels, 'active sales channel')}.`
         : // ⭐ T-230 names the remedy. Until then this check reported a blocking condition with no
           // screen anywhere that could clear it (DEF-207) — a checklist item nobody could tick.
-          'Without one a sales day has nowhere to land, and an unresolvable channel blocks rather ' +
-            'than silently defaulting (DEF-059). Add one under Settings › Sales channels.',
+          // (DEF-059 is why an unresolvable channel blocks instead of defaulting; it stays out of the words.)
+          'Without one, there is nowhere for a day of sales to go. Add one under Settings › Sales channels.',
       remedy: {
         href: `${READINESS_REMEDY_ROUTE.salesChannel}?store=${store.id}`,
         label: 'Add a sales channel →',
@@ -696,8 +698,9 @@ export async function storeReadiness(
       kind: 'manual',
       blocking: true,
       detail: credentials > 0
-        ? `${credentials} person(s) with a live PIN can sign in here.`
-        : 'No one can sign in at this store yet. Hire someone here, or give an existing person store scope, and make sure they hold a PIN — issue one from Staff. ⛔ Store creation deliberately does not auto-issue a PIN, because a generated default ends up in a screenshot.',
+        ? `${countOf(credentials, 'person')} with a live PIN can sign in here.`
+        : // Store creation deliberately does not auto-issue a PIN: a generated default ends up in a screenshot.
+          'No one can sign in at this store yet. Hire someone here, or give an existing person access to this store, and make sure they hold a PIN. Issue one from Staff.',
       // ⚠️ No `?store=` — `/staff` takes no store param today; adding one is a behaviour change and
       // is out of scope for T-243.
       remedy: { href: READINESS_REMEDY_ROUTE.signIn, label: 'Issue a PIN from Staff →' },
@@ -713,7 +716,7 @@ export async function storeReadiness(
       blocking: false,
       detail:
         managers.length > 0
-          ? `Managed by ${managers.join(', ')}.`
+          ? `Managed by ${managers.join(', ').replace(/\.?$/, '.')}`
           : 'No manager assigned to this store. Give a person the manager role and this store in their scope, under Users and roles.',
       remedy: { href: READINESS_REMEDY_ROUTE.manager, label: 'Assign a manager in Users and roles →' },
     },
@@ -730,8 +733,8 @@ export async function storeReadiness(
         store.openingDate === null
           ? 'Not yet open — no opening date set'
           : storesRepo.isPreOpening(store.openingDate, today)
-            ? `Opens ${store.openingDate}`
-            : `Opened ${store.openingDate}`,
+            ? `Opens ${formatBusinessDayLong(store.openingDate)}`
+            : `Opened ${formatBusinessDayLong(store.openingDate)}`,
     },
   ];
 }
