@@ -14,7 +14,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, FlashBanner, LinkRow, RowLink, Select, Input } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, LinkRow, RowLink, Select, Input } from '@/components/ui';
 
 export const metadata = { title: 'Fixed assets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -134,9 +134,12 @@ export default async function FixedAssetsPage({
           </span>
           <Input type="month" name="through" defaultValue={currentPeriod()} />
         </label>
-        <Button type="submit" variant="secondary">
-          Run
-        </Button>
+        <ConfirmDestructive
+          tier="confirm"
+          quiet
+          label="Run depreciation"
+          consequence="Posts depreciation for every asset up to the month you chose. Months already posted are skipped."
+        />
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Safe to run more than once — periods already posted are skipped, and a month that was
           missed is caught up by running it again.

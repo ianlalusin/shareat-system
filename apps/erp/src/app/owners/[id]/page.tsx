@@ -21,7 +21,8 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, Field, FlashBanner, FormModal, Input, Select, DialogActions } from '@/components/ui';
+import { monthName } from '@/lib/format';
+import { Button, ConfirmDestructive, Field, FlashBanner, FormModal, Input, Select, DialogActions } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import {
   OWNERS_CLOSE_MONTH_RULES,
@@ -265,9 +266,12 @@ export default async function OwnerPage({
                 </Field>
               </div>
               <DialogActions>
-                <Button type="submit" variant="secondary">
-                  Close {owner.closableMonth.slice(0, 7)}
-                </Button>
+                <ConfirmDestructive
+                  tier="confirm"
+                  quiet
+                  label="Close month"
+                  consequence={`Closing ${monthName(owner.closableMonth)} locks it: a drawing dated into it is refused afterwards. A difference from the ledger is posted to the books.`}
+                />
               </DialogActions>
             </CheckedForm>
           </FormModal>
@@ -291,7 +295,7 @@ export default async function OwnerPage({
               <tbody>
                 {owner.closes.map((c) => (
                   <tr key={c.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2 font-mono">{c.periodMonth.slice(0, 7)}</td>
+                    <td className="px-3 py-2 font-mono">{monthName(c.periodMonth)}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {peso(c.acknowledgedAmount)}
                     </td>

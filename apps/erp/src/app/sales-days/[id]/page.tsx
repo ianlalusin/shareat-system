@@ -558,9 +558,12 @@ export default async function SalesDayDetailPage({
             <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="flex-1">
               <Input {...nativeAttrs(SALES_DAY_VOID_RULES.reason)} placeholder="Why is this being withdrawn?" />
             </Field>
-            <Button type="submit" variant="danger">
-              Withdraw day
-            </Button>
+            <ConfirmDestructive
+              tier="confirm"
+              showLabel
+              label="Withdraw day"
+              consequence="Takes this unverified day off the books. Nothing was posted, so nothing is reversed. A manager can enter this date again afterwards."
+            />
           </div>
         </CheckedForm>
       )}

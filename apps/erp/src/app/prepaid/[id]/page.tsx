@@ -25,6 +25,7 @@ import {
 } from '@shareat/domain/field-rules';
 import { MONEY_ACCOUNT_CODES, accountLabel } from '@/lib/account-label';
 import { withFlash } from '@/lib/flash';
+import { monthName } from '@/lib/format';
 
 export const metadata = { title: 'Prepaid item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -190,7 +191,7 @@ export default async function PrepaidItemPage({
                   key={p.period}
                   className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                 >
-                  <td className="px-3 py-2 font-mono">{p.period}</td>
+                  <td className="px-3 py-2">{monthName(p.period)}</td>
                   <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400">{formatBusinessDayLong(p.entryDate)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(p.amount)}</td>
                   <td className="px-3 py-2 text-xs">

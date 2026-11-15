@@ -301,11 +301,10 @@ function ChannelCard({
         <input type="hidden" name="name" value={channel.name} />
         <input type="hidden" name="isActive" value="false" />
         <ConfirmDestructive
-          tier="retype"
+          tier="confirm"
           quiet
           label="Retire this channel"
           consequence="It stays on everything already recorded, and anything still open against it can still be resolved. You can bring it back later."
-          expectedName={channel.name}
         />
       </form>
     </section>

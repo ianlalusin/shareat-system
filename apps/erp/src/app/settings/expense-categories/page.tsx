@@ -332,11 +332,10 @@ export default async function ExpenseCategoriesSettingsPage({
                               <input type="hidden" name="isActive" value={c.isActive ? 'false' : 'true'} />
                               {c.isActive ? (
                                 <ConfirmDestructive
-                                  tier="retype"
+                                  tier="confirm"
                                   quiet
                                   label="Retire category"
                                   consequence="It stays on every expense already recorded in it and stops being offered for new ones. You can reinstate it later."
-                                  expectedName={c.category}
                                 />
                               ) : (
                                 <button type="submit" className={`${ACTION_LINK} text-xs text-muted hover:text-ink`}>
