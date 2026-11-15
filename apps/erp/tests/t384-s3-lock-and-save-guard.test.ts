@@ -40,6 +40,8 @@ const EXEMPT: Record<string, string> = {
   'payroll/statutory-payments/new/page.tsx': 'T-193 S5: an add form with hidden id inputs, not record-bound',
   // DEF-778: an add form whose only hidden *Id is the per-render request id; its date default is a prop, not a record.
   'money-transfers/RecordTransferForm.tsx': 'DEF-778: an add form with a hidden request id, not record-bound',
+  // T-584 (NEEDS BOSS APPROVAL): the issue form. Its hidden template / employee / store ids say WHAT to draft; the textarea default is the server-filled draft (or what the issuer typed), not a stored record's value. The edit-in-place shape A0 outlaws is the revise form, which IS an EditableRecord.
+  'documents/new/page.tsx': 'T-584: an issue form whose default is a freshly filled draft, not a saved record',
 };
 
 /**
@@ -54,6 +56,8 @@ const EXEMPT: Record<string, string> = {
 const COMMANDS: Record<string, string> = {
   'Approve and book': 'T-511 S7b (BOSS approved): approves one settlement day and books its payout (money in the books); audited; the uploader rule and the blockers are re-checked in the domain',
   'Book this charge': 'T-511 S7b (BOSS approved): books one platform charge that belongs to no sales day (money out for good); audited; the uploader rule is applied in the domain',
+  'Issue': 'T-584 (NEEDS BOSS APPROVAL): numbers a document and freezes its wording as version 1; audited; nothing can be edited in place afterwards',
+  'Sign': 'T-584 (NEEDS BOSS APPROVAL): attaches the saved signature of the signer to a document version, only after that person types their own Employee ID and PIN; audited, wrong PINs capped',
   'Add till': 'T-546 (BOSS approved): adds a till (the receipt-number identity of a store); audited',
   'Set tablet': 'T-546 (BOSS approved): chooses which paired tablet acts as a till, or none; audited',
   'Save printer': "T-546 (BOSS approved): sets the till's receipt paper and copies, which the tablet then prints with; audited",

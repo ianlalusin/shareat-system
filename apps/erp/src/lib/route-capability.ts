@@ -72,6 +72,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/settings/usage-tolerance': 'set_menu_depletion',
   '/settings/business-rules': 'manage_business_rules',
   // T-584 (Ian, 15 Nov 2026): HR documents. The register, a document and its print need view_documents; issuing needs issue_documents; the templates are the admin's. The longer prefix wins over /documents. Every domain function checks the same word at the document's store.
+  '/documents': 'view_documents',
+  '/documents/new': 'issue_documents',
   '/documents/templates': 'manage_document_templates',
   // T-464: pairing a store's POS tablet is the store manager's (or an admin's) act; `pairPosTablet` / `unpairPosTablet` check the same word at the store. Longer prefix wins over `/settings`.
   '/settings/pos-tablet': 'pair_pos_tablet',

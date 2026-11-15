@@ -137,11 +137,11 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-584: HR documents (dotted: new). Payloads carry ids, a number, a kind and a reason, never the document text or a PIN. A document with no store (an org-wide memo) is scope 'either'.
   def('document_template.version_saved', 'settings', 'normal', 'org', 'document_templates', 'T-584'),
   def('document_template.retired', 'settings', 'normal', 'org', 'document_templates', 'T-584'),
-  def('document.issued', 'staff', 'normal', 'either', 'issued_documents', 'T-584', { reserved: true }),
-  def('document.revised', 'staff', 'high', 'either', 'issued_documents', 'T-584', { reserved: true }),
-  def('document.signed', 'security', 'high', 'either', 'issued_documents', 'T-584', { reserved: true }),
-  def('document.sign_refused', 'security', 'high', 'either', 'issued_documents', 'T-584', { reserved: true, viewers: 'admin' }),
-  def('document.voided', 'staff', 'high', 'either', 'issued_documents', 'T-584', { reserved: true }),
+  def('document.issued', 'staff', 'normal', 'either', 'issued_documents', 'T-584'),
+  def('document.revised', 'staff', 'high', 'either', 'issued_documents', 'T-584'),
+  def('document.signed', 'security', 'high', 'either', 'issued_documents', 'T-584'),
+  def('document.sign_refused', 'security', 'high', 'either', 'issued_documents', 'T-584', { viewers: 'admin' }),
+  def('document.voided', 'staff', 'high', 'either', 'issued_documents', 'T-584'),
   // T-519 S1: a signed staff deduction agreement recorded or cancelled (dotted: new). Payloads carry amounts and ids, never the employee's explanation.
   def('staff_deduction_agreement.recorded', 'money', 'high', 'store', 'staff_deduction_agreements', 'T-519'),
   def('staff_deduction_agreement.cancelled', 'money', 'high', 'store', 'staff_deduction_agreements', 'T-519'),

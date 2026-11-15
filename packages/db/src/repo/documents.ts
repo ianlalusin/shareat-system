@@ -110,17 +110,6 @@ function asVersionRow(r: { id: string; templateId: string; versionNo: number; bo
   return { ...r, signatureSlots: r.signatureSlots as SignatureSlot[] };
 }
 
-export async function getTemplateVersion(tx: Tx, orgId: string, versionId: string): Promise<(TemplateVersionRow & { name: string; kind: DocumentKind }) | null> {
-  const [row] = await tx
-    .select({ ...versionColumns, name: documentTemplates.name, kind: documentTemplates.kind })
-    .from(documentTemplateVersions)
-    .innerJoin(documentTemplates, eq(documentTemplates.id, documentTemplateVersions.templateId))
-    .innerJoin(persons, eq(persons.id, documentTemplateVersions.createdBy))
-    .where(and(eq(documentTemplateVersions.orgId, orgId), eq(documentTemplateVersions.id, versionId)))
-    .limit(1);
-  return row ? { ...asVersionRow(row), name: row.name, kind: row.kind } : null;
-}
-
 export async function listTemplateVersions(tx: Tx, orgId: string, templateId: string): Promise<TemplateVersionRow[]> {
   const rows = await tx
     .select(versionColumns)
@@ -214,7 +203,6 @@ export interface PersonFacts {
   firstName: string | null;
   middleName: string | null;
   lastName: string | null;
-  signatureFileId: string | null;
   isTerminal: boolean;
 }
 
@@ -226,13 +214,12 @@ export async function getPersonFacts(tx: Tx, orgId: string, personId: string): P
       firstName: persons.firstName,
       middleName: persons.middleName,
       lastName: persons.lastName,
-      signatureFileId: persons.signatureFileId,
       kind: persons.kind,
     })
     .from(persons)
     .where(and(eq(persons.orgId, orgId), eq(persons.id, personId)))
     .limit(1);
-  return row ? { id: row.id, displayName: row.displayName, firstName: row.firstName, middleName: row.middleName, lastName: row.lastName, signatureFileId: row.signatureFileId, isTerminal: row.kind === 'terminal' } : null;
+  return row ? { id: row.id, displayName: row.displayName, firstName: row.firstName, middleName: row.middleName, lastName: row.lastName, isTerminal: row.kind === 'terminal' } : null;
 }
 
 /** The issuer's position names across their open jobs, primary first. Empty when they hold no open employment (an admin with no job). */
@@ -322,7 +309,7 @@ export async function allocateNumber(tx: Tx, orgId: string, year: number): Promi
   await lockDocumentNumbering(tx, orgId, year);
   const prefix = `DOC-${String(year)}-`;
   const [row] = await tx
-    .select({ max: sql<number>`coalesce(max((substring(${issuedDocuments.number} from ${prefix.length + 1}))::int), 0)::int` })
+    .select({ max: sql<number>`coalesce(max((substring(${issuedDocuments.number} from ${prefix.length + 1}::int))::int), 0)::int` })
     .from(issuedDocuments)
     .where(and(eq(issuedDocuments.orgId, orgId), sql`${issuedDocuments.number} like ${prefix + '%'}`));
   return `${prefix}${String((row?.max ?? 0) + 1).padStart(4, '0')}`;
@@ -346,7 +333,7 @@ export async function insertDocumentVersion(
 
 export async function insertSignature(
   tx: Tx,
-  input: { orgId: string; issuedDocumentVersionId: string; slot: SignatureSlot; personId: string; signatureFileId: string },
+  input: { orgId: string; issuedDocumentVersionId: string; slot: SignatureSlot; personId: string; fileId: string },
 ): Promise<string> {
   const [row] = await tx.insert(issuedDocumentSignatures).values(input).returning({ id: issuedDocumentSignatures.id });
   return row!.id;
@@ -370,6 +357,7 @@ export interface DocumentRow {
   employeePersonId: string | null;
   employeeName: string | null;
   templateVersionId: string;
+  templateVersionNo: number;
   templateName: string;
   kind: DocumentKind;
   signatureSlots: SignatureSlot[];
@@ -380,8 +368,11 @@ export interface DocumentRow {
   voidedByName: string | null;
   voidReason: string | null;
   currentVersionNo: number;
+  /** How many signatures the CURRENT version already carries. */
+  signedOnCurrent: number;
 }
 
+const signedOnCurrentSql = sql<number>`(select count(*) from issued_document_signatures s where s.issued_document_version_id = (select v.id from issued_document_versions v where v.issued_document_id = ${issuedDocuments.id} order by v.version_no desc limit 1))::int`;
 const currentVersionNoSql = sql<number>`(select max(v.version_no) from issued_document_versions v where v.issued_document_id = ${issuedDocuments.id})::int`;
 
 function documentSelect(tx: Tx) {
@@ -396,6 +387,7 @@ function documentSelect(tx: Tx) {
       employeePersonId: employments.personId,
       employeeName: sql<string | null>`(select p.display_name from persons p where p.id = ${employments.personId})`,
       templateVersionId: issuedDocuments.templateVersionId,
+      templateVersionNo: documentTemplateVersions.versionNo,
       templateName: documentTemplates.name,
       kind: documentTemplates.kind,
       signatureSlots: documentTemplateVersions.signatureSlots,
@@ -406,6 +398,7 @@ function documentSelect(tx: Tx) {
       voidedByName: sql<string | null>`(select p.display_name from persons p where p.id = ${issuedDocuments.voidedBy})`,
       voidReason: issuedDocuments.voidReason,
       currentVersionNo: currentVersionNoSql,
+      signedOnCurrent: signedOnCurrentSql,
     })
     .from(issuedDocuments)
     .innerJoin(documentTemplateVersions, eq(documentTemplateVersions.id, issuedDocuments.templateVersionId))
@@ -529,7 +522,7 @@ export async function getSignatureForServing(
     .from(issuedDocumentSignatures)
     .innerJoin(issuedDocumentVersions, eq(issuedDocumentVersions.id, issuedDocumentSignatures.issuedDocumentVersionId))
     .innerJoin(issuedDocuments, eq(issuedDocuments.id, issuedDocumentVersions.issuedDocumentId))
-    .innerJoin(storedFiles, eq(storedFiles.id, issuedDocumentSignatures.signatureFileId))
+    .innerJoin(storedFiles, eq(storedFiles.id, issuedDocumentSignatures.fileId))
     .where(and(eq(issuedDocumentSignatures.orgId, orgId), eq(issuedDocumentSignatures.id, signatureId)))
     .limit(1);
   return row ?? null;

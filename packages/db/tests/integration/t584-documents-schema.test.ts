@@ -86,7 +86,7 @@ const revise = (f: F, docId: string, no: number, reason: string | null = 'becaus
   sql`insert into issued_document_versions (org_id, issued_document_id, version_no, body, reason, created_by)
       values (${f.orgId}, ${docId}, ${no}, ${`Text ${no}`}, ${reason}, ${f.issuer}) returning id`;
 const sign = (f: F, versionId: string, slot: 'issuer' | 'employee') =>
-  sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, signature_file_id)
+  sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, file_id)
       values (${f.orgId}, ${versionId}, ${slot}, ${slot === 'issuer' ? f.issuer : f.employee}, ${f.fileId}) returning id`;
 
 describe('T-584 migration 0259 - journal and tables', () => {
@@ -147,7 +147,7 @@ describe('T-584 append-only tables refuse UPDATE and DELETE, even for the owner 
     const f = await fixture('sg');
     const d = await document(f, 'DOC-2026-0001');
     const [s] = await sign(f, d.v1, 'issuer');
-    expect((await caught(sql`update issued_document_signatures set signature_file_id = ${f.fileId} where id = ${s!.id}`))?.code).toBe('23001');
+    expect((await caught(sql`update issued_document_signatures set file_id = ${f.fileId} where id = ${s!.id}`))?.code).toBe('23001');
     expect((await caught(sql`delete from issued_document_signatures where id = ${s!.id}`))?.code).toBe('23001');
   });
 });
@@ -237,7 +237,7 @@ describe('T-584 signatures belong to ONE version, and only the current version o
   it('a slot other than issuer or employee is refused [kills: an invented slot]', async () => {
     const f = await fixture('slot');
     const d = await document(f, 'DOC-2026-0001');
-    const e = await caught(sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, signature_file_id)
+    const e = await caught(sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, file_id)
       values (${f.orgId}, ${d.v1}, 'witness', ${f.issuer}, ${f.fileId})`);
     expect(e?.constraint_name).toBe('issued_document_signatures_slot_check');
   });
@@ -262,7 +262,7 @@ describe('T-584 same-org keys and the template rules', () => {
     const a = await fixture('fa');
     const b = await fixture('fb');
     const d = await document(a, 'DOC-2026-0001');
-    const e = await caught(sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, signature_file_id)
+    const e = await caught(sql`insert into issued_document_signatures (org_id, issued_document_version_id, slot, person_id, file_id)
       values (${a.orgId}, ${d.v1}, 'issuer', ${a.issuer}, ${b.fileId})`);
     expect(e?.constraint_name).toBe('issued_document_signatures_file_same_org_fk');
   });

@@ -38,3 +38,4 @@ export * from './clock';
 export * from './pos-tablets';
 export * from './kitchen';
 export * from './pos';
+export * from './documents';

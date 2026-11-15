@@ -34,6 +34,7 @@ const ROW_LINK: readonly string[] = [
   'app/commissary/orders/page.tsx',
   'app/customers/[customerId]/page.tsx',
   'app/customers/page.tsx',
+  'app/documents/page.tsx', // T-584: each issued document row opens the document
   'app/expenses/page.tsx',
   'app/fixed-assets/page.tsx',
   'app/inventory/counts/page.tsx',

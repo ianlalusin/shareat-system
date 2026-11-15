@@ -7,7 +7,7 @@
 --
 -- THE TABLES. document_templates (library entry), document_template_versions (append-only), issued_documents (only the void columns may change,
 -- once), issued_document_versions (append-only; the current version is the highest version_no), issued_document_signatures (append-only; one per
--- version and slot; signature_file_id is copied BY REFERENCE at signing, so a later change to persons.signature_file_id changes nothing printed).
+-- version and slot; file_id (the signer saved signature, from persons) is copied BY REFERENCE at signing, so a later change to the saved signature changes nothing printed).
 --
 -- THE LOCKS (the 0221 / 0239 pattern; no layer is the only lock).
 --   1. RLS ENABLE and FORCE, one policy per table through app_current_org() (DEF-077).
@@ -92,7 +92,7 @@ CREATE TABLE "issued_document_signatures" (
 	"issued_document_version_id" uuid NOT NULL,
 	"slot" text NOT NULL,
 	"person_id" uuid NOT NULL,
-	"signature_file_id" uuid NOT NULL,
+	"file_id" uuid NOT NULL,
 	"signed_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "issued_document_signatures_slot_check" CHECK ("slot" IN ('issuer', 'employee'))
 );
@@ -171,13 +171,13 @@ ALTER TABLE "issued_document_signatures" ADD CONSTRAINT "issued_document_signatu
 --> statement-breakpoint
 ALTER TABLE "issued_document_signatures" ADD CONSTRAINT "issued_document_signatures_person_id_persons_id_fk" FOREIGN KEY ("person_id") REFERENCES "persons" ("id") ON DELETE RESTRICT;
 --> statement-breakpoint
-ALTER TABLE "issued_document_signatures" ADD CONSTRAINT "issued_document_signatures_signature_file_id_stored_files_id_fk" FOREIGN KEY ("signature_file_id") REFERENCES "stored_files" ("id") ON DELETE RESTRICT;
+ALTER TABLE "issued_document_signatures" ADD CONSTRAINT "issued_document_signatures_file_id_stored_files_id_fk" FOREIGN KEY ("file_id") REFERENCES "stored_files" ("id") ON DELETE RESTRICT;
 --> statement-breakpoint
 ALTER TABLE "issued_document_signatures" ADD CONSTRAINT "issued_document_signatures_version_same_org_fk" FOREIGN KEY ("org_id", "issued_document_version_id") REFERENCES "issued_document_versions" ("org_id", "id") ON DELETE RESTRICT;
 --> statement-breakpoint
 ALTER TABLE "issued_document_signatures" ADD CONSTRAINT "issued_document_signatures_person_same_org_fk" FOREIGN KEY ("org_id", "person_id") REFERENCES "persons" ("org_id", "id") ON DELETE RESTRICT;
 --> statement-breakpoint
-ALTER TABLE "issued_document_signatures" ADD CONSTRAINT "issued_document_signatures_file_same_org_fk" FOREIGN KEY ("org_id", "signature_file_id") REFERENCES "stored_files" ("org_id", "id") ON DELETE RESTRICT;
+ALTER TABLE "issued_document_signatures" ADD CONSTRAINT "issued_document_signatures_file_same_org_fk" FOREIGN KEY ("org_id", "file_id") REFERENCES "stored_files" ("org_id", "id") ON DELETE RESTRICT;
 --> statement-breakpoint
 ALTER TABLE "document_templates" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint

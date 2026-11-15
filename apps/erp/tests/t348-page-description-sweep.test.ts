@@ -179,7 +179,7 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 128 -> 126, T-550 (row 452): the retired /inventory/pos-map and /inventory/pos-usage pages each carried one <PageDescription>; measured by walking app/.
     // 126 -> 127, T-569: /reports/pos-data carries its <PageDescription>; measured by walking app/.
     // 126 -> 127, T-568 S1: the Inventory landing's description moved to the shared <PageDescription> component; measured by walking app/.
-    expect(count).toBe(128);
+    expect(count).toBe(131); // T-584: 128 -> 131 (Documents, Issue a document, Document templates), measured by walking app/
   });
 });
 

@@ -212,7 +212,7 @@ export const issuedDocumentSignatures = pgTable(
       .notNull()
       .references(() => persons.id, { onDelete: 'restrict' }),
     /** The person's CURRENT saved signature at signing time, copied by reference. Never updated, so a later change cannot touch it. */
-    signatureFileId: uuid('signature_file_id')
+    fileId: uuid('file_id')
       .notNull()
       .references(() => storedFiles.id, { onDelete: 'restrict' }),
     signedAt: timestamp('signed_at', { withTimezone: true }).notNull().defaultNow(),
@@ -232,7 +232,7 @@ export const issuedDocumentSignatures = pgTable(
       name: 'issued_document_signatures_person_same_org_fk',
     }).onDelete('restrict'),
     foreignKey({
-      columns: [t.orgId, t.signatureFileId],
+      columns: [t.orgId, t.fileId],
       foreignColumns: [storedFiles.orgId, storedFiles.id],
       name: 'issued_document_signatures_file_same_org_fk',
     }).onDelete('restrict'),
