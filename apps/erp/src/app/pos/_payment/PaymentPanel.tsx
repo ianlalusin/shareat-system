@@ -54,10 +54,6 @@ export interface PaymentPanelProps {
   vatRegistered: boolean;
   terminalNo: number;
   storeName: string;
-  /** The registered legal name (falls back to the store's trading name), for the receipt header. */
-  legalName: string | null;
-  tin: string | null;
-  address: string;
   cashierName: string;
   personId: string;
   online: boolean;
@@ -343,7 +339,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
       layout: p.layout,
       copies: p.copies,
       receipt: {
-        header: { businessName: p.legalName ?? p.storeName, addressLines: p.address ? [p.address] : [], tin: p.tin, vatRegistered: p.vatRegistered },
+        header: { businessName: p.storeName, addressLines: [], tin: null, vatRegistered: p.vatRegistered },
         tableLabel: p.isTakeOut ? null : p.label,
         heads: p.isTakeOut ? null : p.heads,
         cashierName: p.cashierName,

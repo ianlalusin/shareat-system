@@ -340,7 +340,7 @@ describe('R3 the snapshot carries the till\'s printer settings', () => {
 
   it('store has receiptPaperMm and receiptCopies (58 and 1 by default)', async () => {
     const f = await fixture();
-    expect((await snapshot(f)).body.store).toEqual({ storeId: f.storeId, name: f.storeName, mode: 'test', terminalNo: 1, vatRegistered: true, receiptPaperMm: 58, receiptCopies: 1, legalName: null, tin: null, address: '' });
+    expect((await snapshot(f)).body.store).toEqual({ storeId: f.storeId, name: f.storeName, mode: 'test', terminalNo: 1, vatRegistered: true, receiptPaperMm: 58, receiptCopies: 1 });
   });
 
   it('changing the printer changes the settings AND the ETag; changing it back restores the ETag', async () => {

@@ -31,9 +31,6 @@ export interface ReadingJson {
 
 export interface SlipContext {
   storeName: string;
-  legalName: string | null;
-  tin: string | null;
-  address: string;
   vatRegistered: boolean;
   printedBy: string;
 }
@@ -50,7 +47,7 @@ export const businessDateLocal = (businessDate: string): string => {
 
 export function readingSlipView(reading: ReadingJson, ctx: SlipContext): ReadingSlipView {
   return {
-    header: { businessName: ctx.legalName ?? ctx.storeName, addressLines: ctx.address ? [ctx.address] : [], tin: ctx.tin, vatRegistered: ctx.vatRegistered },
+    header: { businessName: ctx.storeName, addressLines: [], tin: null, vatRegistered: ctx.vatRegistered },
     printedBy: ctx.printedBy,
     windowFromLocal: stamp(reading.windowStart),
     windowToLocal: stamp(reading.windowEnd),
