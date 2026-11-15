@@ -1,6 +1,14 @@
 # T-587 — Settings that an admin or a manager can find and understand
 
-**Status:** PROPOSAL for Ian (via BOSS), 15 Nov 2026. Navigation and labels only: no migration, no new setting, no new capability. Author: settings session. Design review: UI UX (impeccable, Operate mode).
+**Status:** DECIDED by Ian, 15 Nov 2026 (relayed by BOSS from his own answers); build as S1-S3. Navigation and labels only: no migration, no new setting, no new capability. Author: settings session. Design review: UI UX (impeccable, Operate mode).
+
+## DECIDED (Ian, 15 Nov 2026)
+1. **Option B.** Built as S1, S2, S3, three small PRs.
+2. **Renames approved:** Kitchen setup -> "Kitchen stations"; Clock lane -> **"Failed clock punches"** (Ian's pick over UI UX's "Clock punch problems"); POS link -> "Link to POS store"; Sales channels -> "Sales channels (walk-in, Grab, Foodpanda)"; POS tablet(s) -> "POS tablets and cash registers"; "Menu hours" stays.
+3. **Renames NOT approved, current names stay:** "Business rules" and "Wastage Monitor".
+4. **KEEP the "Find a setting" box** (it also matches old names). Ian chose to keep it over UI UX's suggestion to drop it. It goes in S3. (The table and slice text below that say otherwise are superseded by this section.)
+5. Rows not cards, and the sections This store / Company / People and access / Devices and connections, are approved.
+6. Queue: PRs go to the merger via BOSS with census and pin numbers; branch pushed when S1 opens; wait for #271 and #273 before touching their files, #272 is held.
 **Not this task:** moving data out of Firestore (T-586), the one store screen (T-586 S1, after Lipa go-live), POS v2 under `/pos`.
 **In flight, do not touch until merged:** #273 T-582 `/admin/pos-tablets`, #271 T-533 `/admin/stores/[id]` POS mode, #272 T-583 inventory locations.
 
@@ -32,14 +40,14 @@
 | This store | Menu hours | Menu hours (T-567 ruling: keep this word) | manager |
 | This store | Kitchen stations | Kitchen setup | manager |
 | This store | Sales channels (walk-in, Grab, Foodpanda) | Sales channels | manager |
-| This store | Who reviews wastage | Wastage Monitor | manager |
+| This store | Wastage Monitor | (name kept, Ian) | manager |
 | This store | Attendance and pay rules | Attendance & payroll | manager |
 | This store | Spending limits | Budgets / Expense budgets | manager |
 | This store | Recurring bills | Recurring bills | manager |
 | This store | Store positions | Store positions | manager |
 | Company | Company name, TIN and tax | Organisation | admin |
 | Company | Expense categories | Expense categories | admin |
-| Company | Tax rates and money rules | Business rules | admin |
+| Company | Business rules | (name kept, Ian) | admin |
 | Company | Payroll rates (SSS, PhilHealth, Pag-IBIG, tax) | Payroll rates | admin |
 | Company | Stock usage tolerance | Usage tolerance | admin |
 | Company | Stock usage source | Usage source | admin |
@@ -48,7 +56,7 @@
 | People and access | What each position can do | Position access defaults | admin |
 | Devices and connections | POS tablets and cash registers | POS tablet(s) | manager pairs, admin registers (after T-582) |
 | Devices and connections | Clock terminals | Clock terminals | manager sees, admin sets |
-| Devices and connections | Clock punch problems | Clock lane | manager |
+| Devices and connections | Failed clock punches | Clock lane | manager |
 | Devices and connections | Link to POS store | POS link | admin |
 Words reviewed by UI UX (15 Nov); the old name appears under the row as "also called …". Rows, not the T-582/T-583 cards: those are records with actions, a hub is navigation. A cookbook entry, if ever added, uses the `post_production` key (#272).
 
