@@ -66,7 +66,7 @@ export function createFixtureLobbyData(opts: { now?: () => number } = {}): Lobby
       if (storeCode !== 'LIPA') return fail(409, COUNTER);
       return {
         ok: true,
-        value: { storeCode, storeName: STORE_NAME, partiesWaiting: rows.filter((r) => r.storeCode === storeCode && live(r)).length, accepting: !paused },
+        value: { storeCode, storeName: STORE_NAME, accepting: !paused },
       };
     },
 

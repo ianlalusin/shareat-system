@@ -162,12 +162,11 @@ export function lobbyCancelClaim(storeCode: string, claimId: string, base = ''):
 /** T-455 S4: the store's public line status. A closed store answers 200 with accepting:false; that and any `error` both mean "not joinable". */
 function lobbyStore(storeCode: string, base = ''): Promise<LobbyResult<LobbyStoreView>> {
   return call(base, `/api/lobby/store?s=${encodeURIComponent(storeCode)}`, { method: 'GET' }, (b) => {
-    const s = (b.store ?? {}) as { storeName?: unknown; partiesWaiting?: unknown; accepting?: unknown };
+    const s = (b.store ?? {}) as { storeName?: unknown; accepting?: unknown };
     const open = s.accepting === true && typeof b.error !== 'string';
     return {
       storeCode,
       storeName: typeof s.storeName === 'string' ? s.storeName : '',
-      partiesWaiting: typeof s.partiesWaiting === 'number' ? s.partiesWaiting : 0,
       accepting: open,
     };
   });
