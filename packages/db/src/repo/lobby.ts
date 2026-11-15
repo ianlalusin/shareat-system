@@ -56,10 +56,13 @@ export async function listOrgIdsWithLobbyStore(tx: Tx): Promise<string[]> {
   return rows.map((r) => r.orgId);
 }
 
-/** T-455 S3: a store's id from its public code (unique per org). undefined when the code names no store of this org. */
+/**
+ * T-455 S3: a store's id from its public code. T-581: the code matches in any letter case (phones re-type links in lower case), within this org.
+ * undefined when the code names no store of this org, or when two codes of this org differ only by case (refuse, never pick one).
+ */
 export async function getStoreIdByCode(tx: Tx, orgId: string, code: string): Promise<string | undefined> {
-  const [row] = await tx.select({ id: stores.id }).from(stores).where(and(eq(stores.orgId, orgId), eq(stores.code, code))).limit(1);
-  return row?.id;
+  const rows = await tx.select({ id: stores.id }).from(stores).where(and(eq(stores.orgId, orgId), sql`lower(${stores.code}) = lower(${code})`)).limit(2);
+  return rows.length === 1 ? rows[0]!.id : undefined;
 }
 
 /** T-455 S4: the store's public display name (shown on the diner's lobby screen). undefined when the store is not of this org. */

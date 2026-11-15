@@ -6,11 +6,11 @@ import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
- * T-455 S4 (TESTER) - GET /api/lobby/store?s=CODE, the read the lobby screen needs for "store name, N parties waiting" and the paused notice
+ * T-455 S4 (TESTER) - GET /api/lobby/store?s=CODE, the read the lobby screen needs for "store name" and the paused notice
  * (orchestrator ruling, 25 Oct). Handlers are called directly with a Request against real Postgres (TEST_DATABASE_URL, `_test` guard), as in lobby-routes.test.ts.
  *
- * Contract pinned here: 200 { ok:true, store:{ storeName, partiesWaiting, accepting } }. A closed store (paused / disabled / POS unseen > 5 min / no lobby_stores row)
- * AND an unknown or missing code answer 200 { ok:true, store:{ storeName:'', partiesWaiting:0, accepting:false }, error:'Please check in at the counter.' } with the SAME keys,
+ * Contract pinned here: 200 { ok:true, store:{ storeName, accepting } } (T-581: no waiting count, ever). A closed store (paused / disabled / POS unseen > 5 min / no lobby_stores row)
+ * AND an unknown or missing code answer 200 { ok:true, store:{ storeName:'', accepting:false }, error:'Please check in at the counter.' } with the SAME keys,
  * so the reply never says whether a code exists. No cookie, no x-real-ip, no LOBBY_HASH_SECRET needed. GET only; other methods are not exported (Next answers 405);
  * a body/declared length over 16 KB answers 413. No org id, store id, price or person data in the body; no Set-Cookie; no-store.
  * RED TODAY: apps/customer/src/app/api/lobby/store/route.ts does not exist.
@@ -91,7 +91,7 @@ async function joinLine(s: Store, name: string) {
 }
 
 describe('GET /api/lobby/store', () => {
-  it('S1 an open store answers 200 { ok, store:{ storeName, partiesWaiting:0, accepting:true } }, JSON, no-store, no Set-Cookie [kills: wrong shape/status; cacheable reply; a cookie set on a read]', async () => {
+  it('S1 an open store answers 200 { ok, store:{ storeName, accepting:true } }, JSON, no-store, no Set-Cookie [kills: wrong shape/status; cacheable reply; a cookie set on a read]', async () => {
     const s = await mkStore();
     const r = await store(s.code);
     expect(r.status).toBe(200);
@@ -99,23 +99,20 @@ describe('GET /api/lobby/store', () => {
     expect(r.res.headers.get('cache-control')).toMatch(/no-store/);
     expect(r.res.headers.get('set-cookie')).toBeNull();
     expect(Object.keys(r.body).sort()).toEqual(['ok', 'store']);
-    expect(Object.keys(r.body.store).sort()).toEqual(['accepting', 'partiesWaiting', 'storeName']);
-    expect(r.body).toEqual({ ok: true, store: { storeName: 'Lipa Branch', partiesWaiting: 0, accepting: true } });
+    expect(Object.keys(r.body.store).sort()).toEqual(['accepting', 'storeName']);
+    expect(r.body).toEqual({ ok: true, store: { storeName: 'Lipa Branch', accepting: true } });
   });
 
-  it('S2 partiesWaiting counts only waiting|called entries of THIS store [kills: counting cancelled entries, counting another store, a constant]', async () => {
+  it('S2 T-581: an open store with a live line carries no waiting count and no number anywhere in store; a closed store has none either [kills: leaking how busy a store is]', async () => {
     const a = await mkStore();
-    const b = await mkStore();
     await joinLine(a, 'One');
     await joinLine(a, 'Two');
-    await joinLine(b, 'Other');
-    const cancelled = await joinLine(a, 'Three');
-    const cookie = cancelled.cookie;
-    const { POST } = await import('@/app/api/lobby/cancel/route');
-    const c = await POST(new Request(`${ORIGIN}/api/lobby/cancel`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: `lobby_dev=${cookie}`, 'x-real-ip': '198.51.100.9' }, body: JSON.stringify({ storeCode: a.code }) }));
-    expect(c.status).toBe(200);
-    expect((await store(a.code)).body.store.partiesWaiting).toBe(2);
-    expect((await store(b.code)).body.store.partiesWaiting).toBe(1);
+    const open = await store(a.code);
+    expect(open.body.store).not.toHaveProperty('partiesWaiting');
+    expect(Object.values(open.body.store).filter((v) => typeof v === 'number')).toEqual([]);
+    const closed = await store((await mkStore({ paused: true })).code);
+    expect(closed.body.store).not.toHaveProperty('partiesWaiting');
+    expect(Object.values(closed.body.store).filter((v) => typeof v === 'number')).toEqual([]);
   });
 
   it('S3 paused, disabled, POS unseen > 5 min, never seen, and no lobby_stores row all answer accepting:false with the counter sentence [kills: fail-open on any one switch]', async () => {
@@ -147,7 +144,7 @@ describe('GET /api/lobby/store', () => {
       const r = await store(code);
       expect(r.status, String(code)).toBe(200);
       expect(r.body.store.accepting).toBe(false);
-      expect(r.body.store.partiesWaiting).toBe(0);
+      expect(r.body.store).not.toHaveProperty('partiesWaiting');
       expect(shape(r.body), String(code)).toBe(ref);
     }
   });

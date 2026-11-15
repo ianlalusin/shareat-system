@@ -8,6 +8,7 @@ Cart operations, Money display, request ids and live data loading.
 
 - cart.ts exports Cart, MAX_QTY, emptyCart, setQty, addItem, removeItem, cartCount and toOrderLines.
 - format.ts exports peso; ids.ts exports newId; use-live.ts exports LiveState and useLive.
+- demo-banner.ts exports showDemoBanner(pathname): false on /lobby paths (live), true elsewhere (fixture screens).
 
 ## Invariants
 
