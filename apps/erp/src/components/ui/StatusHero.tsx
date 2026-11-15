@@ -83,8 +83,9 @@ export function StatusHero({ kind, word, step, steps, line, tone, children }: St
             {line}
           </p>
         </div>
+        {/* min-w-0 + a basis: a CheckedForm inside is an inline-size container (no intrinsic width), so the slot must be given one; it wraps under the word on a phone (T-589 B1). */}
         {hasAction && (
-          <div data-status-action className="flex flex-wrap items-end gap-3">
+          <div data-status-action className="flex min-w-0 flex-1 basis-72 flex-wrap items-end justify-end gap-3">
             {children}
           </div>
         )}

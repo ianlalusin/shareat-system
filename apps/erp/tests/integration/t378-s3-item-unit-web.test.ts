@@ -169,7 +169,7 @@ describe('W1 - the item page: a unit form until the item has history, the locked
       // (disabled fieldset) with an "Edit <item> unit" button; Save + Cancel appear after Edit. Find it by that button.
       // T-448: the Edit button is an icon button (aria-label only) OUTSIDE the form, which now sits in a closed <dialog>.
       const pageHtml = await detailHtml(f, id);
-      expect(pageHtml, 'an Edit unit button').toMatch(/<button[^>]*aria-label="Edit [^"]* unit"[^>]*data-tip="Edit"/);
+      expect(pageHtml, 'an Edit unit button').toMatch(/<button[^>]*aria-label="Edit [^"]* unit"[^>]*><svg/);
       const block = formsOf(pageHtml).find((b) => /name="baseUnit"/.test(b));
       expect(block, 'the unit form (with the baseUnit select)').toBeDefined();
       expect(block, 'locked until Edit (A0)').toMatch(/<fieldset disabled/);

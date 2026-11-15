@@ -77,7 +77,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // --- The books. A cashier's own day is theirs; the organisation's ledger is not. -------------
   '/reports/trial-balance': 'view_trial_balance',
   '/reports/income-statement': 'view_financial_reports',
-  '/reports/balance-sheet': 'view_financial_reports',
+  // DEF-867: equals the page's data gate (`reportScope(..., 'view_trial_balance')`); a manager could never see its data.
+  '/reports/balance-sheet': 'view_trial_balance',
   '/reports/cash-flow': 'view_financial_reports',
   '/reports/ap-aging': 'view_financial_reports',
   '/reports/ar-aging': 'view_financial_reports',

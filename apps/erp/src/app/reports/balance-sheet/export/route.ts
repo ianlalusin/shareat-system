@@ -11,6 +11,8 @@ export async function GET(request: Request) {
   const includeYearClose = url.searchParams.get('yearClose') !== 'exclude';
 
   const scope = await reportScope('/reports/balance-sheet', 'view_trial_balance', store);
+
+  if ('refusal' in scope) return new Response('Forbidden', { status: 403 });
   const orgId = scope.actor.orgId;
 
   const result = await runReport(orgId, (tx) =>

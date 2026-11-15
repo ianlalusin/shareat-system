@@ -45,6 +45,8 @@ export default async function SalesRollupPage({
   const sp = await searchParams;
 
   const scope = await reportScope('/reports/sales-rollup', 'view_financial_reports', sp.store);
+
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
   const storeRows = scope.stores;
   const storeId = scope.storeId;
