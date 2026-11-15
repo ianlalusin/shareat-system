@@ -26,6 +26,7 @@ import {
 import { MONEY_ACCOUNT_CODES, accountLabel } from '@/lib/account-label';
 import { withFlash } from '@/lib/flash';
 import { monthName } from '@/lib/format';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Prepaid item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -65,7 +66,7 @@ export default async function PrepaidItemPage({
   return (
     <Page view="detail" density="table">
       <div>
-        <Link href="/prepaid" className="text-sm underline underline-offset-2">
+        <Link href="/prepaid" className={NAV_LINK}>
           ← Prepaid expenses
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{item.name}</h1>

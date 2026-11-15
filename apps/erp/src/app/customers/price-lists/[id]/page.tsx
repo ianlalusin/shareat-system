@@ -10,6 +10,7 @@ import { withFlash } from '@/lib/flash';
 import { Button, FlashBanner, Input, Select, FormModal, DialogActions } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { PRICE_SET_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Price list — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,7 @@ export default async function PriceListPage({
   return (
     <Page view="detail" sectioned density="table">
       <div>
-        <Link href="/customers/price-lists" className="text-sm underline underline-offset-2">
+        <Link href="/customers/price-lists" className={NAV_LINK}>
           ← Price lists
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{list.name}</h1>

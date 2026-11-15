@@ -14,7 +14,7 @@ import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_POS_LINK_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_TENDER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select, Textarea } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'POS link — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -49,7 +49,7 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
     <Page density="table">
       <div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/settings" className={ACTION_LINK}>
+          <a href="/settings" className={NAV_LINK}>
             Settings
           </a>{' '}
           / POS link
@@ -402,7 +402,7 @@ function TendersSection({
       {t.accounts.length === 0 && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           {storeName} has no bank or e-wallet account yet. Add one under{' '}
-          <a href="/money-accounts" className={ACTION_LINK}>
+          <a href="/money-accounts" className={NAV_LINK}>
             Money accounts
           </a>{' '}
           first.

@@ -30,6 +30,7 @@ import { typedFor, type TypedView } from '@/lib/keep-typing';
 import { RECURRING_TEMPLATE_EDIT } from './typed-forms';
 import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
 import { RECURRING_TEMPLATE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Recurring expenses — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -82,7 +83,7 @@ export default async function RecurringExpensesPage({
   return (
     <Page density="table">
       <div>
-        <Link href="/expenses" className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
+        <Link href="/expenses" className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
           ← Expenses
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">Recurring expenses</h1>

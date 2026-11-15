@@ -12,7 +12,7 @@ import {
 } from './lib';
 import type { QueuedDay, ReviewDayRow } from './lib';
 import type { LeaveRow } from '@shareat/domain';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th } from '@/components/ui';
@@ -165,7 +165,7 @@ export default async function AttendanceReviewPage({
         {leave.length === 0 ? (
           <p className="rounded-[20px] border border-dashed border-surface-border p-6 text-center text-sm text-muted">
             No leave in this range. Ask for or decide leave on{' '}
-            <a href="/attendance/leave" className={ACTION_LINK}>
+            <a href="/attendance/leave" className={NAV_LINK}>
               the leave page
             </a>
             .

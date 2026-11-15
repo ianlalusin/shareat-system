@@ -34,7 +34,7 @@ import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { CertificateView } from './CertificateView';
 import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea , FormSection, FormModal, DialogActions} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
-import { ACTION_LINK } from '@/components/action-link';
+import { ACTION_LINK, NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Leave — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -294,7 +294,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
 
           {!managerError && storeId && (
             <p>
-              <a href={`/attendance/leave/export?store=${storeId}&from=${from}&to=${to}`} className={ACTION_LINK}>
+              <a href={`/attendance/leave/export?store=${storeId}&from=${from}&to=${to}`} className={NAV_LINK}>
                 Download this register as CSV
               </a>
             </p>

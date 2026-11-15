@@ -9,6 +9,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, FlashBanner, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Receive a shipment — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,7 @@ export default async function InboundShipmentPage({
   return (
     <Page view="detail" sectioned density="table">
       <div>
-        <Link href="/inventory/deliveries/inbound" className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+        <Link href="/inventory/deliveries/inbound" className={NAV_LINK}>
           ← Shipments to receive
         </Link>
         <h1 className="mt-2 flex items-center gap-3 text-2xl font-semibold">

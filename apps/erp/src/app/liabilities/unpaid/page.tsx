@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { getUnpaidLiabilities, type UnpaidKind, type UnpaidLine, type UnpaidLiabilities } from '@shareat/domain';
 import { accountLabel } from '@/lib/account-label';
-import { ACTION_LINK } from '@/components/action-link';
+import { FILTER_CHIP, FILTER_CHIP_ON } from '@/components/action-link';
 import { peso } from '@/lib/format';
 import { Page } from '@/components/shell/Page';
 import { Badge, Banner, Card, LinkRow, NumTd, RowLink, Table, Td, Th } from '@/components/ui';
@@ -30,7 +30,6 @@ export default async function UnpaidPage({ searchParams }: { searchParams: Promi
   const today = toBusinessDate();
   const storeName = (id: string | null): string =>
     id === null ? 'No store' : (scope.stores.find((s) => s.id === id)?.name ?? 'Another store');
-  const currentStore = scope.storeId ? storeName(scope.storeId) : 'All stores';
 
   return (
     <Page
@@ -38,15 +37,14 @@ export default async function UnpaidPage({ searchParams }: { searchParams: Promi
       title="Everything unpaid"
       description="What the business still owes, grouped by kind. This page only shows figures; it changes nothing."
     >
-      <nav aria-label="Store" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <span className="text-muted">{currentStore}</span>
+      <nav aria-label="Store" className="flex flex-wrap items-center gap-2 text-sm">
         {scope.coversWholeOrg && (
-          <Link href="/liabilities/unpaid" className={ACTION_LINK}>
+          <Link href="/liabilities/unpaid" aria-current={scope.storeId ? undefined : 'page'} className={scope.storeId ? FILTER_CHIP : FILTER_CHIP_ON}>
             All stores
           </Link>
         )}
         {scope.stores.map((s) => (
-          <Link key={s.id} href={`/liabilities/unpaid?store=${s.id}`} className={ACTION_LINK}>
+          <Link key={s.id} href={`/liabilities/unpaid?store=${s.id}`} aria-current={scope.storeId === s.id ? 'page' : undefined} className={scope.storeId === s.id ? FILTER_CHIP_ON : FILTER_CHIP}>
             {s.name}
           </Link>
         ))}

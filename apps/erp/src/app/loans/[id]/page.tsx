@@ -12,6 +12,7 @@ import { withFlash } from '@/lib/flash';
 import { Button, ConfirmDestructive, FlashBanner, FormModal, Input, Select, statusLabel, DialogActions } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REPAYMENT_RULES, LOAN_REVERSE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Loan — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -50,7 +51,7 @@ export default async function LoanPage({
   return (
     <Page view="detail" density="table">
       <div>
-        <Link href="/loans" className="text-sm underline underline-offset-2">
+        <Link href="/loans" className={NAV_LINK}>
           ← Loans
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{loan.name}</h1>

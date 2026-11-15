@@ -11,6 +11,7 @@ import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/dat
 import { Button, ConfirmDestructive, Field, FlashBanner, Input, LinkRow, RowLink, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_POS_VOID_RULES, INVENTORY_USAGE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -52,7 +53,7 @@ export default async function UsageRecordPage({
   return (
     <Page view="detail" sectioned density="table">
       <div>
-        <Link href={`/inventory/usage?store=${record.storeId}`} className="text-sm underline underline-offset-4">
+        <Link href={`/inventory/usage?store=${record.storeId}`} className={NAV_LINK}>
           ← Usage &amp; wastage
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">
@@ -172,7 +173,7 @@ export default async function UsageRecordPage({
         </CheckedForm>
       )}
 
-      <Link href={`/inventory?store=${record.storeId}`} className="inline-block text-sm underline underline-offset-4">
+      <Link href={`/inventory?store=${record.storeId}`} className={NAV_LINK}>
         View stock on hand →
       </Link>
     </Page>

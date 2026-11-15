@@ -13,6 +13,7 @@ import { withFlash } from '@/lib/flash';
 import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
 import { COUNT_LINE } from '../typed-forms';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Count sheet — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -127,7 +128,7 @@ export default async function CountSessionPage({
   return (
     <Page view="detail" sectioned density="table">
       <div>
-        <Link href={`/inventory/counts?store=${detail.storeId}`} className="text-sm underline underline-offset-4">
+        <Link href={`/inventory/counts?store=${detail.storeId}`} className={NAV_LINK}>
           ← Physical counts
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">

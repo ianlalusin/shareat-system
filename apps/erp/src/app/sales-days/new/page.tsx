@@ -12,6 +12,7 @@ import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Button, FlashBanner, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'New sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -53,7 +54,7 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
       <div>
         <a
           href={`/sales-days?${carry.toString()}`}
-          className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400"
+          className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}
         >
           ← All sales days
         </a>

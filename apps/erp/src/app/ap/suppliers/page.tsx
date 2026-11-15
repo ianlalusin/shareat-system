@@ -16,7 +16,7 @@ import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, In
 import { CheckedForm } from '@/components/forms';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { SUPPLIER_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { createSupplierAction } from '../actions';
 
 export const metadata = { title: 'Suppliers — Shareat System' };
@@ -65,7 +65,7 @@ export default async function SuppliersPage({
           </PageDescription>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/ap" className={ACTION_LINK}>← Payables</Link>
+          <Link href="/ap" className={NAV_LINK}>← Payables</Link>
           {/* T-448: suppliers change rarely, so adding one is a header action, not a form on the invoices page. */}
           <FormModal trigger="+ Add supplier" title="Add a supplier" size="md">
             <CheckedForm rules={SUPPLIER_ADD_RULES} action={createSupplierAction} className="space-y-3">

@@ -11,6 +11,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, FlashBanner, FormModal, LinkRow, RowLink, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Trade orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,7 +46,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
     <Page density="table">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Trade orders</h1>
-        <Link href="/trade/returns" className="text-sm underline underline-offset-4">
+        <Link href="/trade/returns" className={NAV_LINK}>
           Customer returns →
         </Link>
       </div>

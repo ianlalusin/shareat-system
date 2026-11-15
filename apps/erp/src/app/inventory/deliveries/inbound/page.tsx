@@ -7,6 +7,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, FlashBanner, LinkRow, RowLink } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Shipments to receive — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,7 @@ export default async function InboundShipmentsPage({
             amount you owe the sender is recorded in your own books.
           </PageDescription>
         </div>
-        <Link href="/inventory/deliveries" className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+        <Link href="/inventory/deliveries" className={NAV_LINK}>
           ← Deliveries
         </Link>
       </div>
@@ -41,11 +42,11 @@ export default async function InboundShipmentsPage({
 
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
         {showVoid ? (
-          <Link href="/inventory/deliveries/inbound" className="inline-flex min-h-6 items-center underline underline-offset-4">
+          <Link href="/inventory/deliveries/inbound" className={NAV_LINK}>
             Hide cancelled shipments
           </Link>
         ) : (
-          <Link href="/inventory/deliveries/inbound?void=1" className="inline-flex min-h-6 items-center underline underline-offset-4">
+          <Link href="/inventory/deliveries/inbound?void=1" className={NAV_LINK}>
             Show cancelled shipments
           </Link>
         )}

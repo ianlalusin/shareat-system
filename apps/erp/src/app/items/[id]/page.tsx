@@ -27,6 +27,7 @@ import { Page } from '@/components/shell/Page';
 import { EditableRecord, RecordSummary } from '@/components/forms';
 import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select, SplitWorkspace, statusLabel } from '@/components/ui';
 import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -112,7 +113,7 @@ export default async function ItemDetailPage({
   return (
     <Page view="detail" density="table">
       <div>
-        <a data-screen-return href="/items" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
+        <a data-screen-return href="/items" className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
           ← Items
         </a>
         <h1 className="mt-1 text-2xl font-semibold">{item.name}</h1>

@@ -23,6 +23,7 @@ import {
 } from './actions';
 import { loadPricesPage, storesInScope, withOrgPrincipal, type DaypartView, type PricesPageData, type ScheduledOffer } from '../lib';
 import { dayName, time12, windowText } from '../daypart-text';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Menu prices - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -116,7 +117,7 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
             time (Manila time). An online price can follow the store price by a rule, so it moves when the store price moves.
           </PageDescription>
         </div>
-        <Link href="/menu" className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+        <Link href="/menu" className={NAV_LINK}>
           Back to the menu
         </Link>
       </div>
@@ -145,7 +146,7 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
             <p className="text-sm text-muted">Only a super admin can change which prices belong to menu hours. You can still change a price.</p>
           )}
           {canHours && (
-            <Link href={`/menu/hours?store=${store.id}`} className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+            <Link href={`/menu/hours?store=${store.id}`} className={NAV_LINK}>
               Change the menu hours
             </Link>
           )}

@@ -5,6 +5,7 @@ import { scorecardFor, scorecardRange } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner } from '@/components/ui';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Responsiveness scorecard — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,7 @@ export default async function ScorecardPage() {
   return (
     <Page density="wide">
       <div>
-        <Link href="/findings" className="text-sm underline underline-offset-2">
+        <Link href="/findings" className={NAV_LINK}>
           ← Findings
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">Responsiveness scorecard</h1>

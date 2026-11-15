@@ -23,7 +23,7 @@ import { PLATFORM_SALES_EDIT } from '../typed-forms';
 import { DraftMark, DraftMemory, DraftSettle } from '../DraftMemory';
 import { CheckedForm, EditableRecord, FieldCheck, RuleCheck } from '@/components/forms';
 import { SALES_DAY_CORRECTION_RULES, SALES_DAY_EDIT_RULES, SALES_DAY_VOID_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input } from '@/components/ui';
 
 export const metadata = { title: 'Sales day — Shareat System' };
@@ -169,7 +169,7 @@ export default async function SalesDayDetailPage({
         <div>
           <a
             href={`/sales-days?${carry.toString()}`}
-            className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400"
+            className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}
           >
             ← All sales days
           </a>
@@ -204,7 +204,7 @@ export default async function SalesDayDetailPage({
           <strong>Yesterday&apos;s usage not posted.</strong> {unpostedUsage} usage {unpostedUsage === 1 ? 'draft is' : 'drafts are'} still waiting for
           a manager. Check each line against what POS says was sold, then post it. If nobody does, a draft made from POS sales is posted at
           the expected quantity at 2:00 p.m. the next day. This does not stop the day from being submitted or verified.{' '}
-          <a href={`/inventory/usage?store=${day.storeId}`} className={ACTION_LINK}>
+          <a href={`/inventory/usage?store=${day.storeId}`} className={NAV_LINK}>
             Open the usage queue →
           </a>
         </Banner>

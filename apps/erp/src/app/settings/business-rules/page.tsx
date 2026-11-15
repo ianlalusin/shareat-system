@@ -7,7 +7,7 @@ import { FLAG_OPTIONS, fromWords, inputValue, madeOn, rulesView, sharedDayWinner
 import { BUSINESS_RULE_EDIT, ruleRecordId } from './typed-forms';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { EditableRecord } from '@/components/forms';
 import { Badge, Field, FlashBanner, FormGrid, Input, Select, Textarea } from '@/components/ui';
 import { SETTINGS_BUSINESS_RULE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -39,7 +39,7 @@ export default async function BusinessRulesPage({ searchParams }: { searchParams
     <Page density="table" className="space-y-8">
       <div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/settings" className={ACTION_LINK}>
+          <a href="/settings" className={NAV_LINK}>
             Settings
           </a>{' '}
           / Business rules

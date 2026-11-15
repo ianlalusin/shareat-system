@@ -19,6 +19,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { LOCATION_EDIT } from './typed-forms';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Stock locations — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -71,7 +72,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
             The rooms where this store keeps stock, such as Stockroom, Kitchen and Receiving.
           </PageDescription>
         </div>
-        <Link href="/inventory" className="text-sm underline underline-offset-4">
+        <Link href="/inventory" className={NAV_LINK}>
           ← Stock on hand
         </Link>
       </div>

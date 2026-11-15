@@ -15,6 +15,7 @@ import { withFlash } from '@/lib/flash';
 import { payableFloatsForStore } from '@/lib/money-lines/load';
 import { typedFor } from '@/lib/keep-typing';
 import { SUPPLIER_EDIT } from '../../typed-forms';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Supplier — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -78,7 +79,7 @@ export default async function SupplierDetailPage({
     <Page view="detail" sectioned density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <a href="/ap/suppliers" className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
+          <a href="/ap/suppliers" className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
             ← Suppliers
           </a>
           <h1 className="mt-1 text-2xl font-semibold">{supplier.name}</h1>

@@ -29,6 +29,7 @@ import { CheckedForm } from '@/components/forms';
 import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';
 import { ChevronIcon } from '@/components/shell/icons';
 import { FINDINGS_MISSED_MONTH_RULES, FINDINGS_MISSING_PERIOD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Findings — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -83,7 +84,7 @@ export default async function FindingsPage({
           <h1 className="text-2xl font-semibold">Findings</h1>
           {/* ⚠️ Linked, not orphaned. DEF-139 and DEF-181 were both screens reachable only by
               typing the URL — a link is part of shipping. */}
-          <Link href="/findings/scorecard" className="text-sm underline underline-offset-2">
+          <Link href="/findings/scorecard" className={NAV_LINK}>
             Responsiveness scorecard →
           </Link>
         </div>

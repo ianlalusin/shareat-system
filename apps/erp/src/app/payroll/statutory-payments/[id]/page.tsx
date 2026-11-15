@@ -8,7 +8,7 @@ import { agencyLabel, moneyAccountNameFor, monthWords, paymentFor, storeNamesFor
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { Badge, Banner, ConfirmDestructive, FlashBanner, Input, NumTd, Table, Td, Th } from '@/components/ui';
 
 export const metadata = { title: 'Government payment — Shareat System' };
@@ -60,7 +60,7 @@ export default async function StatutoryPaymentPage({
     <Page view="detail" sectioned density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Link href="/payroll/statutory-payments" className={ACTION_LINK}>
+          <Link href="/payroll/statutory-payments" className={NAV_LINK}>
             ← All government payments
           </Link>
           <h1 className="mt-1 text-2xl font-semibold">
@@ -90,7 +90,7 @@ export default async function StatutoryPaymentPage({
           {payment.notes ? <Fact label="Notes">{payment.notes}</Fact> : null}
           {payment.journalEntryId ? (
             <Fact label="Ledger entry">
-              <Link href={`/reports/journal-lines?entry=${payment.journalEntryId}`} className={ACTION_LINK}>
+              <Link href={`/reports/journal-lines?entry=${payment.journalEntryId}`} className={NAV_LINK}>
                 See the journal entry
               </Link>
             </Fact>

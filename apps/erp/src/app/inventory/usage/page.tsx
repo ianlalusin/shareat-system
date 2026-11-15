@@ -5,7 +5,7 @@ import { requireSession } from '../../../lib/session';
 import { saveUsageDraftAction } from './actions';
 import { listStores, usageQueueData, usageScreenData } from './lib';
 import { NewUsageForm } from './NewUsageForm';
-import { ACTION_LINK } from '@/components/action-link';
+import { ACTION_LINK, NAV_LINK } from '@/components/action-link';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -68,7 +68,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
             only step that moves stock and hits the books.
           </PageDescription>
         </div>
-        <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
+        <Link href={`/inventory?store=${storeId}`} className={NAV_LINK}>
           ← Stock on hand
         </Link>
       </div>
@@ -213,7 +213,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
         <Banner tone="warning">
           This store has no active operating room yet — a usage can only be recorded from one. Add
           one under{' '}
-          <Link href={`/inventory/locations?store=${storeId}`} className="text-sm underline underline-offset-4">
+          <Link href={`/inventory/locations?store=${storeId}`} className={NAV_LINK}>
             Locations
           </Link>
           .

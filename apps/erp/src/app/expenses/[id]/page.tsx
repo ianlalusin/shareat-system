@@ -24,6 +24,7 @@ import { invoicePartsView } from '../parts-view';
 import { EXPENSE_APPROVE_RULES, EXPENSE_DRAFT_EDIT_RULES, EXPENSE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { accountCodeAndName } from '@/lib/account-label';
 import { Badge, Button, CardGrid, ConfirmDestructive, Field, FlashBanner, FormGrid, Input } from '@/components/ui';
+import { NAV_LINK } from '@/components/action-link';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
@@ -149,7 +150,7 @@ export default async function ExpenseDetailPage({
     <Page view="detail" sectioned density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <a href={`/expenses?${carry}`} className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
+          <a href={`/expenses?${carry}`} className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
             ← All expenses
           </a>
           <h1 className="mt-1 text-2xl font-semibold">{expense.particulars}</h1>

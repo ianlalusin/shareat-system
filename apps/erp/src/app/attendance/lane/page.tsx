@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { NAV_LINK } from '@/components/action-link';
 import type { LaneHealthReport, QuarantineView } from '@shareat/domain';
 import { LANE_HEALTH } from '@shareat/domain';
 import { requireSession } from '../../../lib/session';
@@ -188,7 +189,7 @@ export default async function LanePage({
       )}
 
       <p className="text-xs text-neutral-500 dark:text-neutral-500">
-        <Link href="/" className="underline">
+        <Link href="/" className={NAV_LINK}>
           Back
         </Link>{' '}
         · Read at {when(now)}

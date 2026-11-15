@@ -31,7 +31,7 @@ import {
 import { arrangeFamilies } from './family';
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import Link from 'next/link';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 import { Banner, Button, Checkbox, DialogActions, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, FormModal, statusLabel } from '@/components/ui';
@@ -77,7 +77,7 @@ export default async function ItemsPage({
         </div>
         <div className="flex flex-wrap items-center gap-4">
         {/* T-502 S4: the admin's CSV import; shown only to those who hold approve_item_request (the page and the domain refuse everyone else). */}
-        {canImport && <Link href="/items/import" className={ACTION_LINK}>Import items from a file</Link>}
+        {canImport && <Link href="/items/import" className={NAV_LINK}>Import items from a file</Link>}
         <FormModal
           trigger="+ Request item"
           title="Request a new item"

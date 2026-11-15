@@ -10,6 +10,7 @@ import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { Banner, Button, ConfirmDestructive, Field, FlashBanner, Input, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_PRODUCTION_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Production record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,7 @@ export default async function ProductionRecordPage({
             <span className="font-medium">{statusLabel(record.status)}</span>
           </PageDescription>
         </div>
-        <Link href="/inventory/production" className="text-sm underline underline-offset-4">
+        <Link href="/inventory/production" className={NAV_LINK}>
           ← Production
         </Link>
       </div>

@@ -18,6 +18,7 @@ import {
 } from './actions';
 import { ITEM_REQUEST } from './typed-forms';
 import { confirmTokenFor, listActiveItemNames, listCategories, myRequests, openRequests, storesInScope, withOrgPrincipal, type RequestRow } from '../lib';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Item requests - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -85,7 +86,7 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
           </PageDescription>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/menu" className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+          <Link href="/menu" className={NAV_LINK}>
             Back to the menu
           </Link>
           {stores.length > 0 && (

@@ -6,7 +6,7 @@ import { requirePageAccess } from '../../../../lib/page-access';
 import { agencyLabel, isAgency, isMonthStart, monthDetailFor, monthWords, storeNamesFor } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { Badge, Banner, LinkRow, NumTd, RowLink, Table, Td, Th } from '@/components/ui';
 
 export const metadata = { title: 'Government payments by month — Shareat System' };
@@ -41,7 +41,7 @@ export default async function StatutoryMonthPage({ searchParams }: { searchParam
   return (
     <Page density="table" className="space-y-6">
       <div>
-        <Link href="/payroll/statutory-payments" className={ACTION_LINK}>
+        <Link href="/payroll/statutory-payments" className={NAV_LINK}>
           ← All government payments
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">
@@ -71,7 +71,7 @@ export default async function StatutoryMonthPage({ searchParams }: { searchParam
       )}
 
       <div>
-        <a href={csv} className={ACTION_LINK}>
+        <a href={csv} className={NAV_LINK}>
           Download as CSV
         </a>
       </div>

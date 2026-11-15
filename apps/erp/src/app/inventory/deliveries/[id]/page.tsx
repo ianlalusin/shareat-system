@@ -26,6 +26,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { PhotoThumb } from '@/components/upload/PhotoThumb';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Delivery — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -81,7 +82,7 @@ export default async function DeliveryPage({
   return (
     <Page view="detail" sectioned density="table">
       <div>
-        <Link href={`/inventory/deliveries?store=${doc.storeId}`} className="text-sm underline underline-offset-4">
+        <Link href={`/inventory/deliveries?store=${doc.storeId}`} className={NAV_LINK}>
           ← Deliveries
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">
@@ -241,7 +242,7 @@ export default async function DeliveryPage({
         </dl>
       )}
 
-      <Link href={`/inventory?store=${doc.storeId}`} className="inline-block text-sm underline underline-offset-4">
+      <Link href={`/inventory?store=${doc.storeId}`} className={NAV_LINK}>
         View stock on hand →
       </Link>
     </Page>

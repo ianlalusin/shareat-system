@@ -21,6 +21,7 @@ import { withFlash } from '@/lib/flash';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, Input, Select, Textarea } from '@/components/ui';
 import { typedFor } from '@/lib/keep-typing';
 import { ASSET_IN_SERVICE_EDIT, ASSET_TERMS_EDIT } from '../typed-forms';
+import { NAV_LINK } from '@/components/action-link';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,7 +85,7 @@ export default async function AssetDetailPage({
     <Page view="detail" density="table">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <a href={`/fixed-assets?${carry.toString()}`} className="text-sm underline hover:no-underline">
+          <a href={`/fixed-assets?${carry.toString()}`} className={NAV_LINK}>
             ← Fixed assets
           </a>
           <h1 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-semibold">

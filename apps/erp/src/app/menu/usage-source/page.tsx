@@ -12,6 +12,7 @@ import { Badge, Banner, Button, Checkbox, Field, FlashBanner, FormGrid, Input, S
 import { linkItemAction, seedLinkAction, switchSourceAction, unlinkItemAction } from './actions';
 import { loadUsageSourcePage, type UsageSourcePageData } from './lib';
 import { storesInScope, withOrgPrincipal } from '../lib';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Where stock usage comes from - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -59,7 +60,7 @@ export default async function UsageSourcePage({ searchParams }: { searchParams: 
             compare the two, then switch. You can switch back at any time.
           </PageDescription>
         </div>
-        <Link href="/menu" className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+        <Link href="/menu" className={NAV_LINK}>
           Back to the menu
         </Link>
       </div>
@@ -253,7 +254,7 @@ function Compare({ data, storeId, canSwitch }: { data: UsageSourcePageData; stor
       <p className="text-sm text-muted">
         Compare checks the last 7 days both ways, with the POS item maps and with the menu rules, and lists every difference. It changes nothing.
       </p>
-      <Link href={`/menu/usage-source?store=${storeId}&compare=1`} className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+      <Link href={`/menu/usage-source?store=${storeId}&compare=1`} className={NAV_LINK}>
         Compare now
       </Link>
       {cmp && (
