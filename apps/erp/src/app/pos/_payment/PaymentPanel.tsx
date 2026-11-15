@@ -13,6 +13,7 @@ import { nativeAttrs, POS_STATUTORY_HOLDER_RULES, rulesOf } from '@shareat/domai
 import type { PricedSession } from '@shareat/domain/pos/price';
 import { peso } from '@/lib/format';
 import type { NewPosEvent } from '@/lib/pos-device';
+import { receiptHeaderOf } from '@/lib/pos-print/header';
 import { printAmount } from '@/lib/pos-print/layout';
 import type { PrintLayout, ReceiptView } from '@/lib/pos-print/types';
 import { AmountPad } from './AmountPad';
@@ -54,6 +55,8 @@ export interface PaymentPanelProps {
   vatRegistered: boolean;
   terminalNo: number;
   storeName: string;
+  /** T-585: the issuer identity from the snapshot; absent in an old cached one. */
+  identity?: unknown;
   cashierName: string;
   personId: string;
   online: boolean;
@@ -339,7 +342,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
       layout: p.layout,
       copies: p.copies,
       receipt: {
-        header: { businessName: p.storeName, addressLines: [], tin: null, vatRegistered: p.vatRegistered },
+        header: receiptHeaderOf({ name: p.storeName, vatRegistered: p.vatRegistered, identity: p.identity }),
         tableLabel: p.isTakeOut ? null : p.label,
         heads: p.isTakeOut ? null : p.heads,
         cashierName: p.cashierName,
