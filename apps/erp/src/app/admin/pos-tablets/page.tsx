@@ -123,7 +123,7 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
               )}
               <FormGrid layout="fields">
                 <Field label="Device id" width="full" span="full" rule={POS_TABLET_REGISTER_RULES.deviceId}>
-                  <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.deviceId)} placeholder="Paste from the tablet: Settings, Terminal, Copy" autoComplete="off" />
+                  <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.deviceId)} className="w-full" placeholder="Paste from the tablet: Settings, Terminal, Copy" autoComplete="off" />
                 </Field>
                 <Field label="Terminal number (1 to 99)" width="name" rule={POS_TABLET_REGISTER_RULES.terminalNo}>
                   <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.terminalNo)} defaultValue="1" />
