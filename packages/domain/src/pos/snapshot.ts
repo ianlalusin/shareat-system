@@ -22,7 +22,7 @@ export const NO_TILL_NUMBER = 'This tablet has no till number yet. Ask a manager
 
 export interface PosSnapshot {
   body: {
-    store: { storeId: string; name: string; mode: string; terminalNo: number; vatRegistered: boolean; receiptPaperMm: number; receiptCopies: number };
+    store: { storeId: string; name: string; mode: string; terminalNo: number; vatRegistered: boolean; receiptPaperMm: number; receiptCopies: number; legalName: string | null; tin: string | null; address: string };
     menu: Awaited<ReturnType<typeof loadStoreMenu>>;
     stands: { id: string; number: number }[];
     tenders: { id: string; name: string; kind: string }[];
@@ -44,6 +44,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
   const terminal = await posV2Repo.getTerminalForPairing(tx, orgId, storeId, pairingId);
   if (!terminal) throw refuse('pos: pairing has no terminal', NO_TILL_NUMBER);
   const storeRow = await storesRepo.getById(tx, orgId, storeId);
+  const orgIdentity = await posV2Repo.getOrgIdentity(tx, orgId);
   const menu = await loadStoreMenu(tx, orgId, storeId, undefined, { showWithdrawnStore: true }); // T-527b: a sold-out dish stays on the tablet, greyed (row 307)
   const businessDate = await businessDateOf(tx, orgId, storeId, deps);
   const rules = await readRules(tx, orgId, businessDate, deps);
@@ -59,7 +60,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
   }
 
   const body: PosSnapshot['body'] = {
-    store: { storeId, name: storeRow?.name ?? '', mode: store.mode, terminalNo: terminal.terminalNo, receiptPaperMm: terminal.receiptPaperMm, receiptCopies: terminal.receiptCopies, vatRegistered: (await posV2Repo.getOrgTaxType(tx, orgId)) === 'vat' }, // T-528 R1: the tablet prices with the org's own VAT status
+    store: { storeId, name: storeRow?.name ?? '', mode: store.mode, terminalNo: terminal.terminalNo, receiptPaperMm: terminal.receiptPaperMm, receiptCopies: terminal.receiptCopies, vatRegistered: (await posV2Repo.getOrgTaxType(tx, orgId)) === 'vat', legalName: orgIdentity?.legalName ?? null, tin: orgIdentity?.tin ?? null, address: storeRow?.address ?? '' }, // T-528 R1: the tablet prices with the org's own VAT status
     menu,
     stands: (await posV2Repo.listActiveStands(tx, orgId, storeId)).map((s) => ({ id: s.id, number: s.number })),
     tenders: (await posV1Repo.listTendersByStore(tx, orgId, storeId)).filter((t) => t.isActive).map((t) => ({ id: t.id, name: t.name, kind: t.kind })),

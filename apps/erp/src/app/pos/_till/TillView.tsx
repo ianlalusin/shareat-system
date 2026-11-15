@@ -17,7 +17,7 @@ interface Props {
   reading: ReadingJson;
   history: TillHistoryRow[];
   isManager: boolean;
-  store: { name: string; vatRegistered: boolean; receiptPaperMm: 58 | 80; receiptCopies: number };
+  store: { name: string; legalName: string | null; tin: string | null; address: string; vatRegistered: boolean; receiptPaperMm: 58 | 80; receiptCopies: number };
   cashierName: string;
   tillCountsHref: string;
 }
@@ -38,7 +38,7 @@ export function TillView({ reading, history, isManager, store, cashierName, till
       const { json } = await post('/api/pos/day-close', body);
       if (json.ok !== true) return failed(json, 'The day could not be closed.');
       const r = json as unknown as { dayCloseId: string; zNo: number; businessDate: string; reading: ReadingJson; closedByName: string; approvedByName: string };
-      const slip = formatZSlip(zSlipView(r.reading, { storeName: store.name, vatRegistered: store.vatRegistered, printedBy: r.closedByName }, { zNo: r.zNo, businessDate: r.businessDate, approvedBy: r.approvedByName, reprint: false }), layout);
+      const slip = formatZSlip(zSlipView(r.reading, { storeName: store.name, legalName: store.legalName, tin: store.tin, address: store.address, vatRegistered: store.vatRegistered, printedBy: r.closedByName }, { zNo: r.zNo, businessDate: r.businessDate, approvedBy: r.approvedByName, reprint: false }), layout);
       router.refresh();
       return { ok: true, dayCloseId: r.dayCloseId, zNo: r.zNo, slip };
     },

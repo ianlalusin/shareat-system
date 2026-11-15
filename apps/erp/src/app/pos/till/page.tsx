@@ -36,8 +36,9 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
     const me = await personsRepo.getPersonById(tx, actor.orgId, actor.personId);
     const isManager = isStoreManagerOrAbove((await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId))?.role) && (await can(tx, actor, 'approve_pos_correction', at));
     const taxType = await posV2Repo.getOrgTaxType(tx, actor.orgId);
+    const orgIdentity = await posV2Repo.getOrgIdentity(tx, actor.orgId);
     const till = await posV2Repo.getTerminalForPairing(tx, actor.orgId, storeId, pairing.pairingId);
-    return { storeId, reading, closes, receiptPaperMm: till?.receiptPaperMm === 80 ? (80 as const) : (58 as const), receiptCopies: till?.receiptCopies ?? 1, storeName: store?.name ?? 'Store', vatRegistered: taxType === 'vat', cashierName: me?.displayName?.trim() || 'Signed in', isManager };
+    return { storeId, reading, closes, receiptPaperMm: till?.receiptPaperMm === 80 ? (80 as const) : (58 as const), receiptCopies: till?.receiptCopies ?? 1, storeName: store?.name ?? 'Store', legalName: orgIdentity?.legalName ?? null, tin: orgIdentity?.tin ?? null, address: store?.address ?? '', vatRegistered: taxType === 'vat', cashierName: me?.displayName?.trim() || 'Signed in', isManager };
   });
   if (!data) {
     return (
@@ -48,7 +49,7 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
   }
 
   const print = printSettingsOf({ receiptPaperMm: data.receiptPaperMm, receiptCopies: data.receiptCopies });
-  const ctx = { storeName: data.storeName, vatRegistered: data.vatRegistered, printedBy: data.cashierName };
+  const ctx = { storeName: data.storeName, legalName: data.legalName, tin: data.tin, address: data.address, vatRegistered: data.vatRegistered, printedBy: data.cashierName };
   const history = data.closes.map((c) => ({
     id: c.id,
     zNo: c.zNo,
@@ -64,7 +65,7 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
         reading={JSON.parse(JSON.stringify(data.reading)) as ReadingJson}
         history={history}
         isManager={data.isManager}
-        store={{ name: data.storeName, vatRegistered: data.vatRegistered, receiptPaperMm: data.receiptPaperMm, receiptCopies: data.receiptCopies }}
+        store={{ name: data.storeName, legalName: data.legalName, tin: data.tin, address: data.address, vatRegistered: data.vatRegistered, receiptPaperMm: data.receiptPaperMm, receiptCopies: data.receiptCopies }}
         cashierName={data.cashierName}
         tillCountsHref={`/till?store=${encodeURIComponent(data.storeId)}`}
       />

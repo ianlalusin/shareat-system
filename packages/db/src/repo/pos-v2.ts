@@ -192,6 +192,13 @@ export async function getOrgTaxType(tx: Tx, orgId: string): Promise<string | und
   return (res as unknown as { tax_type: string }[])[0]?.tax_type;
 }
 
+/** The organization's registered identity for a document header: legal name and TIN (null while unset). */
+export async function getOrgIdentity(tx: Tx, orgId: string): Promise<{ legalName: string | null; tin: string | null } | undefined> {
+  const res = await tx.execute(sql`select legal_name, tin from organizations where id = ${orgId}`);
+  const row = (res as unknown as { legal_name: string | null; tin: string | null }[])[0];
+  return row ? { legalName: row.legal_name, tin: row.tin } : undefined;
+}
+
 export async function insertSession(
   tx: Tx,
   row: {

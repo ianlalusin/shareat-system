@@ -47,7 +47,7 @@ const body = (store: Record<string, unknown> = {}): Record<string, unknown> => (
 describe('paymentPartOf: the cached snapshot must carry the till\'s printer settings', () => {
   it('a current snapshot gives store.receiptPaperMm and store.receiptCopies as sent', async () => {
     const { paymentPartOf } = await part();
-    expect(paymentPartOf(body({ receiptPaperMm: 80, receiptCopies: 2 }))?.store).toEqual({ storeId: id(1), name: 'Lipa', terminalNo: 2, vatRegistered: true, receiptPaperMm: 80, receiptCopies: 2 });
+    expect(paymentPartOf(body({ receiptPaperMm: 80, receiptCopies: 2 }))?.store).toEqual({ storeId: id(1), name: 'Lipa', terminalNo: 2, vatRegistered: true, receiptPaperMm: 80, receiptCopies: 2, legalName: null, tin: null, address: '' });
     expect(paymentPartOf(body())?.store).toMatchObject({ receiptPaperMm: 58, receiptCopies: 1 });
   });
 
