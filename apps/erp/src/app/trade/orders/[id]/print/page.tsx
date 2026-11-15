@@ -3,8 +3,9 @@ import { notFound } from 'next/navigation';
 import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../../../lib/session';
-import { deliveryReceiptData, peso } from '../../lib';
-import { ACTION_LINK } from '@/components/action-link';
+import { deliveryReceiptData, orderDetail, peso } from '../../lib';
+import { receiptRefusal } from './refusal';
+import { NAV_LINK } from '@/components/action-link';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Delivery receipt — Shareat System' };
@@ -18,14 +19,30 @@ export const dynamic = 'force-dynamic';
  * official invoice is the BIR booklet the business already uses (bible row 75: this system never issues one); the booklet's
  * number, when someone noted it, is printed here for reference only.
  *
- * Anyone without `approve_buyer` or `record_ar_collection` at the order's store, a draft or void order and a branch
- * transfer all get the same 404 (`deliveryReceiptData` returns null for each).
+ * Anyone without `approve_buyer` or `record_ar_collection` at the order's store, and an id that is not theirs to open, get a
+ * 404. T-589 B4b: a person who CAN open the order but whose order has no receipt (a draft, a void order, a branch
+ * transfer) gets a plain message and a link back instead (`receiptRefusal`).
  */
 export default async function DeliveryReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { actor } = await requireSession(`/trade/orders/${id}/print`);
   const data = await deliveryReceiptData(actor, id);
-  if (!data) notFound();
+  if (!data) {
+    // T-589 B4b: someone who can open the order is told why it has no receipt; a forged id, another org's order, or a person
+    // without the right still get the same 404 as before.
+    const seen = await orderDetail(actor, id);
+    const why = seen ? receiptRefusal(seen.order) : null;
+    if (!seen || !why) notFound();
+    return (
+      <Page density="table">
+        <Link href={`/trade/orders/${seen.order.id}`} className={NAV_LINK}>
+          ← Back to the order
+        </Link>
+        <h1 className="mt-1 text-xl font-semibold">Nothing to print</h1>
+        <p className="mt-2 text-sm" role="status">{why}</p>
+      </Page>
+    );
+  }
   const { detail, paid, balanceDue, accountBalance, printedAt } = data;
   const { order, lines, customer, sellingStore } = detail;
   const goods = add(...lines.map((l) => money(l.lineTotal)));
@@ -42,7 +59,7 @@ export default async function DeliveryReceiptPage({ params }: { params: Promise<
       `}</style>
 
       <div className="no-print">
-        <Link href={`/trade/orders/${order.id}`} className={`${ACTION_LINK} text-neutral-500 dark:text-neutral-400`}>
+        <Link href={`/trade/orders/${order.id}`} className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
           ← Back to the order
         </Link>
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Print this page (Ctrl+P). Navigation is hidden on paper.</p>

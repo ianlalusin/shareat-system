@@ -20,3 +20,16 @@
  */
 export const ACTION_LINK =
   'inline-flex items-center py-2 -my-2 text-xs underline underline-offset-2';
+
+/**
+ * T-589 B4b. A link that is NAVIGATION (a "Back to ..." link, a sub-page link) rather than a word inside a sentence:
+ * a full 44px tap target (`min-h-11`), same quiet underlined look. Do not use it inside a paragraph - `inline-flex`
+ * would break the line; keep the bare underlined `<a>` there.
+ */
+export const NAV_LINK = 'inline-flex min-h-11 items-center text-sm underline underline-offset-4';
+
+/** T-589 B4b. A filter that is a link (the list reloads with `?what=...`): a 44px chip, filled when it is the one in force. */
+export const FILTER_CHIP =
+  'inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-medium text-ink hover:bg-canvas';
+export const FILTER_CHIP_ON =
+  'inline-flex min-h-11 items-center rounded-[12px] border border-ink bg-ink px-4 text-sm font-semibold text-canvas';
