@@ -34,8 +34,8 @@ const rel = (f: string) => relative(APP_ROOT, f).replace(/\\/g, '/');
 
 /** Files whose raw record-bound form is deliberate. Each needs a reason. Empty at the end of S3b. */
 const EXEMPT: Record<string, string> = {
-  // T-546 (BOSS approved): the Tills table. One small settings row per till (its tablet; its paper and copies), each saved on its own with one click and audited; locking a row behind Edit would add a tap to a two-control setting.
-  'admin/pos-tablets/TillsSection.tsx': 'T-546: per-till settings rows saved one at a time, not an edit-in-place record',
+  // T-546 (BOSS approved): the Cash registers cards (T-582; were a table). One small settings block per cash register (its tablet; its paper and copies), each saved on its own with one click and audited; locking a block behind Edit would add a tap to a two-control setting.
+  'admin/pos-tablets/TillsSection.tsx': 'T-546: per-cash-register settings blocks saved one at a time, not an edit-in-place record',
   // T-193 S5: an add form (hidden request id and hidden month/agency inputs), not a record-bound edit-in-place form.
   'payroll/statutory-payments/new/page.tsx': 'T-193 S5: an add form with hidden id inputs, not record-bound',
   // DEF-778: an add form whose only hidden *Id is the per-render request id; its date default is a prop, not a record.
@@ -54,8 +54,8 @@ const EXEMPT: Record<string, string> = {
 const COMMANDS: Record<string, string> = {
   'Approve and book': 'T-511 S7b (BOSS approved): approves one settlement day and books its payout (money in the books); audited; the uploader rule and the blockers are re-checked in the domain',
   'Book this charge': 'T-511 S7b (BOSS approved): books one platform charge that belongs to no sales day (money out for good); audited; the uploader rule is applied in the domain',
+  'Add cash register': 'T-546 (BOSS approved), T-582 rename: adds a cash register (a till in code; the receipt-number identity of a store); audited',
   'Confirm and switch': 'T-533 S1, BOSS approved 15 Nov 2026: switches a store between the old and the new POS (decides where its sales days come from; admin or super-admin only; audited pos.store_mode_set)',
-  'Add till': 'T-546 (BOSS approved): adds a till (the receipt-number identity of a store); audited',
   'Set tablet': 'T-546 (BOSS approved): chooses which paired tablet acts as a till, or none; audited',
   'Save printer': "T-546 (BOSS approved): sets the till's receipt paper and copies, which the tablet then prints with; audited",
   'Register tablet': 'T-505: links a POS tablet to the store so it can ask a manager for a refund approval (grants access); audited',
