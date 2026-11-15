@@ -37,7 +37,7 @@ export interface PosSnapshotLike {
 }
 
 export interface PosQueryLike {
-  where(field: string, op: '>=' | '<' | '>' | '<=' | '==', value: unknown): PosQueryLike;
+  where(field: string, op: '>=' | '<' | '>' | '<=' | '==' | 'array-contains', value: unknown): PosQueryLike;
   orderBy(field: unknown, direction?: 'asc' | 'desc'): PosQueryLike;
   startAfter(...cursor: unknown[]): PosQueryLike;
   limit(n: number): PosQueryLike;

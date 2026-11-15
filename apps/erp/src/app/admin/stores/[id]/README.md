@@ -9,7 +9,8 @@ Parent blueprint: [up one directory](../README.md).
 ## Interface
 
 - Page route `/admin/stores/[id]`; dynamic route segments are supplied through App Router params.
-- [page.tsx](./page.tsx) — `StoreDetailPage`.
+- [page.tsx](./page.tsx) — `StoreDetailPage`; its New POS card holds [PosModeForm.tsx](./PosModeForm.tsx) (mode, live-from date, reason, then a review step in plain words; T-533 S1).
+- [pos-preflight/page.tsx](./pos-preflight/page.tsx) — what still blocks the switch to live (T-533 S3).
 
 ## Invariants
 
@@ -18,7 +19,7 @@ Parent blueprint: [up one directory](../README.md).
 
 ## Side Effects
 
-- Submitted forms invoke `updateStoreAction`, `setStoreOpeningDateAction`, `setStoreStockModelAction`; these adapters perform the authorized workflow and return feedback/navigation.
+- Submitted forms invoke `updateStoreAction`, `setStoreOpeningDateAction`, `setStoreStockModelAction`, `setStorePosModeAction`; these adapters perform the authorized workflow and return feedback/navigation.
 - Loads screen/report data through `storeDetail`.
 
 ## Verification

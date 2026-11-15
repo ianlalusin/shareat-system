@@ -14,6 +14,7 @@ Legacy taxonomy, capture, conversion and reconciliation APIs, with balance audit
 - [audit](./audit/README.md): Reconstructs landed journal balances, cross-checks v1 cached accounts, classifies source groups and renders the resulting audit report.
 - [dual-run](./dual-run/README.md): Pure store-week extraction, key maps, document matching, difference classification and sign-off verdict calculations.
 - [master-data](./master-data/README.md): Read-only extraction boundary and planners for item, party and staff decision sheets, including local HR validation.
+- [pos-v2](./pos-v2/README.md): One-time load of a store's POS stands and discount presets from POS v1, with a setup-gap report.
 
 ## Invariants
 
