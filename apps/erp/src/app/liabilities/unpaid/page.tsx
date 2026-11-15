@@ -22,6 +22,7 @@ export default async function UnpaidPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   // Covered by '/liabilities' -> view_financial_reports (route-capability); store-scoped like AP aging.
   const scope = await reportScope('/liabilities/unpaid', 'view_financial_reports', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   const result: UnpaidLiabilities = await runReport(scope.actor.orgId, (tx) =>
     getUnpaidLiabilities(tx, scope.actor, { storeId: scope.storeId }),
   );

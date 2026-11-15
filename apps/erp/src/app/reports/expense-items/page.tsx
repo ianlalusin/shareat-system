@@ -36,6 +36,7 @@ const rule = 'border-t border-neutral-200 dark:border-neutral-800';
 export default async function ExpenseItemsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
   const scope = await reportScope('/reports/expense-items', 'view_financial_reports', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   const today = toBusinessDate();
   const { from, to } = resolveRange(sp.from, sp.to, today);
   const storeId = scope.storeId ?? null;

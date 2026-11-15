@@ -223,24 +223,27 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           <ul className="divide-y divide-surface-border text-sm">
             {adminPins.map((a) => (
               <li key={a.personId} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <div>
+                <div className="min-w-0 basis-48">
                   <div className="font-medium">{a.displayName}</div>
                   <div className="text-xs text-muted">
                     {a.role === 'super_admin' ? 'Super admin' : 'Admin'} · {a.hasPin ? 'PIN issued' : 'No PIN yet'}
                   </div>
                 </div>
                 <IssueAdminPinConfirm displayName={a.displayName} hasPin={a.hasPin}>
-                  <CheckedForm rules={STAFF_PIN_RULES} action={issueAdminPinAction} className="flex flex-wrap items-end gap-2">
+                  {/* The form is an inline-size container (no intrinsic width), so it gets a basis and wraps under the name on a phone; the PIN field and button wrap inside it (T-589 B1). */}
+                  <CheckedForm rules={STAFF_PIN_RULES} action={issueAdminPinAction} className="min-w-0 flex-1 basis-72">
                     <input type="hidden" name="personId" value={a.personId} />
                     <input type="hidden" name="storeId" value={storeId} />
-                    <FormGrid layout="fields" className="flex-1">
-                      <Field label={`${a.hasPin ? 'New PIN' : 'PIN'} (6 digits)`} width="code" rule={STAFF_PIN_RULES.pin}>
-                        <Input {...nativeAttrs(STAFF_PIN_RULES.pin)} type="password" autoComplete="off" className="w-full" />
-                      </Field>
-                    </FormGrid>
-                    <SubmitButton variant="secondary" icon={null} pendingLabel="Issuing…">
-                      {a.hasPin ? 'Re-issue PIN' : 'Issue PIN'}
-                    </SubmitButton>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <FormGrid layout="fields" className="min-w-0 flex-1">
+                        <Field label={`${a.hasPin ? 'New PIN' : 'PIN'} (6 digits)`} width="code" rule={STAFF_PIN_RULES.pin}>
+                          <Input {...nativeAttrs(STAFF_PIN_RULES.pin)} type="password" autoComplete="off" className="w-full" />
+                        </Field>
+                      </FormGrid>
+                      <SubmitButton variant="secondary" icon={null} pendingLabel="Issuing…">
+                        {a.hasPin ? 'Re-issue PIN' : 'Issue PIN'}
+                      </SubmitButton>
+                    </div>
                   </CheckedForm>
                 </IssueAdminPinConfirm>
               </li>

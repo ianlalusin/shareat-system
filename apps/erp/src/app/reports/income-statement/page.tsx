@@ -35,6 +35,7 @@ export default async function IncomeStatementPage({
   // ⛔ DEF-064 — see ../lib.ts. Org from the session, stores from person_store_scope,
   // `sp.org` deliberately ignored.
   const scope = await reportScope('/reports/income-statement', 'view_financial_reports', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
   const storeRows = scope.stores;
   const storeId = scope.storeId;

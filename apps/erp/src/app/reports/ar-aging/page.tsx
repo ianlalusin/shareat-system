@@ -30,6 +30,7 @@ export default async function ArAgingPage({
 
   // Same audience as AP aging (T-209b spec) — view_financial_reports, not view_trial_balance.
   const scope = await reportScope('/reports/ar-aging', 'view_financial_reports', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
   const storeRows = scope.stores;
   const storeId = scope.storeId;
