@@ -192,6 +192,8 @@ export interface FormCase<C extends BaseCtx> {
   /** a refused save whose typing is over the cookie budget but is still refused by the server */
   tooLong: Record<string, string | string[]>;
   good(ctx: C): FormData;
+  /** the action a good save goes through, when it is not `action` (a review step that only asks for confirmation) */
+  goodAction?(): Promise<(fd: FormData) => Promise<void>>;
   ok: RegExp;
   siblings?(ctx: C): Promise<Sibling[]>;
   /** why a leg cannot be driven for this form, reported rather than worked around */
@@ -216,10 +218,10 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
   }
 
   function runTypedLegs<C extends BaseCtx>(c: FormCase<C>): void {
-    async function submit(ctx: C, fd: FormData, who: Actor = ctx.f.admin) {
+    async function submit(ctx: C, fd: FormData, who: Actor = ctx.f.admin, useGood = false) {
       resetJar();
       h.actor = who;
-      const act = await c.action();
+      const act = await (useGood && c.goodAction ? c.goodAction() : c.action());
       const signal = await captureRedirect(() => act(fd));
       return { signal, outcome: outcomeOf(signal) };
     }
@@ -348,7 +350,7 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
 
       it('good (green today): a good save is unchanged - ok banner, no typed slot, no dropped notice', async () => {
         const ctx = await c.setup('good');
-        const r = await submit(ctx, c.good(ctx));
+        const r = await submit(ctx, c.good(ctx), ctx.f.admin, true);
         expect(r.outcome.flash.error, 'saved, not refused').toBeUndefined();
         expect(r.outcome.flash.ok).toMatch(c.ok);
         const p = await payload();

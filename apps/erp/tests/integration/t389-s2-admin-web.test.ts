@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 /**
- * T-389 S2 (TESTER) - admin/stores/[id]: the three saved-record forms keep what was typed after a refused save (DEF-617).
+ * T-389 S2 (TESTER) - admin/stores/[id]: the saved-record forms keep what was typed after a refused save (DEF-617).
  * Spec: docs/tasks/389-refused-save-keeps-typing.md. Legs and harness: t389-s2-common.ts (read its header).
  *
  * Forms (page -> action -> the refusal driven; every one is reachable from the browser):
@@ -61,11 +61,12 @@ async function storeCtx(hint: string, extra?: (f: Awaited<ReturnType<typeof fixt
   await extra?.(f);
   return { f, record: f.storeId, name };
 }
-const storeSiblings = (ctx: StoreCtx, except: 'details' | 'openingDate' | 'stockModel') =>
+const storeSiblings = (ctx: StoreCtx, except: 'details' | 'openingDate' | 'stockModel' | 'posMode') =>
   [
     { k: 'details', label: 'Details form', sel: { action: 'updateStoreAction', hidden: { storeId: ctx.record } }, has: [`name="storeId" value="${ctx.record}"`, 'name="tinBranchCode"'] },
     { k: 'openingDate', label: 'Opening date form', sel: { action: 'setStoreOpeningDateAction', hidden: { storeId: ctx.record } }, has: [`name="storeId" value="${ctx.record}"`, 'name="openingDate"'] },
     { k: 'stockModel', label: 'Stock model form', sel: { action: 'setStoreStockModelAction', hidden: { storeId: ctx.record } }, has: [`name="storeId" value="${ctx.record}"`, 'name="stockModel"'] },
+    { k: 'posMode', label: 'POS mode form', sel: { action: 'reviewStorePosModeAction', hidden: { storeId: ctx.record } }, has: [`name="storeId" value="${ctx.record}"`, 'name="mode"'] },
   ]
     .filter((s) => s.k !== except)
     .map(({ k: _k, ...s }) => s);
@@ -138,7 +139,7 @@ const openingDate: FormCase<StoreCtx> = {
   stored: (_ctx, seg, m) => expect(m.inputValue(seg, 'openingDate')).toBe('2026-02-01'),
   tooLong: { openingDate: LONG },
   good: (ctx) => openingDate.refused(ctx, { openingDate: '2026-03-01' }),
-  ok: /Opening date set to 2026-03-01/,
+  ok: /Opening date set to March 1, 2026/,
   siblings: async (ctx) => storeSiblings(ctx, 'openingDate'),
   note: 'plain-error branch only; the confirm branch keeps its keep keys',
 };
@@ -181,6 +182,41 @@ const stockModel: FormCase<StoreCtx> = {
   note: 'guard-clause refusal for the too-long leg',
 };
 
+// T-533 S1: the POS mode form. Its save is the REVIEW step (changes nothing, answers with a confirm sentence); the confirm-step form it shows
+// (hidden fields only, nothing to retype) is not a saved record. The confirm action's own tests: packages/domain/tests/integration/t533-s1-store-mode.test.ts - here a good save goes through it.
+const posMode: FormCase<StoreCtx> = {
+  label: 'admin store POS mode',
+  form: 'store.posMode',
+  setup: (hint) => storeCtx(hint),
+  action: async () => (await acts()).reviewStorePosModeAction,
+  goodAction: async () => (await acts()).setStorePosModeAction,
+  page,
+  props: (ctx, params) => props(ctx.record, params),
+  sel: (ctx) => ({ action: 'reviewStorePosModeAction', hidden: { storeId: ctx.record } }),
+  has: (ctx) => [`name="storeId" value="${ctx.record}"`, 'name="mode"'],
+  hiddenNames: ['storeId'],
+  // live with no date is refused in the review step (checkModeInput)
+  refused: (ctx, over = {}) => {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries({ storeId: ctx.record, mode: 'live', reason: 'Typed reason', ...over })) if (v !== null) fd.set(k, v as string);
+    return fd;
+  },
+  refusal: /needs the date/i,
+  fields: () => ({ mode: 'live', reason: 'Typed reason' }),
+  changed: { list: 'mode,reason', fields: () => ({ mode: 'live', reason: 'Typed reason' }) },
+  notDrawn: ['Typed reason'],
+  stored: (_ctx, seg, m) => {
+    expect(m.selectedValue(seg, 'mode')).toBe('off');
+    expect(m.inputValue(seg, 'liveFrom')).toBe('');
+    expect(m.textareaValue(seg, 'reason')).toBe('');
+  },
+  tooLong: { reason: LONG },
+  good: (ctx) => posMode.refused(ctx, { mode: 'test', reason: 'Practice run' }),
+  ok: /test mode/,
+  siblings: async (ctx) => storeSiblings(ctx, 'posMode'),
+  note: 'the save is the review step; a good save is driven through the confirm action',
+};
+
 runTypedLegs(details);
 runTypedLegs(openingDate);
 // Audit leg set: the INVALID-DATE refusal (guard clause before the try), not the traded-since one.
@@ -196,9 +232,10 @@ const openingDateInvalid: FormCase<StoreCtx> = {
 };
 runTypedLegs(openingDateInvalid);
 runTypedLegs(stockModel);
+runTypedLegs(posMode);
 
 describe('T-389 S2 admin store - census', () => {
-  it('the page holds exactly the three saved-record forms this file drives', async () => {
+  it('the page holds exactly the four saved-record forms this file drives', async () => {
     const ctx = await storeCtx('census');
     h.actor = ctx.f.admin;
     seen.records = [];
@@ -206,6 +243,6 @@ describe('T-389 S2 admin store - census', () => {
     const Page = (await page()) as unknown as (p: unknown) => Promise<unknown>;
     renderToStaticMarkup((await Page(props(ctx.record, {}))) as never);
     const names = (seen.records as Array<{ action?: { name?: string } }>).map((r) => r.action?.name).sort();
-    expect(names).toEqual(['setStoreOpeningDateAction', 'setStoreStockModelAction', 'updateStoreAction']);
+    expect(names).toEqual(['reviewStorePosModeAction', 'setStoreOpeningDateAction', 'setStoreStockModelAction', 'updateStoreAction']);
   });
 });

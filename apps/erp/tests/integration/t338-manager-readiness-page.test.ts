@@ -94,7 +94,7 @@ describe('T-338 - store page, manager readiness', () => {
         /<a[^>]*href="\/admin\/users"[^>]*>\s*Assign a manager in Users and roles →\s*<\/a>/.test(html),
         'remedy link to /admin/users',
       ).toBe(true);
-      expect(html).not.toContain('still stop this store working');
+      expect(html).not.toMatch(/still stops? this store working/); // T-587 S4: 1 thing now reads "stops"
     },
     60_000,
   );

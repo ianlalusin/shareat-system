@@ -137,3 +137,9 @@ export function formatBusinessDateTime(
     timeZone: BUSINESS_TIMEZONE,
   }).format(instant);
 }
+
+/** A business date ("2022-02-14") in long words, Manila time. The one date formatter above, applied to that day's own midnight. */
+export function formatBusinessDayLong(date: string): string {
+  const at = new Date(`${date}T00:00:00+08:00`);
+  return Number.isNaN(at.getTime()) ? date : formatBusinessDateTime(at, { dateStyle: 'long' });
+}
