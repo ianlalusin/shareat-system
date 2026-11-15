@@ -558,7 +558,12 @@ export default async function RemittancePage({
               whatever this says — that is the control, and it is not what this changes.
             </p>
           </div>
-          <EditableRecord action={setCashPolicyAction} label="cash policy" hidden={{ storeId }} typed={typedFor(sp, CASH_POLICY_EDIT, storeId, actor.personId)} rules={CASH_POLICY_RULES}>
+          <EditableRecord action={setCashPolicyAction} label="cash policy"
+            summary={[
+              { label: 'Remittance cadence', value: CADENCE_LABEL[policy.remittanceCadence as keyof typeof CADENCE_LABEL] ?? policy.remittanceCadence },
+              { label: 'Un-remitted ceiling', value: policy.unremittedCeiling ? peso(policy.unremittedCeiling) : null },
+            ]}
+            hidden={{ storeId }} typed={typedFor(sp, CASH_POLICY_EDIT, storeId, actor.personId)} rules={CASH_POLICY_RULES}>
 <FormGrid>
             {/* ⚠️ Both fields carry a hint so the control row lines up. With only one hinted, the
                 select and the text input sat at different heights under `items-end`. */}

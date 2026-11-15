@@ -32,6 +32,8 @@ export default async function PosReconciliationPage({
   const sp = await withFlash(searchParams);
 
   const scope = await reportScope('/reports/pos-reconciliation', 'view_financial_reports', sp.store);
+
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
   const storeRows = scope.stores;
   // ⚠️ Unlike every other report, this screen has no "all stores" reading — fall back to the

@@ -235,6 +235,7 @@ function ChannelCard({
   canSetPlatformCode: boolean;
 }) {
   const wallet = channel.destinationMoneyAccountId ? walletNames.get(channel.destinationMoneyAccountId) : null;
+  const receivable = accounts.find((a) => a.code === channel.receivableAccountCode);
   return (
     <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
       <div className="flex flex-wrap items-center gap-2">
@@ -268,6 +269,12 @@ function ChannelCard({
       <EditableRecord
         action={updateSalesChannelAction}
         label={channel.name}
+        summary={[
+          { label: 'Channel name', value: channel.name },
+          { label: 'Where the money goes', value: channel.isRemittedDaily ? 'Reaches the till' : 'Settles later' },
+          { label: 'Receivable account', value: receivable ? `${receivable.code} · ${receivable.name}` : channel.receivableAccountCode },
+          { label: 'Wasted or refunded orders', value: channel.wastageTypeMode === 'tracked' ? 'Review it' : 'Decide on the spot' },
+        ]}
         hidden={{ storeId, channelId: channel.id }}
         typed={typedFor(sp, SALES_CHANNEL_EDIT, channel.id, actorId)}
         rules={SETTINGS_SALES_CHANNEL_RULES}
@@ -323,7 +330,14 @@ function SettlementWiring({ storeId, config, sp, actorId }: { storeId: string; c
         The short name and the labels that will let a Foodpanda or Grab payout statement be matched to this branch. They are{' '}
         <strong>saved for later and not used to match anything yet</strong>. The platform and its store code are set on each channel below.
       </p>
-      <EditableRecord action={saveStoreSettlementAction} label="settlement wiring" hidden={{ storeId }} typed={typedFor(sp, STORE_SETTLEMENT_EDIT, storeId, actorId)} rules={SETTINGS_STORE_SETTLEMENT_RULES}>
+      <EditableRecord action={saveStoreSettlementAction} label="settlement wiring"
+        summary={[
+          { label: 'Store key', value: config?.storeKey },
+          { label: 'Outlet names on statements', value: config?.matchLabels.join(', ') },
+          { label: 'Start of file names', value: config?.fileHints.join(', ') },
+          { label: 'Read wastage emails', value: config?.wastageEmailIngestEnabled ? 'Yes' : 'No' },
+        ]}
+        hidden={{ storeId }} typed={typedFor(sp, STORE_SETTLEMENT_EDIT, storeId, actorId)} rules={SETTINGS_STORE_SETTLEMENT_RULES}>
         <FormGrid>
           <Field
             label={<span className="text-neutral-600 dark:text-neutral-400">Store key</span>}
@@ -364,7 +378,7 @@ function SettlementWiring({ storeId, config, sp, actorId }: { storeId: string; c
 /** T-564: a channel's bank hints, in their own small form. Saved for the payout parser; nothing reads them yet. */
 function BankHintsForm({ channel, storeId, sp, actorId }: { channel: SalesChannelAdminRow; storeId: string; sp: Parameters<typeof typedFor>[0]; actorId: string }) {
   return (
-    <EditableRecord action={setBankHintsAction} label={`${channel.name} bank names`} hidden={{ storeId, channelId: channel.id }} typed={typedFor(sp, BANK_HINTS_EDIT, channel.id, actorId)} rules={SETTINGS_BANK_HINTS_RULES}>
+    <EditableRecord action={setBankHintsAction} label={`${channel.name} bank names`} summary={[{ label: 'Bank names on payouts', value: channel.bankHints.join(', ') }]} hidden={{ storeId, channelId: channel.id }} typed={typedFor(sp, BANK_HINTS_EDIT, channel.id, actorId)} rules={SETTINGS_BANK_HINTS_RULES}>
       <Field
         label={<span className="text-neutral-600 dark:text-neutral-400">Bank names on this channel&apos;s payouts, separated by commas</span>}
         hint="At most 20, each at most 60 characters. Saved for the payout reader; nothing uses it yet."

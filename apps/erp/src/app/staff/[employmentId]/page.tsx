@@ -97,7 +97,13 @@ export default async function EmploymentDetailPage({
               ? `Saved as "${detail.personName}" (one box, from before names were split). Type the last, first and middle name once to fix it; it then reads "Last, First M.".`
               : 'Shown everywhere as "Last, First M.". Saving rewrites it.'}
           </p>
-          <EditableRecord action={renamePersonAction} label="name" hidden={{ employmentId }} typed={typedFor(sp, STAFF_RENAME, employmentId, actor.personId)} rules={STAFF_RENAME_RULES}>
+          <EditableRecord action={renamePersonAction} label="name"
+            summary={[
+              { label: 'Last name', value: detail.nameParts.lastName },
+              { label: 'First name', value: detail.nameParts.firstName },
+              { label: 'Middle name', value: detail.nameParts.middleName },
+            ]}
+            hidden={{ employmentId }} typed={typedFor(sp, STAFF_RENAME, employmentId, actor.personId)} rules={STAFF_RENAME_RULES}>
             <FormGrid>
               <Field label="Last name" rule={STAFF_RENAME_RULES.lastName}>
                 <Input {...nativeAttrs(STAFF_RENAME_RULES.lastName)} defaultValue={detail.nameParts.lastName ?? ''} className="mt-1 w-full" />
@@ -227,7 +233,15 @@ export default async function EmploymentDetailPage({
             Payroll deducts SSS, PhilHealth and Pag-IBIG only for an agency whose number is filled in here. A blank box means that agency is
             not deducted from this person&rsquo;s payslips (and nothing is caught up later). Digits only; dashes and spaces are ignored.
           </p>
-          <EditableRecord action={setGovernmentIdsAction} label="government numbers" hidden={{ employmentId }} typed={null} rules={STAFF_GOV_ID_RULES}>
+          <EditableRecord action={setGovernmentIdsAction} label="government numbers"
+            // Personal data: the page never shows these numbers while locked, so the summary says only whether one is on file.
+            summary={[
+              { label: 'SSS number', value: govIds.sssNo ? 'On file' : null },
+              { label: 'PhilHealth number', value: govIds.philhealthNo ? 'On file' : null },
+              { label: 'Pag-IBIG number', value: govIds.pagibigNo ? 'On file' : null },
+              { label: 'TIN', value: govIds.tin ? 'On file' : null },
+            ]}
+            hidden={{ employmentId }} typed={null} rules={STAFF_GOV_ID_RULES}>
             <FormGrid layout="pairs">
               <Field width="code" label="SSS number" hint="10 digits" rule={STAFF_GOV_ID_RULES.sssNo}>
                 <Input {...nativeAttrs(STAFF_GOV_ID_RULES.sssNo)} defaultValue={govIds.sssNo ?? ''} className="w-full font-mono" />

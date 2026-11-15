@@ -81,7 +81,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // --- The books. A cashier's own day is theirs; the organisation's ledger is not. -------------
   '/reports/trial-balance': 'view_trial_balance',
   '/reports/income-statement': 'view_financial_reports',
-  '/reports/balance-sheet': 'view_financial_reports',
+  // DEF-867: equals the page's data gate (`reportScope(..., 'view_trial_balance')`); a manager could never see its data.
+  '/reports/balance-sheet': 'view_trial_balance',
   '/reports/cash-flow': 'view_financial_reports',
   '/reports/ap-aging': 'view_financial_reports',
   '/reports/ar-aging': 'view_financial_reports',
@@ -140,6 +141,11 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/staff/hire': 'enrol_staff',
   // T-398 S5d: goods another company sent us are received by whoever may receive a delivery. The longer key wins over the open /inventory.
   '/inventory/deliveries/inbound': 'receive_delivery',
+  // T-583 S2 (Ian, 2026-11-15, revised 16 Nov: "cooks can read recipes"): the cookbook is READ by whoever may record a cook run
+  // (`record_stock_movement`: managers and admins by role, cooks by position); staff with no cook role are refused. /[id] inherits.
+  // The longer /new key wins over the prefix and needs `manage_recipes`. Recipe writes keep their own `manage_recipes` check.
+  '/inventory/production/recipes': 'record_stock_movement',
+  '/inventory/production/recipes/new': 'manage_recipes',
   // T-398 S6d: the franchisor looks at a franchisee's sales and stock (each press is logged by the database); the franchisee's owner reads who looked.
   '/franchise/sales': 'view_franchise_sales',
   '/franchise/stock': 'view_franchise_sales',

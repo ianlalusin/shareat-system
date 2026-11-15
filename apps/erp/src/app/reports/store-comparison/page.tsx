@@ -41,6 +41,7 @@ export default async function StoreComparisonPage({
   // than relying on reportScope's own single-store fallback, which only checks the FIRST store
   // for someone not scoped to the whole org (see ../lib.ts's authorizeForScope).
   const scope = await reportScope('/reports/store-comparison', 'view_financial_reports', undefined);
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
 
   const requestedIds = sp.stores ? (Array.isArray(sp.stores) ? sp.stores : [sp.stores]) : [];

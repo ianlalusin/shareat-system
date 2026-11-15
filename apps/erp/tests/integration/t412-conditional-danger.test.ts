@@ -6,7 +6,7 @@ import postgres from 'postgres';
 
 /**
  * T-412 AUDIT ROUND H1 / H2 (TESTER) - the two CONDITIONAL danger buttons the first census missed (`variant={x ? 'danger' : ...}`):
- *   admin/stores/[id]      "Close this branch"  -> deactivateStoreAction   Tier R: retype the STORE's name
+ *   admin/stores/[id]      "Close this store"  -> deactivateStoreAction   Tier R: retype the STORE's name
  *   admin/users/[personId] "In scope - remove"  -> setStoreScopeAction     Tier R: retype the PERSON's name
  * Both names are loaded by the server from the database (field `confirmName`, never a form-supplied name). Refusal sentence:
  * "Type the name exactly — '<name>' — to confirm."  The same actions' safe direction (reactivate / add scope) needs no name.
@@ -61,7 +61,7 @@ async function fx(hint: string) {
 }
 const isActive = async (storeId: string) => (await sql<{ a: boolean }[]>`select is_active as a from stores where id = ${storeId}`)[0]!.a;
 
-describe('H1 deactivateStoreAction ("Close this branch") is Tier R: retype the store name', () => {
+describe('H1 deactivateStoreAction ("Close this store") is Tier R: retype the store name', () => {
   const MOD = '../../src/app/admin/stores/actions';
 
   it('C1: no confirmName, a wrong name and a prefix are refused with the sentence naming the REAL store name; the store stays open (MC-1)', async () => {
