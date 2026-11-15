@@ -29,9 +29,15 @@ export async function canManageRecipes(orgId: string, actor: Actor): Promise<boo
   return withOrgPrincipal(orgId, async (tx) => (await heldCapabilities(tx, actor)).has(MANAGE_RECIPES));
 }
 
-/** T-583: may this viewer post a production run (manager, admin, super)? Gates the Cook tab's Cookbook shortcut and the recipes screens' read. */
-export async function canPostProduction(orgId: string, actor: Actor): Promise<boolean> {
-  return withOrgPrincipal(orgId, async (tx) => (await heldCapabilities(tx, actor)).has('post_production'));
+/**
+ * T-583 S2: which cookbook shortcut the Cook tab shows. `post_production` holders (manager, admin, super) get "Cookbook settings";
+ * a cook who may only record a run (`record_stock_movement`, held by position) gets a plain read "Recipes" link; anyone else, none.
+ * `heldCapabilities` reads role and grants (position grants are person_grants rows) but not store scope: fine for presentation,
+ * the page read gate uses the same set and every action authorizes again.
+ */
+export async function cookbookShortcut(orgId: string, actor: Actor): Promise<'settings' | 'read' | null> {
+  const held = await withOrgPrincipal(orgId, async (tx) => heldCapabilities(tx, actor));
+  return held.has('post_production') ? 'settings' : held.has('record_stock_movement') ? 'read' : null;
 }
 
 /** Active items a recipe may use (the pickers); each shows its base unit. */

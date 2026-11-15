@@ -136,8 +136,11 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/staff/hire': 'enrol_staff',
   // T-398 S5d: goods another company sent us are received by whoever may receive a delivery. The longer key wins over the open /inventory.
   '/inventory/deliveries/inbound': 'receive_delivery',
-  // T-583 S2 (Ian, 2026-11-15): the cookbook is read by whoever may post a production run (manager, admin, super); staff no longer reach it. The recipe writes keep their own `manage_recipes` check. Children (/new, /[id]) inherit.
-  '/inventory/production/recipes': 'post_production',
+  // T-583 S2 (Ian, 2026-11-15, revised 16 Nov: "cooks can read recipes"): the cookbook is READ by whoever may record a cook run
+  // (`record_stock_movement`: managers and admins by role, cooks by position); staff with no cook role are refused. /[id] inherits.
+  // The longer /new key wins over the prefix and needs `manage_recipes`. Recipe writes keep their own `manage_recipes` check.
+  '/inventory/production/recipes': 'record_stock_movement',
+  '/inventory/production/recipes/new': 'manage_recipes',
   // T-398 S6d: the franchisor looks at a franchisee's sales and stock (each press is logged by the database); the franchisee's owner reads who looked.
   '/franchise/sales': 'view_franchise_sales',
   '/franchise/stock': 'view_franchise_sales',
