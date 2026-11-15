@@ -100,7 +100,6 @@ export default async function SettingsPage() {
           <SettingsRow
             href="/settings/pos-tablet"
             title="POS tablets and cash registers"
-            also="POS tablet, POS tablets"
             hint="Pair a store’s counter tablet so staff sign in with Employee ID and PIN."
             writeCap="pair_pos_tablet"
           />
@@ -110,19 +109,10 @@ export default async function SettingsPage() {
         </Section>
       </div>
 
-      <div className="rounded-lg border border-dashed border-neutral-300 p-4 text-sm text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
-        <p className="font-medium text-neutral-800 dark:text-neutral-200">Not here yet</p>
-        {/* ⭐ Named rather than silently absent — the pattern `/expenses/recurring` set when its
-            job was blocked: a feature that quietly does nothing is the defect class this project
-            keeps hitting; one that says it does nothing YET is a plan with a visible next step. */}
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>
-            <strong>The staff-advance ceiling.</strong> Deliberately not a form yet: four different
-            things put a staff member into debt and none of them checks a limit, so a box here
-            would look like a control without being one.
-          </li>
-        </ul>
-      </div>
+      {/* ⭐ Named rather than silently absent — the pattern `/expenses/recurring` set when its job was blocked. The reason it is not a form yet:
+          four different things put a staff member into debt and none of them checks a limit, so a box here would look like a control without being
+          one. UI UX (T-587): that reasoning is for developers, so managers read one plain line. */}
+      <p className="text-sm text-neutral-600 dark:text-neutral-400">Staff advance limits: not set up yet.</p>
     </Page>
   );
 }
@@ -164,13 +154,15 @@ function SettingsRow({ href, title, hint, also, viewOnly }: RowProps) {
       className="flex min-h-11 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink dark:hover:bg-neutral-900"
     >
       <span className="min-w-0 flex-1">
-        <span className="block font-medium">{title}</span>
+        <span className="block font-medium">
+          {title}
+          {viewOnly && (
+            <span className="ml-2 inline-block rounded-full border border-neutral-300 px-2 py-0.5 align-middle text-xs font-normal text-neutral-700 dark:border-neutral-600 dark:text-neutral-300">View only</span>
+          )}
+        </span>
         <span className="block text-sm text-neutral-600 dark:text-neutral-400">{hint}</span>
         {also && <span className="block text-xs text-neutral-600 dark:text-neutral-400">{`Also called: ${also}`}</span>}
       </span>
-      {viewOnly && (
-        <span className="shrink-0 rounded-full border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 dark:border-neutral-600 dark:text-neutral-300">View only</span>
-      )}
       <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-neutral-500">
         <path d="M7 5l5 5-5 5" />
       </svg>
