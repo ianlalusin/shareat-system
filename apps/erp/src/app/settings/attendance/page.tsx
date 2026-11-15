@@ -8,12 +8,34 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_ATTENDANCE_POLICY_RULES, SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Button, Checkbox, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { ATTENDANCE_POLICY } from './typed-forms';
 
 export const metadata = { title: 'Attendance & payroll settings — Shareat System' };
 export const dynamic = 'force-dynamic';
+
+const OVERTIME_WORDS = { multiplier: 'Times the hourly rate', fixed: 'Flat pesos per hour' } as const;
+const LATE_WORDS = { record_only: 'Recorded only, no money', charge_per_minute: 'Charged per minute', infraction: 'Points only, no money' } as const;
+const PERIOD_WORDS = { monthly: 'Monthly', semi_monthly: 'Twice a month', weekly: 'Weekly' } as const;
+
+/** T-589 B2: the live policy in words, shown while the card is locked. The edit form below still carries every field. */
+function policySummary(cfg: NonNullable<Awaited<ReturnType<typeof liveConfigFor>>>) {
+  const fixedPay = cfg.payoutMode === 'fixed_days';
+  return [
+    { label: 'Live since', value: formatBusinessDayLong(cfg.effectiveFrom) },
+    { label: 'Required hours per shift', value: `${cfg.requiredHoursPerShift} h (half day ${cfg.halfDayHours} h)` },
+    { label: 'Time mode', value: cfg.timeMode === 'open' ? 'Open, free clock in and out' : 'Fixed, posted shift grid' },
+    { label: 'Overtime', value: cfg.overtimeMode === 'fixed' ? `${OVERTIME_WORDS.fixed}: ${cfg.overtimeFixedHourly ?? '-'}` : `${OVERTIME_WORDS.multiplier}: ${cfg.overtimeMultiplier}` },
+    { label: 'Night differential', value: cfg.nightDiffEnabled ? `${cfg.nightDiffMultiplier} x, from ${cfg.nightDiffStartHour}:00 to ${cfg.nightDiffEndHour}:00` : 'Off' },
+    { label: 'Holiday multipliers', value: `Regular ${cfg.holidayRegularMultiplier}, special non-working ${cfg.holidaySpecialNonWorkingMultiplier}, special working ${cfg.holidaySpecialWorkingMultiplier}` },
+    { label: 'Late policy', value: `${LATE_WORDS[cfg.latePolicy]}${cfg.latePolicy === 'charge_per_minute' ? ` (${cfg.lateChargePerMinute} a minute)` : ''}, ${cfg.lateGraceMinutes} min grace` },
+    { label: 'Pay periods', value: `${PERIOD_WORDS[cfg.payrollPeriodType]}${cfg.payrollPeriodType === 'semi_monthly' ? `, cut-off day ${cfg.semiMonthlyCutoffDay}` : ''}` },
+    { label: 'Payout', value: fixedPay ? `On day ${cfg.payoutDays.join(' and ')} of the month` : `${cfg.payoutLagDays} days after the period ends` },
+    { label: 'Auto clock-out', value: cfg.autoClockOutHour === null ? 'Never' : `${cfg.autoClockOutHour}:00` },
+  ];
+}
 
 interface SearchParams {
   store?: string;
@@ -98,7 +120,7 @@ export default async function AttendanceSettingsPage({
           This store has no attendance config yet.
         </p>
       ) : (
-        <EditableRecord action={updateAttendanceConfigAction} label="attendance policy" hidden={{ storeId }} typed={typedFor(sp, ATTENDANCE_POLICY, storeId, actor.personId)} rules={SETTINGS_ATTENDANCE_POLICY_RULES}>
+        <EditableRecord action={updateAttendanceConfigAction} label="attendance policy" summary={policySummary(cfg)} hidden={{ storeId }} typed={typedFor(sp, ATTENDANCE_POLICY, storeId, actor.personId)} rules={SETTINGS_ATTENDANCE_POLICY_RULES}>
           <div className="space-y-6">
           <Field
             label="Effective from"
