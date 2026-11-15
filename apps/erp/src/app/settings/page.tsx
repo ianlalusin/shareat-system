@@ -74,7 +74,7 @@ export default async function SettingsPage() {
             hint="Whether a channel’s money arrives that day or waits for the platform to pay."
             writeCap="manage_store_settings"
           />
-          <SettingsRow href="/settings/wastage-monitor" title="Wastage Monitor" hint="Who answers for a wasted or refunded order at each branch." writeCap="manage_store_settings" />
+          <SettingsRow href="/settings/wastage-monitor" title="Wastage Monitor" hint="Who answers for a wasted or refunded order at each store." writeCap="manage_store_settings" />
           <SettingsRow href="/settings/attendance" title="Attendance & payroll" hint="Shift hours, late policy, overtime, holiday pay and the pay period." writeCap="manage_store_settings" />
           <SettingsRow href="/budgets" title="Spending limits" also="Budgets, Expense budgets" hint="A spending cap per category, store and period." writeCap="manage_expense_budgets" />
           <SettingsRow href="/expenses/recurring" title="Recurring bills" hint="Bills that repeat, kept as templates." writeCap="manage_recurring_expenses" />
@@ -88,7 +88,7 @@ export default async function SettingsPage() {
           <SettingsRow href="/payroll/rates" title="Payroll rates" hint="SSS, PhilHealth, Pag-IBIG and tax tables, and minimum wages." writeCap="manage_payroll_rates" />
           <SettingsRow href="/settings/usage-tolerance" title="Usage tolerance" hint="How far recorded stock usage may stray from what POS sales imply." writeCap="set_menu_depletion" />
           <SettingsRow href="/menu/usage-source" title="Usage source" hint="Whether daily stock usage comes from POS item maps or menu stock rules." writeCap={['switch_usage_source', 'manage_pos_map']} />
-          <SettingsRow href="/admin/stores" title="Stores" hint="Open or close a branch and set how it organises stock." writeCap="manage_stores" />
+          <SettingsRow href="/admin/stores" title="Stores" hint="Open or close a store and set how it organises stock." writeCap="manage_stores" />
         </Section>
 
         <Section title="People and access" held={held}>
@@ -105,7 +105,7 @@ export default async function SettingsPage() {
           />
           <SettingsRow href="/attendance/terminals" title="Clock terminals" hint="Register a clock terminal and enrol cards or fingerprints." writeCap="provision_clock_terminal" />
           <SettingsRow href="/attendance/lane" title="Failed clock punches" also="Clock lane" hint="Punches that did not post, waiting for a manager to look." writeCap={['manage_attendance', 'provision_clock_terminal']} />
-          <SettingsRow href="/settings/pos-link" title="Link to POS store" also="POS link" hint="Which POS store each branch sells under." writeCap="manage_chart_of_accounts" />
+          <SettingsRow href="/settings/pos-link" title="Link to POS store" also="POS link" hint="Which POS store each store sells under." writeCap="manage_chart_of_accounts" />
         </Section>
       </div>
 
