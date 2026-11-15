@@ -176,11 +176,9 @@ describe('Button — T-334 slice 2 contract', () => {
   });
 
   // T-448: the round icon button - words become the accessible name + hover tip, never visible text.
-  it('icon buttons: Save/Edit/+ Add/Delete render a round white-on-red or white-on-ink icon with the words as aria-label and data-tip, and no visible text', () => {
+  it('icon buttons: Edit/Delete (not primary) render a round white-on-red or white-on-ink icon with the words as aria-label and data-tip, and no visible text', () => {
     const cases: Array<[string, 'primary' | 'secondary' | 'danger', string, string]> = [
-      ['Save', 'primary', 'Save', 'bg-brand'],
       ['Edit', 'secondary', 'Edit', 'bg-ink'],
-      ['+ Add supplier', 'primary', 'Add supplier', 'bg-brand'],
       ['Delete', 'danger', 'Delete', 'bg-brand'],
     ];
     for (const [words, variant, name, fill] of cases) {
@@ -193,6 +191,25 @@ describe('Button — T-334 slice 2 contract', () => {
       for (const need of ['rounded-full', 'h-11', 'w-11', 'erp-icon-btn', fill]) expect(t.has(need), `${words} ${need}`).toBe(true);
       expect(t.has('rounded-[12px]'), words).toBe(false);
     }
+  });
+
+  // T-589 B4a (Ian R1): the MAIN action of a view keeps its icon and shows its word beside it.
+  it('a primary button with an icon is a pill: the icon AND the visible word, no round icon-only shape', () => {
+    for (const [words, shown] of [['Save', 'Save'], ['+ Add supplier', 'Add supplier'], ['Approve', 'Approve'], ['Verify', 'Verify'], ['Apply', 'Apply']] as const) {
+      const html = renderToStaticMarkup(createElement(Button, { variant: 'primary', children: words }));
+      expect(html, words).toContain('<svg');
+      expect(html.replace(/<svg.*?<\/svg>/g, '').replace(/<[^>]+>/g, ''), `${words}: the word is visible`).toBe(shown);
+      const t = classTokens(html);
+      for (const need of ['rounded-full', 'bg-brand', 'min-h-11', 'px-4']) expect(t.has(need), `${words} ${need}`).toBe(true);
+      expect(t.has('erp-icon-btn') || t.has('w-11'), `${words}: not a round icon button`).toBe(false);
+      expect(html, `${words}: the words name it, no data-tip`).not.toContain('data-tip');
+    }
+  });
+
+  it('a secondary icon button is still icon-only (the control of the pill rule: only primary gains words)', () => {
+    const html = renderToStaticMarkup(createElement(Button, { variant: 'secondary', children: 'Save' }));
+    expect(classTokens(html).has('erp-icon-btn')).toBe(true);
+    expect(html.replace(/<svg.*?<\/svg>/g, '').replace(/<[^>]+>/g, '')).toBe('');
   });
 
   // T-448: Ian's explicit request supersedes ADR-013's outlined danger FOR ICON BUTTONS; text danger stays outlined (test above).

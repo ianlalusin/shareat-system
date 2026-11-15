@@ -14,8 +14,9 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: ButtonVariant;
   /**
    * T-448: the icon. Left out, it is read from the button's own words ("Save" -> save, "+ Add supplier" -> plus);
-   * `null` keeps the words. With an icon the button is a round icon button: the words become its accessible name
-   * and the name shown on hover (`data-tip`, drawn by `TooltipLayer`).
+   * `null` keeps the words. With an icon a secondary/ghost/danger button is a round icon button: the words become its
+   * accessible name and the name shown on hover (`data-tip`, drawn by `TooltipLayer`). T-589 B4a (Ian R1): a PRIMARY
+   * button keeps its icon AND shows its words beside it, so the main action of a view is never a bare glyph.
    */
   readonly icon?: ActionIconName | null;
   /** Drawn instead of the icon while busy (SubmitButton's spinner). */
@@ -124,7 +125,9 @@ export function Button({
 }: ButtonProps) {
   const words = textOf(children);
   const resolved = icon === null ? null : (icon ?? (words ? actionIconFor(words) : null));
-  if (resolved && words) {
+  // T-589 B4a: a primary button with an icon is a pill, icon + word (the visible words are its name; a caller's explicit aria-label still wins).
+  const pill = resolved !== null && words !== null && variant === 'primary';
+  if (resolved && words && !pill) {
     const name = actionName(words);
     return (
       <button
@@ -147,7 +150,7 @@ export function Button({
       {...rest}
     >
       {variant === 'danger' ? <WarningTriangleIcon /> : null}
-      {children}
+      {pill ? <>{busyIcon ?? <ActionIcon name={resolved} />}{actionName(words)}</> : children}
     </button>
   );
 }

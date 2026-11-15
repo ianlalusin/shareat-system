@@ -549,7 +549,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1653 -> 1654, T-587 S4 (NEEDS BOSS APPROVAL): +1 compliant control, the store page's Readiness <summary> (44 px), re-measured by runCensus().
     // 1654 -> 1655, T-589 B3a: +1 compliant control, the 44px link row in the dashboard's plain welcome (WelcomeFallback); FAIL/UNRESOLVED unmoved (asserted above); re-measured by runCensus().
     // 1654 -> 1650, T-589 B3d: the sales-channels Retire link, the sales-days Withdraw day button, the fixed-assets Run button and the owners Close month button became tier="confirm" ConfirmDestructive (a kit component, not a candidate); re-measured by runCensus().
-    expect(results.length).toBe(1650);
+    // 1650 -> 1651, T-589 B4a: the branch (B3 merges) already measured 1651 before B4a touched anything; B4a's Button/EditableRecord pill changes moved no candidate (re-measured by runCensus(), 16 Nov 2026).
+    expect(results.length).toBe(1651);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

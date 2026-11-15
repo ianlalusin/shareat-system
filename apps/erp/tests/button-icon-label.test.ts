@@ -34,6 +34,7 @@ describe('DEF-754 icon Button accessible name', () => {
     const html = renderToStaticMarkup(
       createElement(FormModal, { trigger: '+ Log invoice', title: 'Log invoice', children: null }),
     );
-    expect(html).toContain('aria-label="Log invoice"');
+    // T-589 B4a: the trigger is primary, so the word is VISIBLE and is its name (no aria-label needed).
+    expect(html).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*><svg[^>]*>.*?<\/svg>Log invoice<\/button>/);
   });
 });
