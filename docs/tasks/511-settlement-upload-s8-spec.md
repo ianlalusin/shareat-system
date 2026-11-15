@@ -78,6 +78,15 @@ Decisions (mine, flagged to BOSS/Ian in the hand-back):
    sentence; both months closed refuses; a reversal follows the same rule; the money (amount, VAT, accounts) is identical either way.
    This changes `postPlatformCharge` (S6c) on purpose: update only the pins/tests that assert the old refusal for a closed charge month.
 
+9. **PandaGO delivery fees are booked (Ian, 15 Nov, amends design decision 4 of 2 Nov).** The real file proves Foodpanda deducts PandaGO
+   "Delivery Service Fees" (+89.29 original, −89.29 reversal, +89.29 re-bill) from the weekly payout (Appendix C), so they must book or the
+   week can never match the bank. Rule: an Appendix B row whose category is "Delivery Service Fees" (incl. "PandaGO Order-…" and "Incorrect
+   Invoice Amount Reversal: …" rows) stages as a period charge like CPC/platform fee and books through `postPlatformCharge` (expense
+   `platformFee` 6400, receivable 1220, VAT 12% included). PandaGO cash-on-delivery rows and any other PandaGO row stay shown-only, never
+   booked. Everything about that row (dated by its own date, official document number, the late-charge month rule of item 8) follows the
+   other charges. Update `deduction-mapping.ts:66`, the staging kind, the "PandaGO: not booked here" screen text only for rows that now
+   book, `docs/designs/channel-settlement-upload.md` (decision 4 and rows 80/96/241/257 wording), and the tests that pin the old rule.
+
 ## Out of scope / accepted
 Day lines still replace by sales date without the invoice number (existing S4 design, noted); reading the PDF; a UI for Appendix C items that
 are not charges (blocked → reject the day); renders (sign-in blocked; Ian looks after merge).
