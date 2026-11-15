@@ -318,7 +318,7 @@ export function AutoAllocatePaymentForm({
         </Button>
         {pageStale && (
           <p className="mt-2 text-xs text-warning-ink">
-            ⚠️ The open items changed since this page loaded — refresh before relying on this
+            The open items changed since this page loaded. Refresh before relying on this
             figure or pressing Save.
           </p>
         )}
@@ -331,7 +331,7 @@ export function AutoAllocatePaymentForm({
         {unallocated !== null && !pageStale && !raceDetected && !editedSinceCheck && (
           <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
             {compare(money(unallocated), ZERO) > 0
-              ? `₱${unallocated} would be unallocated — routed to advances to suppliers as an overpayment unless you edit the boxes above.`
+              ? `₱${unallocated} would be unallocated — kept as an advance to the supplier unless you edit the boxes above.`
               : 'Fully allocated across the boxes above.'}
           </p>
         )}

@@ -1,3 +1,4 @@
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '@/lib/page-access';
 import { createRequestAction } from './actions';
 import {
@@ -56,13 +57,13 @@ export default async function CashRequestsPage({
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Cash requests</h1>
           <PageDescription>
-            Money handed to a person for an errand, spent, and reconciled. Every figure is summed from
-            the ledger — <strong>a request closes when its float reaches zero</strong>, not when
+            Money handed to a person for an errand, then spent and accounted for.{' '}
+            <strong>A request closes when the cash handed out is fully accounted for</strong>, not when
             someone marks it done.
           </PageDescription>
         </div>
         <FormModal trigger="+ Ask for cash" title="Ask for cash" size="md"
-          description="This records the ask. Nothing posts: a request that moved money would show a float in someone's hands before anyone handed it over.">
+          description="This records the ask only. No money moves until it is approved and handed over.">
           <CheckedForm rules={CASH_REQUEST_CREATE_RULES} action={createRequestAction} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Store" rule={CASH_REQUEST_CREATE_RULES.storeId}>
@@ -79,7 +80,7 @@ export default async function CashRequestsPage({
               </Field>
               <Field
                 label="Who holds the money"
-                hint="The person the float is charged to — a shortage lands on them by name."
+                hint="The person the money is charged to. Any shortage is charged to them by name."
                 rule={CASH_REQUEST_CREATE_RULES.requestedFor}
               >
                 <Select id="requested-for" {...nativeAttrs(CASH_REQUEST_CREATE_RULES.requestedFor)} defaultValue="" invalid={sp.field === 'requested-for'} className="w-full">
@@ -128,7 +129,7 @@ export default async function CashRequestsPage({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <div className="text-xs text-neutral-500 dark:text-neutral-400">
-            Out with holders, across {open.length} {open.length === 1 ? 'float' : 'floats'}
+            Cash still held by staff, across {open.length} {open.length === 1 ? 'request' : 'requests'}
           </div>
           <div className="font-mono text-lg tabular-nums">{peso(outstanding)}</div>
         </div>
@@ -172,7 +173,7 @@ export default async function CashRequestsPage({
                         {r.purpose}
                       </RowLink>
                       <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                        {r.requestedOn}
+                        {formatBusinessDayLong(r.requestedOn)}
                       </div>
                     </td>
                     <td className="px-3 py-2">

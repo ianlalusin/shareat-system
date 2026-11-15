@@ -50,9 +50,8 @@ export function TieIndicator({
       </p>
       {!ties ? (
         <p className="mt-2 text-sm text-danger">
-          This should never happen — every journal entry is enforced balanced at the
-          database level. Stop and investigate before trusting any other figure on this
-          screen.
+          Debits and credits should always match. Stop and ask for help before trusting any
+          other figure on this screen.
         </p>
       ) : null}
     </div>

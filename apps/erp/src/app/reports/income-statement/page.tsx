@@ -63,7 +63,7 @@ export default async function IncomeStatementPage({
     <Page
       density="wide"
       title="Income Statement"
-      description="A GROUP BY query over journal_lines — a new revenue or expense account appears here automatically, with no code change."
+      description="Sales, costs and profit for the dates you pick. A new sales or expense account shows up here by itself."
     >
       <ReportFilters
         basePath="/reports/income-statement"
@@ -74,7 +74,7 @@ export default async function IncomeStatementPage({
         fromDate={fromDate}
         toDate={toDate}
         includeYearClose={includeYearClose}
-        yearCloseHelp="Defaults to excluded — a date-range P&L excludes the year-close entry (ADR-006)."
+        yearCloseHelp="Excluded by default, so a profit and loss for a date range leaves out the year-end closing entry."
       />
 
       <div className="flex items-center justify-between gap-4">

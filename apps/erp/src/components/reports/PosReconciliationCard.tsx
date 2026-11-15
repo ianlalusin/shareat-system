@@ -10,8 +10,8 @@ export type LedgerSideView =
   | { exists: false };
 
 const SIDE_LABEL: Record<'not_found' | 'none', string> = {
-  not_found: 'POS had no analytics for this store/date',
-  none: 'Nothing stored for this store/date',
+  not_found: 'POS had no figures for this store and date',
+  none: 'No reading for this store and date',
 };
 
 function Side({ title, subtitle, side }: { title: string; subtitle?: string; side: PosSideView }) {
@@ -22,7 +22,7 @@ function Side({ title, subtitle, side }: { title: string; subtitle?: string; sid
       {side.status === 'ok' ? (
         <>
           <p className="text-xl font-semibold tabular-nums">{formatMoney(side.paidTotal)}</p>
-          <p className="text-xs text-neutral-500">{side.receiptCount} receipt(s)</p>
+          <p className="text-xs text-neutral-500">{side.receiptCount} {side.receiptCount === 1 ? 'receipt' : 'receipts'}</p>
         </>
       ) : (
         <p className="text-sm text-neutral-500">{SIDE_LABEL[side.status]}</p>
@@ -67,7 +67,7 @@ export function PosReconciliationCard({
       )}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Side title="Posted basis" subtitle="What the ledger holds: the import, or the latest correction." side={postedBasis} />
+        <Side title="Posted basis" subtitle="What the books hold: the import, or the latest correction." side={postedBasis} />
         <Side title="Latest check" side={latest} />
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">Shareat System</p>
@@ -86,7 +86,7 @@ export function PosReconciliationCard({
 
       {delta !== null ? (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Delta (latest check − posted basis): <span className="font-mono tabular-nums">{formatMoney(delta)}</span>
+          Difference (latest check − posted basis): <span className="font-mono tabular-nums">{formatMoney(delta)}</span>
         </p>
       ) : null}
     </div>

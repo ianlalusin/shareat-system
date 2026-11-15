@@ -1,7 +1,7 @@
 import { getArAgingReport } from '@shareat/domain';
 import { customersRepo } from '@shareat/db';
 import { mayReadCustomerBalances, reportScope, runReport } from '../lib';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { AgingFilters } from '@/components/reports/AgingFilters';
 import { ArAgingTable, ArAgingReconciliationIndicator, type ArAgingTableRow } from '@/components/reports/ArAgingTable';
@@ -72,9 +72,8 @@ export default async function ArAgingPage({
       <div>
         <h1 className="text-2xl font-semibold">AR Aging</h1>
         <PageDescription>
-          Every open receivable, bucketed by due date. The total below is checked against the
-          1210 control account on every load — two independent queries that must agree to the
-          centavo.
+          Every unpaid customer balance, grouped by how overdue it is. The total is checked against
+          what the books say customers owe.
         </PageDescription>
       </div>
 
@@ -93,23 +92,26 @@ export default async function ArAgingPage({
           {' · '}
           {currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
           {' · '}
-          as of {asOfDate}
+          as of {formatBusinessDayLong(asOfDate)}
         </p>
         <CsvExportLink
           href={`/reports/ar-aging/export?${new URLSearchParams({ ...(storeId ? { store: storeId } : {}), asOf: asOfDate }).toString()}`}
         />
       </div>
 
-      <ArAgingReconciliationIndicator
-        reconciles={report.reconciles}
-        agingTotal={report.totals.total}
-        controlBalance={report.controlBalance}
-      />
+      {/* An empty report claims nothing; a mismatch is still shown, since it is a real fault. */}
+      {rows.length > 0 || !report.reconciles ? (
+        <ArAgingReconciliationIndicator
+          reconciles={report.reconciles}
+          agingTotal={report.totals.total}
+          controlBalance={report.controlBalance}
+        />
+      ) : null}
 
       {rows.length > 0 ? (
         <ArAgingTable rows={rows} totals={report.totals} />
       ) : (
-        <EmptyState message={`No open receivables as of ${asOfDate}.`} />
+        <EmptyState message={`No open receivables as of ${formatBusinessDayLong(asOfDate)}.`} />
       )}
 
       <PlatformAgingSection

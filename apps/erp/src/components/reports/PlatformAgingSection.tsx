@@ -42,7 +42,7 @@ export function PlatformAgingSection({
     <section className="space-y-3">
       <h2 className="text-xl font-semibold">Due from delivery platforms</h2>
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        Only verified sales days appear here. {waitingForVerification} day(s) with platform sales are waiting for verification.{' '}
+        Only verified sales days appear here. {waitingForVerification} {waitingForVerification === 1 ? 'day' : 'days'} with platform sales {waitingForVerification === 1 ? 'is' : 'are'} waiting for verification.{' '}
         <a href="/sales-days?status=unverified" className="inline-flex min-h-11 items-center underline hover:no-underline">
           See the days waiting
         </a>

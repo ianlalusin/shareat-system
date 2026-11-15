@@ -1,7 +1,7 @@
 import { accountLabel } from '@/lib/account-label';
 import { notFound } from 'next/navigation';
 import { authorize, heldCapabilities, can } from '@shareat/auth';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { expensesRepo, apRepo, filesRepo } from '@shareat/db';
 import { previewInvoiceDrafts } from '@shareat/domain';
@@ -194,8 +194,8 @@ return (
             {supplier?.name ?? invoice.supplierId} — {invoice.invoiceNo ?? id.slice(0, 8)}
           </h1>
           <PageDescription>
-            {invoice.invoiceDate}
-            {invoice.dueDate ? ` · due ${invoice.dueDate}` : ''}
+            {formatBusinessDayLong(invoice.invoiceDate)}
+            {invoice.dueDate ? ` · due ${formatBusinessDayLong(invoice.dueDate)}` : ''}
           </PageDescription>
         </div>
         <div className="text-right">
@@ -242,13 +242,13 @@ return (
           <h2 className="mb-3 font-medium">Evidence</h2>
           {invoice.receiptFileId ? (
             <div className="text-success">
-              photo attached &mdash; uploaded, not typed{' '}
+              Photo attached{' '}
               {canViewReceipt && (
                 <PhotoThumb purpose="receipt_photo" label="Receipt photo" existing={{ fileId: invoice.receiptFileId, kind: receiptKind }} size="sm" />
               )}
             </div>
           ) : (
-            <span className="text-warning-ink">none &mdash; required to verify</span>
+            <span className="text-warning-ink">No photo yet. One is needed to verify.</span>
           )}
         </div>
       </section>
@@ -258,8 +258,8 @@ return (
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">What was on this bill</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Itemise it before verifying &mdash; ticking &ldquo;right items, right price&rdquo; only
-            means something if the items are on the record. Lines must add up to{' '}
+            List the items before verifying. Ticking &ldquo;right items, right price&rdquo; only
+            means something if the items are on record. Lines must add up to{' '}
             <strong>{peso(goodsTotal)}</strong>
             {compare(deliveryFee, ZERO) !== 0 || compare(otherFees, ZERO) !== 0
               ? ' (the total less the delivery and other fees, which are not lines)'
@@ -268,7 +268,7 @@ return (
             itemised detail (a utility bill), and the invoice still works.
           </p>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            ⚠️ <strong>Quantity and unit price are in the unit the supplier billed.</strong> If they
+            <strong>Quantity and unit price are in the unit the supplier billed.</strong> If they
             sell by the case, enter cases &mdash; then set &ldquo;per unit&rdquo; to how many of the
             item&rsquo;s own unit are in one, so ₱/kg stays comparable across suppliers.
           </p>
@@ -378,10 +378,8 @@ return (
         <section className="space-y-2 rounded-lg border border-warning p-4">
           <h2 className="font-medium">What verifying will post</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            The four checks below attest the DOCUMENT is genuine. Posting attests the CODING is
-            right — cost of food vs. supplies vs. owner&rsquo;s drawings drives the tax
-            treatment, and one click is about to make both assertions. These drafts post the
-            instant you verify.
+            Verifying confirms the paper is genuine and posts these draft expenses straight away.
+            Check each category too: food, supplies and owner&rsquo;s drawings are taxed differently.
           </p>
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
             <table aria-label="What verifying will post" className="w-full min-w-[640px] border-collapse text-sm">
@@ -404,7 +402,7 @@ return (
                       <LinkRow key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                         <td className="px-3 py-2">{cat?.category ?? e.categoryId}</td>
                         <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">
-                          {cat?.accountCode ? accountLabel(cat.accountCode) : <span className="text-danger">unmapped — will block</span>}
+                          {cat?.accountCode ? accountLabel(cat.accountCode) : <span className="text-danger">No account set. Verifying will be blocked.</span>}
                         </td>
                         <td className="px-3 py-2">
                           <RowLink href={`/expenses/${e.id}`}>{e.particulars}</RowLink>
@@ -491,7 +489,7 @@ return (
             {payments.map((p) => (
               <li key={p.paymentId} className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                  <span className="font-medium">{p.businessDate}</span>
+                  <span className="font-medium">{formatBusinessDayLong(p.businessDate)}</span>
                   <span className="font-mono tabular-nums">{peso(p.amount)}</span>
                 </div>
                 <dl className="mt-1 grid gap-x-4 gap-y-0.5 text-xs text-neutral-500 sm:grid-cols-2 dark:text-neutral-400">
@@ -584,7 +582,7 @@ return (
             trigger="+ Record expense"
             title="Record an expense against this invoice"
             size="lg"
-            description="Posts immediately — verification already was the approval (Ian, 2026-08-27)."
+            description="Posts straight away. Verifying the invoice was the approval."
           >
           <CheckedForm rules={INVOICE_EXPENSE_RULES} action={recordInvoiceExpenseAction} className="space-y-3">
             <input type="hidden" name="returnTo" value={`/ap/invoices/${invoice.id}`} />

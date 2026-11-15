@@ -66,7 +66,7 @@ export default async function AccessDefaultsPage({
       <Page density="table">
         <h1 className="text-2xl font-semibold">Position access defaults</h1>
         <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-400">
-          You have no store scope, so there is nothing to configure here.
+          You are not assigned to any store, so there is nothing to set up here.
         </p>
       </Page>
     );
@@ -88,9 +88,9 @@ export default async function AccessDefaultsPage({
       <div>
         <h1 className="text-2xl font-semibold">Position access defaults</h1>
         <PageDescription>
-          What can a Cashier do here? Set, per position and per store, which capabilities every
-          holder of that job gets in addition to the role matrix. Additive only — nothing here can
-          switch off a capability the role matrix already grants.
+          What can a Cashier do here? For each position and store, choose what everyone in that job
+          can do on top of what their role already allows. This only adds access. It cannot take
+          away anything the role already gives.
         </PageDescription>
       </div>
 
@@ -111,8 +111,8 @@ export default async function AccessDefaultsPage({
 
       {positions.length === 0 ? (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          This store has no positions yet. The canonical six are seeded when the organisation is
-          created — if none appear here, that is worth reporting.
+          This store has no positions yet. The standard positions are added when the organization is
+          created. If none appear here, please report it.
         </p>
       ) : (
         <>
@@ -140,9 +140,8 @@ export default async function AccessDefaultsPage({
         <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Same for every store</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Applies this position&rsquo;s currently-saved defaults at this store to every other
-            active store. Canonical positions only — a store-invented position belongs to its own
-            store.
+            Copies this position&rsquo;s saved defaults at this store to every other active store.
+            Standard positions only. A position made for one store stays with that store.
           </p>
           <div className="flex flex-wrap gap-2">
             {canonicalPositions.map((p) => (
@@ -162,9 +161,9 @@ export default async function AccessDefaultsPage({
         <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Copy defaults from&hellip;</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Copies every canonical-position default that is active at the source store into this
-            one. A store-invented position never copies — it belongs to its own store. This is a
-            copy, not a link: the two stores&rsquo; rows do not stay in sync afterwards.
+            Copies every default of the standard positions from the other store into this one. A
+            position made for one store is never copied. This is a one-time copy: the two stores do
+            not stay in sync afterwards.
           </p>
           <CheckedForm rules={ADMIN_COPY_DEFAULTS_RULES} action={copyDefaultsAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="storeId" value={storeId} />
