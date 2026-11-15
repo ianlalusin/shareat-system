@@ -13,9 +13,11 @@ export interface EmptyStateProps {
   readonly title: string;
   readonly body?: string;
   readonly action?: ReactNode;
+  /** T-583: `sm` draws the same picture at 60x45 with tighter spacing, for a card. */
+  readonly size?: 'md' | 'sm';
 }
 
-function Illustration({ name }: { readonly name: EmptyStateIllustration }) {
+function Illustration({ name, size }: { readonly name: EmptyStateIllustration; readonly size: 'md' | 'sm' }) {
   return (
     <svg
       aria-hidden="true"
@@ -26,7 +28,7 @@ function Illustration({ name }: { readonly name: EmptyStateIllustration }) {
       strokeWidth={2.5}
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="h-[90px] w-[120px] text-ink"
+      className={size === 'sm' ? 'h-[45px] w-[60px] text-ink' : 'h-[90px] w-[120px] text-ink'}
     >
       {name === 'truck' ? (
         <>
@@ -58,12 +60,13 @@ function Illustration({ name }: { readonly name: EmptyStateIllustration }) {
   );
 }
 
-export function EmptyState({ illustration, title, body, action }: EmptyStateProps) {
+export function EmptyState({ illustration, title, body, action, size = 'md' }: EmptyStateProps) {
+  const sm = size === 'sm';
   return (
-    <div className="flex flex-col items-center gap-2 rounded-[20px] border border-dashed border-surface-border p-8 text-center">
-      <Illustration name={illustration} />
-      <b className="text-lg font-bold text-ink">{title}</b>
-      {body ? <p className="text-sm text-muted">{body}</p> : null}
+    <div className={sm ? 'flex flex-col items-center gap-1 rounded-[20px] border border-dashed border-surface-border p-4 text-center' : 'flex flex-col items-center gap-2 rounded-[20px] border border-dashed border-surface-border p-8 text-center'}>
+      <Illustration name={illustration} size={sm ? 'sm' : 'md'} />
+      <b className={sm ? 'text-sm font-bold text-ink' : 'text-lg font-bold text-ink'}>{title}</b>
+      {body ? <p className={sm ? 'text-xs text-muted' : 'text-sm text-muted'}>{body}</p> : null}
       {action ?? null}
     </div>
   );
