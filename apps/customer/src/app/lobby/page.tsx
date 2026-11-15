@@ -10,7 +10,7 @@ import { getLobbyData } from '@/data/lobby-source';
 import { LobbyMenu } from './lobby-menu';
 import { storeScreenView } from './lobby-view';
 
-/** /lobby?s=CODE - store name, "N parties waiting", the way in to the check-in form, and the menu. A closed store shows only the counter sentence and the menu. */
+/** /lobby?s=CODE - store name, the way in to the check-in form, and the menu. A closed store shows only the counter sentence and the menu. */
 function StoreScreen() {
   const storeCode = useSearchParams().get('s') ?? '';
   const [result, setResult] = useState<LobbyResult<LobbyStoreView> | null>(null);
@@ -41,7 +41,7 @@ function StoreScreen() {
   const view = storeScreenView(result);
   return (
     <div>
-      <PageTitle hint={view.waitingText || undefined}>{view.title}</PageTitle>
+      <PageTitle>{view.title}</PageTitle>
       {view.notice ? (
         <p role="status" className="mb-4 rounded-md border border-border bg-muted px-3 py-3 text-center text-sm font-semibold">
           {view.notice}

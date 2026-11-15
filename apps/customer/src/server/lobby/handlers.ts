@@ -331,11 +331,11 @@ export async function handleClaimCancel(req: Request): Promise<Response> {
 
 /** The one reply for every store the diner cannot join: paused, switched off, POS unseen, no lobby row, unknown or missing code. Same keys as an open store. */
 const closedStore = (): Response =>
-  json(200, { ok: true, store: { storeName: '', partiesWaiting: 0, accepting: false }, error: SENTENCES.counter });
+  json(200, { ok: true, store: { storeName: '', accepting: false }, error: SENTENCES.counter });
 
 /**
- * GET /api/lobby/store?s=CODE - what the lobby screen shows before check-in: the store's name, how many parties are waiting, and whether the line
- * is open. Public and read-only: no cookie, no ip, no hash secret, no person data and no money. A closed store and an unknown code look the same.
+ * GET /api/lobby/store?s=CODE - what the lobby screen shows before check-in: the store's name and whether the line
+ * is open. T-581: never a waiting count - the public must not read how busy a store is. Public and read-only: no cookie, no ip, no hash secret, no person data and no money. A closed store and an unknown code look the same.
  */
 export async function handleStore(req: Request): Promise<Response> {
   return guarded('store', async () => {
@@ -355,9 +355,9 @@ export async function handleStore(req: Request): Promise<Response> {
       if (!sw || !sw.enabled || sw.paused || !sw.posFresh) return null;
       const storeName = await lobbyRepo.getStoreName(tx, orgId, storeId);
       if (storeName === undefined) return null;
-      return { storeName, partiesWaiting: await lobbyRepo.countLive(tx, orgId, storeId) };
+      return { storeName };
     });
     if (!view) return closedStore();
-    return json(200, { ok: true, store: { storeName: view.storeName, partiesWaiting: view.partiesWaiting, accepting: true } });
+    return json(200, { ok: true, store: { storeName: view.storeName, accepting: true } });
   });
 }
