@@ -554,8 +554,8 @@ export default async function SalesDayDetailPage({
             counted handover) has to be undone first. A reason is required. A manager can enter this
             date again afterwards.
           </p>
-          <div className="flex gap-2">
-            <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="flex-1">
+          <div className="flex flex-wrap gap-2">
+            <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="min-w-[12rem] flex-1">
               <Input {...nativeAttrs(SALES_DAY_VOID_RULES.reason)} placeholder="Why is this being withdrawn?" />
             </Field>
             <ConfirmDestructive
@@ -576,8 +576,8 @@ export default async function SalesDayDetailPage({
             A verified day is voided by <strong>reversing</strong> its entry — the original stays
             visible and both sides remain in the ledger. A reason is required.
           </p>
-          <div className="flex gap-2">
-            <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="flex-1">
+          <div className="flex flex-wrap gap-2">
+            <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="min-w-[12rem] flex-1">
               <Input {...nativeAttrs(SALES_DAY_VOID_RULES.reason)} placeholder="Why is this being voided?" />
             </Field>
             <ConfirmDestructive
