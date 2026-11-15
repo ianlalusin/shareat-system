@@ -22,6 +22,7 @@ import { APP_ROLE, closeDb, documentsRepo, transaction, RefusalError, type Tx } 
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import {
+  voidDocument,
   documentDraft,
   documentIssueOptions,
   getIssuedDocument,
@@ -232,8 +233,9 @@ describe('T-584 S3 - the register (s3 item 4)', () => {
     const all = await issue(w, w.f.admin.actor, { body: 'Org-wide' });
     const ids = async (actor: Actor) => (await asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, actor, {}))).map((d) => d.id).sort();
     expect(await ids(w.f.admin.actor)).toEqual([a.documentId, b.documentId, all.documentId].sort());
-    expect(await ids(w.f.managerA.actor)).toEqual([a.documentId]);
-    expect(await ids(w.f.managerB.actor)).toEqual([b.documentId]);
+    // an organisation-wide document (no store) is readable by anyone who holds view_documents at any store (Ian, 15 Nov)
+    expect(await ids(w.f.managerA.actor)).toEqual([a.documentId, all.documentId].sort());
+    expect(await ids(w.f.managerB.actor)).toEqual([b.documentId, all.documentId].sort());
     await denied(asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, w.f.staff.actor, {})));
   });
 
@@ -377,5 +379,37 @@ describe('T-584 limits and edge cases', () => {
     await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${w.f.orgId}, 'admin')`;
     const rows = await asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, { personId: p!.id, orgId: w.f.orgId }, {}));
     expect(rows.map((d) => d.id)).toEqual([all.documentId]);
+  });
+});
+
+describe('T-584 organisation-wide documents: a store manager may READ them, never change them (Ian, 15 Nov)', () => {
+  it('a manager lists, opens and prints a storeless memo; the admin too [kills: a memo only an administrator can read]', async () => {
+    const w = await world('storeless-read');
+    const memo = await issue(w, w.f.admin.actor, { body: 'Everyone, the shop closes early on Friday.' });
+    for (const who of [w.f.managerA.actor, w.f.managerB.actor, w.f.admin.actor]) {
+      expect((await asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, who, {}))).map((d) => d.id)).toContain(memo.documentId);
+      const got = await asOrg(w.f.orgId, (tx) => getIssuedDocument(tx, who, memo.documentId));
+      expect(got.document).toMatchObject({ number: memo.number, storeId: null });
+      const p = await asOrg(w.f.orgId, (tx) => documentPrintData(tx, who, memo.documentId));
+      expect(p).toMatchObject({ number: memo.number, body: 'Everyone, the shop closes early on Friday.' });
+    }
+  });
+
+  it('a manager cannot revise or void it; the admin can [kills: read access leaking into write access]', async () => {
+    const w = await world('storeless-write');
+    const memo = await issue(w, w.f.admin.actor, { body: 'Everyone, original.' });
+    await denied(asOrg(w.f.orgId, (tx) => reviseDocument(tx, w.f.managerA.actor, { documentId: memo.documentId, body: 'x', reason: 'y' })));
+    await denied(asOrg(w.f.orgId, (tx) => voidDocument(tx, w.f.managerA.actor, { documentId: memo.documentId, reason: 'y' })));
+    await denied(issue(w, w.f.managerA.actor, { body: 'Mine, org-wide.' }));
+    expect((await asOrg(w.f.orgId, (tx) => reviseDocument(tx, w.f.admin.actor, { documentId: memo.documentId, body: 'Everyone, changed.', reason: 'Changed day' }))).versionNo).toBe(2);
+    await asOrg(w.f.orgId, (tx) => voidDocument(tx, w.f.admin.actor, { documentId: memo.documentId, reason: 'Withdrawn' }));
+  });
+
+  it('staff with no view_documents anywhere cannot list, open or print it [kills: a memo open to every signed-in person]', async () => {
+    const w = await world('storeless-staff');
+    const memo = await issue(w, w.f.admin.actor, { body: 'Everyone, private.' });
+    await denied(asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, w.f.staff.actor, {})));
+    await denied(asOrg(w.f.orgId, (tx) => getIssuedDocument(tx, w.f.staff.actor, memo.documentId)));
+    await denied(asOrg(w.f.orgId, (tx) => documentPrintData(tx, w.f.staff.actor, memo.documentId)));
   });
 });

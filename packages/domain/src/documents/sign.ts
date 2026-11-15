@@ -19,6 +19,7 @@ import { DOCUMENT_REASON_RULES, DOCUMENT_SIGN_RULES } from '../field-rules/docum
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { gone, internalFault, refuse } from '../shared/refusal';
 import { resolveStorageDriver } from '../files/driver';
+import { authorizeViewStoreless } from './access';
 
 export interface SignInput {
   documentId: string;
@@ -162,6 +163,6 @@ export async function documentSignatureImage(tx: Tx, actor: Actor, signatureId: 
   const row = await documentsRepo.getSignatureForServing(tx, actor.orgId, signatureId);
   if (!row) throw gone('documents: signature not found', 'signature');
   if (row.storeId) await authorize(tx, actor, 'view_documents', { storeId: row.storeId });
-  else await authorize(tx, actor, 'manage_document_templates', {});
+  else await authorizeViewStoreless(tx, actor);
   return { bytes: await resolveStorageDriver().get(row.storagePath), contentType: row.contentType };
 }

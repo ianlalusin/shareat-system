@@ -109,6 +109,8 @@ rendered, so there is no XSS surface. A test proves `<script>` in a template bod
 | `issue_documents` | store | super_admin, admin, manager |
 | `view_documents` | store | super_admin, admin, manager |
 
+**Storeless (organisation-wide) documents (Ian, 15 Nov):** anyone who holds `view_documents` at ANY store may list, open and print a document with no store, and see the signature images on it. Issuing, revising, voiding and signing a storeless document stay `manage_document_templates` (admin).
+
 Signing needs no capability: it needs the signer's own valid PIN, and the signer must be the
 issuer (issuer slot) or the document's employee (employee slot). Use `verifyPin` / the staff PIN
 lookup already used by the POS sign-in (T-464). Reuse its lockout and attempt cap; don't write a new

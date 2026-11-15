@@ -17,6 +17,7 @@ import { DOCUMENT_REASON_RULES } from '../field-rules/documents';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { gone, refuse } from '../shared/refusal';
 import { fillBody, longDate, missingIn, type MergeValues } from './merge-fields';
+import { authorizeViewStoreless } from './access';
 import { assertBodyText } from './templates';
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -24,9 +25,13 @@ import { assertBodyText } from './templates';
 // ---------------------------------------------------------------------------------------------------------------------
 type DocCapability = 'issue_documents' | 'view_documents';
 
-/** At the document's store; a document with no store is the admin's (`manage_document_templates`, org scope). */
+/**
+ * At the document's store. A document with no store: READING it is open to anyone who holds `view_documents` at any store (Ian, 15 Nov); issuing, revising
+ * and voiding it stay the admin's (`manage_document_templates`, org scope).
+ */
 async function authorizeAt(tx: Tx, actor: Actor, capability: DocCapability, storeId: string | null): Promise<void> {
   if (storeId) await authorize(tx, actor, capability, { storeId });
+  else if (capability === 'view_documents') await authorizeViewStoreless(tx, actor);
   else await authorize(tx, actor, 'manage_document_templates', {});
 }
 
@@ -35,7 +40,8 @@ async function scopeOf(tx: Tx, actor: Actor, capability: DocCapability): Promise
   const stores = await storesRepo.listForOrg(tx, actor.orgId);
   const storeIds: string[] = [];
   for (const s of stores) if (await can(tx, actor, capability, { storeId: s.id })) storeIds.push(s.id);
-  const includeOrgWide = await can(tx, actor, 'manage_document_templates', {});
+  // Reading storeless documents follows view_documents at any store; the issue picker keeps them the admin's.
+  const includeOrgWide = (capability === 'view_documents' && storeIds.length > 0) || (await can(tx, actor, 'manage_document_templates', {}));
   if (storeIds.length === 0 && !includeOrgWide && stores[0]) await authorize(tx, actor, capability, { storeId: stores[0].id });
   return { storeIds, includeOrgWide };
 }

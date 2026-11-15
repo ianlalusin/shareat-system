@@ -334,3 +334,21 @@ describe('T-584 R7 - a signature keeps the signer\'s name as it was', () => {
     await v('z'.repeat(500));
   });
 });
+
+describe('T-584 organisation-wide documents: the signature image is readable by a store manager (Ian, 15 Nov)', () => {
+  it('a manager at any store sees the image on a storeless document the admin signed; staff do not [kills: a signed memo image only an administrator can open]', async () => {
+    const f = await documentFixture(sql, 'storeless-image');
+    const t = await asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.admin.actor, { name: 'Memo', kind: 'memo', body: 'x', signatureSlots: ['issuer'] }));
+    const m = await asOrg(f.orgId, (tx) => issueDocument(tx, f.admin.actor, { templateId: t.templateId, body: 'Everyone, signed.' }));
+    for (const row of await sql<{ storage_path: string }[]>`select storage_path from stored_files where org_id = ${f.orgId}`) driver.files.set(row.storage_path, new Uint8Array([9, 9, 9]));
+    await asOrg(f.orgId, (tx) => signDocument(tx, f.admin.actor, { documentId: m.documentId, slot: 'issuer', versionNo: 1, employeeId: '', pin: f.admin.pin }));
+    const sigId = (await asOrg(f.orgId, (tx) => getIssuedDocument(tx, f.managerA.actor, m.documentId))).versions[0]!.signatures[0]!.id;
+    for (const who of [f.managerA.actor, f.managerB.actor]) {
+      const img = await asOrg(f.orgId, (tx) => documentSignatureImage(tx, who, sigId));
+      expect(Array.from(img.bytes)).toEqual([9, 9, 9]);
+    }
+    await denied(asOrg(f.orgId, (tx) => documentSignatureImage(tx, f.staff.actor, sigId)));
+    // reading is not signing: a manager cannot sign the storeless memo
+    await denied(asOrg(f.orgId, (tx) => signDocument(tx, f.managerA.actor, { documentId: m.documentId, slot: 'issuer', versionNo: 1, employeeId: '', pin: f.admin.pin })));
+  });
+});
