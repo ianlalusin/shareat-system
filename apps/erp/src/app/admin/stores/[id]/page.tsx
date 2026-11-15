@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePageAccess } from '../../../../lib/page-access';
-import { daypartsForStore, storeDetail } from '../lib';
+import { daypartsForStore, posModeFor, storeDetail } from '../lib';
 import { DaypartsSection } from '../../../menu/DaypartsSection';
 import {
   deactivateStoreAction,
   reactivateStoreAction,
   setStoreOpeningDateAction,
+  setStorePosModeAction,
   setStoreStockModelAction,
   updateStoreAction,
 } from '../actions';
@@ -17,7 +18,10 @@ import { ADMIN_STORE_DETAILS_RULES, ADMIN_STORE_OPENING_DATE_RULES, nativeAttrs 
 import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Field, Input, Textarea } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { STORE_DETAILS, STORE_OPENING_DATE, STORE_STOCK_MODEL } from '../typed-forms';
+import { STORE_DETAILS, STORE_OPENING_DATE, STORE_POS_MODE, STORE_STOCK_MODEL } from '../typed-forms';
+import { PosModeForm } from './PosModeForm';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
+import { formatBusinessDateTime } from '@shareat/core/datetime';
 
 export const metadata = { title: 'Store — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -70,6 +74,11 @@ export default async function StoreDetailPage({
 
   const blocking = readiness.filter((c) => !c.ok && c.blocking);
   const hours = await daypartsForStore(actor, id);
+  const pos = await posModeFor(actor, id);
+  const posTyped = typedFor(sp, STORE_POS_MODE, store.id, actor.personId);
+  const posTypedFields = posTyped?.kind === 'typed' ? posTyped.fields : {};
+  const one = (v: string | string[] | undefined): string | undefined => (Array.isArray(v) ? v[0] : v);
+  const niceDay = (d: string): string => formatBusinessDateTime(new Date(`${d}T00:00:00+08:00`), { dateStyle: 'medium' });
 
   return (
     <Page view="detail" sectioned density="table">
@@ -159,6 +168,51 @@ export default async function StoreDetailPage({
         </section>
 
         <section className="space-y-4">
+          {/**
+            * ⭐ T-533 S1 — which POS owns this store's sales days. `off` and `test` book nothing; `live` from a date means the new POS closes the day and the v1 day
+            * feed stops from that date. Admin and super-admin only (the page itself is `manage_stores`; `setStorePosMode` checks the role again).
+            */}
+          <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+            <h2 className="text-sm font-medium">New POS</h2>
+            <p className="text-sm">
+              Mode: <strong>{pos.mode === 'live' && pos.liveFrom ? `Live from ${niceDay(pos.liveFrom)}` : pos.mode === 'test' ? 'Test' : 'Off'}</strong>
+            </p>
+            <p className="text-xs text-neutral-500">
+              {pos.changedAt ? `Last changed by ${pos.changedByName ?? 'someone'} on ${formatBusinessDateTime(pos.changedAt)}.` : 'Never switched on for this store.'}
+            </p>
+            <p className="text-sm">
+              Pre-flight:{' '}
+              {pos.preflight.blocking.length === 0
+                ? 'nothing blocks going live'
+                : `${pos.preflight.blocking.length} thing${pos.preflight.blocking.length === 1 ? '' : 's'} block${pos.preflight.blocking.length === 1 ? 's' : ''} going live`}
+              {pos.preflight.warnings.length > 0 ? `, ${pos.preflight.warnings.length} warning${pos.preflight.warnings.length === 1 ? '' : 's'}` : ''}.{' '}
+              <Link href={`/admin/stores/${id}/pos-preflight`} className={ACTION_LINK}>
+                See the pre-flight list →
+              </Link>
+            </p>
+            {sp.needsConfirmation && posTyped?.kind === 'typed' ? (
+              <form action={setStorePosModeAction} className="space-y-3 text-sm">
+                <input type="hidden" name="storeId" value={store.id} />
+                <input type="hidden" name="mode" value={one(posTypedFields.mode) ?? ''} />
+                <input type="hidden" name="liveFrom" value={one(posTypedFields.liveFrom) ?? ''} />
+                <input type="hidden" name="reason" value={one(posTypedFields.reason) ?? ''} />
+                <input type="hidden" name="confirmed" value="1" />
+                <Banner tone="warning">{sp.needsConfirmation}</Banner>
+                <p className="text-neutral-600 dark:text-neutral-400">Reason: {one(posTypedFields.reason)}</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <SubmitButton variant="primary" pendingLabel="Switching…" icon={null}>
+                    Confirm and switch
+                  </SubmitButton>
+                  <Link href={`/admin/stores/${id}`} className={ACTION_LINK}>
+                    Cancel
+                  </Link>
+                </div>
+              </form>
+            ) : (
+              <PosModeForm storeId={store.id} storeName={store.name} currentMode={pos.mode} today={pos.today} typed={posTyped} />
+            )}
+          </section>
+
           <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="text-sm font-medium">Details</h2>
             <EditableRecord action={updateStoreAction} label={store.name} hidden={{ storeId: store.id }} typed={typedFor(sp, STORE_DETAILS, store.id, actor.personId)} rules={ADMIN_STORE_DETAILS_RULES}>

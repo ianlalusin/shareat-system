@@ -12,3 +12,4 @@ export * from './reader';
 export * from './plan';
 export * from './pos-receipts';
 export * from './pos-receipt-map';
+export * from './pos-store-setup-source';

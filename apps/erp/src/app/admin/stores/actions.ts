@@ -13,6 +13,7 @@
 import { authorize, can } from '@shareat/auth';
 import {
   assertFieldRules,
+  checkModeInput,
   CANONICAL_POSITION_DEFAULTS,
   createDaypart,
   createStore,
@@ -20,11 +21,12 @@ import {
   reactivateStore,
   retireDaypart,
   setStoreOpeningDate,
+  setStorePosMode,
   setStoreStockModel,
   updateDaypart,
   updateStoreDetails,
 } from '@shareat/domain';
-import { ADMIN_STORE_CREATE_RULES } from '@shareat/domain/field-rules';
+import { ADMIN_STORE_CREATE_RULES, ADMIN_STORE_POS_MODE_RULES } from '@shareat/domain/field-rules';
 
 // Derived, never hand-typed — T-336 §1's own lesson (three documents once quoted "~8-12" and none
 // had checked it). Recomputes to 38 today; changes with the ruling, not with this file.
@@ -40,7 +42,9 @@ import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
 import { retypeMatches } from '@/lib/retype';
-import { STORE_DETAILS, STORE_OPENING_DATE, STORE_STOCK_MODEL } from './typed-forms';
+import { STORE_DETAILS, STORE_OPENING_DATE, STORE_POS_MODE, STORE_STOCK_MODEL } from './typed-forms';
+import { keyFilePresent, posModeStepFor } from './lib';
+import { niceDate, posModeConsequence } from './pos-mode-text';
 // T-346 Amendment R3.1 — the one date-validity check, never re-derived per call site.
 import { daypartsRepo, refuse, storesRepo } from '@shareat/db';
 import { isUuid } from '../../menu/lib';
@@ -253,6 +257,40 @@ export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
     {},
     { ok: openingDate ? `Opening date set to ${openingDate}.` : 'Opening date cleared.' },
   );
+}
+
+/**
+ * ⭐ T-533 S1 — switch a store between the old and the new POS, in TWO steps like the opening date. The first send (no `confirmed`) changes nothing: it checks the
+ * form and answers with a plain sentence saying exactly what would happen, which the page shows as the confirm step. The second send (`confirmed=1`) calls
+ * `setStorePosMode`, which decides who may (admin or super-admin only), the date, an existing sales day, the pre-flight and the roll-back rule, and says why in a
+ * sentence. The mode comes from the form, the actor from the session.
+ */
+export async function setStorePosModeAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/admin/stores');
+  const storeId = str(fd, 'storeId');
+  const here = `/admin/stores/${storeId}`;
+  const typed = () => keepTyping(fd, STORE_POS_MODE, storeId, { actorId: actor.personId });
+  const input = { mode: str(fd, 'mode'), liveFrom: str(fd, 'liveFrom'), reason: str(fd, 'reason') };
+  if (str(fd, 'confirmed') !== '1') {
+    let sentence: string;
+    try {
+      assertFieldRules(ADMIN_STORE_POS_MODE_RULES, fd);
+      const want = checkModeInput(input);
+      const step = await posModeStepFor(actor, storeId);
+      sentence = posModeConsequence({ mode: want.mode, liveFrom: want.liveFrom, storeName: step.storeName, wasLive: step.wasLive });
+    } catch (err) {
+      return await redirectWithFlash(here, {}, { error: errorMessage(err), typed: typed() });
+    }
+    return await redirectWithFlash(here, {}, { needsConfirmation: sentence, typed: typed() });
+  }
+  let done: Awaited<ReturnType<typeof setStorePosMode>>;
+  try {
+    done = await withOrgPrincipal(actor.orgId, (tx) => setStorePosMode(tx, actor, { storeId, ...input }, { keyFilePresent }));
+  } catch (err) {
+    return await redirectWithFlash(here, {}, { error: errorMessage(err), typed: typed() });
+  }
+  const said = done.mode === 'live' ? `The new POS is live from ${niceDate(done.liveFrom ?? '')}.` : done.mode === 'test' ? 'The new POS is in test mode: no sales day is booked.' : 'The new POS is off.';
+  return await redirectWithFlash(here, {}, { ok: done.changed ? said : 'Nothing changed: the store already has that mode.' });
 }
 
 export async function deactivateStoreAction(fd: FormData): Promise<void> {
