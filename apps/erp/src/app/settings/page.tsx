@@ -100,7 +100,7 @@ export default async function SettingsPage() {
           <SettingsRow
             href="/settings/pos-tablet"
             title="POS tablets and cash registers"
-            hint="Pair a store’s counter tablet so staff sign in with Employee ID and PIN."
+            hint="Make this browser the store’s tablet, or cut off a lost one. Also sets each cash register’s tablet and printer."
             writeCap="pair_pos_tablet"
           />
           <SettingsRow href="/attendance/terminals" title="Clock terminals" hint="Register a clock terminal and enrol cards or fingerprints." writeCap="provision_clock_terminal" />
