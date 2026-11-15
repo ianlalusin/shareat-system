@@ -10,6 +10,7 @@ import { INVENTORY_PRODUCTION_RULES, nativeAttrs } from '@shareat/domain/field-r
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { FILTER_CHIP, FILTER_CHIP_ON, NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Production — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -65,7 +66,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
           <Link href="/inventory/production/recipes" className="inline-flex min-h-11 items-center underline underline-offset-4">
             Recipes
           </Link>
-          <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
+          <Link href={`/inventory?store=${storeId}`} className={NAV_LINK}>
             ← Stock on hand
           </Link>
         </div>
@@ -90,7 +91,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
         <Banner tone="warning">
           This store has no active operating room yet — a production run can only be recorded from
           one. Add one under{' '}
-          <Link href={`/inventory/locations?store=${storeId}`} className="text-sm underline underline-offset-4">
+          <Link href={`/inventory/locations?store=${storeId}`} className={NAV_LINK}>
             Locations
           </Link>
           .
@@ -104,7 +105,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
                 key={k}
                 href={`/inventory/production?store=${storeId}&kind=${k}`}
                 aria-current={k === kind ? 'page' : undefined}
-                className={k === kind ? 'rounded-md border border-neutral-900 px-3 py-1 font-medium dark:border-neutral-100' : 'rounded-md border border-neutral-200 px-3 py-1 underline-offset-4 hover:underline dark:border-neutral-800'}
+                className={k === kind ? FILTER_CHIP_ON : FILTER_CHIP}
               >
                 {KIND_LABEL[k]}
               </Link>
