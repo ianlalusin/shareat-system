@@ -57,16 +57,15 @@ export default async function SettingsPage() {
       </div>
 
       {/* ⚠️ One column first and no `min-w` anywhere: DEF-199 measured 24 of 66 routes scrolling sideways at 390px.
-          Phone portrait is the canvas; two panels side by side only from `lg`. `items-start` so a short panel does
-          not stretch to its neighbour's height. */}
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+          Phone portrait is the canvas; two columns only from `lg`, flowed as CSS columns (not a row grid) so a short
+          panel never leaves a hole beside a tall one. */}
+      <div className="lg:columns-2 lg:gap-4">
         <Section title="This store" held={held}>
           <SettingsRow href="/menu/hours" title="Menu hours" hint="The lunch and dinner hours a menu price can follow." />
           <SettingsRow href="/kitchen" title="Kitchen stations" also="Kitchen setup" hint="Which kitchen station cooks each item." />
           <SettingsRow
             href="/settings/sales-channels"
             title="Sales channels (walk-in, Grab, Foodpanda)"
-            also="Sales channels"
             hint="Whether a channel’s money arrives that day or waits for the platform to pay."
           />
           <SettingsRow href="/settings/wastage-monitor" title="Wastage Monitor" hint="Who answers for a wasted or refunded order at each branch." />
@@ -128,7 +127,7 @@ function Section({ title, held, children }: { title: string; held: ReadonlySet<s
   );
   if (rows.length === 0) return null;
   return (
-    <section className="rounded-lg border border-neutral-200 dark:border-neutral-800">
+    <section className="mb-4 break-inside-avoid rounded-lg border border-neutral-200 dark:border-neutral-800">
       <h2 className="border-b border-neutral-200 px-4 py-3 text-base font-semibold dark:border-neutral-800">{title}</h2>
       <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
         {rows.map((r) => (

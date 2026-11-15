@@ -41,7 +41,7 @@ type Row = { section: string; label: string; href: string; also?: string };
 const ROWS: Row[] = [
   { section: 'This store', label: 'Menu hours', href: '/menu/hours' },
   { section: 'This store', label: 'Kitchen stations', href: '/kitchen', also: 'Kitchen setup' },
-  { section: 'This store', label: 'Sales channels (walk-in, Grab, Foodpanda)', href: '/settings/sales-channels', also: 'Sales channels' },
+  { section: 'This store', label: 'Sales channels (walk-in, Grab, Foodpanda)', href: '/settings/sales-channels' },
   { section: 'This store', label: 'Wastage Monitor', href: '/settings/wastage-monitor' },
   { section: 'This store', label: 'Attendance &amp; payroll', href: '/settings/attendance' },
   { section: 'This store', label: 'Spending limits', href: '/budgets', also: 'Budgets, Expense budgets' },
