@@ -4,7 +4,7 @@
  */
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { money, type Money } from '@shareat/core/money';
-import type { ReadingSlipView, ZSlipView } from '@/lib/pos-print';
+import { receiptHeaderOf, type ReadingSlipView, type ZSlipView } from '@/lib/pos-print';
 
 /** A reading as it travels over JSON (`Reading` of the domain with its Dates as ISO text). Optional fields are absent from older callers. */
 export interface ReadingJson {
@@ -33,6 +33,8 @@ export interface SlipContext {
   storeName: string;
   vatRegistered: boolean;
   printedBy: string;
+  /** T-585: the issuer identity (legal name, address, TIN); absent from older callers, which print the store name only. */
+  identity?: unknown;
 }
 
 const amountOf = (s: string | undefined): Money => money(s ?? '0.00');
@@ -47,7 +49,7 @@ export const businessDateLocal = (businessDate: string): string => {
 
 export function readingSlipView(reading: ReadingJson, ctx: SlipContext): ReadingSlipView {
   return {
-    header: { businessName: ctx.storeName, addressLines: [], tin: null, vatRegistered: ctx.vatRegistered },
+    header: receiptHeaderOf({ name: ctx.storeName, vatRegistered: ctx.vatRegistered, identity: ctx.identity }),
     printedBy: ctx.printedBy,
     windowFromLocal: stamp(reading.windowStart),
     windowToLocal: stamp(reading.windowEnd),

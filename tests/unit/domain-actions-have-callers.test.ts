@@ -89,6 +89,10 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  upsertPosStand:
+    'JOB — T-533 S2: `loadStoreSetup` (packages/etl/src/pos-v2/load-store-setup.ts) calls it, run by the script scripts/pos-load-setup.ts (`npm run pos:load-setup`), a one-time operator load for Lipa. No ERP screen is planned for stands (row 371: a store keeps the fixed set v1 holds). Remove this row if a screen ever calls it.',
+  upsertPosDiscountPreset:
+    'JOB — T-533 S2: `loadStoreSetup` (packages/etl/src/pos-v2/load-store-setup.ts) calls it, run by the script scripts/pos-load-setup.ts (`npm run pos:load-setup`). UNWIRED for screens: T-535 (the preset editing screen, row 439) is the app caller. Remove this row when T-535 lands.',
   callEntry:
     'UNWIRED — T-455 S5 (POS lobby card) is its caller; S2 built the domain layer first (25 Oct). Remove this row when S5 lands.',
   listLobbyEntries:

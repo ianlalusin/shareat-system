@@ -58,6 +58,7 @@ const COMMANDS: Record<string, string> = {
   'Book this charge': 'T-511 S7b (BOSS approved): books one platform charge that belongs to no sales day (money out for good); audited; the uploader rule is applied in the domain',
   'Issue': 'T-584 (NEEDS BOSS APPROVAL): numbers a document and freezes its wording as version 1; audited; nothing can be edited in place afterwards',
   'Sign': 'T-584 (NEEDS BOSS APPROVAL): attaches the saved signature of the signer to a document version, only after that person types their own Employee ID and PIN; audited, wrong PINs capped',
+  'Confirm and switch': 'T-533 S1, BOSS approved 15 Nov 2026: switches a store between the old and the new POS (decides where its sales days come from; admin or super-admin only; audited pos.store_mode_set)',
   'Add till': 'T-546 (BOSS approved): adds a till (the receipt-number identity of a store); audited',
   'Set tablet': 'T-546 (BOSS approved): chooses which paired tablet acts as a till, or none; audited',
   'Save printer': "T-546 (BOSS approved): sets the till's receipt paper and copies, which the tablet then prints with; audited",

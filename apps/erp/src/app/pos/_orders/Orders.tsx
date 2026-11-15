@@ -239,6 +239,7 @@ export function Orders() {
             vatRegistered={payment.store.vatRegistered}
             terminalNo={payment.store.terminalNo}
             storeName={payment.store.name}
+            identity={payment.store.identity}
             cashierName={pos.personName ?? payment.staff.find((s) => s.personId === personId)?.displayName ?? ''}
             personId={personId}
             online={pos.online}
