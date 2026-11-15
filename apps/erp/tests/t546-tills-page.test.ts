@@ -12,6 +12,8 @@ const STORE = { id: 'store-1', name: 'SharEat Lipa', code: 'LIPA' };
 const H: { allowed: boolean; tills: Record<string, unknown>; calls: number } = { allowed: true, tills: {}, calls: 0 };
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/admin/pos-tablets', // T-582: Add a cash register is a FormModal, which reads the address
+  useSearchParams: () => new URLSearchParams(),
   redirect: (to: string) => { throw new Error(`redirect:${to}`); },
   notFound: () => { throw new Error('notFound'); },
 }));
@@ -58,23 +60,25 @@ beforeEach(() => {
 });
 
 describe('R4 the Tills section', () => {
-  it('sits under the pairings list, titled Tills, with the columns Till, Tablet, Paper and Copies', async () => {
+  it('T-582: sits under the tablet cards, titled Cash registers, as cards (no table) with Tablet and Receipt printer blocks', async () => {
     const html = await render();
-    expect(html.indexOf('data-tills'), 'after "Linked tablets"').toBeGreaterThan(html.indexOf('Linked tablets'));
+    expect(html.indexOf('data-tills'), 'after the Tablets cards').toBeGreaterThan(html.indexOf('>Tablets<'));
     const s = tillsSection(html);
-    expect(s).toMatch(/Tills/);
-    for (const col of ['Till', 'Tablet', 'Paper', 'Copies']) expect(s, col).toMatch(new RegExp(`<th[^>]*>${col}</th>`));
+    expect(s).toContain('>Cash registers<');
+    expect(s).not.toMatch(/<table|<th[ >]/);
+    expect(s).toContain('Receipt printer');
+    expect(s).toContain('Tablet set');
   });
 
-  it('one row per till, in number order, naming its tablet or saying there is none', async () => {
+  it('one card per cash register, in number order, naming its tablet or saying there is none', async () => {
     const s = tillsSection(await render());
-    expect(s.indexOf('Till 1')).toBeGreaterThan(-1);
-    expect(s.indexOf('Till 2')).toBeGreaterThan(s.indexOf('Till 1'));
+    expect(s.indexOf('Cash register 1')).toBeGreaterThan(-1);
+    expect(s.indexOf('Cash register 2')).toBeGreaterThan(s.indexOf('Cash register 1'));
     expect(s).toContain('Counter tablet');
     expect(s).toContain('No tablet');
   });
 
-  it('Add till: a number input from 1 to 99 defaulting to the next free number (the first gap)', async () => {
+  it('Add cash register: a number input from 1 to 99 defaulting to the next free number (the first gap)', async () => {
     H.tills = { terminals: [till({ terminalNo: 1 }), till({ id: 't2', terminalNo: 2, pairingId: null, pairingLabel: null }), till({ id: 't4', terminalNo: 4, pairingId: null, pairingLabel: null })], freePairings: [] };
     const s = tillsSection(await render());
     expect(s).toMatch(/name="terminalNo"/);
@@ -83,14 +87,14 @@ describe('R4 the Tills section', () => {
     expect(input).toMatch(/inputMode="numeric"/);
     expect(input).toMatch(/value="3"/);
     expect(s).toContain('(1 to 99)');
-    expect(s).toContain('Add till');
+    expect(s).toContain('Add cash register');
   });
 
-  it('Add till defaults to 1 when the store has no till', async () => {
+  it('Add cash register defaults to 1 when the store has no till', async () => {
     H.tills = { terminals: [], freePairings: [] };
     const s = tillsSection(await render());
     expect(s.match(/<input[^>]*name="terminalNo"[^>]*>/)![0]).toMatch(/value="1"/);
-    expect(s).toMatch(/No till/i);
+    expect(s).toContain('No cash register at SharEat Lipa yet. Add cash register 1, then choose its tablet.');
   });
 
   it('Choose tablet: a select of the free live tablets plus "No tablet"; a till\'s own tablet stays selectable and selected', async () => {
@@ -107,7 +111,7 @@ describe('R4 the Tills section', () => {
 
   it('Printer: paper is a 58 mm / 80 mm radio pair with the till\'s value checked; copies is 1 to 3 with the till\'s value selected', async () => {
     const s = tillsSection(await render());
-    const row2 = s.slice(s.indexOf('Till 2'));
+    const row2 = s.slice(s.indexOf('Cash register 2'));
     const radios = row2.match(/<input[^>]*type="radio"[^>]*name="receiptPaperMm"[^>]*>/g)!;
     expect(radios.length).toBeGreaterThanOrEqual(2);
     expect(radios.find((r) => /value="80"/.test(r))).toMatch(/checked/);

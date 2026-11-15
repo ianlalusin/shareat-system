@@ -3,19 +3,21 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { staffStoresFor } from '../../staff/lib';
 import { clearLockAction, registerTabletAction, revokeTabletAction } from './actions';
-import { deviceTail, loadPosTablets, loadTills, revokeConfirmName, type PosTabletLinkView } from './lib';
+import { deviceTail, loadPosTablets, loadTills, revokeConfirmName, type PosTabletLinkView, type TerminalLockView } from './lib';
 import { TillsSection } from './TillsSection';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { CheckedForm } from '@/components/forms';
 import { POS_TABLET_REGISTER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { ActionIcon } from '@/components/ui/action-icons';
 
 export const metadata = { title: 'POS tablets — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 const RETURN_TO = '/admin/pos-tablets';
+const CARD = 'flex flex-col gap-3 rounded-[20px] border border-surface-border bg-surface p-4';
 
 interface SearchParams {
   store?: string;
@@ -34,8 +36,40 @@ function LinkLine({ link }: { link: PosTabletLinkView }) {
   );
 }
 
+/** T-582: the approval lock as a pill. A word and, when locked, a padlock: never colour alone. */
+function LockPill({ locked }: { locked: boolean }) {
+  if (!locked) return <Badge tone="success" label="Approvals ready" />;
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-surface px-2.5 py-0.5 text-xs font-semibold text-danger">
+      <ActionIcon name="lock" size={12} />
+      Approvals locked
+    </span>
+  );
+}
+
+/** T-582: the lock line and its Clear the lock form, inside the card of the login that is locked (every login keeps it). */
+function LockBlock({ lock, storeId }: { lock: TerminalLockView; storeId: string }) {
+  if (!lock.capped) return null;
+  return (
+    <div className="space-y-2">
+      <p data-locked className="text-sm text-danger">
+        Locked since {when(lock.cappedAt)}. It lifts by itself after 24 hours.
+      </p>
+      <form action={clearLockAction}>
+        <input type="hidden" name="personId" value={lock.personId} />
+        <input type="hidden" name="storeId" value={storeId} />
+        <Button type="submit" variant="primary">
+          Clear the lock
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 /**
- * `/admin/pos-tablets`. T-505 (Ian, 1 Nov 2026), docs/tasks/505-erp-pos-tablet-links.md.
+ * `/admin/pos-tablets`. T-505 (Ian, 1 Nov 2026), docs/tasks/505-erp-pos-tablet-links.md. T-582 (Ian, 15 Nov 2026), docs/tasks/582-pos-tablets-cards.md:
+ * one card per tablet login (the linked tablet's card carries its device, who it signs in as and Revoke), Register a tablet is behind a header
+ * button, and the approval lock lives on each card instead of in a section of its own. No behaviour changed.
  *
  * A POS v2 tablet approves refunds only once an admin links its device id to the store's terminal person. Until this screen that was a
  * command on the server. Admin and super admin only (`provision_clock_terminal`, store-scoped, the capability the writes check). This is
@@ -60,15 +94,58 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
 
   const { active, revoked, terminals } = await loadPosTablets(actor, store.id);
   const tills = await loadTills(actor, store.id);
+  const activeLock = active ? terminals.find((t) => t.personId === active.terminalPersonId) : undefined;
+  const otherLogins = terminals.filter((t) => t.personId !== active?.terminalPersonId);
 
   return (
     <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">POS tablets</h1>
-        <PageDescription>
-          Register a store&apos;s POS tablet so it can ask a manager for a refund approval. Admin or super admin only. This is not the clock-in
-          terminal (Setup, Clock terminals).
-        </PageDescription>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-semibold">POS tablets</h1>
+          <PageDescription>
+            Register a store&apos;s POS tablet so it can ask a manager for a refund approval. Admin or super admin only. This is not the clock-in
+            terminal (Setup, Clock terminals).
+          </PageDescription>
+        </div>
+        <FormModal trigger="+ Register tablet" title="Register a tablet" size="md">
+          {terminals.length === 0 ? (
+            <p data-no-terminal className="text-sm text-neutral-600 dark:text-neutral-400">
+              {store.name} has no tablet login yet. Create the store&apos;s tablet login in the Firebase console first, then run the
+              provision-terminal command with that login&apos;s uid. After that it appears here.
+            </p>
+          ) : (
+            <CheckedForm rules={POS_TABLET_REGISTER_RULES} action={registerTabletAction} className="space-y-3 text-sm">
+              <input type="hidden" name="storeId" value={store.id} />
+              {active && (
+                <Banner tone="warning">
+                  This replaces the tablet ending {deviceTail(active.deviceId)}. That tablet stops working for approvals.
+                </Banner>
+              )}
+              <FormGrid layout="fields">
+                <Field label="Device id" width="long" rule={POS_TABLET_REGISTER_RULES.deviceId}>
+                  <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.deviceId)} placeholder="Paste from the tablet: Settings, Terminal, Copy" autoComplete="off" />
+                </Field>
+                <Field label="Terminal number (1 to 99)" width="short" rule={POS_TABLET_REGISTER_RULES.terminalNo}>
+                  <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.terminalNo)} defaultValue="1" />
+                </Field>
+                <Field label="Tablet login" width="name">
+                  <Select name="terminalPersonId">
+                    {terminals.map((t) => (
+                      <option key={t.personId} value={t.personId}>
+                        {t.displayName}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </FormGrid>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Register tablet
+                </Button>
+              </DialogActions>
+            </CheckedForm>
+          )}
+        </FormModal>
       </div>
 
       <FlashBanner flash={sp} />
@@ -87,25 +164,64 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
       </FilterRow>
 
       <section className="space-y-3 rounded-lg border border-surface-border p-4">
-        <h2 className="font-medium">Linked tablets</h2>
-        {active ? (
-          <div className="space-y-2 text-sm">
-            <p data-active-link>
-              <LinkLine link={active} />
+        <h2 className="font-medium">Tablets</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Five wrong manager PINs in a day lock a tablet&apos;s refund approvals. The lock lifts by itself after 24 hours.
+        </p>
+        {!active && terminals.length > 0 && (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">No tablet is linked to {store.name} yet.</p>
+        )}
+        {!active && terminals.length === 0 ? (
+          <div className={CARD}>
+            <p data-no-terminal className="text-sm text-neutral-600 dark:text-neutral-400">
+              {store.name} has no tablet login yet. Create the store&apos;s tablet login in the Firebase console first, then run the
+              provision-terminal command with that login&apos;s uid. After that it appears here.
             </p>
-            <form action={revokeTabletAction} className="space-y-2">
-              <input type="hidden" name="linkId" value={active.id} />
-              <input type="hidden" name="storeId" value={store.id} />
-              <ConfirmDestructive
-                tier="retype"
-                label="Revoke tablet link"
-                consequence="Refund approvals on this tablet stop until a tablet is registered again. Nothing is deleted."
-                expectedName={revokeConfirmName(active.terminalNo)}
-              />
-            </form>
           </div>
         ) : (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">No tablet is linked to {store.name} yet.</p>
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {active && (
+              <li data-active-link className={CARD}>
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-base font-semibold text-ink">Terminal {active.terminalNo}</h3>
+                  <LockPill locked={!!activeLock?.capped} />
+                </div>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                  <dt className="text-muted">Tablet</dt>
+                  <dd title={active.deviceId} className="font-mono">
+                    {deviceTail(active.deviceId)}
+                  </dd>
+                  <dt className="text-muted">Signs in as</dt>
+                  <dd>{active.terminalPersonName}</dd>
+                  <dt className="text-muted">Linked</dt>
+                  <dd>
+                    {when(active.createdAt)} by {active.createdByName ?? 'unknown'}
+                  </dd>
+                </dl>
+                {activeLock && <LockBlock lock={activeLock} storeId={store.id} />}
+                <form action={revokeTabletAction} className="space-y-2 border-t border-surface-border pt-3">
+                  <input type="hidden" name="linkId" value={active.id} />
+                  <input type="hidden" name="storeId" value={store.id} />
+                  <ConfirmDestructive
+                    tier="retype"
+                    label="Revoke tablet link"
+                    consequence="Refund approvals on this tablet stop until a tablet is registered again. Nothing is deleted."
+                    expectedName={revokeConfirmName(active.terminalNo)}
+                  />
+                </form>
+              </li>
+            )}
+            {otherLogins.map((t) => (
+              <li key={t.personId} className={CARD}>
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-base font-semibold text-ink">{t.displayName}</h3>
+                  <LockPill locked={t.capped} />
+                </div>
+                <p className="text-sm text-neutral-600 dark:text-neutral-400">No tablet is linked to this login.</p>
+                <LockBlock lock={t} storeId={store.id} />
+              </li>
+            ))}
+          </ul>
         )}
         {revoked.length > 0 && (
           <details className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -122,77 +238,6 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
       </section>
 
       <TillsSection store={store} tills={tills} returnTo={RETURN_TO} />
-
-      <section className="space-y-3 rounded-lg border border-surface-border p-4">
-        <h2 className="font-medium">Register a tablet</h2>
-        {terminals.length === 0 ? (
-          <p data-no-terminal className="text-sm text-neutral-600 dark:text-neutral-400">
-            {store.name} has no tablet login yet. Create the store&apos;s tablet login in the Firebase console first, then run the
-            provision-terminal command with that login&apos;s uid. After that it appears here.
-          </p>
-        ) : (
-          <CheckedForm rules={POS_TABLET_REGISTER_RULES} action={registerTabletAction} className="space-y-3 text-sm">
-            <input type="hidden" name="storeId" value={store.id} />
-            {active && (
-              <Banner tone="warning">
-                This replaces the tablet ending {deviceTail(active.deviceId)}. That tablet stops working for approvals.
-              </Banner>
-            )}
-            <FormGrid layout="fields">
-              <Field label="Device id" width="long" rule={POS_TABLET_REGISTER_RULES.deviceId}>
-                <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.deviceId)} placeholder="Paste from the tablet: Settings, Terminal, Copy" autoComplete="off" />
-              </Field>
-              <Field label="Terminal number (1 to 99)" width="short" rule={POS_TABLET_REGISTER_RULES.terminalNo}>
-                <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.terminalNo)} defaultValue="1" />
-              </Field>
-              <Field label="Tablet login" width="name">
-                <Select name="terminalPersonId">
-                  {terminals.map((t) => (
-                    <option key={t.personId} value={t.personId}>
-                      {t.displayName}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="primary">
-              Register tablet
-            </Button>
-          </CheckedForm>
-        )}
-      </section>
-
-      <section className="space-y-3 rounded-lg border border-surface-border p-4">
-        <h2 className="font-medium">Approval lock</h2>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Five wrong manager PINs in a day lock the tablet&apos;s refund approvals. The lock lifts by itself after 24 hours.
-        </p>
-        {terminals.length === 0 ? (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">No tablet login at this store.</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {terminals.map((t) => (
-              <li key={t.personId} className="flex flex-wrap items-center gap-3">
-                <span className="font-medium">{t.displayName}</span>
-                {t.capped ? (
-                  <>
-                    <span data-locked>Locked since {when(t.cappedAt)}. It lifts by itself after 24 hours.</span>
-                    <form action={clearLockAction}>
-                      <input type="hidden" name="personId" value={t.personId} />
-                      <input type="hidden" name="storeId" value={store.id} />
-                      <Button type="submit" variant="primary">
-                        Clear the lock
-                      </Button>
-                    </form>
-                  </>
-                ) : (
-                  <span className="text-neutral-600 dark:text-neutral-400">Not locked.</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </Page>
   );
 }

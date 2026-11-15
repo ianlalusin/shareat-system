@@ -117,13 +117,13 @@ describe('the whole round trip as the store manager', () => {
 
     const a = await run(createTillAction, form({ storeId: f.storeA, terminalNo: '1' }));
     expect(a.path).toBe('/admin/pos-tablets');
-    expect(a.flash.ok, 'a sentence of success').toBeTruthy();
+    expect(a.flash.ok, 'a sentence of success').toBe('Added cash register 1. Choose its tablet and printer below.'); // T-582: cash register, not till
     expect(a.flash.error).toBeUndefined();
     const [t] = await tills(f);
     expect(t).toMatchObject({ terminal_no: 1, pairing_id: null, receipt_paper_mm: 58, receipt_copies: 1 });
 
     const b = await run(linkTillAction, form({ storeId: f.storeA, terminalId: t!.id, pairingId: f.tablet1 }));
-    expect(b.flash.ok).toBeTruthy();
+    expect(b.flash.ok).toBe('Tablet chosen for the cash register.');
     expect((await tills(f))[0]!.pairing_id).toBe(f.tablet1);
 
     const c = await run(setTillPrinterAction, form({ storeId: f.storeA, terminalId: t!.id, receiptPaperMm: '80', receiptCopies: '2' }));
@@ -143,7 +143,7 @@ describe('the whole round trip as the store manager', () => {
     const t = (await tills(f))[0]!;
     await run(linkTillAction, form({ storeId: f.storeA, terminalId: t.id, pairingId: f.tablet1 }));
     const out = await run(linkTillAction, form({ storeId: f.storeA, terminalId: t.id, pairingId: '' }));
-    expect(out.flash.ok).toBeTruthy();
+    expect(out.flash.ok).toBe('The cash register has no tablet now.');
     expect((await tills(f))[0]!.pairing_id).toBeNull();
   });
 
