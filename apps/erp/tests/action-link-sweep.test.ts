@@ -549,8 +549,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1646 -> 1648, T-533 S3 (15 Nov 2026): +2 compliant controls, the two 44px links on /admin/stores/[id]/pos-preflight; FAIL/UNRESOLVED unmoved (asserted above); re-measured by runCensus().
     // 1648 -> 1653, T-533 S1 (15 Nov 2026): +5 controls on /admin/stores/[id], the See-the-pre-flight link, the Set POS mode record form (mode, date, reason) and the confirm step's Cancel link; FAIL/UNRESOLVED unmoved (asserted above); re-measured by this test's own runCensus() on lane/t533.
     // 1653 -> 1654, T-587 S4 (NEEDS BOSS APPROVAL): +1 compliant control, the store page's Readiness <summary> (44 px), re-measured by runCensus().
-    // 1654 -> 1655, T-587 S1 (BOSS approved +1, as measured): settings hub rebuilt as rows; re-measured by runCensus() after merging main.
-    expect(results.length).toBe(1655);
+    // 1654 -> 1656, T-583 (15 Nov 2026): +2 compliant controls (min-h-11), the stock-count link and the Record a delivery link on each /inventory/locations card; the Recipes text link left /inventory/production and the Cookbook settings button replaced it (net 0); FAIL/UNRESOLVED unmoved; re-measured by runCensus().
+    // 1656 -> 1657, T-587 S1 (BOSS approved +1, as measured): settings hub rebuilt as rows; re-measured by runCensus() after merging main.
+    expect(results.length).toBe(1657);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

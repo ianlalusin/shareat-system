@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireSession } from '../../../../../lib/session';
+import { requirePageAccess } from '../../../../../lib/page-access';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner, Button, FlashBanner } from '@/components/ui';
@@ -15,7 +15,8 @@ const BLANK_ROWS = 8;
 
 export default async function NewRecipePage({ searchParams }: { searchParams: Promise<{ error?: string; ok?: string }> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`${RECIPES_PATH}/new`);
+  const { actor, refusal } = await requirePageAccess(`${RECIPES_PATH}/new`);
+  if (refusal) return refusal;
   const canManage = await canManageRecipes(actor.orgId, actor);
   const items = canManage ? await recipeItemOptions(actor.orgId) : [];
 

@@ -210,12 +210,6 @@
     "headerless": 0
   },
   {
-    "file": "apps/erp/src/app/inventory/locations/page.tsx",
-    "tables": 0,
-    "sharedTables": 1,
-    "headerless": 0
-  },
-  {
     "file": "apps/erp/src/app/inventory/low-stock/page.tsx",
     "tables": 0,
     "sharedTables": 2,
