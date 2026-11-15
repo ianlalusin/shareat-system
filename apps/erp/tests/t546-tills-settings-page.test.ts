@@ -12,6 +12,8 @@ const MINE = { id: 'store-1', name: 'SharEat Lipa', code: 'LIPA' };
 const H: { allowed: boolean; stores: unknown[]; loadedFor: string[] } = { allowed: true, stores: [MINE], loadedFor: [] };
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/settings/pos-tablet', // T-582: Add a cash register is a FormModal, which reads the address
+  useSearchParams: () => new URLSearchParams(),
   redirect: (to: string) => { throw new Error(`redirect:${to}`); },
   notFound: () => { throw new Error('notFound'); },
 }));
@@ -56,7 +58,7 @@ describe('Tills on /settings/pos-tablet', () => {
     const html = await render();
     expect(html).toContain('data-tills');
     expect(H.loadedFor).toEqual(['store-1']);
-    expect(html).toContain('Till 1');
+    expect(html).toContain('Cash register 1');
     expect(html).toMatch(/name="returnTo"[^>]*value="\/settings\/pos-tablet"/);
     expect(html).not.toContain('value="/admin/pos-tablets"');
     expect(html).toContain('One tablet per store. To replace it, un-pair the old tablet first.');

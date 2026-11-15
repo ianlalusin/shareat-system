@@ -15,6 +15,8 @@ const STORE = { id: 'store-1', name: 'SharEat Lipa', code: 'LIPA' };
 const H: { allowed: boolean; view: Record<string, unknown> } = { allowed: true, view: {} };
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/admin/pos-tablets', // T-582: Register a tablet is a FormModal, which reads the address
+  useSearchParams: () => new URLSearchParams(),
   redirect: (to: string) => { throw new Error(`redirect:${to}`); },
   notFound: () => { throw new Error('notFound'); },
 }));
@@ -74,17 +76,17 @@ describe('P9 and the page states', () => {
     expect(html).toContain('data-no-terminal');
     expect(html).toMatch(/Firebase console/);
     expect(html).not.toContain('name="deviceId"');
-    expect(html).not.toContain('Register tablet');
+    expect(html).toContain('Register a tablet'); // T-582: the button stays; its modal holds the instruction, not the form
   });
 
-  it('a locked tablet shows "Locked since" and one Clear the lock button; an unlocked one shows "Not locked."', async () => {
+  it('a locked tablet shows "Locked since" and one Clear the lock button; an unlocked one reads "Approvals ready"', async () => {
     H.view = { active: null, revoked: [], terminals: [{ personId: 'term-1', displayName: 'Terminal Lipa', capped: true, cappedAt: new Date('2026-11-01T02:00:00Z') }] };
     const locked = await render();
     expect(locked).toMatch(/Locked since/);
     expect(locked.match(/Clear the lock/g)).toHaveLength(1);
     H.view = { active: null, revoked: [], terminals: [{ personId: 'term-1', displayName: 'Terminal Lipa', capped: false, cappedAt: null }] };
     const free = await render();
-    expect(free).toContain('Not locked.');
+    expect(free).toContain('Approvals ready');
     expect(free).not.toContain('Clear the lock');
   });
 
@@ -102,6 +104,6 @@ describe('P9 and the page states', () => {
     const html = await render();
     expect(html).not.toContain('Revoke tablet link');
     expect(html).not.toContain('This replaces');
-    expect(html).toContain('Register tablet');
+    expect(html).toContain('Register a tablet');
   });
 });
