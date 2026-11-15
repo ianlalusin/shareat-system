@@ -12,7 +12,7 @@ import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { ATTENDANCE_DISCARD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
-export const metadata = { title: 'The clock lane — Shareat System' };
+export const metadata = { title: 'Failed clock punches — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
@@ -53,7 +53,7 @@ export default async function LanePage({
   if (!storeId) {
     return (
       <Page density="table" className="">
-        <h1 className="text-2xl font-semibold">The clock lane</h1>
+        <h1 className="text-2xl font-semibold">Failed clock punches</h1>
         <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
           There are no stores yet, so there is no lane to watch.
         </p>
@@ -70,7 +70,7 @@ export default async function LanePage({
   return (
     <Page density="table">
       <div>
-        <h1 className="text-2xl font-semibold">The clock lane</h1>
+        <h1 className="text-2xl font-semibold">Failed clock punches</h1>
         <PageDescription>
           Whether the terminals are talking to us, and what did not make it through. Every event
           here is recoverable — nothing is ever dropped.
