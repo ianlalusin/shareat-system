@@ -7,7 +7,7 @@
  * `deactivateLocation` had ZERO callers anywhere in `apps/` — the only writer of a real
  * `stock_locations` row was a raw SQL insert in a dev-seed script (DEF-135).
  */
-import { stockLocationsRepo, type Tx } from '@shareat/db';
+import { stockLedgerRepo, stockLocationsRepo, type Tx } from '@shareat/db';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
 export { listStores, withOrgPrincipal };
@@ -17,6 +17,8 @@ export interface LocationsPageData {
   stockModel: 'single_room' | 'multi_room';
   locations: stockLocationsRepo.LocationRow[];
   types: stockLocationsRepo.LocationTypeRow[];
+  /** T-583: location id -> how many items hold a non-zero balance there. A room with no entry holds nothing. */
+  itemCounts: Record<string, number>;
 }
 
 /** Everything the screen needs for one store, in one org-scoped transaction. `null` if the store
@@ -25,10 +27,13 @@ export async function locationsPageData(orgId: string, storeId: string): Promise
   return withOrgPrincipal(orgId, async (tx: Tx) => {
     const store = await stockLocationsRepo.getStoreStockModel(tx, storeId);
     if (!store) return null;
-    const [locations, types] = await Promise.all([
+    const [locations, types, onHand] = await Promise.all([
       stockLocationsRepo.listLocations(tx, storeId),
       stockLocationsRepo.listLocationTypes(tx, orgId),
+      stockLedgerRepo.onHandByStore(tx, storeId),
     ]);
-    return { stockModel: store.stockModel, locations, types };
+    const itemCounts: Record<string, number> = {};
+    for (const r of onHand) itemCounts[r.locationId] = (itemCounts[r.locationId] ?? 0) + 1;
+    return { stockModel: store.stockModel, locations, types, itemCounts };
   });
 }
