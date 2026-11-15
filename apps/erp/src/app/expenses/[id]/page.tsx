@@ -214,6 +214,10 @@ export default async function ExpenseDetailPage({
                 rules={EXPENSE_DRAFT_EDIT_RULES}
                 action={updateDraftAction}
                 label="draft"
+                summary={[
+                  { label: 'Particulars', value: expense.particulars },
+                  { label: 'Category', value: categoryLabel },
+                ]}
                 hidden={{ storeId: sp.store ?? '', expenseId: expense.id }}
                 saveLabel="Save draft"
                 typed={typedFor(sp, EXPENSE_DRAFT_EDIT, expense.id, actor.personId)}

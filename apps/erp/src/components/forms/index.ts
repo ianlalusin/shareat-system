@@ -23,6 +23,7 @@ export type { CheckedFormState, CheckedFormEvent, CheckCtx, FieldCheckLine, Aria
 export {
   EditableRecord,
   EditableRecordView,
+  RecordSummary,
   editableRecordReducer,
   createEditRegistry,
   runEditableAction,
@@ -37,6 +38,7 @@ export {
 } from './EditableRecord';
 export type {
   EditableRecordProps,
+  SummaryRow,
   EditableRecordViewProps,
   EditableRecordState,
   EditableRecordEvent,

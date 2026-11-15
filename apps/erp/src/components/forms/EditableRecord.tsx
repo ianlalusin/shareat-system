@@ -18,7 +18,7 @@
  *
  * The behaviour is a plain reducer plus a plain registry so it is unit-tested in node, without jsdom.
  */
-import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, type FormEvent, type Ref, type ReactNode } from 'react';
+import { Fragment, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, type FormEvent, type Ref, type ReactNode } from 'react';
 import { ruleInputNames, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 import type { TypedView } from '@/lib/keep-typing';
 import { CheckContext } from './context';
@@ -312,6 +312,11 @@ function applyTyped(form: HTMLFormElement, fields: Record<string, string | strin
 /** `useLayoutEffect` warns when a component renders on the server; the effect is browser-only, so use `useEffect` there. */
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
+export interface SummaryRow {
+  label: string;
+  value: string | null | undefined;
+}
+
 export interface EditableRecordProps {
   action: (formData: FormData) => void | Promise<void>;
   /** The record's name, for the Edit button's aria-label ("Edit Gcash"). */
@@ -322,6 +327,11 @@ export interface EditableRecordProps {
   /** Command buttons shown only in edit mode, each its own form (for example Retire). */
   extra?: ReactNode;
   saveLabel?: 'Save' | 'Save draft';
+  /**
+   * T-589 B2: what is saved, as label/value rows shown while the record is LOCKED (hidden while editing). Plain text; an
+   * empty value reads "Not set". Without it the locked record is just its Edit button, as before.
+   */
+  summary?: ReadonlyArray<SummaryRow>;
   /** T-508 S2b: when set, the locked record's trigger is ONE text button reading this, instead of the round pencil. */
   editText?: string;
   /**
@@ -357,8 +367,29 @@ const PRIMARY =
 const SECONDARY =
   'erp-icon-btn inline-flex h-11 w-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full p-0 text-sm border border-transparent bg-ink text-canvas hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
+// T-589 B2 (Ian R1: a main action carries a word): the pencil with "Edit" beside it. The accessible name stays "Edit {label}".
+const EDIT_BTN =
+  'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-transparent bg-ink px-4 text-sm text-canvas hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+
 const TEXT_BTN =
   'inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-transparent bg-ink px-4 text-sm text-canvas hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+
+/** T-589 B2: the saved values, read-only. Two columns from `sm` up; label above value on a phone. */
+export function RecordSummary({ rows }: { rows: ReadonlyArray<SummaryRow> }) {
+  return (
+    <dl className="mb-3 grid grid-cols-1 gap-x-6 gap-y-0.5 text-sm sm:grid-cols-[max-content_1fr] sm:gap-y-1">
+      {rows.map((r, i) => {
+        const text = r.value?.trim();
+        return (
+          <Fragment key={`${r.label}-${i}`}>
+            <dt className="mt-1.5 text-neutral-600 sm:mt-0 dark:text-neutral-400">{r.label}</dt>
+            <dd className={text ? 'whitespace-pre-line break-words' : 'text-muted italic'}>{text || 'Not set'}</dd>
+          </Fragment>
+        );
+      })}
+    </dl>
+  );
+}
 
 /** The presentational tree: no hooks, so the editing state is reachable in server render tests. */
 export function EditableRecordView({
@@ -376,6 +407,7 @@ export function EditableRecordView({
   children,
   extra,
   editText,
+  summary,
   saveLabel = 'Save',
 }: EditableRecordViewProps) {
   const editing = mode === 'editing';
@@ -387,6 +419,7 @@ export function EditableRecordView({
   // Esc, the close button and a backdrop click all go through onCancel (reset + lock).
   return (
     <>
+      {!editing && summary && summary.length > 0 ? <RecordSummary rows={summary} /> : null}
       <span className="inline-flex flex-wrap items-center gap-2">
         {/* While editing the modal covers the page; the Edit button returns (and takes focus back) on close. */}
         {editing ? null : (
@@ -395,8 +428,9 @@ export function EditableRecordView({
               {editText}
             </button>
           ) : (
-            <button type="button" ref={editRef} className={SECONDARY} aria-label={`Edit ${label}`} aria-haspopup="dialog" data-tip="Edit" onClick={onEdit}>
+            <button type="button" ref={editRef} className={EDIT_BTN} aria-label={`Edit ${label}`} aria-haspopup="dialog" onClick={onEdit}>
               <ActionIcon name="edit" />
+              <span aria-hidden="true">Edit</span>
             </button>
           )
         )}
