@@ -38,9 +38,9 @@ function LinkLine({ link }: { link: PosTabletLinkView }) {
 
 /** T-582: the approval lock as a pill. A word and, when locked, a padlock: never colour alone. */
 function LockPill({ locked }: { locked: boolean }) {
-  if (!locked) return <Badge tone="success" label="Approvals ready" />;
+  if (!locked) return <Badge tone="success" label="Approvals ready" className="whitespace-nowrap shrink-0" />;
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-surface px-2.5 py-0.5 text-xs font-semibold text-danger">
+    <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-danger-surface px-2.5 py-0.5 text-xs font-semibold text-danger">
       <ActionIcon name="lock" size={12} />
       Approvals locked
     </span>
@@ -122,10 +122,10 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
                 </Banner>
               )}
               <FormGrid layout="fields">
-                <Field label="Device id" width="long" rule={POS_TABLET_REGISTER_RULES.deviceId}>
+                <Field label="Device id" width="full" rule={POS_TABLET_REGISTER_RULES.deviceId}>
                   <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.deviceId)} placeholder="Paste from the tablet: Settings, Terminal, Copy" autoComplete="off" />
                 </Field>
-                <Field label="Terminal number (1 to 99)" width="short" rule={POS_TABLET_REGISTER_RULES.terminalNo}>
+                <Field label="Terminal number (1 to 99)" width="name" rule={POS_TABLET_REGISTER_RULES.terminalNo}>
                   <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.terminalNo)} defaultValue="1" />
                 </Field>
                 <Field label="Tablet login" width="name">

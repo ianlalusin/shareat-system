@@ -47,7 +47,7 @@ export function TillsSection({ store, tills, returnTo }: { store: { id: string; 
             <li key={t.id} className="flex flex-col gap-4 rounded-[20px] border border-surface-border bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
                 <h3 className="text-base font-semibold text-ink">Cash register {t.terminalNo}</h3>
-                {t.pairingId ? <Badge tone="success" label="Tablet set" /> : <Badge tone="warning" label="No tablet" />}
+                {t.pairingId ? <Badge tone="success" label="Tablet set" className="whitespace-nowrap shrink-0" /> : <Badge tone="warning" label="No tablet" className="whitespace-nowrap shrink-0" />}
               </div>
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted">Tablet</p>
