@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { canReadFiles } from '@shareat/domain';
 import { photoKinds } from '../../../lib/photo-link';
@@ -304,9 +305,9 @@ export default async function CustomerDetailPage({
                         c.status === 'posted' ? '' : 'opacity-60'
                       } ${c.journalEntryId ? 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900/40' : ''}`}
                     >
-                      <td className="px-3 py-3">{c.chargeDate}</td>
+                      <td className="px-3 py-3">{formatBusinessDayLong(c.chargeDate)}</td>
                       <td className={`px-3 py-3 ${overdue ? 'font-medium text-danger' : ''}`}>
-                        {c.dueDate ?? '—'}
+                        {c.dueDate ? formatBusinessDayLong(c.dueDate) : '—'}
                         {overdue && <span className="ml-1 text-xs">overdue</span>}
                       </td>
                       <td className="px-3 py-3">
@@ -350,7 +351,7 @@ export default async function CustomerDetailPage({
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             <strong>A write-off takes two people.</strong> Whoever recorded the charge cannot
             also declare it dead — the service refuses it by identity, whatever the role. A partial
-            write-off is allowed and leaves the remainder outstanding. ⚠️ <strong>Void</strong> is a
+            write-off is allowed and leaves the remainder outstanding. <strong>Void</strong> is a
             different act: it says the charge should never have existed, and reverses its entry.
           </p>
           {charges
@@ -361,7 +362,7 @@ export default async function CustomerDetailPage({
                 className="space-y-2 rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800"
               >
                 <p className="font-medium">
-                  {c.referenceNo ?? c.chargeDate} &mdash; {peso(c.outstanding)} outstanding of{' '}
+                  {c.referenceNo ?? formatBusinessDayLong(c.chargeDate)} &mdash; {peso(c.outstanding)} outstanding of{' '}
                   {peso(c.totalAmount)}
                   <span className="ml-2 text-xs font-normal text-neutral-500">{storeName(c.storeId)}</span>
                 </p>
@@ -436,7 +437,7 @@ export default async function CustomerDetailPage({
                     } ${c.journalEntryId ? 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900/40' : ''}`}
                   >
                     <td className="px-3 py-3">
-                      {c.collectionDate}
+                      {formatBusinessDayLong(c.collectionDate)}
                       {c.journalEntryId && (
                         <RowLink
                           href={`/reports/journal-lines?entry=${c.journalEntryId}`}
@@ -466,7 +467,7 @@ export default async function CustomerDetailPage({
                       ) : (
                         c.allocations.map((a) => (
                           <div key={`${c.collectionId}-${a.chargeId}`}>
-                            {a.referenceNo ?? a.chargeDate} — {peso(a.amountApplied)}
+                            {a.referenceNo ?? formatBusinessDayLong(a.chargeDate)} — {peso(a.amountApplied)}
                           </div>
                         ))
                       )}
@@ -505,11 +506,6 @@ export default async function CustomerDetailPage({
         )}
       </section>
 
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Every figure on this page is a query over the ledger and the AR tables&rsquo; own CTEs.
-        There is no stored balance to recompute, repair or reconcile &mdash; which is why the three
-        buttons v1 needed for exactly that are not here.
-      </p>
     </Page>
   );
 }

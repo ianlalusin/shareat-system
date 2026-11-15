@@ -58,7 +58,7 @@ export async function enrolFingerprintAction(formData: FormData): Promise<void> 
     return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { error: errorMessage(err) });
   }
   revalidatePath(`/staff/${employmentId}/credentials`);
-  return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { ok: 'Template(s) recorded — this is the test/dev enrolment path; no reader is wired into this app.' });
+  return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { ok: 'Fingerprint templates recorded for testing. No fingerprint reader is connected to this app yet.' });
 }
 
 export async function revokeCredentialAction(formData: FormData): Promise<void> {

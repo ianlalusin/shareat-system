@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { LIABILITY_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
 import { add, compare, money, ZERO } from '@shareat/core/money';
@@ -43,10 +44,8 @@ export default async function LiabilitiesPage({
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Liabilities</h1>
           <PageDescription>
-            What the business owes that nothing else already tracks. Supplier invoices, loans, wages
-            and statutory contributions each have their own home —{' '}
-            <strong>this is the residual</strong>, and naming it precisely is what stops it becoming a
-            dumping ground.
+            What the business owes that is not tracked anywhere else. Supplier invoices, loans, wages
+            and statutory contributions each have their own page.
           </PageDescription>
           <Link href="/liabilities/unpaid" className={ACTION_LINK}>
             Everything unpaid
@@ -130,7 +129,7 @@ export default async function LiabilitiesPage({
                   {r.name}
                 </Link>{' '}
                 — <span className="font-mono tabular-nums">{peso(r.position.outstanding)}</span>, due{' '}
-                {r.dueOn}
+                {r.dueOn ? formatBusinessDayLong(r.dueOn) : '—'}
               </li>
             ))}
           </ul>
@@ -179,7 +178,7 @@ export default async function LiabilitiesPage({
                       r.overdue ? 'text-warning-ink' : ''
                     }`}
                   >
-                    {r.dueOn ?? '—'}
+                    {r.dueOn ? formatBusinessDayLong(r.dueOn) : '—'}
                     {r.overdue && ' · overdue'}
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">

@@ -21,6 +21,7 @@
  * returns money; v1 filtered to `amount > 0` and silently overstated fees by exactly the credit.
  */
 import { accountLabel } from '@/lib/account-label';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Banner, Button, Field, FormGrid, FormSection, Input, Select, SplitWorkspace, Textarea } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
@@ -296,8 +297,8 @@ export function SettlementForm({
                 <option value="">Choose a verified day…</option>
                 {channelDays.map((d) => (
                   <option key={d.salesDayId} value={d.salesDayId}>
-                    {d.businessDate} — reported {money(d.reportedAmount)}
-                    {d.ageDays > 0 ? ` · ${d.ageDays}d old` : ''}
+                    {formatBusinessDayLong(d.businessDate)} — reported {money(d.reportedAmount)}
+                    {d.ageDays > 0 ? ` · ${d.ageDays} ${d.ageDays === 1 ? 'day' : 'days'} old` : ''}
                   </option>
                 ))}
               </Select>
@@ -446,7 +447,7 @@ export function SettlementForm({
           <dl className="space-y-2 text-xs">
             <div><dt className="text-muted">Channel</dt><dd className="break-words font-medium">{channel.storeName} · {channel.name}</dd></div>
             <div><dt className="text-muted">Waiting balance</dt><dd className="break-words font-mono">{money(channel.outstanding)}</dd></div>
-            <div><dt className="text-muted">Verified day</dt><dd>{day?.businessDate ?? 'Choose the day being settled.'}</dd></div>
+            <div><dt className="text-muted">Verified day</dt><dd>{day ? formatBusinessDayLong(day.businessDate) : 'Choose the day being settled.'}</dd></div>
           </dl>
         )}
 

@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { can } from '@shareat/auth';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { isZero, money } from '@shareat/core/money';
 import { salesDaysRepo } from '@shareat/db';
 import { listStores, listChannels, listStoreMoneyAccounts, getStoreLink, withOrgPrincipal, type ChannelOption } from '../../lib';
@@ -81,7 +82,7 @@ export default async function EditSalesDayPage({
         <div>
           {back}
           <h1 className="mt-1 text-2xl font-semibold">Edit sales day</h1>
-          <PageDescription>{day.businessDate}</PageDescription>
+          <PageDescription>{formatBusinessDayLong(day.businessDate)}</PageDescription>
         </div>
         <p className={NOT_EDITABLE}>
           {takesFromPos
@@ -145,11 +146,10 @@ export default async function EditSalesDayPage({
     <Page density="table">
       <div>
         {back}
-        <h1 className="mt-1 text-2xl font-semibold">Edit sales day — {day.businessDate}</h1>
+        <h1 className="mt-1 text-2xl font-semibold">Edit sales day: {formatBusinessDayLong(day.businessDate)}</h1>
         <PageDescription>
-          Fix the figures, channels or wallets. <strong>The date and the store stay as they are</strong>,
-          and so does the status — a submitted day stays submitted, and the verifier sees what you
-          saved here.
+          Fix the figures, channels or wallets. <strong>The date, the store and the status stay as they are.</strong>{' '}
+          A submitted day stays submitted, and the verifier sees what you saved here.
         </PageDescription>
       </div>
 

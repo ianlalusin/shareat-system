@@ -256,7 +256,7 @@ export function AutoAllocateCollectionForm({
         </Button>
         {pageStale && (
           <p className="mt-2 text-xs text-warning-ink">
-            ⚠️ The open items changed since this page loaded — refresh before relying on this
+            The open items changed since this page loaded — refresh before relying on this
             figure or pressing Save.
           </p>
         )}

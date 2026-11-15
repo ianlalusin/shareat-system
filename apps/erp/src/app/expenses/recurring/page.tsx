@@ -20,6 +20,7 @@ import {
   peso,
   today,
 } from './lib';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { Banner, Button, FlashBanner, FormGrid, Input } from '@/components/ui';
@@ -86,8 +87,8 @@ export default async function RecurringExpensesPage({
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">Recurring expenses</h1>
         <PageDescription>
-          The fixed bills — rent, internet, utilities, subscriptions, leases. A branch that forgets
-          rent does not fail to pay it; it pays it late, off-book, and the month closes wrong.
+          The fixed bills: rent, internet, utilities, subscriptions, leases. A store that forgets
+          rent pays it late and the month closes wrong.
         </PageDescription>
       </div>
 
@@ -99,8 +100,8 @@ export default async function RecurringExpensesPage({
           invoice ("verification is a second pair of eyes"). Keeping that control is deliberate — a
           system actor would have made every recurring invoice self-verifiable by anyone. */}
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        A bill drafted from a template must be verified by someone other than the person who set the
-        template up — the job logs the invoice in their name.
+        A bill made from a template must be verified by someone other than the person who set the
+        template up.
       </p>
 
       {unsetSupplier.length > 0 && (
@@ -110,9 +111,8 @@ export default async function RecurringExpensesPage({
               ? '1 template cannot draft yet.'
               : `${unsetSupplier.length} templates cannot draft yet.`}
           </strong>{' '}
-          A bill has to name who it comes from — the landlord, the utility, the ISP — because the
-          job records an invoice against them on the due date. Until then these are recorded
-          intentions and the nightly run refuses them by name:{' '}
+          A bill has to name who it comes from (the landlord, the utility, the internet provider). Until
+          it does, nothing is drafted for:{' '}
           <strong>{unsetSupplier.map((t) => t.name).join(', ')}</strong>. Edit each one and choose a
           supplier.
         </Banner>
@@ -171,7 +171,7 @@ export default async function RecurringExpensesPage({
                         </span>
                       </div>
                       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                        next due <strong>{t.nextDueDate}</strong>
+                        next due <strong>{formatBusinessDayLong(t.nextDueDate)}</strong>
                         {overdue && <span className="ml-1 text-warning-ink">· due now</span>}
                         {/* ⭐ The job catches up ONE period per nightly run, deliberately — three
                             drafts on one morning is noise. Saying how far behind a template is
@@ -179,7 +179,7 @@ export default async function RecurringExpensesPage({
                         {periodsBehind(t.interval, t.anchorDay, t.nextDueDate, now) > 1 && (
                           <span className="ml-1 text-warning-ink">
                             · {periodsBehind(t.interval, t.anchorDay, t.nextDueDate, now)} periods behind,
-                            catching up one per night
+                            catching up one each night
                           </span>
                         )}
                         {!t.supplierId && (
@@ -192,7 +192,7 @@ export default async function RecurringExpensesPage({
                           // ⚠️ Called out on the row, because it is the one setting v1 built a whole
                           // routing module to prevent happening by accident.
                           <span className="ml-1 text-warning-ink">
-                            · pays from the CASHIER TILL, deliberately
+                            · pays from the cashier till, on purpose
                           </span>
                         )}
                         {t.lastDraftedExpenseId ? (
@@ -263,10 +263,10 @@ export default async function RecurringExpensesPage({
           <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <h2 className="font-medium">Add a template</h2>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              ⚠️ The amount is a <strong>default</strong>, not the bill. Rent is fixed; electricity is
-              not — whatever this produces is edited against the real invoice before anyone posts it.
-              ⛔ <strong>No payroll templates.</strong> Payroll posts its own salaries and its own
-              statutory liabilities; a remittance debits a liability and is not an expense.
+              The amount is a <strong>default</strong>, not the bill. Rent is fixed; electricity is
+              not, so each draft is checked against the real invoice before anyone posts it.{' '}
+              <strong>No payroll templates:</strong> payroll posts its own salaries and its own
+              statutory payments.
             </p>
             <TemplateForm
               storeId={storeId}
@@ -331,7 +331,7 @@ function TemplateForm({
       >
         <div className="space-y-3">
         <FormGrid>
-          <Field label="Name" hint="What a person calls it — “Lipa branch rent”." rule={RECURRING_TEMPLATE_RULES.name}>
+          <Field label="Name" hint="What people call it, for example “Lipa store rent”." rule={RECURRING_TEMPLATE_RULES.name}>
             <Input {...nativeAttrs(RECURRING_TEMPLATE_RULES.name)} defaultValue={defaults?.name ?? ''} className="w-full" />
           </Field>
           <Field
@@ -385,7 +385,7 @@ function TemplateForm({
           </Field>
           <Field
             label="On which day"
-            hint="Day of the month (1–31) — or day of the week (0 = Sunday) for weekly and fortnightly. 29–31 clamp to the month end."
+            hint="The day of the month, 1 to 31. In a shorter month the bill falls on its last day. For weekly or fortnightly bills, use 0 for Sunday up to 6 for Saturday."
             rule={RECURRING_TEMPLATE_RULES.anchorDay}
           >
             <Input
@@ -435,7 +435,7 @@ function TemplateForm({
       <input type="hidden" name="storeId" value={storeId} />
         <div className="space-y-3">
         <FormGrid>
-          <Field label="Name" hint="What a person calls it — “Lipa branch rent”." rule={RECURRING_TEMPLATE_RULES.name}>
+          <Field label="Name" hint="What people call it, for example “Lipa store rent”." rule={RECURRING_TEMPLATE_RULES.name}>
             <Input {...nativeAttrs(RECURRING_TEMPLATE_RULES.name)} defaultValue="" className="w-full" />
           </Field>
           <Field
@@ -488,7 +488,7 @@ function TemplateForm({
           </Field>
           <Field
             label="On which day"
-            hint="Day of the month (1–31) — or day of the week (0 = Sunday) for weekly and fortnightly. 29–31 clamp to the month end."
+            hint="The day of the month, 1 to 31. In a shorter month the bill falls on its last day. For weekly or fortnightly bills, use 0 for Sunday up to 6 for Saturday."
             rule={RECURRING_TEMPLATE_RULES.anchorDay}
           >
             <Input
@@ -501,7 +501,7 @@ function TemplateForm({
 
         <Field
           label="Starts from"
-          hint="The first period this bill applies to. A past date makes the nightly job write one catch-up draft for every due date since then (up to 12 a night, never paid). A future date waits until it comes."
+          hint="The first period this bill applies to. A past date creates catch-up drafts, one for each due date since then. None of them is paid. A future date waits until it comes."
           rule={RECURRING_TEMPLATE_RULES.startsOn}
         >
           <Input {...nativeAttrs(RECURRING_TEMPLATE_RULES.startsOn)} type="date" defaultValue={today()} className="w-full" />

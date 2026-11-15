@@ -1,3 +1,4 @@
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { Page } from '@/components/shell/Page';
 import { Table, Td, Th } from '@/components/ui';
@@ -29,7 +30,7 @@ export default async function UploadSettlementFilesPage() {
       <section className="space-y-2" aria-label="Days still waiting for a file">
         <h2 className="text-lg font-semibold">Days with sales and no file yet</h2>
         {waiting.length === 0 ? (
-          <p className="text-sm">Every verified day with sales already has a staged file line.</p>
+          <p className="text-sm">Every verified day with sales already has its file.</p>
         ) : (
           <Table>
             <thead>
@@ -46,7 +47,7 @@ export default async function UploadSettlementFilesPage() {
                   <Td>{w.storeName}</Td>
                   <Td>{w.channelName}</Td>
                   <Td>{w.days.length}</Td>
-                  <Td>{w.days[0]}</Td>
+                  <Td>{w.days[0] ? formatBusinessDayLong(w.days[0]) : '—'}</Td>
                 </tr>
               ))}
             </tbody>

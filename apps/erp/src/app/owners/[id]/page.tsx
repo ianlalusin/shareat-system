@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import {
   closeMonthAction,
@@ -20,7 +21,8 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, Field, FlashBanner, FormModal, Input, Select, DialogActions } from '@/components/ui';
+import { monthName } from '@/lib/format';
+import { Button, ConfirmDestructive, Field, FlashBanner, FormModal, Input, Select, DialogActions } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import {
   OWNERS_CLOSE_MONTH_RULES,
@@ -98,14 +100,13 @@ export default async function OwnerPage({
               <Figure label="Still owes us" value={peso(owner.position.receivable)} />
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-500">
-              ⭐ <strong>Net</strong> is contributed minus drawn — arithmetic on the two figures
-              beside it, never a stored third number.{' '}
-              <strong>Still owes us</strong> is separate on purpose: a personal expense the business
-              expects back has not reduced equity, and it is not part of net.
+              <strong>Net</strong> is contributed minus drawn.{' '}
+              <strong>Still owes us</strong> is kept separate: a personal expense the business
+              expects back is not part of net.
               {owner.aged && (
                 <>
                   {' '}
-                  ⚠️ Oldest unsettled charge {owner.aged.oldestOn} —{' '}
+                  Oldest unsettled charge: {formatBusinessDayLong(owner.aged.oldestOn)},{' '}
                   <strong>{owner.aged.daysOutstanding} days</strong>.
                 </>
               )}
@@ -119,10 +120,9 @@ export default async function OwnerPage({
           <div>
             <h2 className="font-medium">Settle {peso(owner.position.receivable)}</h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Three ways, and they are not equivalent. ⚠️ Only <strong>cash back</strong> actually
-              returns the money — recovering from pay moves it to a salary advance and nothing has
-              come back yet, so it keeps counting against the drawing limit. Writing it off turns it
-              into a drawing, which is the moment equity really falls.
+              There are three ways to settle, and they are not the same. Only <strong>cash back</strong>{' '}
+              actually returns the money. Recovering from pay turns it into a salary advance, so it
+              still counts against the drawing limit. Writing it off turns it into a drawing.
             </p>
           </div>
           <FormModal trigger="Settle" title="Settle what this owner owes" size="lg">
@@ -185,8 +185,8 @@ export default async function OwnerPage({
               {owner.drawingLimit && (
                 <>
                   {' '}
-                  ⚠️ Refused above {peso(owner.drawingLimit)} {owner.drawingLimitPeriod} — unrepaid
-                  personal expenses count towards it.
+                  Anything above {peso(owner.drawingLimit)} {owner.drawingLimitPeriod} is refused.
+                  Unrepaid personal expenses count towards it.
                 </>
               )}
             </p>
@@ -228,10 +228,9 @@ export default async function OwnerPage({
         <div>
           <h2 className="font-medium">Monthly drawings close</h2>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Agree what this owner drew in a month and shut it. ⛔ <strong>Closing locks it</strong> —
-            a drawing dated into a closed month is refused afterwards, which is what makes the agreed
-            figure stay true. If your figure differs from the ledger, the difference is{' '}
-            <strong>posted to the books</strong>, and it needs a reason.
+            Agree what this owner drew in a month and close it. <strong>Closing locks the month</strong>:
+            no more drawings can be dated into it. If your figure differs from the books, the
+            difference is <strong>added to the books</strong> and needs a reason.
           </p>
         </div>
 
@@ -250,7 +249,7 @@ export default async function OwnerPage({
                 </Field>
                 <Field
                   label="Agreed amount"
-                  hint={`The ledger says ${peso(owner.closableAmount)}. Leave as-is to agree with it.`}
+                  hint={`The books say ${peso(owner.closableAmount)}. Leave it as is to agree.`}
                   rule={OWNERS_CLOSE_MONTH_RULES.acknowledgedAmount}
                 >
                   <Input
@@ -267,9 +266,12 @@ export default async function OwnerPage({
                 </Field>
               </div>
               <DialogActions>
-                <Button type="submit" variant="secondary">
-                  Close {owner.closableMonth.slice(0, 7)}
-                </Button>
+                <ConfirmDestructive
+                  tier="confirm"
+                  quiet
+                  label="Close month"
+                  consequence={`Closing ${monthName(owner.closableMonth)} locks it: a drawing dated into it is refused afterwards. A difference from the ledger is posted to the books.`}
+                />
               </DialogActions>
             </CheckedForm>
           </FormModal>
@@ -293,7 +295,7 @@ export default async function OwnerPage({
               <tbody>
                 {owner.closes.map((c) => (
                   <tr key={c.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2 font-mono">{c.periodMonth.slice(0, 7)}</td>
+                    <td className="px-3 py-2 font-mono">{monthName(c.periodMonth)}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {peso(c.acknowledgedAmount)}
                     </td>
@@ -309,7 +311,7 @@ export default async function OwnerPage({
                         '—'
                       )}
                     </td>
-                    <td className="px-3 py-2 text-xs">{c.closedOn}</td>
+                    <td className="px-3 py-2 text-xs">{formatBusinessDayLong(c.closedOn)}</td>
                   </tr>
                 ))}
               </tbody>

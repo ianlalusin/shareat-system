@@ -11,11 +11,10 @@ import {
 import { canEditPlatformCode, channelsForStore, moneyAccountNames, receivableOptions, settlementConfigForStore, type SalesChannelAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_BANK_HINTS_RULES, SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES, SETTINGS_STORE_SETTLEMENT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, Button, Checkbox, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { BANK_HINTS_EDIT, SALES_CHANNEL_EDIT, STORE_SETTLEMENT_EDIT } from './typed-forms';
@@ -77,7 +76,7 @@ export default async function SalesChannelsSettingsPage({
           <a href="/admin/stores" className="underline">
             Stores
           </a>{' '}
-          first — a channel belongs to a branch.
+          first. Every channel belongs to a store.
         </PageDescription>
       </Page>
     );
@@ -101,9 +100,9 @@ export default async function SalesChannelsSettingsPage({
         <Crumb />
         <h1 className="text-2xl font-semibold">Sales channels</h1>
         <PageDescription>
-          How this branch sells: walk-in, and each delivery platform. A channel decides{' '}
+          How this store sells: walk-in, and each delivery platform. A channel decides{' '}
           <strong>whether its money reaches the till on the day</strong> or is owed to us until the
-          platform settles — and <strong>whether a wasted order gets reviewed</strong> or is
+          platform pays out, and <strong>whether a wasted order gets reviewed</strong> or is
           decided on the spot.
         </PageDescription>
       </div>
@@ -126,7 +125,7 @@ export default async function SalesChannelsSettingsPage({
       {active.length === 0 && (
         <Banner tone="warning">
           <strong>This store has no active sales channel, so it cannot trade.</strong> A sales day
-          has nowhere to land without one. Add the first below — for most branches that is a
+          has nowhere to land without one. Add the first below. For most stores that is a
           walk-in channel whose money reaches the till.
         </Banner>
       )}
@@ -164,9 +163,8 @@ export default async function SalesChannelsSettingsPage({
         <section className="space-y-3">
           <h2 className="font-medium">Retired</h2>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Not offered on new sales days. Still shown on everything already recorded, and anything
-            still open against one can still be resolved — which is why a channel is retired and
-            never deleted.
+            Not offered on new sales days. Still shown on everything already recorded. A channel is
+            retired, never deleted.
           </p>
           {retired.map((c) => (
             <div
@@ -198,9 +196,7 @@ export default async function SalesChannelsSettingsPage({
         <a href="/channel-settlements" className="underline">
           Channel settlements
         </a>
-        , alongside the settlement it is used for. Withholding tax is booked as an expense on every
-        channel — there is no creditable-tax account to claim it against, because this ledger is a
-        management record and never a filing basis.
+        , next to the settlement it is used for. Withholding tax is booked as an expense on every channel.
       </p>
     </Page>
   );
@@ -255,7 +251,7 @@ function ChannelCard({
             <strong>{wallet}</strong>
           ) : (
             <>
-              <strong>not set</strong> — a settlement cannot be recorded until it is
+              <strong>not set</strong>. A settlement cannot be recorded until it is
             </>
           )}
           .{' '}
@@ -272,7 +268,7 @@ function ChannelCard({
         summary={[
           { label: 'Channel name', value: channel.name },
           { label: 'Where the money goes', value: channel.isRemittedDaily ? 'Reaches the till' : 'Settles later' },
-          { label: 'Receivable account', value: receivable ? `${receivable.code} · ${receivable.name}` : channel.receivableAccountCode },
+          { label: 'Receivable account', value: receivable ? receivable.name : channel.receivableAccountCode },
           { label: 'Wasted or refunded orders', value: channel.wastageTypeMode === 'tracked' ? 'Review it' : 'Decide on the spot' },
         ]}
         hidden={{ storeId, channelId: channel.id }}
@@ -304,12 +300,12 @@ function ChannelCard({
         <input type="hidden" name="channelId" value={channel.id} />
         <input type="hidden" name="name" value={channel.name} />
         <input type="hidden" name="isActive" value="false" />
-        <button
-          type="submit"
-          className={`${ACTION_LINK} text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200`}
-        >
-          Retire this channel
-        </button>
+        <ConfirmDestructive
+          tier="confirm"
+          quiet
+          label="Retire this channel"
+          consequence="It stays on everything already recorded, and anything still open against it can still be resolved. You can bring it back later."
+        />
       </form>
     </section>
   );
@@ -327,8 +323,8 @@ function SettlementWiring({ storeId, config, sp, actorId }: { storeId: string; c
         <Pill tone={config ? 'neutral' : 'amber'}>{config ? 'Saved' : 'Not set up'}</Pill>
       </div>
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        The short name and the labels that will let a Foodpanda or Grab payout statement be matched to this branch. They are{' '}
-        <strong>saved for later and not used to match anything yet</strong>. The platform and its store code are set on each channel below.
+        The short name and labels used to match a Foodpanda or Grab payout statement to this store. They are{' '}
+        <strong>not used for matching yet</strong>. The platform and its store code are set on each channel below.
       </p>
       <EditableRecord action={saveStoreSettlementAction} label="settlement wiring"
         summary={[
@@ -365,8 +361,8 @@ function SettlementWiring({ storeId, config, sp, actorId }: { storeId: string; c
           defaultChecked={config?.wastageEmailIngestEnabled ?? false}
           label={
             <span>
-              <span className="font-medium">Read wastage emails for this branch</span>
-              <span className="block text-xs text-muted">Off until ticked. Saved for later; nothing reads wastage emails from this yet.</span>
+              <span className="font-medium">Read wastage emails for this store</span>
+              <span className="block text-xs text-muted">Off until ticked. Nothing reads wastage emails yet.</span>
             </span>
           }
         />
@@ -381,7 +377,7 @@ function BankHintsForm({ channel, storeId, sp, actorId }: { channel: SalesChanne
     <EditableRecord action={setBankHintsAction} label={`${channel.name} bank names`} summary={[{ label: 'Bank names on payouts', value: channel.bankHints.join(', ') }]} hidden={{ storeId, channelId: channel.id }} typed={typedFor(sp, BANK_HINTS_EDIT, channel.id, actorId)} rules={SETTINGS_BANK_HINTS_RULES}>
       <Field
         label={<span className="text-neutral-600 dark:text-neutral-400">Bank names on this channel&apos;s payouts, separated by commas</span>}
-        hint="At most 20, each at most 60 characters. Saved for the payout reader; nothing uses it yet."
+        hint="At most 20, each at most 60 characters. Not used yet."
         rule={SETTINGS_BANK_HINTS_RULES.bankHints}
       >
         <Input {...nativeAttrs(SETTINGS_BANK_HINTS_RULES.bankHints)} defaultValue={channel.bankHints.join(', ')} placeholder="maribank, bdo" className="mt-1 w-full" />
@@ -407,7 +403,7 @@ function PlatformCodeForm({ channel, storeId }: { channel: SalesChannelAdminRow;
         <FormGrid>
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Platform</span>} rule={SETTINGS_PLATFORM_CODE_RULES.platform}>
             <Select {...nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.platform)} defaultValue={channel.platform ?? ''} className="mt-1 w-full">
-              <option value="">— none —</option>
+              <option value="">None</option>
               <option value="grab">Grab</option>
               <option value="foodpanda">Foodpanda</option>
             </Select>
@@ -416,7 +412,7 @@ function PlatformCodeForm({ channel, storeId }: { channel: SalesChannelAdminRow;
             <Input
               {...nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.code)}
               defaultValue={channel.platformStoreCode ?? ''}
-              placeholder="Grab: a UUID. Foodpanda: 3-12 letters or digits"
+              placeholder="The store code printed on the platform's statements"
               className="mt-1 w-full"
             />
           </Field>
@@ -478,7 +474,7 @@ function ChannelFields({
         <Field
           label={
             <span className="text-neutral-600 dark:text-neutral-400">
-              Receivable account <span className="text-neutral-500 dark:text-neutral-400">— required when it settles later</span>
+              Receivable account <span className="text-neutral-500 dark:text-neutral-400">(required when it settles later)</span>
             </span>
           }
         >
@@ -487,7 +483,7 @@ function ChannelFields({
             defaultValue={channel?.receivableAccountCode ?? ''}
             className="mt-1 w-full"
           >
-            <option value="">— none (only valid when it reaches the till) —</option>
+            <option value="">None (only when it reaches the till)</option>
             {accounts.map((a) => (
               <option key={a.code} value={a.code}>
                 {a.code} · {a.name}

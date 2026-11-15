@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, subtract, ZERO } from '@shareat/core/money';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { disburseLoanAction, recordPaymentAction, reverseEntryAction, updateLoanRepaymentAmountAction } from '../actions';
 import { METHOD_LABEL, getDetail, moneyAccounts, peso, repaymentAmountFor, today } from '../lib';
@@ -74,12 +75,8 @@ export default async function LoanPage({
               <Figure label="Principal repaid" value={peso(loan.position.principalPaid)} />
               <Figure label="Outstanding" value={peso(loan.position.outstanding)} emphasis />
             </div>
-            {/* ⛔ v1 stored all four of these on the loan row and they drifted so far that both live
-                Grab loans were unusable. Here they are one query over the ledger. */}
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Interest paid to date: <strong>{peso(loan.position.interestPaid)}</strong>. Every
-              figure is summed from the ledger on load, never stored — so none of them can disagree
-              with the books.
+              Interest paid so far: <strong>{peso(loan.position.interestPaid)}</strong>.
             </p>
           </section>
         }
@@ -90,8 +87,8 @@ export default async function LoanPage({
           <div>
             <h2 className="font-medium">Draw the money</h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              {peso(undrawn)} of this agreement is still undrawn. Anything beyond it is a separate
-              loan with its own terms, not a bigger version of this one.
+              {peso(undrawn)} of this agreement is still waiting to be drawn. Anything more is a
+              separate loan.
             </p>
           </div>
           <FormModal trigger="Draw the money" title="Draw the money from this loan" size="md">
@@ -142,19 +139,19 @@ export default async function LoanPage({
               what was paid, and the split follows from the loan's own terms.
             */}
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Enter what was paid. Interest is taken first, principal second — you do not split it
-              yourself, because the loan&apos;s own terms already decide it.
+              Enter what was paid. Interest is taken first, then the rest reduces what is owed. You do
+              not split it yourself.
             </p>
           </div>
 
           <div className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
             <span className="text-neutral-600 dark:text-neutral-400">
-              Interest built up since {loan.lastPaymentOn ?? loan.startDate}
+              Interest built up since {formatBusinessDayLong(loan.lastPaymentOn ?? loan.startDate)}
             </span>{' '}
             <span className="font-mono font-medium tabular-nums">{peso(loan.accruedNow)}</span>
             <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-              A payment of {peso(loan.instalment)} is one scheduled instalment. ⚠️ Paying less is
-              normal and is handled — it simply retires less principal, or none.
+              A payment of {peso(loan.instalment)} is one scheduled instalment. Paying less is
+              fine; it just reduces what is owed by less.
             </div>
           </div>
 
@@ -248,7 +245,7 @@ export default async function LoanPage({
                     key={p.entryId}
                     className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                   >
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">{p.paidOn}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatBusinessDayLong(p.paidOn)}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {peso(p.interest)}
                     </td>
@@ -278,9 +275,8 @@ export default async function LoanPage({
           {/* ⚠️ A reversed payment disappears from this list rather than sitting beside its own
               undo — netting is right for a figure and wrong for a history. */}
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Reversing writes the opposite entry; the two net to nothing and the debt returns to what
-            it was. A reversed payment leaves this list — it never happened as far as the loan is
-            concerned, and both entries stay in the ledger.
+            Reversing cancels a payment and the debt goes back to what it was. A reversed payment
+            leaves this list, but both entries stay in the books.
           </p>
         </section>
       )}

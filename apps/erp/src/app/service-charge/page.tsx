@@ -54,10 +54,10 @@ export default async function ServiceChargePage({
       <div>
         <h1 className="text-2xl font-semibold">Service charge</h1>
         <PageDescription>
-          RA 11360 sends 100% of the service charge to rank-and-file staff, at least twice a
-          month. This records that the float was discharged and by how much.{' '}
-          <strong>ERP does not know the split, who is eligible, or the odd centavo</strong> — the
-          business processes and documents that by hand.
+          The law requires 100% of the service charge to go to rank-and-file staff, at least twice
+          a month. This records that the float was paid out and by how much.{' '}
+          <strong>The system does not work out the split, who is eligible, or odd centavos.</strong>{' '}
+          The business does that by hand.
         </PageDescription>
       </div>
 
@@ -88,8 +88,7 @@ export default async function ServiceChargePage({
         </div>
         <div className="font-mono text-lg font-medium tabular-nums">{peso(balance)}</div>
         <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">
-          ⭐ Derived from the ledger — the service charge float, credits minus debits, this store only. A store may
-          never spend another store&apos;s float.
+          A store may never spend another store&apos;s float.
         </p>
       </div>
 
@@ -112,7 +111,7 @@ export default async function ServiceChargePage({
                 className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
               />
             </Field>
-            <Field label="From" hint="Balances shown are derived from the ledger." rule={SERVICE_CHARGE_DISTRIBUTE_RULES.moneyAccountId}>
+            <Field label="From" hint="Each balance is what that account holds now." rule={SERVICE_CHARGE_DISTRIBUTE_RULES.moneyAccountId}>
               <Select {...nativeAttrs(SERVICE_CHARGE_DISTRIBUTE_RULES.moneyAccountId)} defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…

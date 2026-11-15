@@ -185,7 +185,7 @@ describe('T-519 S2 - the section by role', () => {
 
 describe('T-519 S2 - plain words', () => {
   it('the payslip line and the source names', () => {
-    expect(chargeRepaymentLabel('2026-01-04')).toBe('Charge repayment, agreement of 2026-01-04');
+    expect(chargeRepaymentLabel('2026-01-04')).toBe('Charge repayment, agreement of January 4, 2026');
     expect(chargeSourceLabel('tillcountshortage')).toBe('Till shortage');
     expect(chargeSourceLabel('remittance_variance')).toBe('Remittance shortage');
     expect(chargeSourceLabel('trade_discrepancy')).toBe('Commissary charge');

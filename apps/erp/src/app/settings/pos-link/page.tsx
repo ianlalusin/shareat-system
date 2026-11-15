@@ -56,8 +56,8 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
         </p>
         <h1 className="text-2xl font-semibold">POS link</h1>
         <PageDescription>
-          Which POS store each branch sells under. A linked branch&apos;s sales days come from POS and cannot be typed;
-          a branch that is not linked keeps typing them in.
+          Which POS store each store sells under. A linked store&apos;s sales days come from POS and cannot be typed;
+          a store that is not linked keeps typing them in.
         </PageDescription>
       </div>
 
@@ -65,8 +65,8 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
 
       {options === null && (
         <Banner tone="warning">
-          POS isn&apos;t connected to this system yet, so its stores can&apos;t be listed. Type the POS store&apos;s id
-          and name instead.
+          POS isn&apos;t connected to this system yet, so its stores can&apos;t be listed. Enter the POS store&apos;s id
+          and name below; ask whoever set up POS if you don&apos;t have them.
         </Banner>
       )}
 
@@ -278,7 +278,7 @@ function StoreCard({
 
       {row.unlinked && !link && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Unlinked {formatBusinessDateTime(row.unlinked.at, { dateStyle: 'medium' })} by {row.unlinked.byName ?? 'someone'}: {row.unlinked.reason}
+          Unlinked on {formatBusinessDateTime(row.unlinked.at, { dateStyle: 'long' })} by {row.unlinked.byName ?? 'someone'}: {row.unlinked.reason}
         </p>
       )}
 

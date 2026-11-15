@@ -125,7 +125,7 @@ const policy: FormCase<BaseCtx> = {
   },
   tooLong: { allowedShiftStartHours: LONG },
   good: (ctx) => policy.refused(ctx, { effectiveFrom: '2026-06-01' }),
-  ok: /Saved\. The new policy takes effect from 2026-06-01/,
+  ok: /Saved\. The new policy takes effect from June 1, 2026/,
 };
 
 runTypedLegs(policy);

@@ -1,4 +1,4 @@
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../lib/page-access';
@@ -126,7 +126,7 @@ export default async function MoneyTransfersPage({
           {overdrawn.map((a) => `${a.name} (${peso(a.balance)})`).join(', ')}.
           <div className="mt-1 text-xs">
             For a <strong>cashier</strong> drawer this is expected while the day&apos;s sales are
-            unverified — the cash is in the till before it is in the ledger. Verify the sales day
+            unverified — the cash is in the till before the sales are verified. Verify the sales day
             and it should clear. If it does not, or if the account is an office safe or a staff
             float, the money is genuinely missing and needs counting.
           </div>
@@ -249,10 +249,6 @@ export default async function MoneyTransfersPage({
           </ul>
 
           {/* Every figure above is summed from the journal on this request; there is no balance column. */}
-          <p className="text-xs text-muted">
-            Each figure is summed from the ledger on load, not stored — so it cannot drift from
-            the books it is meant to describe.
-          </p>
         </section>
       )}
 
@@ -269,7 +265,7 @@ export default async function MoneyTransfersPage({
               <strong>between stores money moves office to office only</strong> — a store remits to
               its own office first, and only office money can fund another store. An office safe
               cannot send more than it holds; a cashier drawer can, and says so, because the till
-              holds the day&apos;s takings before the ledger does.
+              holds the day&apos;s takings before they are verified.
             </>
           }
         >
@@ -328,7 +324,7 @@ export default async function MoneyTransfersPage({
                       t.status === 'voided' ? 'opacity-50' : ''
                     }`}
                   >
-                    <td className="px-3 py-2 whitespace-nowrap">{t.transferDate}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatBusinessDayLong(t.transferDate)}</td>
                     <td className="px-3 py-2">{t.fromName}</td>
                     <td className="px-3 py-2">
                       {t.toName}
@@ -380,8 +376,7 @@ export default async function MoneyTransfersPage({
             </table>
           </div>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Reversing writes an opposite entry — it never deletes the original. Both stay in the
-            ledger, which is what makes the correction auditable.
+            Reversing cancels a transfer but never deletes it. Both entries stay in the books.
           </p>
         </section>
       )}

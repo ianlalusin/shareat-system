@@ -84,8 +84,8 @@ export default async function PriceListPage({
         </div>
       ) : (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          Nothing priced yet. ⚠️ A customer on this list has no rate for any item until something is
-          added — and an unpriced item is refused rather than assumed free.
+          Nothing priced yet. A customer on this list has no rate for any item until one is added,
+          and an unpriced item is refused rather than treated as free.
         </p>
       )}
 
@@ -96,16 +96,16 @@ export default async function PriceListPage({
           size="md"
           description={
             <>
-              ⚠️ Re-quoting an item <strong>replaces</strong> its rate — a list holds one price per
-              item, not a history. ⭐ Items come from the item master now (T-145) — pick one rather
-              than typing a code, so the same product cannot exist under three spellings.
+              Setting a rate for an item that already has one <strong>replaces</strong> it. A list keeps
+              one price per item, not a history. Pick the item from the list rather than typing a
+              code.
             </>
           }
         >
         <CheckedForm rules={PRICE_SET_RULES} action={setPriceAction} className="space-y-3">
           <input type="hidden" name="priceListId" value={list.id} />
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Item" hint="From the item master. No item? Add it under /items first." rule={PRICE_SET_RULES.itemId}>
+            <Field label="Item" hint="From the item master. Item not listed? Add it under Items first." rule={PRICE_SET_RULES.itemId}>
               <Select {...nativeAttrs(PRICE_SET_RULES.itemId)} defaultValue="" className="w-full">
                 <option value="" disabled>
                   {allItems.length === 0 ? 'No items yet' : 'Select…'}

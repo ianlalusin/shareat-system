@@ -230,7 +230,7 @@ export async function runDepreciationAction(formData: FormData): Promise<void> {
     summary = `${created} posted, ${result.posted.length - created} already done, ${result.skipped} not due`;
     if (result.skippedClosed > 0) {
       // Owed, not "not due": the month is closed, so it is booked from the missed-months list instead.
-      summary += ` — ${result.skippedClosed} month(s) fall in a closed month — book them from Findings (missed months).`;
+      summary += ` — ${result.skippedClosed} ${result.skippedClosed === 1 ? 'month falls' : 'months fall'} in a closed month. Book ${result.skippedClosed === 1 ? 'it' : 'them'} from Findings (missed months).`;
     }
     if (result.failed.length > 0) {
       // Surfaced, never swallowed — "a missed period surfaces as a finding, not silence".

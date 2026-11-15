@@ -60,7 +60,7 @@ export default async function StatutoryPaymentsPage({ searchParams }: { searchPa
 
       {off.length > 0 && (
         <Banner tone="error">
-          The payroll figures and the ledger do not match (mismatch):{' '}
+          The payroll figures and the ledger do not match:{' '}
           {off.map((r) => `${agencyLabel(r.agency)} at ${nameOf(r.storeId)} owes ${formatMoney(money(r.outstanding))} by payroll but the ledger shows ${formatMoney(money(r.glBalance))}`).join('; ')}
           . Someone has posted to the payable account outside payroll, or a payment was entered by hand. Ask your accountant before paying.
         </Banner>
