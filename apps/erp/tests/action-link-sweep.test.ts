@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 103 FAIL / 52 UNRESOLVED', () => {
+  it('accepted-baseline totals: 103 FAIL / 51 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -239,7 +239,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 51 -> 50 UNRESOLVED, T-511 S6a: app/channel-settlements/SettlementForm.tsx lost its intrinsic checkbox (baseline entry removed); FAIL unmoved at 115; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
     // 115 -> 113 FAIL, 50 -> 49 UNRESOLVED, T-550 (row 452): the retired /inventory/pos-map and /inventory/pos-usage pages left the baseline (two 20px FAIL entries, one intrinsic-checkbox UNRESOLVED entry).
     // 113 -> 104 FAIL, 50 -> 53 UNRESOLVED, T-568 S1 (groups pass): the Inventory landing's eight inline 20px shortcut links became nav pills (baseline entry app/inventory/page.tsx removed, -8, one more left the census); the shared Table surface moved three controls (the Users Manage link, the findings summary, the staff roster) out of static reach into UNRESOLVED (baselined). No control became smaller; re-measured by runCensus(), 12 Nov 2026.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 103, unresolved: 52 });
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 103, unresolved: 51 });
+    // 52 -> 51 UNRESOLVED, T-587 S1 (NEEDS BOSS APPROVAL): the hub's old SettingsCard anchor had no resolvable font size; the new row resolves. app/settings/page.tsx left the baseline.
     // 104 -> 103 FAIL, T-571 (12 Nov 2026): the /ap/suppliers/[id] collapsed card holding one pencil button went; its 20px <summary> left the census (baseline entry trimmed). UNRESOLVED unmoved at 53.
     // 53 -> 52 UNRESOLVED, FAIL unmoved at 103, T-560 (Codex F1, BOSS ruling 11 Nov): the text-size scale made page.tsx's gov-tile 'Set it under Employer numbers' link resolvable (20px, below the 24px floor); fixed with inline-flex min-h-6 so it now PASSes, and its app/page.tsx baseline entry was removed.
     // FAIL unmoved at 113, 49 -> 50 UNRESOLVED, T-546 Tills (+7 controls, +1 radio box in app/admin/pos-tablets/TillsSection.tsx baselined in touch-target-baseline.json); re-measured after rebase on main, 8 Nov 2026, BOSS approved.
@@ -549,8 +550,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1648 -> 1653, T-533 S1 (15 Nov 2026): +5 controls on /admin/stores/[id], the See-the-pre-flight link, the Set POS mode record form (mode, date, reason) and the confirm step's Cancel link; FAIL/UNRESOLVED unmoved (asserted above); re-measured by this test's own runCensus() on lane/t533.
     // 1653 -> 1654, T-587 S4 (NEEDS BOSS APPROVAL): +1 compliant control, the store page's Readiness <summary> (44 px), re-measured by runCensus().
     // 1654 -> 1656, T-583 (15 Nov 2026): +2 compliant controls (min-h-11), the stock-count link and the Record a delivery link on each /inventory/locations card; the Recipes text link left /inventory/production and the Cookbook settings button replaced it (net 0); FAIL/UNRESOLVED unmoved; re-measured by runCensus().
-    // 1656 -> 1687, T-584 (15 Nov 2026): +31 controls, the Documents screens; re-measured by runCensus().
-    expect(results.length).toBe(1687);
+    // 1656 -> 1657, T-587 S1 (BOSS approved +1, as measured): settings hub rebuilt as rows; re-measured by runCensus() after merging main.
+    // 1657 -> 1688, T-584 (15 Nov 2026): +31 controls, the Documents screens; re-measured by runCensus().
+    expect(results.length).toBe(1688);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
