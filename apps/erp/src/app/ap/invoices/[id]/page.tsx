@@ -32,10 +32,10 @@ import {
   nativeAttrs,
   type FieldRule,
 } from '@shareat/domain/field-rules';
-import { ACTION_LINK } from '@/components/action-link';
+import { ACTION_LINK, NAV_LINK } from '@/components/action-link';
 import { PhotoThumb } from '@/components/upload/PhotoThumb';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
-import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select, FormModal, DialogActions } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, FormModal, DialogActions } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -185,9 +185,9 @@ export default async function InvoiceDetailPage({
 
 return (
     <Page view="detail" sectioned density="table">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:justify-between">
         <div>
-          <a href="/ap" className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
+          <a href="/ap" className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
             ← Accounts payable
           </a>
           <h1 className="mt-1 text-2xl font-semibold">
@@ -198,8 +198,8 @@ return (
             {invoice.dueDate ? ` · due ${formatBusinessDayLong(invoice.dueDate)}` : ''}
           </PageDescription>
         </div>
-        <div className="text-right">
-          <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+        <div className="w-full sm:w-auto sm:text-right">
+          <span className="inline-flex flex-wrap items-center gap-1.5 sm:justify-end">
             <Badge status={invoice.status} />
             {invoice.selfVerified && <Badge tone="warning" label="Verified by its own creator" />}
           </span>
@@ -381,15 +381,15 @@ return (
             Verifying confirms the paper is genuine and posts these draft expenses straight away.
             Check each category too: food, supplies and owner&rsquo;s drawings are taxed differently.
           </p>
-          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table aria-label="What verifying will post" className="w-full min-w-[640px] border-collapse text-sm">
+          {/* The kit Table names the phone card (title, subtitle, two figures); a raw table collapsed to one-letter columns at 390. */}
+          <Table label="What verifying will post" card={{ title: 'Category', subtitle: 'Particulars', keys: ['Amount', 'Running total'] }}>
               <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Category</th>
-                  <th className="px-3 py-2 font-medium">Account</th>
-                  <th className="px-3 py-2 font-medium">Particulars</th>
-                  <th className="px-3 py-2 text-right font-medium">Amount</th>
-                  <th className="px-3 py-2 text-right font-medium">Running total</th>
+                <tr>
+                  <Th>Category</Th>
+                  <Th>Account</Th>
+                  <Th>Particulars</Th>
+                  <Th numeric>Amount</Th>
+                  <Th numeric>Running total</Th>
                 </tr>
               </thead>
               <tbody>
@@ -400,22 +400,21 @@ return (
                     running += Number(e.totalAmount);
                     return (
                       <LinkRow key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                        <td className="px-3 py-2">{cat?.category ?? e.categoryId}</td>
-                        <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">
+                        <Td>{cat?.category ?? e.categoryId}</Td>
+                        <Td className="text-xs text-muted">
                           {cat?.accountCode ? accountLabel(cat.accountCode) : <span className="text-danger">No account set. Verifying will be blocked.</span>}
-                        </td>
-                        <td className="px-3 py-2">
+                        </Td>
+                        <Td>
                           <RowLink href={`/expenses/${e.id}`}>{e.particulars}</RowLink>
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(e.totalAmount)}</td>
-                        <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(running.toFixed(2))}</td>
+                        </Td>
+                        <NumTd>{peso(e.totalAmount)}</NumTd>
+                        <NumTd>{peso(running.toFixed(2))}</NumTd>
                       </LinkRow>
                     );
                   });
                 })()}
               </tbody>
-            </table>
-          </div>
+          </Table>
         </section>
       )}
 

@@ -291,7 +291,8 @@ function ChannelCard({
         />
       </EditableRecord>
 
-      {canSetPlatformCode && <PlatformCodeForm channel={channel} storeId={storeId} />}
+      {/* A walk-in channel (reaches the till, no platform) has nothing to put here; a delivery channel settles later or already has a platform. */}
+      {canSetPlatformCode && (!channel.isRemittedDaily || channel.platform) && <PlatformCodeForm channel={channel} storeId={storeId} />}
 
       <BankHintsForm channel={channel} storeId={storeId} sp={sp} actorId={actorId} />
 
