@@ -6,3 +6,8 @@ const UUID_SHAPE_GLOBAL = new RegExp(UUID_SHAPE.source, 'gi');
 export function screenSentence(sentence: string): string {
   return sentence.replace(/\s+/g, ' ').trim().replace(UUID_SHAPE_GLOBAL, '[hidden]');
 }
+
+/** "1 room", "4 rooms": a count with its noun, never the "room(s)" hedge. */
+export function countOf(n: number, one: string, many: string = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}

@@ -136,6 +136,9 @@ export type { StoreChannelSettlementConfigRow } from './repo/store-channel-settl
 export * as fixedAssetsRepo from './repo/fixed-assets';
 export * as kitchenRepo from './repo/kitchen';
 export * as posV2Repo from './repo/pos-v2';
+export * as posPreflightRepo from './repo/pos-preflight';
+export * as posStoreSetupRepo from './repo/pos-store-setup';
+export * as posStoreModeRepo from './repo/pos-store-mode';
 export * as moneyAccountsRepo from './repo/money-accounts';
 export * as moneyTransfersRepo from './repo/money-transfers';
 export * as prepaidRepo from './repo/prepaid';

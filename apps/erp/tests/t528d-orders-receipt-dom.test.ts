@@ -43,7 +43,7 @@ const BODY = {
   lines: [{ id: id(700), kind: 'item', name: 'Plain rice', qty: 2, unitPrice: '40.00', kitchenStatus: 'sent', bundleHeads: null, menuItemId: IDS.plain, discounts: [] }],
 };
 const PAYMENT = {
-  store: { storeId: id(1), name: 'Shareat Lipa', terminalNo: 1, vatRegistered: false },
+  store: { storeId: id(1), name: 'Shareat Lipa', terminalNo: 1, vatRegistered: false, identity: { businessName: 'Test Legal Co', addressLines: ['1 Test St'], tin: '123-456-789-00002' } },
   tenders: [{ id: T_CASH, name: 'Cash', kind: 'cash' }],
   discountPresets: [],
   rules: { vatPercentBasisPoints: 1200, scPwdPercentBasisPoints: 2000 },
@@ -127,6 +127,12 @@ describe('T-528d P0: the receipt stays after the paid table leaves the open list
     expect(receipt()).toBeNull();
     expect(host.textContent).toContain('Open orders');
     expect(host.textContent).not.toContain('Bill · Stand 5');
+  });
+
+  it('the store identity from the snapshot reaches the receipt header (Orders passes it to the Payment panel)', async () => {
+    await payAndFinish();
+    expect(receipt(), 'the receipt screen is up').toBeTruthy();
+    expect(receipt()!.textContent, 'the legal name from the snapshot is on the receipt (printed in capitals)').toContain('TEST LEGAL CO');
   });
 
   it('control: before Finish there is no receipt screen, and the Payment screen is showing', async () => {

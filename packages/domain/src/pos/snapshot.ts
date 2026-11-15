@@ -8,10 +8,11 @@
  */
 import { createHash } from 'node:crypto';
 import { can, type Actor } from '@shareat/auth';
-import { accessRepo, posV1Repo, posV2Repo, RefusalError, storesRepo, withOrgPrincipal, type Tx } from '@shareat/db';
+import { accessRepo, organizationsRepo, posV1Repo, posV2Repo, RefusalError, storesRepo, withOrgPrincipal, type Tx } from '@shareat/db';
 import { canonicalJson } from '../menu/project';
 import { loadStoreMenu } from '../menu/load-store-menu';
 import { refuse } from '../shared/refusal';
+import { receiptIdentityOf, type ReceiptIdentity } from './receipt-identity';
 import { POS_NOT_SWITCHED_ON, type PosPairing } from './inbox';
 import { listKitchenQueue, listOpenStands, listRefillableTables, listRefillQueue } from './sale';
 import { businessDateOf, readRules, requireStoreScope, type PosDeps } from './shared';
@@ -22,7 +23,7 @@ export const NO_TILL_NUMBER = 'This tablet has no till number yet. Ask a manager
 
 export interface PosSnapshot {
   body: {
-    store: { storeId: string; name: string; mode: string; terminalNo: number; vatRegistered: boolean; receiptPaperMm: number; receiptCopies: number };
+    store: { storeId: string; name: string; mode: string; terminalNo: number; vatRegistered: boolean; receiptPaperMm: number; receiptCopies: number; /** T-585: who the receipt says issued it (legal name, TIN + branch, address, contact); an older cached snapshot lacks it. */ identity: ReceiptIdentity };
     menu: Awaited<ReturnType<typeof loadStoreMenu>>;
     stands: { id: string; number: number }[];
     tenders: { id: string; name: string; kind: string }[];
@@ -59,7 +60,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
   }
 
   const body: PosSnapshot['body'] = {
-    store: { storeId, name: storeRow?.name ?? '', mode: store.mode, terminalNo: terminal.terminalNo, receiptPaperMm: terminal.receiptPaperMm, receiptCopies: terminal.receiptCopies, vatRegistered: (await posV2Repo.getOrgTaxType(tx, orgId)) === 'vat' }, // T-528 R1: the tablet prices with the org's own VAT status
+    store: { storeId, name: storeRow?.name ?? '', mode: store.mode, terminalNo: terminal.terminalNo, receiptPaperMm: terminal.receiptPaperMm, receiptCopies: terminal.receiptCopies, vatRegistered: (await posV2Repo.getOrgTaxType(tx, orgId)) === 'vat', identity: receiptIdentityOf((await organizationsRepo.identityOf(tx, orgId)) ?? { name: '', legalName: null, tin: null }, storeRow ?? { tinBranchCode: null, address: null, contactNumber: null }) }, // T-528 R1: the tablet prices with the org's own VAT status
     menu,
     stands: (await posV2Repo.listActiveStands(tx, orgId, storeId)).map((s) => ({ id: s.id, number: s.number })),
     tenders: (await posV1Repo.listTendersByStore(tx, orgId, storeId)).filter((t) => t.isActive).map((t) => ({ id: t.id, name: t.name, kind: t.kind })),

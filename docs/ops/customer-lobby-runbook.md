@@ -309,7 +309,7 @@ To turn it back on: `asql "update lobby_stores set paused = false where store_id
 |---|---|---|
 | right after start | 75448320 (75.4 MB) | 3 Nov 22:40 Manila; ERP 197894144 (197.9 MB) |
 | after the test check-in | 90746880 (90.7 MB) | 15 Nov 13:35 Manila, Lipa step 10 passed (phone check-in shown on the POS Waiting line card, cancel removed it); ERP 250949632 (250.9 MB). Earlier the same day, after the restart of 14 Nov: 71847936 |
-| after one hour | (owed: read after 14:35 Manila, 15 Nov) | |
+| after one hour | 89952256 (90.0 MB) | 15 Nov 14:30 Manila, about an hour after the check-in; ERP 265285632 (265.3 MB). Steady, far under the 512 MB cap. S9b closed. |
 
 ## What can go wrong
 

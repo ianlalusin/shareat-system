@@ -24,6 +24,7 @@
     "test:all": "vitest run",
     "capture": "tsx scripts/capture.ts",
     "master-data": "tsx scripts/master-data.ts",
+    "pos:load-setup": "tsx scripts/pos-load-setup.ts",
     "dual-run": "tsx scripts/dual-run.ts",
     "v1-expense-export": "tsx scripts/v1-expense-export.ts",
     "db:generate": "npm run db:generate -w @shareat/db",

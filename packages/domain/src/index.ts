@@ -123,6 +123,8 @@ export * from './pos/store-link';
 // T-424 S5 - register a POS v2 tablet as an ERP terminal person (the manager-approval bucket owner).
 export * from './pos/terminal-link';
 export * from './pos/tenders';
+export * from './pos/preflight';
+export * from './pos/store-mode';
 export { packageCapExcess } from './pos/v1-derive';
 export { normalizePosV1Alias, resolvePosV1Methods, type ResolvedMethods, type ResolverTender } from './pos/v1-methods';
 // T-178 — order/channel wastage disposition.

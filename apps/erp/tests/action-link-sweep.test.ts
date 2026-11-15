@@ -545,8 +545,11 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1637 -> 1647, T-564 (14 Nov 2026): +10 controls, the Settlement wiring panel and per-channel bank-names form on /settings/sales-channels plus three links on /admin/stores/[id]; FAIL/UNRESOLVED unmoved (asserted above); re-measured by this test's own runCensus() on lane/t564 over main 93e638a.
     // 1647 -> 1645, T-564 guard fix (15 Nov 2026): the two T-564 forms moved into <EditableRecord>, so their raw Save buttons left the census; re-measured by runCensus().
     // 1638 + T-564 net +8 = 1646 after merging main (incl. #267) into #266, 15 Nov 2026; re-measured by runCensus().
-    // 1646 -> 1648, T-583 (15 Nov 2026): +2 compliant controls (min-h-11), the stock-count link and the Record a delivery link on each /inventory/locations card; the Recipes text link left /inventory/production and the Cookbook settings button replaced it (net 0); FAIL/UNRESOLVED unmoved; re-measured by runCensus().
-    expect(results.length).toBe(1648);
+    // 1646 -> 1648, T-533 S3 (15 Nov 2026): +2 compliant controls, the two 44px links on /admin/stores/[id]/pos-preflight; FAIL/UNRESOLVED unmoved (asserted above); re-measured by runCensus().
+    // 1648 -> 1653, T-533 S1 (15 Nov 2026): +5 controls on /admin/stores/[id], the See-the-pre-flight link, the Set POS mode record form (mode, date, reason) and the confirm step's Cancel link; FAIL/UNRESOLVED unmoved (asserted above); re-measured by this test's own runCensus() on lane/t533.
+    // 1653 -> 1654, T-587 S4 (NEEDS BOSS APPROVAL): +1 compliant control, the store page's Readiness <summary> (44 px), re-measured by runCensus().
+    // 1654 -> 1656, T-583 (15 Nov 2026): +2 compliant controls (min-h-11), the stock-count link and the Record a delivery link on each /inventory/locations card; the Recipes text link left /inventory/production and the Cookbook settings button replaced it (net 0); FAIL/UNRESOLVED unmoved; re-measured by runCensus().
+    expect(results.length).toBe(1656);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

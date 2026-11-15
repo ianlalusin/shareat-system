@@ -28,6 +28,13 @@ export const ADMIN_STORE_OPENING_DATE_RULES = defineFieldRules('admin.setStoreOp
   openingDate: { label: 'The opening date', optional: true, kind: 'date' },
 });
 
+/** T-533 S1: switch a store between the old and the new POS. The date belongs to live only (the domain asks for it there); the reason goes into the audit trail. */
+export const ADMIN_STORE_POS_MODE_RULES = defineFieldRules('admin.setStorePosMode', {
+  mode: { label: 'The mode', kind: 'text', requires: 'Choose a mode: off, test or live.' },
+  liveFrom: { label: 'The live-from date', optional: true, kind: 'date' },
+  reason: { label: 'The reason', kind: 'text', max: 200, requires: 'Give a reason of 1 to 200 characters.' },
+});
+
 /** Assign or change a role (membership of the role list stays server-only). */
 export const ADMIN_ASSIGN_ROLE_RULES = defineFieldRules('admin.assignRole', {
   role: { label: 'The role', kind: 'text', requires: 'Pick a role.' },
