@@ -112,8 +112,8 @@ describe('E2: locked render (renderToStaticMarkup)', () => {
   it('has an Edit button with aria-label="Edit Gcash", type="button"', async () => {
     const html = await render();
     expect(html).toContain('aria-label="Edit Gcash"');
-    // T-448: Edit is a round icon button - the accessible name and the hover tip carry the word, no visible text.
-    expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-label="Edit Gcash"[^>]*data-tip="Edit"[^>]*><svg/);
+    // T-589 B2 (Ian R1): the pencil carries the word "Edit" beside it; the accessible name stays "Edit Gcash".
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-label="Edit Gcash"[^>]*><svg[^>]*>.*<\/svg><span aria-hidden="true">Edit<\/span><\/button>/);
   });
   it('has no type="submit" and no Save button while locked', async () => {
     const html = await render();

@@ -174,7 +174,7 @@ describe('W1 - the Name and code form is drawn only for who may use it', () => {
       expect(hidden).toMatch(/type="hidden"/);
       expect(hidden).toContain(id);
       expect(html).toMatch(/<fieldset disabled/);
-      expect(html).toMatch(/aria-label="Edit [^"]*"[^>]*data-tip="Edit"/); // T-448: icon button
+      expect(html).toMatch(/aria-label="Edit [^"]*"[^>]*><svg/); // T-448: icon button
       expect(html).not.toMatch(/>Rename</);
       expect(html).not.toMatch(/\b(w-64|w-40)\b/);
     },
