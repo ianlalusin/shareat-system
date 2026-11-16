@@ -67,7 +67,8 @@ describe('DEF-867 - report pages refuse with the card, not the error boundary', 
       const out = await Page(sp);
       const html = renderToStaticMarkup(out as never);
       expect(html).toContain('You do not have access to this screen');
-      expect(html).toContain('view_trial_balance');
+      expect(html).toContain('This screen is for people who can view the trial balance.');
+      expect(html.replace(/data-capability="[^"]*"/, '')).not.toContain('view_trial_balance');
     }
   });
 
@@ -82,6 +83,9 @@ describe('DEF-867 - report pages refuse with the card, not the error boundary', 
   });
 
   it('a route that stays open in the map still reaches the data gate, which still throws (defence in depth)', async () => {
-    await expect(reportScope('/reports/journal-lines', 'view_trial_balance', undefined)).rejects.toThrow(/AuthorizationError/);
+    // T-589 B3a keyed journal-lines, so the open example is now the dashboard route: no key, the data gate is the only one.
+    await expect(reportScope('/', 'view_financial_reports', undefined)).resolves.toBeDefined();
+    H.held = new Set();
+    await expect(reportScope('/', 'view_financial_reports', undefined)).rejects.toThrow(/AuthorizationError/);
   });
 });

@@ -112,7 +112,7 @@ describe('T-526 R6 - every /pos page refuses a person without its capability', (
         const f = await fixture();
         const html = await render(page.file, f.none);
         expect(html).toContain(NO_ACCESS);
-        expect(html).toContain(`>${page.cap}<`);
+        expect(html).toContain(`data-capability="${page.cap}"`); // T-589 B3a: the card speaks plain words; the key stays on data-capability
       },
       60_000,
     );
@@ -135,7 +135,7 @@ describe('T-526 R6 - every /pos page refuses a person without its capability', (
             expect(html).not.toContain(NOT_AVAILABLE);
           } else {
             expect(html).toContain(NO_ACCESS);
-            expect(html).toContain(`>${page.cap}<`);
+            expect(html).toContain(`data-capability="${page.cap}"`); // T-589 B3a: the card speaks plain words; the key stays on data-capability
           }
         },
         60_000,

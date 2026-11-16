@@ -6,7 +6,7 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 
 | route | file | last reviewed | status | findings ref | fixed in PR |
 |---|---|---|---|---|---|
-| / | apps/erp/src/app/page.tsx | 2026-11-15 | fix | G3 |  |
+| / | apps/erp/src/app/page.tsx | 2026-11-15 | fix | G3 | #283 |
 | /admin/access-defaults | apps/erp/src/app/admin/access-defaults/page.tsx | 2026-11-15 | fix | G1 |  |
 | /admin/pos-tablets | apps/erp/src/app/admin/pos-tablets/page.tsx | 2026-11-15 | fix | G1 |  |
 | /admin/prerequisite-refusals | apps/erp/src/app/admin/prerequisite-refusals/page.tsx | 2026-11-15 | minor | G1 |  |
@@ -45,13 +45,13 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /cutover/count | apps/erp/src/app/cutover/count/page.tsx | 2026-11-15 | fix | G4 |  |
 | /cutover/count/sheet | apps/erp/src/app/cutover/count/sheet/page.tsx | 2026-11-15 | minor | G4 |  |
 | /cutover/opening | apps/erp/src/app/cutover/opening/page.tsx | 2026-11-15 | fix | G4 |  |
+| /expenses | apps/erp/src/app/expenses/page.tsx | 2026-11-15 | fix | G4 |  |
+| /expenses/[id] | apps/erp/src/app/expenses/[id]/page.tsx | 2026-11-15 | fix | G4 | #279 |
 | /documents | apps/erp/src/app/documents/page.tsx |  | not reviewed | T-584 |  |
 | /documents/[id] | apps/erp/src/app/documents/[id]/page.tsx |  | not reviewed | T-584 |  |
 | /documents/[id]/print | apps/erp/src/app/documents/[id]/print/page.tsx |  | not reviewed | T-584 |  |
 | /documents/new | apps/erp/src/app/documents/new/page.tsx |  | not reviewed | T-584 |  |
 | /documents/templates | apps/erp/src/app/documents/templates/page.tsx |  | not reviewed | T-584 |  |
-| /expenses | apps/erp/src/app/expenses/page.tsx | 2026-11-15 | fix | G4 |  |
-| /expenses/[id] | apps/erp/src/app/expenses/[id]/page.tsx | 2026-11-15 | fix | G4 | #279 |
 | /expenses/new | apps/erp/src/app/expenses/new/page.tsx | 2026-11-15 | fix | G4 |  |
 | /expenses/recurring | apps/erp/src/app/expenses/recurring/page.tsx | 2026-11-15 | fix | G4 |  |
 | /expenses/reimbursements | apps/erp/src/app/expenses/reimbursements/page.tsx | 2026-11-15 | OK | G4 |  |
@@ -120,21 +120,21 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /reports/ar-aging | apps/erp/src/app/reports/ar-aging/page.tsx | 2026-11-15 | minor | G1 |  |
 | /reports/balance-sheet | apps/erp/src/app/reports/balance-sheet/page.tsx | 2026-11-15 | fix | G1 | #277 |
 | /reports/cash-flow | apps/erp/src/app/reports/cash-flow/page.tsx | 2026-11-15 | fix | G1 |  |
-| /reports/dual-run | apps/erp/src/app/reports/dual-run/page.tsx | 2026-11-15 | minor | G1 |  |
-| /reports/dual-run/[store]/[week] | apps/erp/src/app/reports/dual-run/[store]/[week]/page.tsx | 2026-11-15 | minor | G1 |  |
-| /reports/dual-run/pack | apps/erp/src/app/reports/dual-run/pack/page.tsx | 2026-11-15 | minor | G1 |  |
+| /reports/dual-run | apps/erp/src/app/reports/dual-run/page.tsx | 2026-11-15 | minor | G1 | #283 |
+| /reports/dual-run/[store]/[week] | apps/erp/src/app/reports/dual-run/[store]/[week]/page.tsx | 2026-11-15 | minor | G1 | #283 |
+| /reports/dual-run/pack | apps/erp/src/app/reports/dual-run/pack/page.tsx | 2026-11-15 | minor | G1 | #283 |
 | /reports/expense-items | apps/erp/src/app/reports/expense-items/page.tsx | 2026-11-15 | minor | G1 |  |
 | /reports/income-statement | apps/erp/src/app/reports/income-statement/page.tsx | 2026-11-15 | fix | G1 |  |
-| /reports/journal-lines | apps/erp/src/app/reports/journal-lines/page.tsx | 2026-11-15 | minor | G1 |  |
+| /reports/journal-lines | apps/erp/src/app/reports/journal-lines/page.tsx | 2026-11-15 | minor | G1 | #283 |
 | /reports/pos-data | apps/erp/src/app/reports/pos-data/page.tsx | 2026-11-15 | fix | G1 |  |
 | /reports/pos-reconciliation | apps/erp/src/app/reports/pos-reconciliation/page.tsx | 2026-11-15 | fix | G1 |  |
 | /reports/sales-rollup | apps/erp/src/app/reports/sales-rollup/page.tsx | 2026-11-15 | minor | G1 |  |
 | /reports/store-comparison | apps/erp/src/app/reports/store-comparison/page.tsx | 2026-11-15 | fix | G1 |  |
 | /reports/trial-balance | apps/erp/src/app/reports/trial-balance/page.tsx | 2026-11-15 | fix | G1 | #277 |
-| /sales-days | apps/erp/src/app/sales-days/page.tsx | 2026-11-15 | minor | G3 |  |
-| /sales-days/[id] | apps/erp/src/app/sales-days/[id]/page.tsx | 2026-11-15 | minor | G3 |  |
-| /sales-days/[id]/edit | apps/erp/src/app/sales-days/[id]/edit/page.tsx | 2026-11-15 | fix | G3 |  |
-| /sales-days/new | apps/erp/src/app/sales-days/new/page.tsx | 2026-11-15 | fix | G3 |  |
+| /sales-days | apps/erp/src/app/sales-days/page.tsx | 2026-11-15 | minor | G3 | #283 |
+| /sales-days/[id] | apps/erp/src/app/sales-days/[id]/page.tsx | 2026-11-15 | minor | G3 | #283 |
+| /sales-days/[id]/edit | apps/erp/src/app/sales-days/[id]/edit/page.tsx | 2026-11-15 | fix | G3 | #283 |
+| /sales-days/new | apps/erp/src/app/sales-days/new/page.tsx | 2026-11-15 | fix | G3 | #283 |
 | /service-charge | apps/erp/src/app/service-charge/page.tsx | 2026-11-15 | minor | G4 |  |
 | /settings | apps/erp/src/app/settings/page.tsx | 2026-11-15 | minor | G3 |  |
 | /settings/attendance | apps/erp/src/app/settings/attendance/page.tsx | 2026-11-15 | fix | G3 | #279 |

@@ -34,6 +34,9 @@ const STORE_A = { id: 'store-a', name: 'Alpha Branch', code: 'ALP' };
 const STORE_B = { id: 'store-b', name: 'Beta Branch', code: 'BET' };
 
 const scopeState = { stores: [STORE_A] as Array<typeof STORE_A>, storeId: undefined as string | undefined };
+// T-589 B3a: the page probes the financial word before `reportScope`; this suite is about the dashboard a holder sees.
+vi.mock('../src/lib/session', () => ({ requireSession: vi.fn(async () => ({ actor: { orgId: 'org-1', personId: 'p-1' } })) }));
+vi.mock('@/lib/page-access', () => ({ holdsAny: vi.fn(async () => true) }));
 const reportScopeMock = vi.fn();
 vi.mock('../src/app/reports/lib', () => ({
   reportScope: (...args: unknown[]) => reportScopeMock(...args),

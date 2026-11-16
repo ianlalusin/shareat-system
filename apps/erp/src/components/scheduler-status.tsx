@@ -41,9 +41,6 @@ function monthsSince(date: Date): number {
   return (ny - dy) * 12 + (nm - dm);
 }
 
-/** The command that runs each job by hand, named on the never-run banner. */
-const JOB_COMMAND: Partial<Record<SchedulerJob, string>> = { pos_day_import: 'npm run pos-day-import' };
-
 const DAILY_STALE_MS = 26 * 3_600_000;
 
 export async function SchedulerStatus({
@@ -73,17 +70,14 @@ export async function SchedulerStatus({
       return (
         <Banner tone="warning">
           <strong className="font-medium">The {label.toLowerCase()} has never run.</strong> Nothing is drafting
-          the stores&apos; days on a schedule. Until the timer is armed, or someone runs{' '}
-          <code className="font-mono">{JOB_COMMAND[job] ?? job}</code> by hand, days are only typed in.
+          the stores&apos; days on a schedule, so days are only typed in. Ask whoever looks after the server to switch it on.
         </Banner>
       );
     }
     return (
       <Banner tone="warning">
         <strong className="font-medium">{label} has never run.</strong> Nothing is posting it on a
-        schedule. Until <code className="font-mono">npm run month-end</code> is on a timer, the
-        charge only lands when somebody remembers to press a button — which is exactly how v1 lost
-        two months without noticing.
+        schedule, so the charge only lands when somebody remembers to post it. Ask whoever looks after the server to switch it on.
       </Banner>
     );
   }

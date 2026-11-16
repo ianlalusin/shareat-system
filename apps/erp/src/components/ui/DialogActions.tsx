@@ -6,7 +6,7 @@
  * the middle scrolls. It stays INSIDE the `<form>`: SubmitButton keeps its form's pending state and the check context.
  * Outside a dialog it is a plain right-aligned row.
  *
- * In a CheckedForm the "Save is off until..." line renders in this band, above the buttons (the form's own line steps
+ * In a CheckedForm the "To save, ..." line renders in this band, above the buttons (the form's own line steps
  * aside, so there is still exactly one live region). In any other form no line is drawn.
  */
 import { useContext, useEffect, useLayoutEffect, type ReactNode } from 'react';
