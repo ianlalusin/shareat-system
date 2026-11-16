@@ -162,6 +162,8 @@ export interface Sibling {
   sel: RecordSel;
   /** strings that pick that record's <form> out of the page */
   has: string[];
+  /** T-590b: a sibling that is a FormModal + RefillForm (no EditableRecord): read by form key and modal title instead of sel */
+  modal?: { formKey: string; title: string };
 }
 export interface FormCase<C extends BaseCtx> {
   label: string;
@@ -331,6 +333,14 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
         const html = await render(ctx, pageParamsOf(r.signal.url));
         expect(typedOf(ctx), 'the refused record itself reopens').toEqual({ kind: 'typed', fields: (await payload()).t!.fields });
         for (const s of sibs) {
+          if (s.modal) {
+            const sr = seen.refills?.find((x) => x.formKey === s.modal!.formKey);
+            expect(sr, `${s.label}: rendered its RefillForm`).toBeDefined();
+            expect(sr?.typed ?? null, `${s.label}: nothing typed`).toBeNull();
+            expect(seen.modals?.find((m) => m.title === s.modal!.title)?.defaultOpen, `${s.label}: its modal stays shut`).toBe(false);
+            expect(pickForm(html, s.has), `${s.label}: its form is drawn`).toBeTruthy();
+            continue;
+          }
           const rec = find(s.sel);
           expect(rec, `${s.label}: rendered`).toBeDefined();
           expect(rec?.typed ?? null, `${s.label}: nothing typed`).toBeNull();

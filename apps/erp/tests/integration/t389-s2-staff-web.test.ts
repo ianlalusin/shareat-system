@@ -65,7 +65,7 @@ vi.mock('@/components/ui', async (orig) => {
   };
 });
 
-import { seedCanonicalPositions, setEmploymentPositions } from '@shareat/domain';
+import { renamePerson, seedCanonicalPositions, setEmploymentPositions } from '@shareat/domain';
 import { asOrg, createHarness, fixture, LONG, sql, uid, type BaseCtx, type FormCase } from './t389-s2-common';
 
 const { runTypedLegs } = createHarness({ h, seen });
@@ -88,6 +88,7 @@ async function staffCtx(hint: string): Promise<StaffCtx> {
   const ps = await sql<{ id: string }[]>`select id from positions where org_id = ${f.orgId} and store_id is null order by name limit 3`;
   const [p1, p2, p3] = [ps[0]!.id, ps[1]!.id, ps[2]!.id];
   await asOrg(f.orgId, (tx) => setEmploymentPositions(tx, f.admin, { employmentId: emp!.id, positionIds: [p1], primaryPositionId: p1 }));
+  await asOrg(f.orgId, (tx) => renamePerson(tx, f.admin, { employmentId: emp!.id, lastName: 'Storedlast', firstName: 'Storedfirst', middleName: 'Storedmid' }));
   return { f, record: emp!.id, p1, p2, p3 };
 }
 
@@ -123,6 +124,46 @@ const positions: FormCase<StaffCtx> = {
   tooLong: { primaryPositionId: LONG },
   good: (ctx) => positions.refused(ctx, { primaryPositionId: ctx.p3 }),
   ok: /Positions saved/,
+  // T-590b: the name pop-up is the other refill on this page; it must stay shut and untyped.
+  siblings: async (ctx) => [{ label: 'the name pop-up', sel: { action: 'renamePersonAction' }, has: [`name="employmentId" value="${ctx.record}"`, 'name="lastName"'], modal: { formKey: 'staff.rename', title: 'Edit name' } }],
+};
+
+/**
+ * T-590 A1: the name form is a FormModal + RefillForm too. Refusal driven: a first name of only spaces, which the
+ * browser's `required` lets through and the server refuses ("both a last name and a first name").
+ */
+const TYPED_LAST = 'Typedlast-T590';
+const TYPED_MID = 'Typedmid-T590';
+const rename: FormCase<StaffCtx> = {
+  label: 'staff name',
+  form: 'staff.rename',
+  modal: { title: 'Edit name' },
+  setup: staffCtx,
+  action: async () => (await import('../../src/app/staff/actions')).renamePersonAction,
+  page: positions.page,
+  props: positions.props,
+  sel: () => ({ action: 'renamePersonAction' }),
+  has: (ctx) => [`name="employmentId" value="${ctx.record}"`, 'name="lastName"'],
+  hiddenNames: ['employmentId'],
+  refused: (ctx, over = {}) => {
+    const fd = new FormData();
+    const base: Record<string, string | null> = { employmentId: ctx.record, lastName: TYPED_LAST, firstName: '   ', middleName: TYPED_MID };
+    for (const [k, v] of Object.entries({ ...base, ...over })) if (v !== null) fd.append(k, v as string);
+    return fd;
+  },
+  refusal: /first name/i,
+  fields: () => ({ lastName: TYPED_LAST, firstName: '   ', middleName: TYPED_MID }),
+  changed: { list: 'lastName', fields: () => ({ lastName: TYPED_LAST }) },
+  notDrawn: [TYPED_LAST, TYPED_MID],
+  stored: (_ctx, seg, m) => {
+    expect(m.inputValue(seg, 'lastName'), 'the stored last name is drawn, not the typed one').toBe('Storedlast');
+    expect(m.inputValue(seg, 'middleName'), 'the stored middle name is drawn').toBe('Storedmid');
+  },
+  tooLong: { lastName: LONG },
+  good: (ctx) => rename.refused(ctx, { firstName: 'Goodfirst' }),
+  ok: /Name saved/,
+  siblings: async (ctx) => [{ label: 'the positions pop-up', sel: { action: 'setPositionsAction' }, has: [`name="employmentId" value="${ctx.record}"`, 'name="positionIds"'], modal: { formKey: 'staff.positions', title: 'Edit positions' } }],
 };
 
 runTypedLegs(positions);
+runTypedLegs(rename);
