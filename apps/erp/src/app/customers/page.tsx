@@ -1,6 +1,7 @@
 import { CUSTOMER_ADD_RULES, CUSTOMER_RECONCILE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import Link from 'next/link';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { CUSTOMER_GROUPS } from '@shareat/db/schema';
 import { requirePageAccess, StoreNotAvailable } from '../../lib/page-access';
 import { createCustomerAction, reconcileCustomerAction } from './actions';
@@ -55,8 +56,7 @@ export default async function CustomersPage({
         <h1 className="text-2xl font-semibold">Customers</h1>
         <PageDescription>
           Who the business sells to <strong>on terms</strong>. A diner who pays at the counter is
-          not a customer — a row here exists because there is a balance or a credit relationship,
-          and a retail sale creates neither.{' '}
+          not listed here.{' '}
           <Link href="/customers/price-lists" className="underline underline-offset-2">
             Price lists
           </Link>
@@ -75,7 +75,7 @@ export default async function CustomersPage({
                 <th className="px-3 py-2 font-medium">Treatment</th>
                 <th className="px-3 py-2 font-medium">Price list</th>
                 <th className="px-3 py-2 text-right font-medium">Owes</th>
-                <th className="px-3 py-2 font-medium">Verified at zero</th>
+                <th className="px-3 py-2 font-medium">Confirmed owing nothing</th>
               </tr>
             </thead>
             <tbody>
@@ -118,19 +118,19 @@ export default async function CustomersPage({
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(c.balance)}</td>
                   <td className="px-3 py-2 text-xs">
                     {c.reconciledAsOf ? (
-                      c.reconciledAsOf
+                      formatBusinessDayLong(c.reconciledAsOf)
                     ) : (
                       <RowAction>
                         <CheckedForm rules={CUSTOMER_RECONCILE_RULES} action={reconcileCustomerAction} className="flex items-center gap-1">
                           <input type="hidden" name="customerId" value={c.id} />
-                          <Field label={<span className="sr-only">Date verified at zero</span>} rule={CUSTOMER_RECONCILE_RULES.asOf}>
+                          <Field label={<span className="sr-only">Date confirmed owing nothing</span>} rule={CUSTOMER_RECONCILE_RULES.asOf}>
                             <Input type="date" {...nativeAttrs(CUSTOMER_RECONCILE_RULES.asOf)} defaultValue={today()} />
                           </Field>
                           <button
                             type="submit"
                             className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700"
                           >
-                            Anchor
+                            Confirm
                           </button>
                         </CheckedForm>
                       </RowAction>
@@ -146,10 +146,8 @@ export default async function CustomersPage({
       )}
 
       <p className="text-xs text-neutral-500 dark:text-neutral-500">
-        ⚠️ <strong>Verified at zero</strong> is an anchor, not a balance: it records that somebody
-        confirmed this customer owed nothing on that date, so an aging report can start there
-        without migrating history. It does not change when the ledger does — which is what makes a
-        later disagreement visible.
+        <strong>Confirmed owing nothing</strong> records that somebody checked this customer owed
+        nothing on that date. Aging reports start from it.
       </p>
 
       {/* ── Add one ──────────────────────────────────────────────────────────────────── */}
@@ -160,9 +158,9 @@ export default async function CustomersPage({
           size="lg"
           description={
             <>
-              The <strong>counterparty</strong> decides how sales to them are treated, and the two
-              answers are not close: one of our own stores <em>eliminates</em> and is never revenue;
-              another company is <em>real revenue and a real receivable</em>.
+              The <strong>counterparty</strong> decides how sales to them are treated. One of our own
+              stores is not counted as sales. Another company is real sales, and the amount they owe
+              is real money owed to us.
             </>
           }
         >
@@ -181,7 +179,7 @@ export default async function CustomersPage({
                 <Select name="counterparty" defaultValue="" className="w-full">
                   <option value="">External — an outside buyer</option>
                   {stores.length > 0 && (
-                    <optgroup label="One of our own stores — eliminates">
+                    <optgroup label="One of our own stores — not counted as sales">
                       {stores.map((s) => (
                         <option key={s.id} value={`store:${s.id}`}>
                           {s.name}
@@ -190,7 +188,7 @@ export default async function CustomersPage({
                     </optgroup>
                   )}
                   {orgs.length > 0 && (
-                    <optgroup label="Another company — real revenue">
+                    <optgroup label="Another company — counted as sales">
                       {orgs.map((o) => (
                         <option key={o.id} value={`org:${o.id}`}>
                           {o.name}

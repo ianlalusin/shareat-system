@@ -63,7 +63,7 @@ export default async function WastageMonitorSettingsPage({
         <Crumb />
         <h1 className="text-2xl font-semibold">Wastage Monitor</h1>
         <PageDescription>
-          This organisation has no stores yet. A Monitor belongs to a branch.
+          This organisation has no stores yet. A Monitor belongs to a store.
         </PageDescription>
       </Page>
     );
@@ -80,7 +80,7 @@ export default async function WastageMonitorSettingsPage({
         <Crumb />
         <h1 className="text-2xl font-semibold">Wastage Monitor</h1>
         <PageDescription>
-          Who answers for a wasted or refunded order at this branch when nobody else is named. A
+          Who answers for a wasted or refunded order at this store when nobody else is named. A
           reviewed wastage is created in this person&apos;s name, and{' '}
           <strong>if it is still unresolved after 15 days it is charged to them automatically</strong>
           .
@@ -105,9 +105,8 @@ export default async function WastageMonitorSettingsPage({
       {/* ⭐ The consequence, in money, before the form. */}
       {!monitor && (
         <Banner tone="warning">
-          <strong>Nobody answers for a wasted order at this branch.</strong> Every reviewed wastage
-          recorded here is created with no one named, and after 15 days the store absorbs it — no
-          error, no warning, nothing recovered.
+          <strong>Nobody answers for a wasted order at this store.</strong> Every reviewed wastage
+          recorded here has no one named, and after 15 days the store absorbs the cost.
         </Banner>
       )}
 
@@ -133,10 +132,8 @@ export default async function WastageMonitorSettingsPage({
                 {ownerless.amount}
               </strong>{' '}
               {ownerless.count === 1 ? 'has' : 'have'} nobody answering for {ownerless.count === 1 ? 'it' : 'them'}.
-              {/* ⚠️ Said plainly, because the number will not drop when they save and a silent
-                  non-change reads as a broken button. */}{' '}
-              Naming someone now does <strong>not</strong> change {ownerless.count === 1 ? 'it' : 'them'} —
-              an owner is an attribution, and one nobody made cannot be added afterwards. Resolve{' '}
+              {/* Said plainly: the number will not drop on save, and a silent non-change reads as a broken button. */}{' '}
+              Naming someone now does <strong>not</strong> change {ownerless.count === 1 ? 'it' : 'them'}. Resolve{' '}
               {ownerless.count === 1 ? 'it' : 'them'} by hand on{' '}
               <a href="/wastage" className="underline">
                 Order wastage
@@ -166,7 +163,7 @@ export default async function WastageMonitorSettingsPage({
               {/* ⭐ A real choice, not a placeholder: picking it CLEARS the assignment. The column is
                   nullable on purpose — a Monitor who leaves must be removable, and a screen that
                   could only ever set one would make a wrong assignment permanent. */}
-              <option value="">— nobody (the store absorbs after 15 days) —</option>
+              <option value="">Nobody (the store absorbs it after 15 days)</option>
               {people.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.displayName}
@@ -191,7 +188,7 @@ export default async function WastageMonitorSettingsPage({
               {/* ⭐ A real choice, not a placeholder: picking it CLEARS the assignment. The column is
                   nullable on purpose — a Monitor who leaves must be removable, and a screen that
                   could only ever set one would make a wrong assignment permanent. */}
-              <option value="">— nobody (the store absorbs after 15 days) —</option>
+              <option value="">Nobody (the store absorbs it after 15 days)</option>
               {people.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.displayName}
@@ -207,9 +204,8 @@ export default async function WastageMonitorSettingsPage({
       )}
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        ⚠️ The list is everyone active in the organisation, not only people who sign in here — a
-        Monitor is someone a cost can be charged to, which is a wider pool than someone who uses
-        the ERP. Whether a channel&apos;s wastages are reviewed at all is set on{' '}
+        The list is everyone active in the business, not only people who sign in here. Whether a
+        channel&apos;s wastages are reviewed at all is set on{' '}
         <a href="/settings/sales-channels" className="underline">
           Sales channels
         </a>

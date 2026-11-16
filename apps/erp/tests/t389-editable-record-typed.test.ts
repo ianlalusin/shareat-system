@@ -284,7 +284,7 @@ describe('K4 the render (renderToStaticMarkup through the real EditableRecord)',
     expect(html).toContain('<fieldset');
     expect(html).not.toContain('<fieldset disabled');
     // T-448: Save and Cancel are icon buttons named by aria-label.
-    expect(html).toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*><svg/);
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*><svg[^>]*>.*?<\/svg>Save<\/button>/); // T-589 B4a: icon + the word
     expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-label="Cancel"[^>]*><svg/);
     expect(html).not.toContain('aria-label="Edit Gcash"');
     expect(html).toContain('RETIRE-MARKER');

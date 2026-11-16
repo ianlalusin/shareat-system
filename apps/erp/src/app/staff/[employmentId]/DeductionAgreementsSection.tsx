@@ -1,3 +1,4 @@
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { PAYROLL_DEDUCTION_AGREEMENT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
@@ -34,7 +35,7 @@ export function DeductionAgreementsSection({ view, employmentId, storeId }: { vi
                   <Select name="sourceEntryId" className="w-full">
                     {view.waiting.map((w) => (
                       <option key={w.entryId} value={w.entryId}>
-                        {chargeSourceLabel(w.sourceType)} · {w.entryDate} · {peso(Number(w.left))} left
+                        {chargeSourceLabel(w.sourceType)} · {formatBusinessDayLong(w.entryDate)} · {peso(Number(w.left))} left
                       </option>
                     ))}
                   </Select>
@@ -70,7 +71,7 @@ export function DeductionAgreementsSection({ view, employmentId, storeId }: { vi
           <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
             {view.waiting.map((w) => (
               <li key={w.entryId} className="flex flex-wrap justify-between gap-2 py-1.5">
-                <span>{chargeSourceLabel(w.sourceType)} · {w.entryDate}</span>
+                <span>{chargeSourceLabel(w.sourceType)} · {formatBusinessDayLong(w.entryDate)}</span>
                 <span className="font-mono tabular-nums">{peso(Number(w.amount))} · left {peso(Number(w.left))}</span>
               </li>
             ))}
@@ -101,7 +102,7 @@ export function DeductionAgreementsSection({ view, employmentId, storeId }: { vi
                       <input type="hidden" name="agreementId" value={a.id} />
                       <Input
                         name="reason"
-                        aria-label={`Reason for cancelling the ${chargeSourceLabel(a.sourceType)} agreement of ${a.signedOn}`}
+                        aria-label={`Reason for cancelling the ${chargeSourceLabel(a.sourceType)} agreement of ${formatBusinessDayLong(a.signedOn)}`}
                         placeholder="Why cancel this agreement?"
                         className="min-w-0 flex-1 basis-48 placeholder:text-neutral-500 dark:placeholder:text-neutral-400"
                       />
@@ -141,8 +142,8 @@ type AgreementRow = DeductionAgreementsView['agreements'][number];
 function AgreementSummary({ a }: { a: AgreementRow }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-      <span className="font-medium">{chargeSourceLabel(a.sourceType)} · {a.chargeDate}</span>
-      <span>signed {a.signedOn}</span>
+      <span className="font-medium">{chargeSourceLabel(a.sourceType)} · {formatBusinessDayLong(a.chargeDate)}</span>
+      <span>signed {formatBusinessDayLong(a.signedOn)}</span>
       <span className="min-w-0 max-w-full truncate text-neutral-500 dark:text-neutral-400" title={a.explanation}>&ldquo;{a.explanation}&rdquo;</span>
       {a.evidenceFileId && (
         <a href={`/files/${a.evidenceFileId}`} target="_blank" rel="noreferrer" className="inline-block py-1 text-sm underline underline-offset-4">View signed scan</a>

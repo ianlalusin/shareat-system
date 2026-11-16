@@ -138,9 +138,9 @@ export async function moneyAccounts(orgId: string, storeId: string) {
 }
 
 export const METHOD_LABEL: Record<string, string> = {
-  straight: 'Straight — interest on the original amount',
-  amortizing: 'Amortizing — interest on what is left',
-  equal_principal: 'Equal principal — payments shrink',
+  straight: 'Flat: interest on the original amount',
+  amortizing: 'Reducing: interest on what is left',
+  equal_principal: 'Equal principal: payments get smaller',
 };
 
 export const STATUS_LABEL: Record<string, string> = {

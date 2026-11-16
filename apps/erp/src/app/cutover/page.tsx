@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { isZero, money } from '@shareat/core/money';
+import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requireSession } from '../../lib/session';
 import { attestStepAction } from './actions';
 import { PHASE_TITLE, kindLabel, listStores, loadGaps, loadProgress, peso } from './lib';
@@ -44,9 +45,8 @@ export default async function CutoverPage({
       <div>
         <h1 className="text-2xl font-semibold">The 31 December conversion</h1>
         <PageDescription>
-          Closing the old books and opening these ones. It runs twice — a rehearsal in November
-          against a restored copy, then the real thing — and it is meant to be picked up and put
-          down over several days.
+          Closing the old books and opening these ones. It runs twice, once as a rehearsal in
+          November and once for real, and you can pick it up and put it down over several days.
         </PageDescription>
       </div>
 
@@ -93,8 +93,8 @@ export default async function CutoverPage({
           }`}
         >
           {balanced
-            ? 'Opening balance equity nets to zero. Nothing is being carried by an account that should not hold anything.'
-            : 'This is watched while you enter, not revealed at the end. There is no suspense account to push it into — a difference has to be found, not parked.'}
+            ? 'The opening figures add up. Nothing is left over.'
+            : 'This updates as you enter figures. A difference cannot be parked anywhere; it has to be found.'}
         </p>
       </section>
 
@@ -168,9 +168,6 @@ export default async function CutoverPage({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <h3 className="font-medium">
-                        <span className="font-mono text-xs text-neutral-500 dark:text-neutral-500">
-                          {s.def.code}
-                        </span>{' '}
                         {s.def.title}
                         {s.storeId && (
                           <span className="ml-2 text-sm font-normal text-neutral-600 dark:text-neutral-400">
@@ -194,7 +191,7 @@ export default async function CutoverPage({
                       ⛔ But only where it ADDS something: a step already labelled "stated by a
                       person" does not need "not machine-verifiable" bolted on after it.
                     */}
-                    {s.def.kind !== 'attested' && !s.machineVerifiable && ' · nobody can check this for you'}
+                    {s.def.kind !== 'attested' && !s.machineVerifiable && !s.def.cannotVerifyHere && ' · this cannot be checked automatically'}
                   </p>
 
                   {/* Why the step exists at all — the reasoning, not just the label. */}
@@ -220,7 +217,7 @@ export default async function CutoverPage({
 
                   {s.completedAt && (
                     <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-500">
-                      Recorded {new Date(s.completedAt).toLocaleString('en-PH')}
+                      Recorded {formatBusinessDateTime(new Date(s.completedAt))}
                     </p>
                   )}
 
@@ -260,7 +257,7 @@ export default async function CutoverPage({
                     </form>
                   )}
 
-                  {/* An A1/A2-style step is declared verified but cannot be checked here, so it
+                  {/* A step declared verified but cannot be checked here, so it
                       still takes an attestation — and says why above. */}
                   {!s.done && !s.blockedBy && s.def.kind === 'verified' && s.def.cannotVerifyHere && (
                     <form action={attestStepAction} className="mt-3 space-y-2">

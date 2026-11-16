@@ -14,7 +14,7 @@ import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_EXPENSE_CATEGORY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Card, DialogActions, EmptyState, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
+import { Button, Card, ConfirmDestructive, DialogActions, EmptyState, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -22,6 +22,10 @@ import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME, EXPENSE_SUBCATEGORY_
 
 export const metadata = { title: 'Expense categories — Shareat System' };
 export const dynamic = 'force-dynamic';
+
+/** The group code stays in the data and the filter value; people see these words. */
+const GROUP_WORDS: Record<string, string> = { CAPEX: 'Equipment', COGS: 'Cost of goods sold', OPEX: 'Running costs', PERSONAL: 'Owner’s drawings' };
+const groupWord = (code: string) => GROUP_WORDS[code] ?? code;
 
 interface SearchParams {
   ok?: string;
@@ -95,10 +99,8 @@ export default async function ExpenseCategoriesSettingsPage({
         </p>
         <h1 className="text-2xl font-semibold">Expense categories</h1>
         <PageDescription>
-          Which account each kind of spend debits. A category with{' '}
-          <strong>no account mapped blocks posting</strong> rather than guessing — nothing here
-          ever falls back to a catch-all account, so an unmapped category is a decision waiting,
-          not a default.
+          Which account each kind of spend goes to. A category with{' '}
+          <strong>no account blocks posting</strong> until you pick one.
         </PageDescription>
       </div>
 
@@ -126,10 +128,10 @@ export default async function ExpenseCategoriesSettingsPage({
           <span className="block text-muted">Group</span>
           <Select name="group" defaultValue={groupFilter} className="mt-1">
             <option value="">All groups</option>
-            <option value="CAPEX">CAPEX — equipment</option>
-            <option value="COGS">COGS — cost of goods sold</option>
-            <option value="OPEX">OPEX — running cost</option>
-            <option value="PERSONAL">PERSONAL — owner’s drawings</option>
+            <option value="CAPEX">{GROUP_WORDS.CAPEX}</option>
+            <option value="COGS">{GROUP_WORDS.COGS}</option>
+            <option value="OPEX">{GROUP_WORDS.OPEX}</option>
+            <option value="PERSONAL">{GROUP_WORDS.PERSONAL}</option>
           </Select>
         </label>
         <label className="min-w-48 flex-1 text-sm">
@@ -139,21 +141,21 @@ export default async function ExpenseCategoriesSettingsPage({
       </FilterRow>
 
       <p className="text-xs text-muted">
-        {filtered.length} of {categories.length} categories · {unmapped.length} unmapped
+        {filtered.length} of {categories.length} categories · {unmapped.length} with no account
       </p>
 
       {filtered.length === 0 ? (
         <EmptyState
           illustration="magnifier"
           title="No categories match"
-          body="Clear the group or search filter to see the rest of the register."
+          body="Clear the group or search to see the rest."
         />
       ) : (
         <div className="space-y-7">
           {groups.map(([groupName, rows]) => (
             <section key={groupName} className="space-y-2">
               <div className="flex items-baseline gap-2">
-                <h2 className="text-sm font-semibold">{groupName}</h2>
+                <h2 className="text-sm font-semibold">{groupWord(groupName)}</h2>
                 <span className="text-xs tabular-nums text-muted">{rows.length}</span>
               </div>
               <Table card={{ title: 'Category', subtitle: 'Posts to' }}>
@@ -181,12 +183,7 @@ export default async function ExpenseCategoriesSettingsPage({
                           <span className="font-medium">{c.category}</span>
                           {isUnmapped && (
                             <span className="ml-2 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-ink">
-                              unmapped
-                            </span>
-                          )}
-                          {c.isSystem && (
-                            <span className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">
-                              seeded
+                              no account
                             </span>
                           )}
                           {!c.isActive && (
@@ -230,13 +227,13 @@ export default async function ExpenseCategoriesSettingsPage({
                             </FormModal>
                           </div>
                         </Td>
-                        <Td className="text-xs text-muted">{c.group}</Td>
+                        <Td className="text-xs text-muted">{groupWord(c.group)}</Td>
                         <Td className="text-xs">
                           {c.blockedDraftCount === 0 ? (
                             '—'
                           ) : (
                             <span className="font-medium text-warning-ink">
-                              {c.blockedDraftCount} draft{c.blockedDraftCount === 1 ? '' : 's'}
+                              {c.blockedDraftCount} draft{c.blockedDraftCount === 1 ? '' : 's'} held up
                             </span>
                           )}
                         </Td>
@@ -246,7 +243,7 @@ export default async function ExpenseCategoriesSettingsPage({
                               {c.accountCode} · {mapped.name}
                             </span>
                           ) : (
-                            <span className="text-warning-ink">Not mapped — blocks posting</span>
+                            <span className="text-warning-ink">No account: blocks posting</span>
                           )}
                         </Td>
                         <Td className="text-right whitespace-nowrap">
@@ -289,7 +286,7 @@ export default async function ExpenseCategoriesSettingsPage({
                                       {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
                                           `account_code` is nullable on purpose so a wrong mapping is
                                           removable — a wrong account posts silently, an absent one refuses. */}
-                                      <option value="">— none (blocks posting) —</option>
+                                      <option value="">No account (blocks posting)</option>
                                       {accounts.map((a) => (
                                         <option key={a.code} value={a.code}>
                                           {a.code} · {a.name}
@@ -312,7 +309,7 @@ export default async function ExpenseCategoriesSettingsPage({
                                         className="w-full"
                                         aria-label={`Account for ${c.category}`}
                                       >
-                                        <option value="">— none (blocks posting) —</option>
+                                        <option value="">No account (blocks posting)</option>
                                         {accounts.map((a) => (
                                           <option key={a.code} value={a.code}>
                                             {a.code} · {a.name}
@@ -329,16 +326,22 @@ export default async function ExpenseCategoriesSettingsPage({
                                 </form>
                               </FormModal>
                             )}
-                            <form action={setCategoryActiveAction}>
+                            <form action={setCategoryActiveAction} className="contents">
                               <input type="hidden" name="categoryId" value={c.id} />
                               <input type="hidden" name="categoryLabel" value={c.category} />
                               <input type="hidden" name="isActive" value={c.isActive ? 'false' : 'true'} />
-                              <button
-                                type="submit"
-                                className={`${ACTION_LINK} text-xs text-muted hover:text-ink`}
-                              >
-                                {c.isActive ? 'Retire' : 'Reinstate'}
-                              </button>
+                              {c.isActive ? (
+                                <ConfirmDestructive
+                                  tier="confirm"
+                                  quiet
+                                  label="Retire category"
+                                  consequence="It stays on every expense already recorded in it and stops being offered for new ones. You can reinstate it later."
+                                />
+                              ) : (
+                                <button type="submit" className={`${ACTION_LINK} text-xs text-muted hover:text-ink`}>
+                                  Reinstate
+                                </button>
+                              )}
                             </form>
                           </div>
                         </Td>
@@ -367,15 +370,15 @@ export default async function ExpenseCategoriesSettingsPage({
                 </Field>
                 <Field label="Group" width="name">
                   <Select name="group" defaultValue="OPEX" className="w-full">
-                    <option value="OPEX">OPEX — running cost</option>
-                    <option value="COGS">COGS — cost of goods sold</option>
-                    <option value="CAPEX">CAPEX — equipment</option>
-                    <option value="PERSONAL">PERSONAL — owner&apos;s drawings</option>
+                    <option value="OPEX">{GROUP_WORDS.OPEX}</option>
+                    <option value="COGS">{GROUP_WORDS.COGS}</option>
+                    <option value="CAPEX">{GROUP_WORDS.CAPEX}</option>
+                    <option value="PERSONAL">{GROUP_WORDS.PERSONAL}</option>
                   </Select>
                 </Field>
                 <Field label="Posts to" width="name">
                   <Select name="accountCode" defaultValue="" className="w-full">
-                    <option value="">— none (blocks posting) —</option>
+                    <option value="">No account (blocks posting)</option>
                     {accounts.map((a) => (
                       <option key={a.code} value={a.code}>
                         {a.code} · {a.name}
@@ -393,17 +396,16 @@ export default async function ExpenseCategoriesSettingsPage({
           </FormModal>
         </div>
         <p className="mt-3 text-xs text-muted">
-          Names are compared ignoring case and spacing. A category is <strong>retired, never deleted</strong> — everything
-          already recorded in it keeps working.
+          A category is <strong>retired, never deleted</strong>, so everything already recorded in it keeps working.
         </p>
       </Card>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Stuck drafts appear on{' '}
+        Stuck drafts show up on the{' '}
         <a href="/findings" className="underline">
-          /findings
+          Findings
         </a>{' '}
-        once they are three days old.
+        page once they are three days old.
       </p>
     </Page>
   );

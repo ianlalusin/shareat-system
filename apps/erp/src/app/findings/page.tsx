@@ -7,15 +7,17 @@ import {
   createMissingClosedPeriodAction,
 } from './actions';
 import {
-  KIND_LABEL,
   bySeverityThenStatus,
+  findingTitle,
   findingsFor,
   lastCompletedPeriod,
+  monthLabel,
   noteFindingView,
   peso,
   selectablePeriods,
   withOrgPrincipal,
 } from './lib';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { classifyHoles, missedMonths, type ClassifiedHolePiece, type MissedMonthRow } from '@shareat/domain';
 import { heldCapabilities } from '@shareat/auth';
 // T-345 Amendment R3.4 — the Manila month, not UTC.
@@ -86,9 +88,8 @@ export default async function FindingsPage({
           </Link>
         </div>
         <PageDescription>
-          Every question the books are asked, answered on this page load. There is no findings
-          table — <strong>a finding cannot be resolved while it is still true</strong>, only fixed
-          or accepted for now.
+          The checks the system runs on the books, answered each time you open this page.{' '}
+          <strong>A finding goes away only when it is fixed</strong> or accepted for now.
         </PageDescription>
       </div>
 
@@ -102,7 +103,7 @@ export default async function FindingsPage({
           <Select name="period" defaultValue={period} className="w-full">
             {periods.map((p) => (
               <option key={p} value={p}>
-                {p}
+                {monthLabel(p)}
               </option>
             ))}
           </Select>
@@ -128,12 +129,12 @@ export default async function FindingsPage({
           hint="The books do not add up"
         />
         <Tile
-          label={`${period} close`}
+          label={`${monthLabel(period)} close`}
           value={readiness.ready ? 'Ready' : 'Blocked'}
           hint={
             readiness.ready
-              ? 'No hard finding stands'
-              : `${readiness.blocking.length} hard finding(s)`
+              ? 'Nothing is blocking it'
+              : `${readiness.blocking.length} ${readiness.blocking.length === 1 ? 'finding blocks' : 'findings block'} it`
           }
         />
       </section>
@@ -145,12 +146,11 @@ export default async function FindingsPage({
         <form action={closePeriodAction} className="flex items-center gap-3 rounded-lg border border-success bg-success-soft p-4">
           <input type="hidden" name="period" value={period} />
           <div className="flex-1 text-sm text-success">
-            <span className="font-medium">{period} is ready to close.</span> This is a human
-            decision, made once the remittance for the period has actually arrived — never
-            scheduled.
+            <span className="font-medium">{monthLabel(period)} is ready to close.</span> Close it
+            only once the month&apos;s remittance has actually arrived.
           </div>
           <Button type="submit" variant="primary">
-            Close {period}
+            Close {monthLabel(period)}
           </Button>
         </form>
       )}
@@ -173,15 +173,15 @@ export default async function FindingsPage({
 
       {rows.length === 0 && (
         <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
-          Nothing is wrong that this system knows how to ask about. ⚠️ That is not the same as
-          nothing being wrong — it is the twelve questions above, answered.
+          No problems found by the checks this system runs. That does not prove nothing is wrong,
+          only that these checks passed.
         </p>
       )}
 
       {hard.length > 0 && (
         <FindingGroup
           title="The books do not add up"
-          blurb="Each of these blocks the period close, and an acknowledgement does NOT lift that — accepting a risk is not the same as the books tying."
+          blurb="Each of these blocks the month close. Accepting one for now does not lift that."
           rows={hard}
           period={period}
           tone="hard"
@@ -191,7 +191,7 @@ export default async function FindingsPage({
       {soft.length > 0 && (
         <FindingGroup
           title="Something is overdue or adrift"
-          blurb="These do not block a close. The ledger is right; something in the business is behind."
+          blurb="These do not block a close. The books are right; something in the business is behind."
           rows={soft}
           period={period}
           tone="soft"
@@ -236,11 +236,10 @@ function FindingGroup({
           <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
             <span className="min-w-0">
               <span className="flex flex-wrap items-baseline gap-2">
-                <span className="text-sm font-medium">{KIND_LABEL[f.kind] ?? f.kind}</span>
-                <code className="text-xs text-muted">{f.kind}</code>
+                <span className="text-sm font-medium">{findingTitle(f.kind)}</span>
                 {f.status === 'acknowledged' && (
                   <span className="rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">
-                    accepted {f.acknowledgementAgeDays ?? 0}d ago
+                    accepted {f.acknowledgementAgeDays ?? 0} {(f.acknowledgementAgeDays ?? 0) === 1 ? 'day' : 'days'} ago
                   </span>
                 )}
               </span>
@@ -265,8 +264,8 @@ function FindingGroup({
               </form>
             ) : (
               <p className="text-xs text-muted">
-                Accepted — it expires on its own, and it is still counted above. The only way it
-                leaves this list is for the condition to stop being true.
+                Accepted for now. It is still counted above, and it leaves this list only when the
+                problem is fixed.
               </p>
             )}
           </div>
@@ -307,12 +306,14 @@ function MissingPeriodsSection({
       <div>
         <h2 className="text-sm font-medium">Months missing inside closed books</h2>
         <p className="max-w-2xl text-xs text-neutral-600 dark:text-neutral-400">
-          The monthly coverage job never fills these — it would reopen closed books. An
-          administrator can create each one explicitly, with a reason.
+          These months are missing from books that are already closed, and they are not filled in
+          automatically. An administrator can create each one, with a reason.
         </p>
       </div>
       {pieces.map((p) => {
-        const label = p.whole ? p.yearMonth : `${p.startsOn} to ${p.endsOn} (part of ${p.yearMonth})`;
+        const label = p.whole
+          ? monthLabel(p.yearMonth)
+          : `${formatBusinessDayLong(p.startsOn)} to ${formatBusinessDayLong(p.endsOn)} (part of ${monthLabel(p.yearMonth)})`;
         return (
           <details key={`${p.startsOn}-${p.endsOn}`} className="group rounded-[20px] border border-warning bg-surface">
             <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm [&::-webkit-details-marker]:hidden">
@@ -366,9 +367,9 @@ function ScheduledChargesMissedSection({
       <div>
         <h2 className="text-sm font-medium">Scheduled charges missed in closed months</h2>
         <p className="max-w-2xl text-xs text-neutral-600 dark:text-neutral-400">
-          A depreciation or amortisation charge that could not post in its own month. An
+          A depreciation or prepaid charge that could not be booked in its own month. An
           administrator can book it once, in the current open month, for the amount the schedule
-          says — never typed.
+          says.
         </p>
       </div>
       {/* ⚠️ Amendment R3.2 — a non-holder sees only this line, never a name or an amount. The
@@ -386,14 +387,14 @@ function ScheduledChargesMissedSection({
               <span className="min-w-0">
                 <span className="font-medium">{r.subjectName}</span>
                 <span className="ml-2 text-muted">
-                  {r.belongsToPeriod} · {peso(Number(r.amount))}
+                  {monthLabel(r.belongsToPeriod)} · {peso(Number(r.amount))}
                 </span>
               </span>
               <ChevronIcon className="h-4 w-4 shrink-0 text-muted transition group-open:rotate-180" />
             </summary>
             <div className="border-t border-warning/40 p-3">
               <p className="mb-2 text-xs text-muted">
-                Will be booked in {currentPeriod()}.
+                Will be booked in {monthLabel(currentPeriod())}.
               </p>
               <CheckedForm rules={FINDINGS_MISSED_MONTH_RULES} action={bookMissedMonthAction} className="flex flex-wrap items-end gap-2">
                 <input type="hidden" name="period" value={period} />

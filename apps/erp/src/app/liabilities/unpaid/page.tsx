@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { getUnpaidLiabilities, type UnpaidKind, type UnpaidLine, type UnpaidLiabilities } from '@shareat/domain';
 import { accountLabel } from '@/lib/account-label';
 import { ACTION_LINK } from '@/components/action-link';
@@ -36,7 +36,7 @@ export default async function UnpaidPage({ searchParams }: { searchParams: Promi
     <Page
       density="table"
       title="Everything unpaid"
-      description="What the business still owes, grouped by kind, worked out live from the records that own each figure. Nothing here is stored or changed by this page."
+      description="What the business still owes, grouped by kind. This page only shows figures; it changes nothing."
     >
       <nav aria-label="Store" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         <span className="text-muted">{currentStore}</span>
@@ -183,7 +183,7 @@ function KindSection({
                         <Td>{l.counterparty ?? ''}</Td>
                         {showStore && <Td>{storeName(l.storeId)}</Td>}
                         <Td>
-                          {l.dueOn ?? ''}
+                          {l.dueOn ? formatBusinessDayLong(l.dueOn) : ''}
                           {isOverdue(l, today) && ' · overdue'}
                         </Td>
                         <NumTd className="font-mono">{peso(l.amount)}</NumTd>
@@ -244,7 +244,7 @@ function LineSummary({
       </div>
       {line.dueOn && (
         <div className={`text-xs ${isOverdue(line, today) ? 'text-warning-ink' : 'text-muted'}`}>
-          Due {line.dueOn}
+          Due {formatBusinessDayLong(line.dueOn)}
           {isOverdue(line, today) && ' · overdue'}
         </div>
       )}

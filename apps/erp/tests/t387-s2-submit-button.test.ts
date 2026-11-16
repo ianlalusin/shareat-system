@@ -66,15 +66,16 @@ describe('<SubmitButton> SSR (outside any form, not pending)', () => {
     expect(html).not.toContain('Saving…');
   });
 
-  // T-448: "Save" is a ROUND ICON button (rounded-full, h-11 w-11) whose accessible name is the label; no visible text.
-  it('is a submit button rendered through the kit Button: primary icon button, rounded-full, min-h-11, aria-label=Save, no rounded-[12px]', () => {
+  // T-589 B4a (Ian R1): the primary "Save" is the icon AND the word (a pill); a secondary Save stays a round icon.
+  it('is a submit button rendered through the kit Button: primary icon + word pill, rounded-full, min-h-11, visible "Save", no rounded-[12px]', () => {
     expect(html).toMatch(/type="submit"/);
     const t = classTokens(html);
-    for (const need of ['bg-brand', 'text-white', 'hover:bg-brand-hover', 'rounded-full', 'min-h-11', 'erp-icon-btn']) {
+    for (const need of ['bg-brand', 'text-white', 'hover:bg-brand-hover', 'rounded-full', 'min-h-11']) {
       expect(t.has(need), need).toBe(true);
     }
+    expect(t.has('erp-icon-btn')).toBe(false);
     expect(t.has('rounded-[12px]')).toBe(false);
-    expect(html).toContain('aria-label="Save"');
+    expect(html).toMatch(/<\/svg>Save<\/button>/);
     expect(html).not.toContain('animate-spin'); // the check glyph is drawn, the spinner only while pending
   });
 });

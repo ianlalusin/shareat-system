@@ -88,10 +88,10 @@ export default async function AttendanceSettingsPage({
         </p>
         <h1 className="text-2xl font-semibold">Attendance & payroll settings</h1>
         <PageDescription>
-          One store, one policy, effective from a chosen day. ⚠️ A change never rewrites a day
-          already computed — it governs from the date below onward. See it reflected on{' '}
+          One policy per store, starting from a day you choose. A change never rewrites a day already
+          worked. See the result on{' '}
           <a href="/payroll" className="underline">
-            /payroll
+            Payroll
           </a>
           .
         </PageDescription>
@@ -127,8 +127,8 @@ export default async function AttendanceSettingsPage({
             rule={SETTINGS_ATTENDANCE_POLICY_RULES.effectiveFrom}
             hint={
               <>
-                ⛔ Must be after {cfg.effectiveFrom} (today&rsquo;s live policy) and cannot fall on or
-                before a day already adjudicated.
+                Must be after {formatBusinessDayLong(cfg.effectiveFrom)} (the policy in force now) and cannot fall on
+                or before a day that is already settled.
               </>
             }
           >
@@ -155,8 +155,8 @@ export default async function AttendanceSettingsPage({
               name="timeMode"
               defaultValue={cfg.timeMode}
               options={[
-                ['open', 'open — free clock in/out'],
-                ['fixed', 'fixed — posted shift grid'],
+                ['open', 'Open: free clock in and out'],
+                ['fixed', 'Fixed: posted shift grid'],
               ]}
             />
             <NumField label="Default work hours" name="defaultWorkHours" defaultValue={cfg.defaultWorkHours} />
@@ -187,16 +187,16 @@ export default async function AttendanceSettingsPage({
               name="overtimeMode"
               defaultValue={cfg.overtimeMode}
               options={[
-                ['multiplier', 'multiplier — × the hourly-equivalent daily rate'],
-                ['fixed', 'fixed — flat pesos / OT hour'],
+                ['multiplier', 'Multiplier: times the hourly rate'],
+                ['fixed', 'Fixed: flat pesos per overtime hour'],
               ]}
             />
-            <NumField label="Overtime multiplier" name="overtimeMultiplier" defaultValue={cfg.overtimeMultiplier} hint="used when mode is multiplier" />
+            <NumField label="Overtime multiplier" name="overtimeMultiplier" defaultValue={cfg.overtimeMultiplier} hint="Used when the mode is multiplier" />
             <NumField
               label="Overtime fixed hourly (₱)"
               name="overtimeFixedHourly"
               defaultValue={cfg.overtimeFixedHourly ?? ''}
-              hint="required when mode is fixed"
+              hint="Needed when the mode is fixed"
             />
             <CheckField label="Night differential enabled" name="nightDiffEnabled" defaultChecked={cfg.nightDiffEnabled} />
             <IntField label="Night diff start hour" name="nightDiffStartHour" defaultValue={cfg.nightDiffStartHour} />
@@ -216,12 +216,12 @@ export default async function AttendanceSettingsPage({
               name="latePolicy"
               defaultValue={cfg.latePolicy}
               options={[
-                ['record_only', 'record only — no money'],
-                ['charge_per_minute', 'charge per minute — a real payslip deduction'],
-                ['infraction', 'infraction — points only, no money'],
+                ['record_only', 'Record only: no money'],
+                ['charge_per_minute', 'Charge per minute: deducted from the payslip'],
+                ['infraction', 'Points only: no money'],
               ]}
             />
-            <NumField label="Late charge / minute (₱)" name="lateChargePerMinute" defaultValue={cfg.lateChargePerMinute} hint="required when policy is charge_per_minute" />
+            <NumField label="Late charge / minute (₱)" name="lateChargePerMinute" defaultValue={cfg.lateChargePerMinute} hint="Needed when the late policy is charge per minute" />
             <IntField label="Late infraction points" name="lateInfractionPoints" defaultValue={cfg.lateInfractionPoints} />
             <IntField label="Late grace (min)" name="lateGraceMinutes" defaultValue={cfg.lateGraceMinutes} />
             <IntField label="Early-out grace (min)" name="earlyOutGraceMinutes" defaultValue={cfg.earlyOutGraceMinutes} />
@@ -234,27 +234,27 @@ export default async function AttendanceSettingsPage({
               name="payrollPeriodType"
               defaultValue={cfg.payrollPeriodType}
               options={[
-                ['monthly', 'monthly'],
-                ['semi_monthly', 'semi-monthly'],
-                ['weekly', 'weekly'],
+                ['monthly', 'Monthly'],
+                ['semi_monthly', 'Twice a month'],
+                ['weekly', 'Weekly'],
               ]}
             />
-            <IntField label="Semi-monthly cutoff day" name="semiMonthlyCutoffDay" defaultValue={cfg.semiMonthlyCutoffDay} hint="used when period type is semi-monthly" />
+            <IntField label="Semi-monthly cutoff day" name="semiMonthlyCutoffDay" defaultValue={cfg.semiMonthlyCutoffDay} hint="Used when pay periods are twice a month" />
             <SelectField
               label="Payout mode"
               name="payoutMode"
               defaultValue={cfg.payoutMode}
               options={[
-                ['lag', 'lag — N days after period end'],
-                ['fixed_days', 'fixed days — e.g. paid on the 10th & 25th'],
+                ['lag', 'A set number of days after the period ends'],
+                ['fixed_days', 'Fixed days, for example the 10th and 25th'],
               ]}
             />
-            <IntField label="Payout lag (days)" name="payoutLagDays" defaultValue={cfg.payoutLagDays} hint="used when payout mode is lag" />
+            <IntField label="Payout lag (days)" name="payoutLagDays" defaultValue={cfg.payoutLagDays} hint="Used when pay comes a set number of days after the period ends" />
             <TextField
               label="Payout days"
               name="payoutDays"
               defaultValue={cfg.payoutDays.join(',')}
-              hint="Comma-separated day-of-month, required when payout mode is fixed_days. Semi-monthly: two different days, never more than 16 days from one payday to the next (the cutoff day changes this), e.g. 10,25 with cutoff 15."
+              hint="Days of the month, separated by commas. Needed when pay is on fixed days. For twice a month, give two different days no more than 16 days apart, for example 10,25 with cut-off 15."
             />
           </Group>
 
@@ -276,9 +276,8 @@ export default async function AttendanceSettingsPage({
         <section id={`store-${storeId}`} className="space-y-4">
           <h2 className="text-lg font-semibold">Leave limits</h2>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            How many days of each kind a person may take in a calendar month and in a year. Empty means no limit. The most specific row
-            wins: store and position, then position, then store, then the business-wide default. Maternity and paternity are counted per
-            birth and ignore these limits; a statutory kind cannot be set below its legal days. All limits restart on 1 January.
+            How many days of each kind a person may take in a month and in a year. Empty means no limit. The most specific row wins.
+            Maternity and paternity ignore these limits. A kind required by law cannot go below its legal days.
           </p>
           {leave.caps.length > 0 && (
             <ul className="space-y-1 text-sm">
@@ -352,7 +351,7 @@ export default async function AttendanceSettingsPage({
             {leave.kinds.map((k) => (
               <li key={k.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-surface-border p-3 text-sm">
                 <span>
-                  <strong>{k.label}</strong> <span className="text-neutral-500">({k.code})</span>
+                  <strong>{k.label}</strong>
                   {' · '}
                   {k.paid ? 'paid' : 'unpaid by default'}
                   {k.drawsSil ? ' · uses Service Incentive Leave when paid' : ''}

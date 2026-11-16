@@ -9,6 +9,9 @@
  *   'retype'    - the person types the record's name (field `confirmName`); the submit is disabled until it matches, which is a
  *                 convenience only: the SERVER compares with the name it loads from the database.
  *   'admin-pin' - an administrator types THEIR OWN 6-digit PIN (field `adminPin`); the SERVER re-verifies it.
+ *   'confirm'   - T-589 B3d: a plain extra click for an action that is reversible or only posts (retire, withdraw an unposted
+ *                 day, run depreciation). No field is typed and the server asks for nothing more than it did before: the panel
+ *                 says what will happen, then Confirm sends the form. The server rule is unchanged.
  * The browser never decides anything: no flag leaves this component except the typed text.
  */
 import { useState } from 'react';
@@ -17,7 +20,7 @@ import { Input } from './Input';
 import { retypeMatches } from '@/lib/retype';
 
 export interface ConfirmDestructiveProps {
-  readonly tier: 'retype' | 'admin-pin';
+  readonly tier: 'retype' | 'admin-pin' | 'confirm';
   /** The real submit button's words, e.g. "Void expense". */
   readonly label: string;
   /** What will happen, in plain words. */
@@ -47,11 +50,11 @@ export function ConfirmDestructive({ tier, label, consequence, expectedName, qui
     );
   }
 
-  const ready = tier === 'retype' ? retypeMatches(typed, expectedName ?? '') : /^\d{6}$/.test(pin);
+  const ready = tier === 'confirm' ? true : tier === 'retype' ? retypeMatches(typed, expectedName ?? '') : /^\d{6}$/.test(pin);
   return (
-    <div role="group" aria-label={label} className="flex flex-col gap-3 rounded-[20px] border border-danger p-3">
+    <div role="group" aria-label={label} className="flex w-full min-w-0 basis-full flex-col gap-3 whitespace-normal rounded-[20px] border border-danger p-3 text-left">
       <p className="text-sm text-ink">{consequence}</p>
-      {tier === 'retype' ? (
+      {tier === 'confirm' ? null : tier === 'retype' ? (
         <label className="flex flex-col gap-1 text-sm text-ink">
           <span>
             Type <strong>{expectedName}</strong> to confirm
@@ -73,7 +76,7 @@ export function ConfirmDestructive({ tier, label, consequence, expectedName, qui
         </label>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" variant="danger" disabled={!ready}>
+        <Button type="submit" variant={tier === 'confirm' && quiet ? 'primary' : 'danger'} disabled={!ready}>
           {label}
         </Button>
         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>

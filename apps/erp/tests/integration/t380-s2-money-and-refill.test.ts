@@ -564,7 +564,7 @@ describe('W-S2 (B2) - posting a pay run keeps the net total out of the URL; the 
       expect(out.path).toBe('/payroll');
       expect(out.nav.get('store'), 'the store is navigation').toBe(storeId);
       expect(UUID_RE.test(out.nav.get('store') ?? '')).toBe(true);
-      expect(out.flash.ok).toBe(`Posted 1 payslip(s), ${UNICODE_PESO}1,080.00 net. The days they paid are now frozen.`);
+      expect(out.flash.ok).toBe(`Posted 1 payslip, ${UNICODE_PESO}1,080.00 net. The days they paid are now frozen.`);
     },
     90_000,
   );

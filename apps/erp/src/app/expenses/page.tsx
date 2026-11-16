@@ -1,6 +1,6 @@
 import { expensesRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listCategoriesGrouped, withOrgPrincipal } from './lib';
 import { requireSession } from '../../lib/session';
 import { Page } from '@/components/shell/Page';
@@ -21,7 +21,7 @@ interface SearchParams {
 export default async function ExpensesListPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
 
-  // ⭐ The org comes from the SESSION (T-138), never the URL — a person cannot reach another
+  // The org comes from the SESSION, never the URL — a person cannot reach another
   // org's spend by editing a query string, and RLS refuses them underneath in any case.
   const { actor } = await requireSession('/expenses');
   const orgId = actor.orgId;
@@ -48,8 +48,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
         <div>
           <h1 className="text-2xl font-semibold">Expenses</h1>
           <PageDescription>
-            Non-inventory spend — create · approve · void, posted through the real ledger
-            (docs/tasks/122-expenses.md).
+            Money spent on things that are not stock: record it, approve it, or void it.
           </PageDescription>
         </div>
         <a
@@ -112,7 +111,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
             <tbody>
               {expenses.map((e) => (
                 <LinkRow key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                  <td className="px-3 py-2 font-mono text-neutral-500 dark:text-neutral-400">{e.businessDate}</td>
+                  <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400">{formatBusinessDayLong(e.businessDate)}</td>
                   <td className="px-3 py-2">{storeById.get(e.storeId)?.code ?? e.storeId}</td>
                   <td className="px-3 py-2">{categoryLabelById.get(e.categoryId) ?? e.categoryId}</td>
                   <td className="px-3 py-2">
@@ -132,7 +131,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
       )}
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        {toBusinessDate()} today (Asia/Manila)
+        Today is {formatBusinessDayLong(toBusinessDate())}.
       </p>
     </Page>
   );

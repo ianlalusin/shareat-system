@@ -1,6 +1,7 @@
 import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { compare, money, ZERO } from '@shareat/core/money';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requireSession } from '../../lib/session';
 import { listActingPersons } from '../expenses/lib';
 import {
@@ -190,9 +191,8 @@ export default async function RemittancePage({
                 : varianceOverCount > 0
                   ? 'Money arrived in excess of what was counted and signed for.'
                   : 'Money that was counted and signed for did not arrive.')}{' '}
-            ⚠️ This is a{' '}
-            <strong>custody</strong> question, not a counting one — the daily counts already
-            reconciled, so the date below is where the arithmetic left the residual, not who was
+            This is about <strong>who held the cash</strong>, not about counting. The daily counts
+            already agree, so the date below is where the difference showed up, not who was
             holding it.
           </div>
           {variances.map((v) => (
@@ -208,7 +208,7 @@ export default async function RemittancePage({
                   {compare(money(v.amount), ZERO) < 0 ? 'Short ' : 'Over '}
                   {peso(Math.abs(Number(v.amount)))}
                 </span>
-                <span className="ml-2 text-xs">on {v.businessDate}</span>
+                <span className="ml-2 text-xs">on {formatBusinessDayLong(v.businessDate)}</span>
               </div>
               {/* T-366 S2/S3: a SHORTAGE is always charged to a person (Amendment A1 — there is
                   no write-off); an OVERAGE shows only the manager-confirmed recognise-as-income
@@ -352,8 +352,8 @@ export default async function RemittancePage({
                     key={d.businessDate}
                     className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                   >
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">
-                      {d.businessDate}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {formatBusinessDayLong(d.businessDate)}
                       {!d.remittable && (
                         <span className="ml-2 rounded bg-closed-soft px-1.5 py-0.5 text-xs font-medium text-closed">
                           {d.salesDayStatus ? `day ${d.salesDayStatus}` : 'no sales day'}
@@ -397,10 +397,6 @@ export default async function RemittancePage({
             )}
           </p>
         )}
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Every figure is summed from the ledger on load, not stored — so a document type nobody
-          has invented yet is already counted.
-        </p>
       </section>
 
       {/* ── Record a handover ────────────────────────────────────────────────────────── */}
@@ -410,7 +406,7 @@ export default async function RemittancePage({
             trigger="Record handover"
             title="Record a handover"
             size="lg"
-            description="It settles the oldest days first. If it is short, the shortfall lands on the last day it reached — and is recorded as an open item, charged to nobody until somebody says who. If an account is handing over more than it moved over the settleable dates — cash from a day still waiting on verification, for instance — declare the overage beside that amount; nothing is accepted until you do. The balance shown below is what an account currently holds, not what it owes — holding is not owing."
+            description="It settles the oldest days first. If it is short, the shortfall is recorded as an open item on the last day it reached, charged to nobody until someone says who. If you are handing over more than the days that can be settled, such as cash from a day still waiting to be verified, declare the excess beside that amount; nothing is accepted until you do. The balance shown below is what an account holds, not what it owes."
           >
           <CheckedForm rules={REMITTANCE_RECORD_RULES} action={createRemittanceAction} className="space-y-4">
             <input type="hidden" name="storeId" value={storeId} />
@@ -507,7 +503,7 @@ export default async function RemittancePage({
                       r.status === 'reversed' ? 'opacity-50' : ''
                     }`}
                   >
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">{r.remittedOn}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatBusinessDayLong(r.remittedOn)}</td>
                     <td className="px-3 py-2">{r.reference ?? '—'}</td>
                     <td className="px-3 py-2 text-xs">
                       {r.status === 'reversed' ? `Reversed — ${r.reverseReason}` : 'Posted'}
@@ -534,8 +530,7 @@ export default async function RemittancePage({
             </table>
           </div>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Reversing writes opposite entries and un-settles the days — nothing is deleted, and the
-            days simply become owed again.
+            Reversing cancels a handover. Nothing is deleted, and the days become owed again.
           </p>
         </section>
       )}
@@ -554,8 +549,8 @@ export default async function RemittancePage({
             <h2 className="text-sm font-medium">Cash policy for {policy.name}</h2>
             <p className="max-w-2xl text-xs text-neutral-500 dark:text-neutral-500">
               How often the money is carried to the office, and how much may pile up before that
-              becomes urgent. ⚠️ The till is still <strong>counted and handed over daily</strong>{' '}
-              whatever this says — that is the control, and it is not what this changes.
+              becomes urgent. The till is still <strong>counted and handed over daily</strong>{' '}
+              whatever this says.
             </p>
           </div>
           <EditableRecord action={setCashPolicyAction} label="cash policy"
@@ -595,9 +590,8 @@ export default async function RemittancePage({
 </FormGrid>
           </EditableRecord>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Crossing the ceiling never blocks a sale or a handover — it raises a finding at the top
-            of this page. The peso figure is business policy and belongs to whoever carries the
-            risk.
+            Going over the ceiling never blocks a sale or a handover. It shows a warning at the top
+            of this page.
           </p>
         </section>
       )}

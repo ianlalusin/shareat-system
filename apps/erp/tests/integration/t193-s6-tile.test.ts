@@ -172,9 +172,11 @@ describe('who sees it (kills: tile shown to managers; helper throws for a non-ho
     expect(t).toMatch(/Overdue/i);
     expect(t, 'total owed to the agencies').toContain(total);
     expect(t, 'the oldest unpaid month, in words').toMatch(/October 2026|Oct 2026/);
+    expect(t, 'the tile labels it').toContain('Oldest unpaid month');
     const manager = await render(dashboard, w.manager);
     expect(plain(manager), 'a manager still gets the dashboard').toMatch(/Dashboard|Sales/i);
-    expectAbsent(manager, 'manager dashboard', total, 'Overdue', 'October 2026');
+    // The tile's month is checked by its label: the Findings tile, which managers do see, also names a month (T-589 B3d).
+    expectAbsent(manager, 'manager dashboard', total, 'Overdue', 'Oldest unpaid month', 'Owed to government');
     expect(plain(manager)).not.toMatch(/Government payments|owed to (the )?government/i);
   });
 });

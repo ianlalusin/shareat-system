@@ -90,7 +90,8 @@ export function StatusHero({ kind, word, step, steps, line, tone, children }: St
           </div>
         )}
       </div>
-      <ol className="mt-5 flex gap-1 overflow-x-auto text-xs" aria-label="Progress">
+      {/* T-589 B4a: the strip wraps onto a second row on a phone; it used to scroll sideways inside a box nobody knew scrolled, with its last step cut off. */}
+      <ol className="mt-5 flex flex-wrap gap-1 text-xs" aria-label="Progress">
         {steps.map((s, i) => {
           const state = stateOf(i);
           return (

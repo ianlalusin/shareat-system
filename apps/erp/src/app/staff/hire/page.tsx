@@ -65,9 +65,8 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         </a>
         <h1 className="mt-1 text-2xl font-semibold">Hire</h1>
         <PageDescription>
-          Find the person first — a typo in an existing name must never mint a duplicate. Someone
-          who already works another store shows up here too; hiring them again just opens a second
-          employment for the same person (T-154 invariant 8).
+          Search for the person first, so a typo does not create a duplicate. Someone who already works at
+          another store shows up here too. Hiring them again adds a second job for the same person.
         </PageDescription>
       </div>
 
@@ -129,8 +128,8 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
             This is a different person with the same name
           </label>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            ⚠️ Nothing is created until you submit. Pick a person above OR type a name, not both —
-            searching never creates a person by itself. A typed name shows as &ldquo;Last, First M.&rdquo;.
+            Nothing is created until you save. Pick a person above or type a name, not both. A typed
+            name shows as &ldquo;Last, First M.&rdquo;.
           </p>
         </fieldset>
 
@@ -151,7 +150,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
 
         <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
           <legend className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-            Positions — tick what they do, mark exactly one primary
+            Positions: tick what they do, and mark exactly one as primary
           </legend>
           {positions.length === 0 ? (
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -174,9 +173,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
             </div>
           )}
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Leaving all of this blank hires them as <strong>Server</strong> — v1&rsquo;s
-            least-privileged default, chosen so an unspecified role never silently inherits
-            someone else&rsquo;s permissions.
+            Leave all of this blank to hire them as <strong>Server</strong>, the role with the fewest permissions.
           </p>
         </fieldset>
 

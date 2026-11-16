@@ -295,7 +295,7 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
           expect(seg, 'a submit button is showing').toMatch(/<button[^>]*type="submit"/);
         } else {
           expect(seg, 'reopened: not locked').not.toContain('<fieldset disabled');
-          expect(seg, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*>/); // T-448: Save is an icon button (words are aria-label + data-tip)
+          expect(seg, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*(?:aria-label="Save"[^>]*>|>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>)/); // T-589 B4a: a primary Save carries its word; a secondary Save is still an icon named by aria-label
         }
         await c.stored(ctx, seg, markup);
         for (const typed of notDrawnOf(ctx)) expect(seg, `"${typed}" is typed, never drawn by the server (the browser applies it)`).not.toContain(typed);

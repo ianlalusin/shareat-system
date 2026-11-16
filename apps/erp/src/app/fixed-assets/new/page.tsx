@@ -37,9 +37,8 @@ export default async function NewAssetPage({
       <div>
         <h1 className="text-2xl font-semibold">Add asset</h1>
         <PageDescription>
-          Adding it here records what the business owns.{' '}
-          <strong>It does not post the purchase</strong> — an asset bought through an expense is
-          already on the books as equipment. Use this for something being brought onto the register directly.
+          Record something the business owns. <strong>This does not record the purchase</strong>: an
+          asset bought through an expense is already on the books.
         </PageDescription>
       </div>
 
@@ -100,14 +99,14 @@ export default async function NewAssetPage({
           <h2 className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
             When it goes into service
           </h2>
-          <Field label="Choice">
+          <Field label="Goes into service">
             <Select name="inServiceMode" defaultValue="" className="w-full">
               <option value="">When the store opens (or on the acquisition date if it already has)</option>
               <option value="acquired">On the acquisition date — even if the store has not opened yet</option>
-              <option value="set">A specific date —</option>
+              <option value="set">On a date I choose</option>
             </Select>
           </Field>
-          <Field label="Specific date" hint="Only used when 'A specific date' is chosen above" rule={ASSET_CREATE_RULES.inServiceOn}>
+          <Field label="Date you set" hint="Used only when you choose a date above" rule={ASSET_CREATE_RULES.inServiceOn}>
             <Input type="date" {...nativeAttrs(ASSET_CREATE_RULES.inServiceOn)} className="w-full" />
           </Field>
         </section>
@@ -134,7 +133,7 @@ export default async function NewAssetPage({
                 Bible row 140 removed the conversion rather than refining it. */}
             <Field
               label="Useful life (months)"
-              hint="Blank uses this category's default, then 24 months. How long until you would realistically REPLACE it — not how long it could last."
+              hint="Blank uses this category's default, then 24 months. How long until you would realistically replace it, not how long it could last."
               rule={ASSET_CREATE_RULES.usefulLifeMonths}
             >
               <input

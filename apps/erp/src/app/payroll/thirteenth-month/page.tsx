@@ -64,11 +64,10 @@ export default async function ThirteenthMonthPage({
       <div>
         <h1 className="text-2xl font-semibold">13th-month pay</h1>
         <PageDescription>
-          Total basic pay each person earned in <b>{year}</b>, divided by 12 — DOLE&rsquo;s
-          formula, applied to what payroll already posted. Nobody who has no posted basic pay for
-          the year is included. ⚠️{' '}
-          <b>2026 is not real here</b> — v2 pilots Oct&ndash;Dec 2026 and every operational table
-          purges 1 Jan 2027 (ADR-007); the real 2026 payout has to happen outside v2.
+          Total basic pay each person earned in <b>{year}</b>, divided by 12, from the payroll already posted.
+          Anyone with no posted basic pay for the year is left out.{' '}
+          <b>The 2026 figures are not final here</b>, because this system only started in October 2026. Work out
+          the real 2026 payout outside the system.
         </PageDescription>
       </div>
 
@@ -100,7 +99,7 @@ export default async function ThirteenthMonthPage({
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-medium">{year}</h2>
             <span className="text-xs text-neutral-500">
-              {pv.payouts.length} payout(s) · gross {peso(Number(pv.totalGross))} · net{' '}
+              {pv.payouts.length} {pv.payouts.length === 1 ? 'payout' : 'payouts'} · gross {peso(Number(pv.totalGross))} · net{' '}
               {peso(Number(pv.totalNet))}
             </span>
           </div>
@@ -161,7 +160,7 @@ export default async function ThirteenthMonthPage({
               </label>
               <Input name="notes" placeholder="Notes (optional)" className="min-w-0 flex-1 basis-48" />
               <Button type="submit" variant="primary">
-                Post {pv.payouts.length} payout(s)
+                Post {pv.payouts.length} {pv.payouts.length === 1 ? 'payout' : 'payouts'}
               </Button>
             </form>
           )}
@@ -180,7 +179,7 @@ export default async function ThirteenthMonthPage({
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="text-sm font-medium">{run.year}</span>
                 <Badge status={run.status} />
-                {run.voidReason && <span className="text-xs text-neutral-500">voided — {run.voidReason}</span>}
+                {run.voidReason && <span className="text-xs text-neutral-500">Voided: {run.voidReason}</span>}
               </div>
 
               {run.id === latest?.id && latestPayouts.length > 0 && (
@@ -206,7 +205,7 @@ export default async function ThirteenthMonthPage({
                     consequence="Voids this 13th-month run and reverses its entries. An administrator must approve with their own PIN."
                   />
                   <span className="text-xs text-neutral-500">
-                    ⭐ Reverses the entries, so the year is payable again.
+                    Reverses the entries, so the year is payable again.
                   </span>
                 </form>
               )}

@@ -10,6 +10,8 @@
  * R1: the store and the date are never edited, so on an edit the date is plain text, not an input.
  */
 import type { ReactNode } from 'react';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
+import { peso } from '@/lib/format';
 import { Button, Input } from '@/components/ui';
 import { RuleCheck } from '@/components/forms';
 import { DraftMemory } from './DraftMemory';
@@ -65,7 +67,7 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
           <div className="flex flex-col gap-1">
             <span className={LABEL}>Business date</span>
             <p className="rounded border border-neutral-300 bg-neutral-50 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
-              {businessDate}
+              {formatBusinessDayLong(businessDate)}
             </p>
           </div>
         )}
@@ -74,8 +76,8 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Revenue</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <strong>Unli + à la carte must equal the total.</strong> À la carte absorbs dine-in à la
-          carte, take-out and delivery alike — POS has no take-out flag.
+          <strong>Unlimited plus à la carte must equal the total.</strong> À la carte includes dine-in à la
+          carte, take-out and delivery.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           <Money name="totalSales" label="Total sales" value={fig('totalSales')} />
@@ -87,9 +89,8 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Discounts and comps</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Senior and PWD are separate because <strong>RR 5-2017 requires the breakout</strong>.
-          All three are booked as sales discounts; <strong>comps are booked separately</strong>,
-          never as a discount and never a marketing expense.
+          Senior and PWD discounts are listed separately because the tax rules require it. Comps are recorded
+          on their own, not as a discount.
         </p>
         <div className="grid gap-3 sm:grid-cols-4">
           <Money name="seniorDiscount" label="Senior" value={fig('seniorDiscount')} />
@@ -102,24 +103,21 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Charges</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          ⭐ <strong>Only one of these is yours.</strong> Leftover, packaging and other charges{' '}
-          <strong>are income</strong> — you keep them. A <strong>service charge</strong> is
-          neither income nor a payable: RA 11360 sends 100% of it to staff, so it sits in a{' '}
-          <strong>float</strong> that fills here and empties through payroll.{' '}
-          <strong>It never reaches the P&amp;L</strong>, so it cannot bloat revenue.
+          Leftover, packaging and other charges <strong>are income</strong>. A <strong>service charge</strong> is
+          not: by law all of it goes to staff, so it is held and paid out through payroll, and it never counts as revenue.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Money name="serviceCharge" label="Service charge (held for staff)" value={fig('serviceCharge')} />
-          <Money name="otherCharges" label="Other charges — leftover, packaging" value={fig('otherCharges')} />
+          <Money name="otherCharges" label="Other charges (leftover, packaging)" value={fig('otherCharges')} />
         </div>
       </section>
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Tender — where the money went</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Everything taken in plus everything given away{' '}
-          <strong>must equal everything earned</strong> — cash + online + credit + non-remitted
-          channels + discounts + comps = gross sales + charges. Card tenders go through online.
+          Everything taken in plus everything given away <strong>must equal everything earned</strong>:
+          cash + online + credit + channels settled later + discounts + comps = gross sales + charges.
+          Card payments go under online.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           <Money name="cashCollected" label="Cash (at the cashier)" value={fig('cashCollected')} />
@@ -132,10 +130,9 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Sales channels</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            A <strong>remitted</strong> channel&apos;s money reaches the till. A{' '}
-            <strong>non-remitted</strong> one (Foodpanda, GrabFood) settles to a bank later and
-            posts a receivable instead. ⭐ Every channel needs an amount, or <em>No sales</em> ticked —{' '}
-            <strong>a zero is not the same as saying there were none.</strong> You can save with a box blank
+            A channel that <strong>reaches the till</strong> is counted with the day&apos;s cash. One that{' '}
+            <strong>settles later</strong> (Foodpanda, GrabFood) is paid to a bank afterwards. Every channel needs an amount,
+            or <em>No sales</em> ticked. <strong>A zero is not the same as no sales.</strong> You can save with a box blank
             and finish later, but the day cannot be submitted until each one is filled.
           </p>
           <table className="w-full border-collapse">
@@ -193,9 +190,7 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
           <div>
             <h2 className="font-medium">Where the online money landed</h2>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Must add up to the online figure above. Online money is one account for every wallet, so
-              each peso has to say which one it reached — otherwise &ldquo;how much is in the
-              cashier&apos;s hands&rdquo; cannot be answered.
+              Must add up to the online figure above. Each peso has to say which wallet it reached.
             </p>
           </div>
           <table className="w-full border-collapse text-sm">
@@ -226,14 +221,13 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
           <h2 className="font-medium">Wallets no longer in use</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Money this day already recorded against wallets that have since been retired. It stays as it
-            is and cannot be changed here — and verifying still needs the wallets on this day, these
-            included, to add up to its online figure.
+            is and cannot be changed here. Verifying still needs all wallets, these included, to add up to the online figure.
           </p>
           <ul className="text-sm">
             {retiredTenders.map((t) => (
               <li key={t.name} className="flex justify-between gap-4 py-1">
                 <span>{t.name}</span>
-                <span className="tabular-nums">{t.amount}</span>
+                <span className="tabular-nums">{peso(t.amount)}</span>
               </li>
             ))}
           </ul>

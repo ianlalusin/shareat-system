@@ -60,6 +60,6 @@ export async function distributeAction(formData: FormData): Promise<void> {
   // than a refusal (service-charge payouts are expected to come from office/wallet accounts, but
   // the warning is propagated unconditionally so this stays correct if that ever changes).
   return await redirectWithFlash('/service-charge', { store: storeId }, {
-    ok: `Distributed.${warning ? ` ⚠️ ${warning}` : ''} Who received what is processed and documented manually.`,
+    ok: `Distributed.${warning ? ` ${warning}` : ''} Who received what is recorded by hand, outside the system.`,
   });
 }

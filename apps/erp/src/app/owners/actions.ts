@@ -91,7 +91,7 @@ export async function drawingAction(formData: FormData): Promise<void> {
     );
     // ⚠️ Surfaced, not swallowed — a cashier account can read short because its count is unverified,
     // which is why the overdraft guard warns rather than blocks (row 154).
-    if (result.warning) message += ` ⚠️ ${result.warning}`;
+    if (result.warning) message += ` ${result.warning}`;
   } catch (err) {
     return await redirectWithFlash(`/owners/${id}`, {}, { error: errorMessage(err) });
   }
@@ -126,7 +126,7 @@ export async function settleAction(formData: FormData): Promise<void> {
       // ⚠️ Says plainly that nothing has been recovered yet. "Recovered from pay" reads as done.
       message =
         `Moved to salary advance — ₱${result.outstanding} still on the owner account. ` +
-        `⚠️ No cash has come back yet; payroll nets it when it runs, so it still counts against ` +
+        `No cash has come back yet. Payroll deducts it when it runs, so it still counts against ` +
         `the drawing limit.`;
     } else if (how === 'writeoff') {
       // T-412 Tier P (DEF-654): writing a posted receivable off is an administrator's PIN, checked on the server against the

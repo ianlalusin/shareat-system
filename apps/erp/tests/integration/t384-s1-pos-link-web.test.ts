@@ -261,7 +261,7 @@ describe('W1 - the add form (R4, L4)', () => {
   it('W1a: headed "Add a tender", ends in exactly "Save", and is not inside any EditableRecord', async () => {
     const f = await fixture('w1a');
     const add = addBox(cardOf(await render(f), f.storeId));
-    expect(add, 'the submit reads exactly Save (L4)').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"/);
+    expect(add, 'the submit reads exactly Save (L4)').toMatch(/<button[^>]*type="submit"[^>]*(?:aria-label="Save"[^>]*>|>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>)/);
     expect(plain(add)).not.toMatch(/Add tender/);
     expect(add, 'an add form is not a locked record').not.toContain('<fieldset disabled');
     // Red on HEAD: no "Add a tender" heading (the form is headed by a label "New tender") and the button reads "Add tender".
@@ -505,7 +505,7 @@ describe('W6 - every tender is an EditableRecord (A0 L1, L2, L6)', () => {
     const addLink = formWith(cardOf(html, f.otherId), 'posTaxType');
     expect(addLink, 'the unlinked store still shows its link form').toBeDefined();
     expect(addLink!).not.toContain('<fieldset disabled');
-    expect(addLink!, 'L4: ends in Save').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"/);
+    expect(addLink!, 'L4: ends in Save').toMatch(/<button[^>]*type="submit"[^>]*(?:aria-label="Save"[^>]*>|>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>)/);
     expect(plain(addLink!)).not.toMatch(/Link store|Save link/);
   });
 
@@ -665,7 +665,7 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     const form = recordForm(card, f.walletTenderId)!;
     expect(form).toBeDefined();
     expect(form, 'reopened: not disabled').not.toContain('<fieldset disabled');
-    expect(form, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"/);
+    expect(form, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*(?:aria-label="Save"[^>]*>|>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>)/);
     expect(form).toContain('aria-label="Cancel"'); // T-448: Cancel is an icon button
     expect(form, 'the page draws the STORED value (so Cancel restores it) ...').toContain(`value="${stored.name}"`);
     expect(form, '... and never a typed one: the browser applies the typing (R3)').not.toContain('Typed Name Zed');
@@ -728,7 +728,7 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     const linkForm = formWith(card, 'salesChannelId')!;
     expect(linkForm).toBeDefined();
     expect(linkForm, 'reopened').not.toContain('<fieldset disabled');
-    expect(linkForm, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"/);
+    expect(linkForm, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*(?:aria-label="Save"[^>]*>|>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>)/);
     const rec = seen.records.find((r) => (r.hidden as Record<string, string> | undefined)?.storeName === 'Lipa' && !(r.hidden as Record<string, string>).tenderId) as { typed?: { kind: string } } | undefined;
     expect(rec?.typed?.kind).toBe('typed');
     for (const id of [f.cashTenderId, f.walletTenderId]) {

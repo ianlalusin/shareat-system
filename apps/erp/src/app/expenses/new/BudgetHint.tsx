@@ -91,8 +91,8 @@ export function BudgetHint({ caps, periodKey }: { caps: BudgetCap[]; periodKey: 
       )}
       {after < 0 && (
         <div className="mt-1">
-          ⚠️ That is over the cap. <strong>It will still save</strong> — this is a warning, not a
-          gate. Tell whoever set the cap.
+          That is over the cap. <strong>It will still save</strong>. This is a warning, not a
+          block. Tell whoever set the cap.
         </div>
       )}
     </div>

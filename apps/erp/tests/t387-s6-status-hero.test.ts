@@ -101,6 +101,14 @@ describe('StatusHero source rules and barrel', () => {
     expect(src).not.toMatch(/\b(?:text|bg|border)-(?:red|green|blue|amber|yellow|orange|emerald|rose|sky)-\d/);
     expect(src).not.toMatch(/\bbg-danger(?!-)/);
   });
+  // T-589 B4a. MUTANT: put `overflow-x-auto` back on the Progress <ol> (and drop `flex-wrap`) -> the strip clips "Dispatched, R..." at 390 again.
+  it('the step strip wraps instead of scrolling sideways, so no step is ever cut off', () => {
+    const found = /<ol className="([^"]*)" aria-label="Progress">/.exec(src);
+    expect(found, 'the Progress <ol> was not found').not.toBeNull();
+    const classes = (found?.[1] ?? '').split(/\s+/);
+    expect(classes).toContain('flex-wrap');
+    expect(classes).not.toContain('overflow-x-auto');
+  });
   it('the barrel exports StatusHero and the steps module', () => {
     const idx = readFileSync(path.join(ui, 'index.ts'), 'utf8');
     expect(idx).toMatch(/StatusHero/);

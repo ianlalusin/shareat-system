@@ -47,7 +47,7 @@ export async function createLiabilityAction(formData: FormData): Promise<void> {
     return await redirectWithFlash('/liabilities', {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/liabilities/${id}`, {}, {
-    ok: 'Recorded. ⚠️ Nothing is owed yet — charge it to put the obligation on the books.',
+    ok: 'Recorded. Nothing is owed yet. Charge it to put the obligation on the books.',
   });
 }
 
@@ -93,7 +93,7 @@ export async function payAction(formData: FormData): Promise<void> {
       ? 'Paid. That settles it — the balance is zero.'
       : `Paid. ₱${result.outstanding} still owed.`;
     // ⚠️ Surfaced, not swallowed: a cashier account can read short because its count is unverified.
-    if (result.warning) message += ` ⚠️ ${result.warning}`;
+    if (result.warning) message += ` ${result.warning}`;
   } catch (err) {
     return await redirectWithFlash(`/liabilities/${id}`, {}, { error: errorMessage(err) });
   }

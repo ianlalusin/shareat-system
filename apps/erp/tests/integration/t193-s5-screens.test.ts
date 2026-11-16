@@ -169,7 +169,7 @@ describe('the mismatch banner: all-time outstanding vs GL 22x0', () => {
   it('a clean organization shows no banner (kills: banner always on)', async () => {
     const w = await mkWorld(sql, 's5clean');
     const t = plain(await render(listPage, w.admin));
-    expect(t).not.toMatch(/mismatch|does not match/i);
+    expect(t).not.toMatch(/mismatch|do(?:es)? not match/i);
   });
 
   it('a manual credit to 2210 at Lipa that payroll never made raises the banner (kills: banner never on / reconciliation not read)', async () => {
@@ -186,7 +186,7 @@ describe('the mismatch banner: all-time outstanding vs GL 22x0', () => {
       await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
     });
     const t = plain(await render(listPage, w.admin));
-    expect(t).toMatch(/mismatch|does not match/i);
+    expect(t).toMatch(/mismatch|do(?:es)? not match/i);
     const rec = (await (await loader('reconciliationFor'))(w.admin)) as { agency: string; storeId: string; outstanding: string; glBalance: string }[];
     const row = rec.find((r) => r.agency === 'sss' && r.storeId === w.lipa);
     expect([row?.outstanding, row?.glBalance]).toEqual(['3180.00', '3190.00']);

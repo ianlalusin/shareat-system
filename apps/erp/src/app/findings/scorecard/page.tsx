@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { scorecardFor, scorecardRange } from '../lib';
 import { Page } from '@/components/shell/Page';
@@ -36,8 +37,8 @@ export default async function ScorecardPage() {
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">Responsiveness scorecard</h1>
         <PageDescription>
-          Findings raised between {range.from} and {range.to}, and how many of them stopped being
-          true. A finding clears when the condition goes away — nobody can clear one by clicking.
+          Findings raised from {formatBusinessDayLong(range.from)} to {formatBusinessDayLong(range.to)},
+          and how many of them were fixed. A finding clears only when the problem goes away.
         </PageDescription>
       </div>
 
@@ -48,14 +49,14 @@ export default async function ScorecardPage() {
       <Banner tone="warning">
         {card.recordBeganOn ? (
           <>
-            Ages are measured from <strong>{card.recordBeganOn}</strong>, when this record began.
-            Findings older than that are shown as starting then; their true age is not recoverable.
+            Ages are measured from <strong>{formatBusinessDayLong(card.recordBeganOn)}</strong>, when this record began.
+            Findings older than that are shown as starting then; their true age cannot be recovered.
           </>
         ) : (
           <>
-            <strong>Nothing has been observed yet.</strong> The daily observation job has not run, so
-            there is nothing to score. Until it runs, this page is empty because the clock has not
-            started — not because everything is fine.
+            <strong>Nothing has been recorded yet.</strong> The daily check has not run, so there is
+            nothing to score. This page is empty because the clock has not started, not because
+            everything is fine.
           </>
         )}
       </Banner>
@@ -64,7 +65,7 @@ export default async function ScorecardPage() {
         {card.lastViewedBy ? (
           <>
             Findings last opened by <strong>{card.lastViewedBy}</strong>
-            {card.lastViewedDaysAgo === 0 ? ' today' : ` ${card.lastViewedDaysAgo} day(s) ago`}.
+            {card.lastViewedDaysAgo === 0 ? ' today' : ` ${card.lastViewedDaysAgo} ${card.lastViewedDaysAgo === 1 ? 'day' : 'days'} ago`}.
           </>
         ) : (
           // ⚠️ The null is the useful answer, not a missing one.
@@ -94,7 +95,7 @@ export default async function ScorecardPage() {
                   {s.storeId == null ? (
                     // ⛔ Org-wide findings are their own row and never spread across stores — a
                     // trial balance belongs to no branch, and charging one for it would be a lie.
-                    <span title="Findings that belong to no single branch">Organisation-wide</span>
+                    <span title="Findings that belong to no single store">Organisation-wide</span>
                   ) : (
                     storeName.get(s.storeId) ?? s.storeId
                   )}
@@ -148,10 +149,7 @@ export default async function ScorecardPage() {
 
       <div className="space-y-2 rounded-lg border border-neutral-200 p-4 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
         <p>
-          <strong>Score</strong> weights clear rate at 57% and speed at 43% — v1&rsquo;s own 0.4/0.3
-          ratio, normalised over the two components that survive. v1&rsquo;s third component was
-          &ldquo;did you open the AI briefing&rdquo;, and there is no briefing here, so it is dropped
-          rather than carried as a permanently-zero term.
+          <strong>Score</strong> is 57% how many findings were cleared and 43% how quickly.
         </p>
         <p>
           <strong>Speed</strong> scores against a 14-day horizon: cleared the same day scores 1,
@@ -165,10 +163,10 @@ export default async function ScorecardPage() {
           zero.
         </p>
         <p>
-          ⚠️ <strong>Accepted is reported, never scored.</strong> Acknowledging a finding means the
-          condition still holds and the risk is accepted for now. Counting it as a win would pay
-          people to accept problems instead of fixing them. The age beside it is the point — an
-          ageing acceptance is a smell.
+          <strong>Accepted is reported, never scored.</strong> Accepting a finding means the
+          problem is still there and the risk is accepted for now. Counting it as a win would reward
+          people for accepting problems instead of fixing them. Watch the age beside it: a long-ageing
+          acceptance is a warning sign.
         </p>
       </div>
     </Page>

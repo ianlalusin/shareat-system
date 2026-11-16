@@ -37,17 +37,17 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
         </p>
         <h1 className="text-2xl font-semibold">Usage tolerance</h1>
         <PageDescription>
-          How far the usage staff record may differ from what the day&apos;s POS sales say was used. Inside the band a manager posts as usual;
-          outside it the manager must give a reason, and a draft nobody posts is posted at the expected quantity the next afternoon.
+          How far the usage staff record may differ from what the day&apos;s POS sales say was used. Inside the limit a manager posts as usual;
+          outside it the manager must give a reason.
         </PageDescription>
       </div>
 
       <FlashBanner flash={sp} />
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="text-sm font-medium">Whole organisation: {percentOf(view.org)}</h2>
+        <h2 className="text-sm font-medium">Whole business: {percentOf(view.org)}</h2>
         <CheckedForm rules={SETTINGS_ORG_TOLERANCE_RULES} action={setOrgUsageToleranceAction} className="mt-3 flex flex-wrap items-end gap-3">
-          <Field label="Tolerance, as a fraction (0.10 is 10%)" rule={SETTINGS_ORG_TOLERANCE_RULES.tolerance} className="text-sm">
+          <Field label="Allowed difference (type 0.10 for 10%)" rule={SETTINGS_ORG_TOLERANCE_RULES.tolerance} className="text-sm">
             <Input
               {...nativeAttrs(SETTINGS_ORG_TOLERANCE_RULES.tolerance)}
               defaultValue={view.org}
@@ -84,7 +84,7 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
                     ))}
                   </Select>
                 </label>
-                <Field label="Tolerance, as a fraction" rule={SETTINGS_ITEM_TOLERANCE_RULES.tolerance} className="text-sm">
+                <Field label="Allowed difference (type 0.05 for 5%)" rule={SETTINGS_ITEM_TOLERANCE_RULES.tolerance} className="text-sm">
                   <Input
                     {...nativeAttrs(SETTINGS_ITEM_TOLERANCE_RULES.tolerance)}
                     inputMode="decimal"

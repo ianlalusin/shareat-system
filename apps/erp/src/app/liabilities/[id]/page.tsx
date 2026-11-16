@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { chargeAction, payAction, retireAction, reverseAction } from '../actions';
 import {
@@ -66,7 +67,7 @@ export default async function LiabilityPage({
         <h1 className="mt-2 text-2xl font-semibold">{liability.name}</h1>
         <PageDescription>
           {CATEGORY_LABEL[liability.category] ?? liability.category} · {store?.name ?? '—'} ·{' '}
-          {liability.dueOn ? `due ${liability.dueOn}` : 'no due date'}
+          {liability.dueOn ? `due ${formatBusinessDayLong(liability.dueOn)}` : 'no due date'}
           {liability.overdue && (
             <span className="text-warning-ink"> · overdue</span>
           )}
@@ -86,9 +87,8 @@ export default async function LiabilityPage({
               <Figure label="Outstanding" value={peso(liability.position.outstanding)} emphasis />
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-500">
-              ⭐ <strong>Outstanding</strong> is what the ledger still shows owed on this
-              obligation. Charged and paid are the same balance split by what happened — which is
-              why they cannot disagree with it, and why nothing here is stored.
+              <strong>Outstanding</strong> is what is still owed on this obligation: charged minus
+              paid.
               {owing <= 0 && liability.position.charged !== '0.00' && (
                 <> It has reached <strong>zero</strong>, so this is settled.</>
               )}
@@ -101,8 +101,8 @@ export default async function LiabilityPage({
           <div>
             <h2 className="font-medium">Charge it</h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              The obligation is incurred. ⚠️ Name what it was <strong>for</strong> — an expense, or
-              an asset. Charging it to another liability would move a debt without settling it.
+              Record that the obligation has been incurred. Name what it was <strong>for</strong>:
+              an expense or an asset. Charging it to another liability would only move the debt.
             </p>
           </div>
           <FormModal trigger="Charge it" title="Charge this obligation" size="md">
@@ -170,7 +170,7 @@ export default async function LiabilityPage({
                     className={INPUT}
                   />
                 </Field>
-                <Field label="From" hint="Balances shown are derived from the ledger." rule={LIABILITY_PAY_RULES.fromMoneyAccountId}>
+                <Field label="From" hint="Each balance is what that account holds now." rule={LIABILITY_PAY_RULES.fromMoneyAccountId}>
                   <Select {...nativeAttrs(LIABILITY_PAY_RULES.fromMoneyAccountId)} defaultValue="" className="w-full">
                     <option value="" disabled>
                       Choose…
@@ -217,7 +217,7 @@ export default async function LiabilityPage({
                     key={e.entryId}
                     className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
                   >
-                    <td className="px-3 py-2 font-mono text-xs">{e.entryDate}</td>
+                    <td className="px-3 py-2 text-xs">{formatBusinessDayLong(e.entryDate)}</td>
                     <td className="px-3 py-2">
                       {SOURCE_LABEL[e.sourceType] ?? e.sourceType}
                       {e.memo && (
@@ -255,8 +255,8 @@ export default async function LiabilityPage({
           </p>
         )}
         <p className="text-xs text-neutral-500 dark:text-neutral-500">
-          ⚠️ A reversal writes the opposite entry; both stay here and net to nothing. Nothing is ever
-          deleted, so this list always adds up to the balance above it.
+          A reversal cancels an entry. Both stay in this list and net to nothing, so the list always
+          adds up to the balance above.
         </p>
       </section>
 
@@ -266,8 +266,8 @@ export default async function LiabilityPage({
           <div>
             <h2 className="font-medium">Retire</h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Stop using this obligation. ⚠️ Retiring is not settling — it says nobody expects to
-              charge it again. It stays on the ledger and its history is untouched.
+              Stop using this obligation. Retiring is not settling: it means nobody expects to charge
+              it again. Its history stays in the books.
             </p>
           </div>
           <form action={retireAction}>
