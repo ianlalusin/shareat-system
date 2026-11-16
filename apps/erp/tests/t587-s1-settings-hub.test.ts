@@ -56,7 +56,7 @@ const ROWS: Row[] = [
   { section: 'Company', label: 'Stores', href: '/admin/stores' },
   { section: 'People and access', label: 'Users and roles', href: '/admin/users' },
   { section: 'People and access', label: 'Position access defaults', href: '/admin/access-defaults' },
-  { section: 'Devices and connections', label: 'POS tablets and cash registers', href: '/settings/pos-tablet', also: 'POS tablet, POS tablets' },
+  { section: 'Devices and connections', label: 'POS tablets and cash registers', href: '/settings/pos-tablet' },
   { section: 'Devices and connections', label: 'Clock terminals', href: '/attendance/terminals' },
   { section: 'Devices and connections', label: 'Failed clock punches', href: '/attendance/lane', also: 'Clock lane' },
   { section: 'Devices and connections', label: 'Link to POS store', href: '/settings/pos-link', also: 'POS link' },
