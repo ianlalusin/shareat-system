@@ -300,7 +300,7 @@ describe('/inventory/production links to the recipes screen (T-583 S2: a Cookboo
     const staffHtml = await render(PRODUCTION, w.c.staff, { search: { store: w.c.storeA, kind: 'cook' } });
     expect(plainL(staffHtml)).not.toContain('Cookbook settings');
     expect(staffHtml).not.toContain(`href="${BASE}"`);
-    expect(plainL(await render(LIST, w.c.staff, {}))).toContain('record_stock_movement');
+    expect(await render(LIST, w.c.staff, {})).toContain('data-capability="record_stock_movement"'); // T-589 B3a: the key lives on data-capability
     expect(plainL(await render(LIST, w.c.manager, {}))).toContain('Stew');
   });
 });
