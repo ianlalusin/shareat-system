@@ -48,6 +48,12 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/pos/kitchen': 'serve_pos_ticket',
   '/pos/refills': 'request_pos_refill',
 
+  // T-587 S2: the two clock pages had no key, so every signed-in person (a cashier) saw them in the sidebar. Both loaders already authorize
+  // `manage_attendance` at the store (`listTerminals`, `laneHealth`, `listQuarantine`), so that is the word; the writes keep their own words
+  // (`provision_clock_terminal` to provision or revoke, discarding a failed punch). Managers keep access, cashiers lose link, hub row and page.
+  '/attendance/terminals': 'manage_attendance',
+  '/attendance/lane': 'manage_attendance',
+
   // --- Who may act, and where. The keys to the building. -------------------------------------
   '/admin/users': 'manage_users',
   '/admin/stores': 'manage_stores',
