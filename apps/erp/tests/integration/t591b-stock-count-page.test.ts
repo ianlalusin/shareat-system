@@ -104,6 +104,18 @@ describe('T-591 B - the "Not counted yet" filter', () => {
     expect(plain(html)).toContain('All items (4)');
   });
 
+  it('an uncounted row is ONE table row: its two boxes name the item for a screen reader, the column header is the visible label, and Save has a word', async () => {
+    const ctx = await ctxOf('onerow');
+    const html = await render(ctx, { show: 'uncounted' });
+    const row = /<tr[^>]*>(?:(?!<\/tr>)[\s\S])*Chicken Thigh(?:(?!<\/tr>)[\s\S])*<\/tr>/.exec(html)?.[0];
+    expect(row, 'the item has its own <tr>').toBeDefined();
+    expect(row).toContain('aria-label="Quantity (kg) of Chicken Thigh"');
+    expect(row).toContain('aria-label="Cost per kg of Chicken Thigh"');
+    expect(row, 'the row holds its own Save').toMatch(/<button[^>]*type="submit"[^>]*>[\s\S]*Save/);
+    // the three headers the boxes sit under
+    expect(plain(html)).toMatch(/Item Unit Quantity Cost per unit Value/);
+  });
+
   it('an uncounted row is a form that carries `show` back, so a Save leaves the person on the short list', async () => {
     const ctx = await ctxOf('carry');
     const seg = formFor(await render(ctx, { show: 'uncounted' }), ctx.chicken)!;

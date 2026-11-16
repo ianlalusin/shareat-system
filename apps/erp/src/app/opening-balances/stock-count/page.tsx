@@ -202,7 +202,16 @@ export default async function CountPage({
       )}
 
       {rows.length > 0 && (
-        <Table label={`Opening stock count, ${room.name}`} card={{ title: 'Item', keys: ['Quantity', 'Value'] }}>
+        <Table label={`Opening stock count, ${room.name}`} card={{ title: 'Item', keys: ['Quantity', 'Value'] }} className="md:table-fixed">
+          {/* Fixed column widths: the add form below spans the four figure columns and lays its own cells on the same widths. */}
+          <colgroup>
+            <col />
+            <col className="md:w-20" />
+            <col className="md:w-44" />
+            <col className="md:w-44" />
+            <col className="md:w-36" />
+            {!readOnly && <col className="md:w-36" />}
+          </colgroup>
           <thead>
             <tr>
               <Th>Item</Th>
@@ -223,7 +232,7 @@ export default async function CountPage({
                 <>
                   <Td className="font-medium">
                     {r.name}
-                    {r.quantity === null && <span className="block text-xs font-normal text-warning-ink">Not counted</span>}
+                    {r.quantity === null && <span className="ml-2 whitespace-nowrap text-xs font-normal text-warning-ink">Not counted</span>}
                   </Td>
                   <Td className="text-muted">{r.baseUnit}</Td>
                 </>
@@ -244,31 +253,49 @@ export default async function CountPage({
                   <tr key={r.itemId} className={onlyMissing ? undefined : 'bg-warning-soft'}>
                     {head}
                     {/* T-384 A0: a row with no saved count is an ADD: open, ending in Save. */}
-                    <Td colSpan={4}>
-                      <CheckedForm rules={CUTOVER_COUNT_RULES} action={recordCountAction}>
+                    <Td colSpan={4} className="md:!p-0">
+                      <CheckedForm rules={CUTOVER_COUNT_RULES} action={recordCountAction} quietSummary>
                         <input type="hidden" name="storeId" value={storeId} />
                         <input type="hidden" name="locationId" value={roomId} />
                         <input type="hidden" name="itemId" value={r.itemId} />
                         {onlyMissing && <input type="hidden" name="show" value="uncounted" />}
-                        <div className="flex flex-wrap items-end gap-3">
-                          <FormGrid className="flex-1">
-                            <Field label={`Quantity (${r.baseUnit})`} rule={CUTOVER_COUNT_RULES.quantity}>
+                        {/* From md up the cells sit under their column headers (the header is the visible label; the label is read aloud). A phone stacks them with the labels showing. */}
+                        <div className="flex flex-col gap-2 md:grid md:grid-cols-[11rem_11rem_9rem_9rem] md:gap-0">
+                          <div className="md:px-3 md:py-2 lg:py-1.5">
+                            <Field
+                              label={`Quantity (${r.baseUnit})`}
+                              width="full"
+                              rule={CUTOVER_COUNT_RULES.quantity}
+                              className="md:[&_.erp-field-control]:mt-0 md:[&_.erp-field-label]:sr-only"
+                            >
                               <input
                                 {...nativeAttrs(CUTOVER_COUNT_RULES.quantity)}
+                                aria-label={`Quantity (${r.baseUnit}) of ${r.name}`}
                                 className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                               />
                             </Field>
-                            <Field label={`Cost per ${r.baseUnit}`} rule={CUTOVER_COUNT_RULES.unitCost}>
+                          </div>
+                          <div className="md:px-3 md:py-2 lg:py-1.5">
+                            <Field
+                              label={`Cost per ${r.baseUnit}`}
+                              width="full"
+                              rule={CUTOVER_COUNT_RULES.unitCost}
+                              className="md:[&_.erp-field-control]:mt-0 md:[&_.erp-field-label]:sr-only"
+                            >
                               <input
                                 {...nativeAttrs(CUTOVER_COUNT_RULES.unitCost)}
+                                aria-label={`Cost per ${r.baseUnit} of ${r.name}`}
                                 inputMode="decimal"
                                 className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                               />
                             </Field>
-                          </FormGrid>
-                          <Button type="submit" variant="secondary">
-                            Save
-                          </Button>
+                          </div>
+                          <div className="hidden text-muted md:flex md:items-center md:justify-end md:px-3">—</div>
+                          <div className="md:px-3 md:py-2 lg:py-1.5">
+                            <Button type="submit" variant="primary">
+                              Save
+                            </Button>
+                          </div>
                         </div>
                       </CheckedForm>
                     </Td>
