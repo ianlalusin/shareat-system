@@ -5,6 +5,7 @@ import { requirePageAccess } from '../../lib/page-access';
 import { navHrefAllowed } from '../../lib/route-capability';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { FindSetting } from './FindSetting';
 
 export const metadata = { title: 'Settings — Shareat System' };
 // Reads the session cookie, so it can never be statically rendered — declared rather than left to
@@ -61,6 +62,9 @@ export default async function SettingsPage() {
         </PageDescription>
       </div>
 
+      {/* T-587 S3: filters the rows below by their visible text (`data-settings-*` hooks); the rows themselves stay server-rendered literals. */}
+      <FindSetting />
+
       {/* ⚠️ One column first and no `min-w` anywhere: DEF-199 measured 24 of 66 routes scrolling sideways at 390px.
           Phone portrait is the canvas; two columns only from `lg`, flowed as CSS columns (not a row grid) so a short
           panel never leaves a hole beside a tall one. */}
@@ -104,6 +108,8 @@ export default async function SettingsPage() {
             writeCap="pair_pos_tablet"
           />
           <SettingsRow href="/attendance/terminals" title="Clock terminals" hint="Register a clock terminal and enrol cards or fingerprints." writeCap="provision_clock_terminal" />
+          {/* S3: the sidebar no longer links this; the hub is its door. Registers refund-approval tablets, admin only (the route's own key IS the write key, so no View only). */}
+          <SettingsRow href="/admin/pos-tablets" title="POS tablet approvals" hint="Let a tablet ask a manager to approve refunds, clear a locked tablet, and manage cash registers." writeCap="provision_clock_terminal" />
           <SettingsRow href="/attendance/lane" title="Failed clock punches" also="Clock lane" hint="Punches that did not post, waiting for a manager to look." writeCap={['manage_attendance', 'provision_clock_terminal']} />
           <SettingsRow href="/settings/pos-link" title="Link to POS store" also="POS link" hint="Which POS store each store sells under." writeCap="manage_chart_of_accounts" />
         </Section>
@@ -112,7 +118,7 @@ export default async function SettingsPage() {
       {/* ⭐ Named rather than silently absent — the pattern `/expenses/recurring` set when its job was blocked. The reason it is not a form yet:
           four different things put a staff member into debt and none of them checks a limit, so a box here would look like a control without being
           one. UI UX (T-587): that reasoning is for developers, so managers read one plain line. */}
-      <p className="text-sm text-neutral-600 dark:text-neutral-400">Staff advance limits: not set up yet.</p>
+      <p data-settings-footnote className="text-sm text-neutral-600 dark:text-neutral-400">Staff advance limits: not set up yet.</p>
     </Page>
   );
 }
@@ -124,11 +130,11 @@ function Section({ title, held, children }: { title: string; held: ReadonlySet<s
   );
   if (rows.length === 0) return null;
   return (
-    <section className="mb-4 break-inside-avoid overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
+    <section data-settings-section className="mb-4 break-inside-avoid overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
       <h2 className="border-b border-neutral-200 px-4 py-3 text-base font-semibold dark:border-neutral-800">{title}</h2>
       <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
         {rows.map((r) => (
-          <li key={r.props.href}>{cloneElement(r, { viewOnly: viewOnly(r.props.writeCap, held) })}</li>
+          <li data-settings-row key={r.props.href}>{cloneElement(r, { viewOnly: viewOnly(r.props.writeCap, held) })}</li>
         ))}
       </ul>
     </section>
@@ -159,8 +165,9 @@ function SettingsRow({ href, title, hint, also, viewOnly }: RowProps) {
           {viewOnly && (
             <span className="ml-2 inline-block rounded-full border border-neutral-300 px-2 py-0.5 align-middle text-xs font-normal text-neutral-700 dark:border-neutral-600 dark:text-neutral-300">View only</span>
           )}
-        </span>
-        <span className="block text-sm text-neutral-600 dark:text-neutral-400">{hint}</span>
+        </span>{' '}
+        {/* the spaces keep title, hint and "Also called" apart when the row's text is read for Find a setting */}
+        <span className="block text-sm text-neutral-600 dark:text-neutral-400">{hint}</span>{' '}
         {also && <span className="block text-xs text-neutral-600 dark:text-neutral-400">{`Also called: ${also}`}</span>}
       </span>
       <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-neutral-500">

@@ -58,6 +58,7 @@ const ROWS: Row[] = [
   { section: 'People and access', label: 'Position access defaults', href: '/admin/access-defaults' },
   { section: 'Devices and connections', label: 'POS tablets and cash registers', href: '/settings/pos-tablet' },
   { section: 'Devices and connections', label: 'Clock terminals', href: '/attendance/terminals' },
+  { section: 'Devices and connections', label: 'POS tablet approvals', href: '/admin/pos-tablets' },
   { section: 'Devices and connections', label: 'Failed clock punches', href: '/attendance/lane', also: 'Clock lane' },
   { section: 'Devices and connections', label: 'Link to POS store', href: '/settings/pos-link', also: 'POS link' },
 ];
@@ -122,6 +123,7 @@ describe('T-587 S1 hub - a store manager sees only what the route map lets a man
     '/admin/stores',
     '/admin/users',
     '/admin/access-defaults',
+    '/admin/pos-tablets',
     '/settings/business-rules',
     '/settings/usage-tolerance',
     '/settings/pos-link',
@@ -172,9 +174,8 @@ describe('T-587 S1 hub - source shape the guards depend on', () => {
 
 describe('T-587 S1 renames - the sidebar label and the screen title agree', () => {
   const nav = GROUPS.flatMap((g) => g.links);
-  it('nav says Kitchen stations and Failed clock punches, not the old words', () => {
-    expect(nav.find((l) => l.href === '/kitchen')?.label).toBe('Kitchen stations');
-    expect(nav.find((l) => l.href === '/attendance/lane')?.label).toBe('Failed clock punches');
+  // T-587 S3: those two left the sidebar for the hub (the ROWS above prove the new labels there); the sidebar must not bring the old words back.
+  it('the sidebar has neither the old words nor the two renamed entries', () => {
     expect(nav.map((l) => l.label)).not.toContain('Kitchen setup');
     expect(nav.map((l) => l.label)).not.toContain('Clock lane');
   });

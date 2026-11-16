@@ -552,7 +552,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1654 -> 1656, T-583 (15 Nov 2026): +2 compliant controls (min-h-11), the stock-count link and the Record a delivery link on each /inventory/locations card; the Recipes text link left /inventory/production and the Cookbook settings button replaced it (net 0); FAIL/UNRESOLVED unmoved; re-measured by runCensus().
     // 1656 -> 1657, T-587 S1 (BOSS approved +1, as measured): settings hub rebuilt as rows; re-measured by runCensus() after merging main.
     // 1657 -> 1688, T-584 (15 Nov 2026): +31 controls, the Documents screens; re-measured by runCensus().
-    expect(results.length).toBe(1688);
+    // 1688 -> 1689, T-587 S3 (NEEDS BOSS APPROVAL): +1 hub row link (POS tablet approvals, so /admin/pos-tablets is not orphaned once it leaves the sidebar), re-measured by runCensus() on main 145f7cc.
+    expect(results.length).toBe(1689);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
