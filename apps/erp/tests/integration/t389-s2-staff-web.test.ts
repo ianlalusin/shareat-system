@@ -125,7 +125,7 @@ const positions: FormCase<StaffCtx> = {
   good: (ctx) => positions.refused(ctx, { primaryPositionId: ctx.p3 }),
   ok: /Positions saved/,
   // T-590b: the name pop-up is the other refill on this page; it must stay shut and untyped.
-  siblings: async (ctx) => [{ label: 'the name pop-up', sel: { action: 'renamePersonAction' }, has: [`name="employmentId" value="${ctx.record}"`, 'name="lastName"'], modal: { formKey: 'staff.rename', title: 'Edit name' } }],
+  siblings: async (ctx) => [{ label: 'the name pop-up', sel: { action: 'renamePersonAction', hidden: { employmentId: ctx.record } }, has: [`name="employmentId" value="${ctx.record}"`, 'name="lastName"'], modal: { formKey: 'staff.rename', title: 'Edit name' } }],
 };
 
 /**
@@ -142,7 +142,7 @@ const rename: FormCase<StaffCtx> = {
   action: async () => (await import('../../src/app/staff/actions')).renamePersonAction,
   page: positions.page,
   props: positions.props,
-  sel: () => ({ action: 'renamePersonAction' }),
+  sel: (ctx) => ({ action: 'renamePersonAction', hidden: { employmentId: ctx.record } }),
   has: (ctx) => [`name="employmentId" value="${ctx.record}"`, 'name="lastName"'],
   hiddenNames: ['employmentId'],
   refused: (ctx, over = {}) => {
@@ -162,7 +162,7 @@ const rename: FormCase<StaffCtx> = {
   tooLong: { lastName: LONG },
   good: (ctx) => rename.refused(ctx, { firstName: 'Goodfirst' }),
   ok: /Name saved/,
-  siblings: async (ctx) => [{ label: 'the positions pop-up', sel: { action: 'setPositionsAction' }, has: [`name="employmentId" value="${ctx.record}"`, 'name="positionIds"'], modal: { formKey: 'staff.positions', title: 'Edit positions' } }],
+  siblings: async (ctx) => [{ label: 'the positions pop-up', sel: { action: 'setPositionsAction', hidden: { employmentId: ctx.record } }, has: [`name="employmentId" value="${ctx.record}"`, 'name="positionIds"'], modal: { formKey: 'staff.positions', title: 'Edit positions' } }],
 };
 
 runTypedLegs(positions);
