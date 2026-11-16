@@ -34,7 +34,9 @@ describe('T-511 S5b - the new exports have production callers', () => {
 
   it('control: the scan sees real app source [kills: a scan of nothing]', () => {
     expect(app.length).toBeGreaterThan(100_000);
-    expect(named(app, 'ingestSettlementFile')).toBe(true);
+    // T-511 S8a: the upload action calls `ingestSettlementUpload`, which calls `ingestSettlementFile` once per invoice (was: the action named ingestSettlementFile)
+    expect(named(app, 'ingestSettlementUpload')).toBe(true);
+    expect(named(codeOnly(readFileSync(path.join(repoRoot, DOMAIN, 'settlement-intake/ingest-many.ts'), 'utf8')), 'ingestSettlementFile')).toBe(true);
   });
 
   for (const name of ['rejectDay', 'reopenDay', 'overrideLoanAllocation', 'listReviewDays', 'getReviewDayDetail', 'dayBlockers']) {

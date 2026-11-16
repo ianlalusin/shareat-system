@@ -34,12 +34,14 @@ const rel = (f: string) => relative(APP_ROOT, f).replace(/\\/g, '/');
 
 /** Files whose raw record-bound form is deliberate. Each needs a reason. Empty at the end of S3b. */
 const EXEMPT: Record<string, string> = {
-  // T-546 (BOSS approved): the Tills table. One small settings row per till (its tablet; its paper and copies), each saved on its own with one click and audited; locking a row behind Edit would add a tap to a two-control setting.
-  'admin/pos-tablets/TillsSection.tsx': 'T-546: per-till settings rows saved one at a time, not an edit-in-place record',
+  // T-546 (BOSS approved): the Cash registers cards (T-582; were a table). One small settings block per cash register (its tablet; its paper and copies), each saved on its own with one click and audited; locking a block behind Edit would add a tap to a two-control setting.
+  'admin/pos-tablets/TillsSection.tsx': 'T-546: per-cash-register settings blocks saved one at a time, not an edit-in-place record',
   // T-193 S5: an add form (hidden request id and hidden month/agency inputs), not a record-bound edit-in-place form.
   'payroll/statutory-payments/new/page.tsx': 'T-193 S5: an add form with hidden id inputs, not record-bound',
   // DEF-778: an add form whose only hidden *Id is the per-render request id; its date default is a prop, not a record.
   'money-transfers/RecordTransferForm.tsx': 'DEF-778: an add form with a hidden request id, not record-bound',
+  // T-584 (NEEDS BOSS APPROVAL): the issue form. Its hidden template / employee / store ids say WHAT to draft; the textarea default is the server-filled draft (or what the issuer typed), not a stored record's value. The edit-in-place shape A0 outlaws is the revise form, which IS an EditableRecord.
+  'documents/new/page.tsx': 'T-584: an issue form whose default is a freshly filled draft, not a saved record',
 };
 
 /**
@@ -54,8 +56,10 @@ const EXEMPT: Record<string, string> = {
 const COMMANDS: Record<string, string> = {
   'Approve and book': 'T-511 S7b (BOSS approved): approves one settlement day and books its payout (money in the books); audited; the uploader rule and the blockers are re-checked in the domain',
   'Book this charge': 'T-511 S7b (BOSS approved): books one platform charge that belongs to no sales day (money out for good); audited; the uploader rule is applied in the domain',
+  'Issue': 'T-584 (NEEDS BOSS APPROVAL): numbers a document and freezes its wording as version 1; audited; nothing can be edited in place afterwards',
+  'Sign': 'T-584 (NEEDS BOSS APPROVAL): attaches the saved signature of the signer to a document version, only after that person types their own Employee ID and PIN; audited, wrong PINs capped',
+  'Add cash register': 'T-546 (BOSS approved), T-582 rename: adds a cash register (a till in code; the receipt-number identity of a store); audited',
   'Confirm and switch': 'T-533 S1, BOSS approved 15 Nov 2026: switches a store between the old and the new POS (decides where its sales days come from; admin or super-admin only; audited pos.store_mode_set)',
-  'Add till': 'T-546 (BOSS approved): adds a till (the receipt-number identity of a store); audited',
   'Set tablet': 'T-546 (BOSS approved): chooses which paired tablet acts as a till, or none; audited',
   'Save printer': "T-546 (BOSS approved): sets the till's receipt paper and copies, which the tablet then prints with; audited",
   'Register tablet': 'T-505: links a POS tablet to the store so it can ask a manager for a refund approval (grants access); audited',
@@ -142,7 +146,7 @@ const COMMANDS: Record<string, string> = {
   'Dispute — flag for review, does not stop the 15-day clock': 'moves a status',
   'Override': 'overrides a verified day',
   '\u2192 Move to reviewing': 'moves a status',
-  'Open branch': 'opening a store is a status change',
+  'Add store': 'opening a store is a status change',
   'Create the missing month': 'creates a period',
   'Make default': 'changes which record is default',
   'Discard': 'discards a record',
@@ -188,7 +192,7 @@ const COMMANDS: Record<string, string> = {
   'Assign role': 'grants access',
   'Cancel order': 'moves a status',
   'Issue PIN': 'issues a credential',
-  'Provision terminal': 'issues a device credential',
+  'Set up terminal': 'issues a device credential',
   'Reinstate': 'moves a status',
   'Retire this channel': 'moves a status',
   // T-434 staff photo/signature (managers only; bible rows 353/355)

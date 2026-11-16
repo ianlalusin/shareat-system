@@ -36,13 +36,13 @@ const MB = 1024 * 1024;
 const dataUrl = (js: string): URL => new URL(`data:text/javascript,${encodeURIComponent(js)}`);
 
 /** A workbook whose worksheet part has the given raw XML, stored at `partName` and reached through the workbook rels. */
-function withSheet(sheet: string, partName = 'xl/worksheets/sheet1.xml', relTarget?: string, extra: { name: string; data: Buffer }[] = []): Buffer {
+function withSheet(sheet: string, partName = 'xl/worksheets/sheet1.xml', relTarget?: string, extra: { name: string; data: Buffer }[] = [], sheetName = 'Appendix A'): Buffer {
   const target = relTarget ?? partName.replace(/^xl\//, '');
   const rel = (n: string, t: string, ty: string): string => `<Relationship Id="${n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${ty}" Target="${t}"/>`;
   return zipBytes([
     { name: '[Content_Types].xml', data: Buffer.from(`${HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>`) },
     { name: '_rels/.rels', data: Buffer.from(`${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rel('rId1', 'xl/workbook.xml', 'officeDocument')}</Relationships>`) },
-    { name: 'xl/workbook.xml', data: Buffer.from(`${HEAD}<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Appendix A" sheetId="1" r:id="rId1"/></sheets></workbook>`) },
+    { name: 'xl/workbook.xml', data: Buffer.from(`${HEAD}<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${sheetName}" sheetId="1" r:id="rId1"/></sheets></workbook>`) },
     { name: 'xl/_rels/workbook.xml.rels', data: Buffer.from(`${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rel('rId1', target, 'worksheet')}${rel('rId2', 'styles.xml', 'styles')}</Relationships>`) },
     { name: 'xl/styles.xml', data: Buffer.from(`${HEAD}<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cellXfs count="1"><xf numFmtId="0"/></cellXfs></styleSheet>`) },
     { name: partName, data: Buffer.from(sheet) },
@@ -66,6 +66,9 @@ const HOSTILE: Hostile[] = [
   ['300,000 attributes on one element', () => withSheet(doc(`<c ${Array.from({ length: 300_000 }, (_, i) => `a${i}="1"`).join(' ')} r="A1"/>`))],
   ['1.2 million empty <row/> elements', () => withSheet(doc('<row/>'.repeat(1_200_000)))],
   ['a far-cell sheet reached through the rels, stored outside xl/worksheets/', () => withSheet(doc(manyRows(5000, (i) => `r="XFD${i}"`)), 'xl/other/sub/s.xml', 'other/sub/s.xml')],
+  // T-511 S8b: the third sheet the worker now opens gets the same containment as the first two
+  ['an Appendix C sheet (S8b) with a far cell reference on 5,000 rows', () => withSheet(doc(manyRows(5000, (i) => `r="XFD${i}"`)), 'xl/worksheets/sheet1.xml', undefined, [], 'Appendix C')],
+  ['an Appendix C sheet (S8b) with a 4 MB attribute value', () => withSheet(doc(`<c z="${'a'.repeat(4 * MB)}" r="A1"/>`), 'xl/worksheets/sheet1.xml', undefined, [], 'Appendix C')],
 ];
 
 describe('read-excel-file runs in a worker: a hostile worksheet ends in XLSX_TOO_HEAVY or XLSX_TOO_SLOW, never a frozen or dead process', () => {
@@ -204,19 +207,21 @@ describe('legitimate workbooks read through the worker exactly as the library re
       const direct = {
         a: await readSheet(workbook, 'Appendix A').catch(() => null),
         b: await readSheet(workbook, 'Appendix B').catch(() => null),
+        c: await readSheet(workbook, 'Appendix C').catch(() => null),
       };
       const t0 = Date.now();
       const viaWorker = await readSheetsInWorker(workbook);
       lines.push(`${label}=${Date.now() - t0}ms`);
       expect(viaWorker.a).toEqual(direct.a);
       expect(viaWorker.b).toEqual(direct.b);
+      expect(viaWorker.c).toEqual(direct.c);
     }
     console.log(`WORKER_MS ${lines.join(' ')}`);
   }, 60_000);
 
   it('a workbook with neither sheet gives nulls for both (the reader turns that into FOODPANDA_NO_SHEETS)', async () => {
     const out = await readSheetsInWorker(fpWorkbook({ sheetNames: ['Sheet1', 'Sheet2'] }));
-    expect(out).toEqual({ a: null, b: null });
+    expect(out).toEqual({ a: null, b: null, c: null });
   });
 
   it('no filesystem write happens (the worker reads from the buffer only)', async () => {

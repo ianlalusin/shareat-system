@@ -33,9 +33,9 @@ export function RepairButton({
       <TokenReveal
         heading={`New pairing token for "${label}"`}
         intro={
-          'This mints a fresh one-time pairing token for this SAME terminal — its identity, ' +
-          'history and any punches it has already recorded all stay attached to this row. Use this ' +
-          'when the original token was lost before pairing, or the device was wiped or replaced.'
+          'This makes a fresh one-time pairing token for this same terminal. Its history and any ' +
+          'punches it has recorded stay with it. Use it when the first token was lost before ' +
+          'pairing, or the device was wiped or replaced.'
         }
         customToken={reveal.customToken}
         onDone={() => {
@@ -61,7 +61,7 @@ export function RepairButton({
           })
         }
       >
-        {pending ? 'Minting…' : 'Re-pair (new token)'}
+        {pending ? 'Making token…' : 'Re-pair (new token)'}
       </Button>
       {error && <p className="max-w-xs text-xs text-danger">{error}</p>}
     </div>

@@ -10,7 +10,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { Banner, FlashBanner, Select } from '@/components/ui';
 
-export const metadata = { title: 'Kitchen setup — Shareat System' };
+export const metadata = { title: 'Kitchen stations — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -27,7 +27,7 @@ export default async function KitchenPage({ searchParams }: { searchParams: Prom
   if (stores.length === 0) {
     return (
       <Page density="table">
-        <h1 className="text-2xl font-semibold">Kitchen setup</h1>
+        <h1 className="text-2xl font-semibold">Kitchen stations</h1>
         <Banner tone="warning">You do not manage any store&apos;s settings, so there is no kitchen for you to set up.</Banner>
       </Page>
     );
@@ -40,7 +40,7 @@ export default async function KitchenPage({ searchParams }: { searchParams: Prom
   return (
     <Page density="table">
       <div>
-        <h1 className="text-2xl font-semibold">Kitchen setup</h1>
+        <h1 className="text-2xl font-semibold">Kitchen stations</h1>
         <PageDescription>
           Choose which kitchen station cooks each item sold at {store.name}. An item with no station stays off the POS.
         </PageDescription>

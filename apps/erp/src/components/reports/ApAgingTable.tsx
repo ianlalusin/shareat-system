@@ -1,4 +1,3 @@
-import { accountCodeAndName } from '@/lib/account-label';
 import { formatMoney, type Money } from '@shareat/core/money';
 
 export interface ApAgingTableRow {
@@ -56,13 +55,13 @@ export function ApAgingReconciliationIndicator({
             : 'mt-1 text-base font-semibold text-danger'
         }
       >
-        Aging total {formatMoney(agingTotal)} {reconciles ? '=' : '≠'} control account ({accountCodeAndName('2110')}){' '}
+        Aging total {formatMoney(agingTotal)} {reconciles ? '=' : '≠'} owed to suppliers in the books{' '}
         {formatMoney(controlBalance)}
       </p>
       {!reconciles ? (
         <p className="mt-2 text-sm text-danger">
-          This should never happen — the subledger and the ledger have drifted. Stop and
-          investigate before trusting any other figure on this screen.
+          The supplier balances and the books should always agree. Stop and ask for help before
+          trusting any other figure on this screen.
         </p>
       ) : null}
     </div>

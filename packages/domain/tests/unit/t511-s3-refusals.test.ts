@@ -47,10 +47,10 @@ const malvar = (): ReturnType<typeof parseGrab> => parseGrab(fixture('grab-malva
 
 const TRIGGERS: Record<string, () => unknown> = {
   FILE_EMPTY: () => openSettlementZip(fixture('hostile-empty.zip')),
-  FILE_TOO_BIG: () => openSettlementZip(zipBytes([{ name: 'a.xls', data: Buffer.alloc(1_100_000, 7), method: 'store' }])),
+  FILE_TOO_BIG: () => openSettlementZip(zipBytes([{ name: 'a.xls', data: Buffer.alloc(3_200_000, 7), method: 'store' }])),
   ZIP_NOT_A_ZIP: () => openSettlementZip(fixture('hostile-not-a-zip.zip')),
-  ZIP_TOO_MANY_ENTRIES: () => openSettlementZip(fixture('hostile-zip-11-entries.zip')),
-  ZIP_TOO_BIG_EXPANDED: () => openSettlementZip(fixture('hostile-zip-expands-over-5mb.zip')),
+  ZIP_TOO_MANY_ENTRIES: () => openSettlementZip(zipBytes(manyEntries(41, 'pdf'))),
+  ZIP_TOO_BIG_EXPANDED: () => openSettlementZip(zipBytes([{ name: 'a.pdf', data: Buffer.alloc(16 * 1024 * 1024) }])),
   ZIP_UNSAFE_NAME: () => openSettlementZip(fixture('hostile-zip-path-traversal.zip')),
   ZIP_NESTED_ARCHIVE: () => openSettlementZip(fixture('hostile-zip-nested-archive.zip')),
   ZIP_ENTRY_NOT_ALLOWED: () => openSettlementZip(fixture('hostile-zip-bad-extension.zip')),

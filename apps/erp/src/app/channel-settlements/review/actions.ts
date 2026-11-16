@@ -66,14 +66,18 @@ export async function bookChargeAction(formData: FormData): Promise<void> {
   const nav = navOf(formData, text(formData, 'lineId').trim());
   if (!UUID.test(otherLineId)) return await redirectWithFlash(REVIEW, nav, { error: NOT_FOUND });
   let posted = true;
+  let dateNote: string | null = null;
   try {
-    posted = (await withOrgPrincipal(actor.orgId, (tx) => bookPeriodCharge(tx, actor, { otherLineId }))).posted;
+    const result = await withOrgPrincipal(actor.orgId, (tx) => bookPeriodCharge(tx, actor, { otherLineId }));
+    posted = result.posted;
+    dateNote = result.posted ? result.dateNote : null;
   } catch (err) {
     return await redirectWithFlash(REVIEW, nav, { error: errorMessage(err) });
   }
   // a second press on a charge that is already booked books nothing, so it says so and carries no stamp
   if (!posted) return await redirectWithFlash(REVIEW, nav, { ok: 'This charge was already booked.' });
-  return await redirectWithFlash(REVIEW, nav, { ok: 'Charge booked.', stamp: 'POSTED' });
+  // T-511 S8b: a charge whose own month is closed is booked today; the message says so in words
+  return await redirectWithFlash(REVIEW, nav, { ok: dateNote ? `Charge booked. ${dateNote}` : 'Charge booked.', stamp: 'POSTED' });
 }
 
 export async function rejectDayAction(formData: FormData): Promise<void> {

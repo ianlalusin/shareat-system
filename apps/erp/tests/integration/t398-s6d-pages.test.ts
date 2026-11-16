@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { franchiseWorld, D0, SENTINEL_BANK, SENTINEL_COST, SENTINEL_EXPENSE, totalLogCount, sql as ownerSql, type FranchiseWorld } from '../../../../packages/db/tests/integration/_fixtures/t398-s6-franchise';
+import { CAPABILITY_LABEL } from '@shareat/auth';
 import { M, pageError, plain, render } from './t435-fixture';
 
 /**
@@ -47,7 +48,8 @@ describe('P1 the page gate (requirePageAccess)', () => {
       const W = await franchiseWorld();
       const html = await render(load, mk(W));
       expect(plain(html)).toContain(M.refusedCard);
-      expect(plain(html)).toContain('view_franchise_sales');
+      expect(plain(html)).toContain(`This screen is for people who can ${CAPABILITY_LABEL.view_franchise_sales}.`);
+      expect(plain(html)).not.toContain('view_franchise_sales');
       expect(html).not.toContain(W.pg.orgId);
       expect(plain(html)).not.toContain(await pgName(W));
     });

@@ -27,11 +27,10 @@ export function ProvisionForm({
   if (reveal) {
     return (
       <TokenReveal
-        heading={`"${reveal.label}" is provisioned`}
+        heading={`"${reveal.label}" is set up`}
         intro={
-          'Pair the terminal with this token now, while it is online — a device cannot begin ' +
-          'authenticating offline. Until it completes this pairing once, it is NOT ready and cannot ' +
-          'record a punch.'
+          'Pair the terminal with this token now, while it is online. A device cannot start ' +
+          'pairing offline. Until it is paired once, it is not ready and cannot record a punch.'
         }
         customToken={reveal.customToken}
         onDone={() => {
@@ -71,7 +70,7 @@ export function ProvisionForm({
         />
       </label>
       <Button type="submit" variant="primary" disabled={pending}>
-        {pending ? 'Provisioning…' : 'Provision terminal'}
+        {pending ? 'Setting up…' : 'Set up terminal'}
       </Button>
       {error && <p className="w-full text-sm text-danger">{error}</p>}
     </form>

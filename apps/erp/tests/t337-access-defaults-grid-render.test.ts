@@ -489,7 +489,7 @@ describe('R4 (Amendment A1) — openCapability opens exactly that capability’s
         openCapability: 'record_stock_movement' as const,
       }),
     );
-    const textIdx = html.indexOf('org-scoped');
+    const textIdx = html.indexOf('Whole organization');
     expect(textIdx, 'fixture must render both scopes for this test to mean anything').toBeGreaterThan(-1);
     const orgScopeStart = detailsTagStartBefore(html, textIdx);
     const storeRegion = html.slice(0, orgScopeStart);
@@ -515,7 +515,7 @@ describe('R4 (Amendment A1) — openCapability opens exactly that capability’s
         openCapability: 'run_cutover' as const,
       }),
     );
-    const textIdx = html.indexOf('org-scoped');
+    const textIdx = html.indexOf('Whole organization');
     const orgScopeStart = detailsTagStartBefore(html, textIdx);
     const storeRegion = html.slice(0, orgScopeStart);
     const orgRegion = html.slice(orgScopeStart);

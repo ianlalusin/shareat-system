@@ -49,8 +49,8 @@ export function SalesReconciliationIndicator({
       </p>
       {!reconciles ? (
         <p className="mt-2 text-sm text-danger">
-          This should never happen — the channel/mode breakdown (from `sales_days`) and the
-          ledger total (from `journal_lines`) have drifted. Stop and investigate.
+          The channel and payment-mode breakdown and the ledger total should always agree. Stop
+          and ask for help before trusting any other figure on this screen.
         </p>
       ) : null}
     </div>

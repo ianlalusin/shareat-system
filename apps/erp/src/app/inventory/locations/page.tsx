@@ -13,7 +13,7 @@ import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_LOCATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Checkbox, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select, Table, Td, Th, statusLabel } from '@/components/ui';
+import { Badge, Button, Checkbox, ConfirmDestructive, DialogActions, EmptyState, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select, statusLabel } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -60,7 +60,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
       </Page>
     );
   }
-  const { stockModel, locations, types } = data;
+  const { stockModel, locations, types, itemCounts } = data;
 
   return (
     <Page density="table" className="space-y-8">
@@ -160,106 +160,128 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
               </CheckedForm>
             </FormModal>
           </div>
-          <Table card={{ title: 'Room', subtitle: 'Type / role', keys: [] }}>
-            <thead>
-              <tr>
-                <Th>Room</Th>
-                <Th>Type / role</Th>
-                <Th>Purpose</Th>
-                <Th>Default</Th>
-                <Th>Status</Th>
-                <Th className="w-24">Actions</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {locations.map((loc) => (
-                <tr key={loc.id} className="align-top">
-                  <Td>
-                    <div className="font-medium">{loc.name}</div>
-                    <div className="font-mono text-xs text-muted">{loc.code}</div>
-                  </Td>
-                  <Td className="text-muted">
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {locations.map((loc) => {
+              const n = itemCounts[loc.id] ?? 0;
+              const inactive = loc.status !== 'active';
+              return (
+                <li
+                  key={loc.id}
+                  className="flex flex-col gap-3 rounded-[20px] border border-surface-border bg-surface p-4"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium">{loc.name}</div>
+                      <div className="font-mono text-xs text-muted">{loc.code}</div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-1">
+                      {loc.isDefault ? <Badge tone="info" label="Default" /> : null}
+                      {loc.purpose === 'receiving' ? <Badge tone="progress" label="Receiving" /> : null}
+                      {inactive ? <Badge tone="closed" label="Inactive" /> : null}
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted">
                     {loc.typeName} · {statusLabel(loc.role)}
-                  </Td>
-                  <Td>{loc.purpose === 'receiving' ? 'Receiving' : 'Normal'}</Td>
-                  <Td>{loc.isDefault ? 'Default' : ''}</Td>
-                  <Td>{statusLabel(loc.status)}</Td>
-                  <Td>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <EditableRecord
-                          action={updateLocationAction}
-                          label={loc.name}
-                          hidden={{ storeId, id: loc.id }}
-                          typed={typedFor(sp, LOCATION_EDIT, loc.id, actor.personId)}
+                  </p>
+                  {inactive ? (
+                    <p className="text-sm text-muted">Inactive — holds nothing new.</p>
+                  ) : n === 0 ? (
+                    <EmptyState
+                      size="sm"
+                      illustration="truck"
+                      title="Nothing stored here yet"
+                      body="Stock lands here through a delivery, a transfer or a count."
+                      action={
+                        <Link
+                          href={`/inventory/deliveries?store=${storeId}`}
+                          className="mt-1 inline-flex min-h-11 items-center rounded-full border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
                         >
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            <Input
-                              name="name"
-                              aria-label="Name"
-                              defaultValue={loc.name}
-                              className="col-span-2 sm:col-span-1"
-                            />
-                            <Select name="typeId" aria-label="Type" defaultValue={loc.typeId}>
-                              {types.map((t) => (
-                                <option key={t.id} value={t.id}>
-                                  {t.name}
-                                </option>
-                              ))}
-                            </Select>
-                            {loc.purpose === 'receiving' ? (
-                              <span className="self-center text-xs text-neutral-500">Storage (fixed)</span>
-                            ) : (
-                              <Select name="role" aria-label="Role" defaultValue={loc.role}>
-                                {LOCATION_ROLES.map((r) => (
-                                  <option key={r} value={r}>
-                                    {statusLabel(r)}
-                                  </option>
-                                ))}
-                              </Select>
-                            )}
-                          </div>
-                        </EditableRecord>
-                        <>
-                          {loc.status === 'active' && !loc.isDefault && (
-                            <form action={setDefaultAction}>
-                              <input type="hidden" name="storeId" value={storeId} />
-                              <input type="hidden" name="id" value={loc.id} />
-                              <Button type="submit" variant="secondary" className="text-xs">
-                                Make default
-                              </Button>
-                            </form>
-                          )}
-                          {loc.status === 'active' && loc.isDefault ? (
-                            // The default room cannot be retired (the service refuses it —
-                            // review 2026-09-03); say so instead of offering a button that fails.
-                            <HelpTip label="Default room">Default room: pick another default to retire this room.</HelpTip>
-                          ) : loc.status === 'active' ? (
-                            <form action={deactivateLocationAction}>
-                              <input type="hidden" name="storeId" value={storeId} />
-                              <input type="hidden" name="id" value={loc.id} />
-                              <ConfirmDestructive
-                                tier="retype"
-                                label="Deactivate room"
-                                consequence="Deactivates this room."
-                                expectedName={loc.name}
-                              />
-                            </form>
-                          ) : (
-                            <form action={reactivateLocationAction}>
-                              <input type="hidden" name="storeId" value={storeId} />
-                              <input type="hidden" name="id" value={loc.id} />
-                              <Button type="submit" variant="secondary" className="text-xs">
-                                Reactivate
-                              </Button>
-                            </form>
-                          )}
-                        </>
+                          Record a delivery
+                        </Link>
+                      }
+                    />
+                  ) : (
+                    <Link
+                      href={`/inventory?store=${storeId}`}
+                      className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                    >
+                      {n === 1 ? '1 item in stock' : `${n} items in stock`}
+                    </Link>
+                  )}
+                  <div className="mt-auto flex flex-wrap items-center gap-2">
+                    <EditableRecord
+                      action={updateLocationAction}
+                      label={loc.name}
+                      hidden={{ storeId, id: loc.id }}
+                      typed={typedFor(sp, LOCATION_EDIT, loc.id, actor.personId)}
+                    >
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        <Input
+                          name="name"
+                          aria-label="Name"
+                          defaultValue={loc.name}
+                          className="col-span-2 sm:col-span-1"
+                        />
+                        <Select name="typeId" aria-label="Type" defaultValue={loc.typeId}>
+                          {types.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </Select>
+                        {loc.purpose === 'receiving' ? (
+                          <span className="self-center text-xs text-neutral-500">Storage (fixed)</span>
+                        ) : (
+                          <Select name="role" aria-label="Role" defaultValue={loc.role}>
+                            {LOCATION_ROLES.map((r) => (
+                              <option key={r} value={r}>
+                                {statusLabel(r)}
+                              </option>
+                            ))}
+                          </Select>
+                        )}
                       </div>
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+                    </EditableRecord>
+                    <>
+                      {loc.status === 'active' && !loc.isDefault && (
+                        <form action={setDefaultAction}>
+                          <input type="hidden" name="storeId" value={storeId} />
+                          <input type="hidden" name="id" value={loc.id} />
+                          <Button type="submit" variant="secondary" className="text-xs">
+                            Make default
+                          </Button>
+                        </form>
+                      )}
+                      {loc.status === 'active' && loc.isDefault ? (
+                        // The default room cannot be retired (the service refuses it —
+                        // review 2026-09-03); say so instead of offering a button that fails.
+                        <HelpTip label="Default room">Default room: pick another default to retire this room.</HelpTip>
+                      ) : loc.status === 'active' ? (
+                        <form action={deactivateLocationAction}>
+                          <input type="hidden" name="storeId" value={storeId} />
+                          <input type="hidden" name="id" value={loc.id} />
+                          <ConfirmDestructive
+                            tier="retype"
+                            label="Deactivate room"
+                            consequence="Deactivates this room."
+                            expectedName={loc.name}
+                          />
+                        </form>
+                      ) : (
+                        <form action={reactivateLocationAction}>
+                          <input type="hidden" name="storeId" value={storeId} />
+                          <input type="hidden" name="id" value={loc.id} />
+                          <Button type="submit" variant="secondary" className="text-xs">
+                            Reactivate
+                          </Button>
+                        </form>
+                      )}
+                    </>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
     </Page>

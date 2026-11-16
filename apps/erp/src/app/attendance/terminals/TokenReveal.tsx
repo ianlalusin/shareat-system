@@ -86,8 +86,8 @@ export function TokenReveal({
       </div>
 
       <p className="text-xs font-medium text-warning-ink">
-        ⚠️ Shown once. This screen cannot show it to you again after you leave or refresh — if it is
-        lost before pairing finishes, mint a fresh one instead of hunting for this one.
+        Shown once. It cannot be shown again after you leave or refresh this screen. If it is lost
+        before pairing finishes, make a fresh one.
       </p>
 
       <Button type="button" variant="primary" onClick={onDone}>

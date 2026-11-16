@@ -21,8 +21,8 @@
  *     inactive: { active:false, blocked:false, summary:null, failing:[], result:()=>undefined, touched:()=>false } even if
  *     the stored values would fail. active: every rule of `set` is checked against state.values[name] ?? '' (absent = blank);
  *     failing = names in rule order; blocked = failing.length > 0;
- *     summary = null when nothing fails, else "Save is off until: <req1>[ <req2>][ and N more]" (first two requirements, then
- *     "and N more" for the rest; exactly "Save is off until: <req1>" when one fails). result(name) = checkField(rule, value).
+ *     summary = null when nothing fails, else "To save, fix the N field(s) marked above." (T-589 B3a; was a requirements list, then
+ *     "and N more" for the rest; exactly "the field" when one fails). result(name) = checkField(rule, value).
  *   CheckContext                      - the React context (value: the object above, or null outside any checked form).
  *   onCheckedSubmit(event, ctx, effects) -> boolean   the submit handler's body. effects = { touch(names: string[]): void;
  *     focus(name: string): void }. When ctx.blocked: event.preventDefault(), effects.touch(ctx.failing),
@@ -151,7 +151,7 @@ describe('checkContextValue', () => {
     expect(c.active).toBe(true);
     expect(c.blocked).toBe(true);
     expect(c.failing).toEqual(['name']);
-    expect(c.summary).toBe(`Save is off until: ${await requirementOf(set.name, '')}`);
+    expect(c.summary).toBe('To save, fix the field marked above.');
     const r = c.result('name');
     expect(r && !r.ok && r.progress).toBe('Required');
   });
@@ -163,21 +163,15 @@ describe('checkContextValue', () => {
     expect(c.failing).toEqual([]);
     expect(c.result('sss')).toEqual({ ok: true, value: '1234567890' });
   });
-  it('failing is in rule order and the summary lists the first two requirements then "and N more"', async () => {
+  it('failing is in rule order and the summary points at the fields: "the N fields" (plural), "the field" (one) - never a list of requirements (T-589 B3a)', async () => {
     const set = await fourRequired();
     const c = await ctxFor(set, ACTIVE({}));
     expect(c.failing).toEqual(['a', 'b', 'c', 'd']);
-    const [r1, r2, r3, r4] = [await requirementOf(set.a, ''), await requirementOf(set.b, ''), await requirementOf(set.c, ''), await requirementOf(set.d, '')];
-    expect(c.summary).toContain(r1);
-    expect(c.summary).toContain(r2);
-    expect(c.summary).not.toContain(r3);
-    expect(c.summary).not.toContain(r4);
-    expect(c.summary).toMatch(/^Save is off until:/);
-    expect(c.summary).toMatch(/and 2 more/);
+    expect(c.summary).toBe('To save, fix the 4 fields marked above.');
     const three = await ctxFor(set, ACTIVE({ d: 'x' }));
-    expect(three.summary).toMatch(/and 1 more/);
-    const two = await ctxFor(set, ACTIVE({ c: 'x', d: 'x' }));
-    expect(two.summary).not.toMatch(/more/);
+    expect(three.summary).toBe('To save, fix the 3 fields marked above.');
+    const one = await ctxFor(set, ACTIVE({ a: 'x', b: 'x', c: 'x' }));
+    expect(one.summary).toBe('To save, fix the field marked above.');
   });
   it('A5: the status line never repeats a typed value', async () => {
     const set = await oneSet();
@@ -202,7 +196,7 @@ describe('T-S1-13 typed reopen (T-389), at the state level - no pilot can show i
     const c = await ctxFor(set, s);
     expect(c.blocked).toBe(true);
     expect(c.touched('name')).toBe(true);
-    expect(c.summary).toContain(await requirementOf(set.name, ''));
+    expect(c.summary).toBe('To save, fix the field marked above.');
   });
 });
 
@@ -342,7 +336,7 @@ describe('EditableRecordView under the context (T-S1-8, T-S1-10)', () => {
     expect(status).toMatch(/aria-live="polite"/);
     const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
     expect(html).toContain(esc(c.summary!));
-    expect(html).toMatch(/Save is off until:/);
+    expect(html).toMatch(/To save, fix the field marked above\./);
   });
   it('editing + the saveLabel "Save draft" is disabled the same way', async () => {
     const c = await ctxFor(await oneSet(), ACTIVE({}));
@@ -392,8 +386,8 @@ describe('CheckSummary: the ONE persistent live region (audit a)', () => {
     expect(await summary({ active: true, summary: null })).toMatch(/^<p\b[^>]*role="status"[^>]*aria-live="polite"[^>]*><\/p>$/);
   });
   it('active + blocked: the same element carries the summary', async () => {
-    const html = await summary({ active: true, summary: 'Save is off until: The name is required.' });
-    expect(html).toMatch(/^<p\b[^>]*role="status"[^>]*aria-live="polite"[^>]*>Save is off until: The name is required\.<\/p>$/);
+    const html = await summary({ active: true, summary: 'To save, fix the field marked above.' });
+    expect(html).toMatch(/^<p\b[^>]*role="status"[^>]*aria-live="polite"[^>]*>To save, fix the field marked above\.<\/p>$/);
   });
   it('inactive: nothing at all (the server render has no status region)', async () => {
     expect(await summary({ active: false, summary: null })).toBe('');

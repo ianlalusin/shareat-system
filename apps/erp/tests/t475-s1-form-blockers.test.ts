@@ -9,7 +9,7 @@
  *       the tests read it only through checkContextValue.
  *   CheckCtx gains   blockers: ReadonlyMap<string, string>,  warnings: ReadonlyMap<string, string>   (id -> sentence)
  *       blocked = some field rule fails || blockers.size > 0;  a warning NEVER blocks.
- *       summary = "Save is off until: " + the failing field requirements (as T-440) THEN the blocker sentences.
+ *       summary = "To save: " + the pointer to the failing fields THEN the blocker sentences.
  *   <RuleCheck id facts /> from '@/components/forms' (file components/forms/RuleCheck.tsx): renders nothing outside a form context.
  *   useLookupCheck(action, inputs) exported from components/forms (file may be useLookupCheck.ts).
  *
@@ -70,7 +70,7 @@ describe('T-475 S1 - blockers and warnings in the check state', () => {
     expect(ctx.failing).toEqual([]);
     expect(ctx.blocked).toBe(true);
     expect(ctx.blockers.get('ap.invoice.dueNotBeforeInvoice')).toBe(BLOCK.sentence);
-    expect(ctx.summary).toBe(`Save is off until: ${BLOCK.sentence}`);
+    expect(ctx.summary).toBe(`To save: ${BLOCK.sentence}`);
   });
 
   it('a warning NEVER disables Save and is not in the summary (mutant: warn treated as block)', async () => {
@@ -112,14 +112,14 @@ describe('T-475 S1 - blockers and warnings in the check state', () => {
     expect(ctx.failing).toEqual(['name']);
     expect(ctx.blocked).toBe(true);
     const text = ctx.summary!;
-    expect(text.startsWith('Save is off until: Type a name.')).toBe(true);
-    expect(text.indexOf('Type a name.')).toBeLessThan(text.indexOf(BLOCK.sentence));
+    expect(text.startsWith('To save: fix the field marked above. ')).toBe(true);
+    expect(text.indexOf('fix the field')).toBeLessThan(text.indexOf(BLOCK.sentence));
   });
 
   it('a form with an EMPTY rule set (the verify form) still blocks on a blocker', async () => {
     const ctx = await drive(NONE, [read_({}), verdict('ap.verify.attestation', { level: 'block', sentence: 'Confirm every part.' })]);
     expect(ctx.blocked).toBe(true);
-    expect(ctx.summary).toBe('Save is off until: Confirm every part.');
+    expect(ctx.summary).toBe('To save: Confirm every part.');
   });
 
   it('BEFORE hydration (the first render = the server render) a verdict blocks nothing and shows nothing (mutant: no-JS submit blocked)', async () => {

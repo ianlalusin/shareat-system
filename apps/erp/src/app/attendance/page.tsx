@@ -1,4 +1,4 @@
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import {
@@ -81,9 +81,8 @@ export default async function AttendanceReviewPage({
       <div>
         <h1 className="text-2xl font-semibold">Attendance review</h1>
         <PageDescription>
-          The days waiting on a decision, and every day in the period. A correction is recorded
-          <strong> beside </strong>the punches, never in place of them — the original tap is a
-          label, and it is never rewritten.
+          The days waiting for a decision, and every day in the period. A correction is shown next
+          to the original punches and never replaces them.
         </PageDescription>
       </div>
 
@@ -197,7 +196,7 @@ export default async function AttendanceReviewPage({
 function LeaveGridRow({ row }: { row: LeaveRow }) {
   return (
     <tr>
-      <Td className="tabular-nums">{row.date}</Td>
+      <Td className="tabular-nums">{formatBusinessDayLong(row.date)}</Td>
       <Td>{row.personName}</Td>
       <Td>
         {row.leaveType.replace(/_/g, ' ')}
@@ -225,7 +224,7 @@ function QueueRow({ day }: { day: QueuedDay }) {
       <Link href={`/attendance/${day.id}`} className="block space-y-1">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <span className="font-medium">
-            {day.personName} · {day.shiftDay}
+            {day.personName} · {formatBusinessDayLong(day.shiftDay)}
           </span>
           <span className="text-xs text-neutral-500">
             {asHours(day.computedMinutes)} paid
@@ -247,7 +246,7 @@ function RosterRow({ day }: { day: ReviewDayRow }) {
     <LinkRow>
       <Td>
         <RowLink href={`/attendance/${day.id}`}>
-          {day.shiftDay}
+          {formatBusinessDayLong(day.shiftDay)}
         </RowLink>
       </Td>
       <Td>{day.personName}</Td>

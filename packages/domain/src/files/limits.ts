@@ -44,7 +44,7 @@ export const PURPOSE_LIMITS: Record<LimitPurpose, { readonly types: readonly str
   staff_photo: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
   staff_signature: { types: ['image/png'], maxBytes: 1024 * 1024 },
   // T-511 S2a. A settlement statement: a CSV or a zip of CSVs. Windows often sends a .csv as application/vnd.ms-excel, so that type is listed
-  // (its bytes must still be text: files/magic.ts). 3 MB here; the reader enforces its own tighter caps (a zip is read only up to 1 MB compressed).
+  // (its bytes must still be text: files/magic.ts). 3 MB here; the zip reader holds the same 3 MB compressed (a test keeps them equal) and caps a zip at 40 files and 15 MB once opened (T-511 S8a).
   channel_settlement_file: {
     types: ['text/csv', 'application/vnd.ms-excel', 'application/zip', 'application/x-zip-compressed'],
     maxBytes: 3 * 1024 * 1024,
@@ -65,4 +65,17 @@ export const MAX_IMAGE_BYTES = 1024 * 1024;
 /** Whether `MAX_IMAGE_BYTES` applies. Images only. */
 export function isImageContentType(contentType: string): boolean {
   return contentType.toLowerCase().startsWith('image/');
+}
+
+/**
+ * T-511 S8a - the most the settlement upload screen sends in one go: 20 MB, under the 26 MB Server Action body limit (`apps/erp/next.config.js`; a test keeps
+ * them in order), so the person reads a sentence instead of getting a bare 413. Lives here with the other upload limits; the form (a browser file) imports it.
+ */
+export const SETTLEMENT_BATCH_MAX_BYTES = 20 * 1024 * 1024;
+
+/** The sentence to show when the chosen files together are too big for one go, or null. */
+export function settlementBatchProblem(sizes: readonly number[]): string | null {
+  const total = sizes.reduce((a, b) => a + b, 0);
+  if (total <= SETTLEMENT_BATCH_MAX_BYTES) return null;
+  return `These files together are ${(total / (1024 * 1024)).toFixed(1)} MB, over the ${SETTLEMENT_BATCH_MAX_BYTES / (1024 * 1024)} MB the upload can carry at once. Choose fewer files and upload the rest in a second go.`;
 }

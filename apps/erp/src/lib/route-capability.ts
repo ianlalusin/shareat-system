@@ -48,6 +48,12 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/pos/kitchen': 'serve_pos_ticket',
   '/pos/refills': 'request_pos_refill',
 
+  // T-587 S2: the two clock pages had no key, so every signed-in person (a cashier) saw them in the sidebar. Both loaders already authorize
+  // `manage_attendance` at the store (`listTerminals`, `laneHealth`, `listQuarantine`), so that is the word; the writes keep their own words
+  // (`provision_clock_terminal` to provision or revoke, discarding a failed punch). Managers keep access, cashiers lose link, hub row and page.
+  '/attendance/terminals': 'manage_attendance',
+  '/attendance/lane': 'manage_attendance',
+
   // --- Who may act, and where. The keys to the building. -------------------------------------
   '/admin/users': 'manage_users',
   '/admin/stores': 'manage_stores',
@@ -71,6 +77,10 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // T-401 S6: the usage tolerance band is org policy, admin-only like the menu depletion rules (`set_menu_depletion`); the setters check the same word.
   '/settings/usage-tolerance': 'set_menu_depletion',
   '/settings/business-rules': 'manage_business_rules',
+  // T-584 (Ian, 15 Nov 2026): HR documents. The register, a document and its print need view_documents; issuing needs issue_documents; the templates are the admin's. The longer prefix wins over /documents. Every domain function checks the same word at the document's store.
+  '/documents': 'view_documents',
+  '/documents/new': 'issue_documents',
+  '/documents/templates': 'manage_document_templates',
   // T-464: pairing a store's POS tablet is the store manager's (or an admin's) act; `pairPosTablet` / `unpairPosTablet` check the same word at the store. Longer prefix wins over `/settings`.
   '/settings/pos-tablet': 'pair_pos_tablet',
 
@@ -86,6 +96,14 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/reports/expense-items': 'view_financial_reports',
   '/reports/sales-rollup': 'view_financial_reports',
   '/reports/pos-data': 'view_financial_reports',
+  // T-589 B3a: these routes had no key, so a refused person hit the error boundary (`reportScope`'s data gate throws). Each key is the word the page's own
+  // `reportScope(...)` gate uses, so the route gate and the data gate cannot disagree. Children inherit (dual-run/pack, dual-run/[store]/[week]).
+  '/reports/journal-lines': 'view_trial_balance',
+  '/reports/dual-run': 'view_financial_reports',
+
+  // T-589 B3a: the day list shows every day's totals and cash (DEF-809: managers and up, never staff). Any-of the two words `sales-days/[id]` and `/edit` already
+  // read by (`canReadAtStore`), so nobody who reads a day is locked out of its list. `/` is deliberately NOT keyed: everyone lands there (the page shows a plain welcome).
+  '/sales-days': ['submit_sales_day', 'verify_sales_day'],
 
   // --- What the business owes and owns, and what people are paid ------------------------------
   // ⚠️ `/payroll` is the one people react to most strongly when it is visible on a counter
@@ -137,6 +155,11 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/staff/hire': 'enrol_staff',
   // T-398 S5d: goods another company sent us are received by whoever may receive a delivery. The longer key wins over the open /inventory.
   '/inventory/deliveries/inbound': 'receive_delivery',
+  // T-583 S2 (Ian, 2026-11-15, revised 16 Nov: "cooks can read recipes"): the cookbook is READ by whoever may record a cook run
+  // (`record_stock_movement`: managers and admins by role, cooks by position); staff with no cook role are refused. /[id] inherits.
+  // The longer /new key wins over the prefix and needs `manage_recipes`. Recipe writes keep their own `manage_recipes` check.
+  '/inventory/production/recipes': 'record_stock_movement',
+  '/inventory/production/recipes/new': 'manage_recipes',
   // T-398 S6d: the franchisor looks at a franchisee's sales and stock (each press is logged by the database); the franchisee's owner reads who looked.
   '/franchise/sales': 'view_franchise_sales',
   '/franchise/stock': 'view_franchise_sales',

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { PURPOSE_LIMITS } from '@shareat/domain';
+import { SETTLEMENT_BATCH_MAX_BYTES, settlementBatchProblem } from '@shareat/domain/files/limits';
 
 /**
  * T-282 / DEF-317 — the framework must never be the layer that refuses a file the domain accepts.
@@ -80,6 +81,18 @@ describe('T-282 / DEF-317 — Server Action body limit vs the domain upload limi
     const largestPurpose = Math.max(...Object.values(PURPOSE_LIMITS).map((l) => l.maxBytes));
     // What the framework would have enforced with the key absent, against what the domain allows.
     expect(NEXT_DEFAULT_BYTES).toBeLessThan(largestPurpose);
+  });
+
+  it('T-511 S8a: the settlement upload screen stops a batch over 20 MB itself, under the body limit and above one file [kills: a 413 the person cannot read]', () => {
+    const declaredBytes = parseSize(declaredBodySizeLimit(source));
+    expect(SETTLEMENT_BATCH_MAX_BYTES).toBe(20 * 1024 * 1024);
+    expect(SETTLEMENT_BATCH_MAX_BYTES).toBeLessThan(declaredBytes);
+    expect(SETTLEMENT_BATCH_MAX_BYTES).toBeGreaterThan(PURPOSE_LIMITS.channel_settlement_file.maxBytes);
+    expect(settlementBatchProblem([SETTLEMENT_BATCH_MAX_BYTES])).toBeNull();
+    expect(settlementBatchProblem([SETTLEMENT_BATCH_MAX_BYTES, 1])).toBe(
+      'These files together are 20.0 MB, over the 20 MB the upload can carry at once. Choose fewer files and upload the rest in a second go.',
+    );
+    expect(settlementBatchProblem([3 * 1024 * 1024, 3 * 1024 * 1024])).toBeNull();
   });
 
   it('the 1 MB default would have refused a receipt photo the domain accepts', () => {
