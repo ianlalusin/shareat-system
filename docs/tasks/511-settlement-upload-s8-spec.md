@@ -6,13 +6,13 @@ Branch `lane/t511-fp-lipa-nov11` (worktree `wt-fpnov`, base origin/main c7c5275)
 
 ## What the real file is (measured 15 Nov, Sonnet probe + my own read)
 Zip `lipa nov 11.zip` = 4 pairs (invoice workbook `.xls` + `.pdf`), store Lipa, partner code O6JZ. The `.xls` files are really OOXML.
-- `20261107_200691218807` — weekly statement, 1–7 Nov, 255 order rows, sheets Appendix A (34 cols), B (7 CPC lines + Platform Fee), **C**.
-- `20261031_200223033317` (+89.29, official doc 2000000005092538), `…200711317519` (+89.29, doc 2000000005094869), `…200372998561`
-  (−89.29, doc 3000000000090835, "Incorrect Invoice Amount Reversal: 200223033317"): charge-only PandaGO invoices, same order date 31 Oct.
+- `20261107_299999000010` — weekly statement, 1–7 Nov, 255 order rows, sheets Appendix A (34 cols), B (7 CPC lines + Platform Fee), **C**.
+- `20261031_299999000001` (+89.29, official doc 2999999900000001), `…299999000003` (+89.29, doc 2999999900000003), `…299999000002`
+  (−89.29, doc 3999999900000002, "Incorrect Invoice Amount Reversal: 299999000001"): charge-only PandaGO invoices, same order date 31 Oct.
 - **Appendix C** of the weekly = "Outstanding Amount From Previous Periods": rows `Invoice Number | Invoice Date | Invoice Period | Invoice
-  Amount | Remaining Amount` = (2000000005092538, −100), (3000000000090835, +100), (2000000005094869, −100). Net −100. These numbers are the
+  Amount | Remaining Amount` = (2999999900000001, −100), (3999999900000002, +100), (2999999900000003, −100). Net −100. These numbers are the
   three small invoices' official document numbers. Foodpanda netted the open 100 (the re-bill) out of this payout.
-- Printed bank amount (PDF) 60,760.98 = Σ per-order balance 62,727.35 − own period charges with 12% VAT 1,866.35 (net 1,666.38 + VAT 199.97)
+- Printed bank amount (PDF) 60,303.98 = Σ per-order balance 62,000.00 − own period charges with 12% VAT 1,596.00 (net 1,425.00 + VAT 171.00)
   − Appendix C net 100.00 − 0.02 rounding.
 
 ## What fails today
@@ -59,9 +59,9 @@ Decisions (mine, flagged to BOSS/Ian in the hand-back):
    charge totals, else blocker `prior_items_mismatch` in plain words ("Foodpanda says this payout settles earlier items worth X, but the
    charges on file add up to Y"). A listed document with no charge on file, or on file but not booked, is a blocker in plain words (upload /
    book it first; reject the day is the escape). Already-netted matches are informational (no double net). `chargeNetting` unchanged.
-6. **Screen.** Carrier note and the charges panel list the earlier-invoice charges ("From earlier invoices: invoice 200711317519 … 100.00").
+6. **Screen.** Carrier note and the charges panel list the earlier-invoice charges ("From earlier invoices: invoice 299999000003 … 100.00").
    `carrierNote` wording updated; five blocker/words entries added to `words.ts`; COMMANDS/labels unchanged.
-7. Worked example (a test to the centavo, all three small charges booked first): weekly deposit total 60,760.98 = 62,727.35 − 1,866.35 −
+7. Worked example (a test to the centavo, all three small charges booked first): weekly deposit total 60,303.98 = 62,000.00 − 1,596.00 −
    100.00 − 0.02 rounding; the three small charges link to that settlement; 1220 has no leftover from them. If the 0.02 lands elsewhere than
    the S3 rounding line, report it, do not hide it. Negative controls: C lists a document not on file → blocked; C amount ≠ charge totals →
    blocked; re-run approve → no second netting.

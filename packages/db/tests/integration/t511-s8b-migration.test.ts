@@ -108,7 +108,7 @@ describe('T-511 S8b / 0260 - settlement_other_lines.official_document', () => {
     const s = await side();
     const row = (doc: string | null) => (tx: Tx) =>
       tx`insert into settlement_other_lines (org_id, upload_id, kind, booked_as, amount, vat_amount, official_document) values (${s.orgId}, ${s.upload}, 'period_charge', 'none', '100.00', '12.00', ${doc})`;
-    await accepted(row('2000000005092538'), 'a real document number');
+    await accepted(row('2999999900000001'), 'a real document number');
     await accepted(row(null), 'no document number');
     await accepted(row('2'.repeat(40)), '40 characters');
     await refusedWith(row(''), '23514', 'an empty document number');
@@ -124,7 +124,7 @@ describe('T-511 S8b / 0260 - settlement_other_lines.official_document', () => {
     expect(def).not.toMatch(/UNIQUE/i);
     const s = await side();
     const same = (tx: Tx) =>
-      tx`insert into settlement_other_lines (org_id, upload_id, kind, booked_as, amount, official_document) select ${s.orgId}, ${s.upload}, 'period_charge', 'none', '1.00', '2000000005092538' from generate_series(1, 2)`;
+      tx`insert into settlement_other_lines (org_id, upload_id, kind, booked_as, amount, official_document) select ${s.orgId}, ${s.upload}, 'period_charge', 'none', '1.00', '2999999900000001' from generate_series(1, 2)`;
     await accepted(same, 'two lines with one document number');
   });
 });
@@ -146,7 +146,7 @@ describe('T-511 S8b / 0260 - settlement_uploads.prior_items', () => {
     const [row] = await sql<{ prior_items: unknown }[]>`select prior_items from settlement_uploads where id = ${s.upload}`;
     expect(row!.prior_items).toEqual([]);
     const set = (v: string) => (tx: Tx) => tx`update settlement_uploads set prior_items = ${v}::text::jsonb where id = ${s.upload}`;
-    await accepted(set('[{"document":"2000000005092538","date":"2026-10-31","amount":"-100.00"}]'), 'an array of items');
+    await accepted(set('[{"document":"2999999900000001","date":"2026-10-31","amount":"-100.00"}]'), 'an array of items');
     await refusedWith(set('{"document":"x"}'), '23514', 'an object');
     await refusedWith(set('"x"'), '23514', 'a string');
     await refusedWith(set('5'), '23514', 'a number');
@@ -169,7 +169,7 @@ describe('T-511 S8b / 0260 - the app role gains exactly one column', () => {
       const value = col === 'kind' ? "'adjustment'" : col === 'booked_as' ? "'marketing'" : col === 'description' ? "'x'" : '2';
       await refusedWith(asApp((tx) => tx.unsafe(`update settlement_other_lines set ${col} = ${value} where id = '${line!.id}'`)), '42501', `update ${col} as the app role`);
     }
-    await accepted(asApp((tx) => tx`update settlement_other_lines set official_document = '2000000005092538' where id = ${line!.id}`), 'update official_document as the app role');
+    await accepted(asApp((tx) => tx`update settlement_other_lines set official_document = '2999999900000001' where id = ${line!.id}`), 'update official_document as the app role');
     await accepted(asApp((tx) => tx`select prior_items from settlement_uploads where id = ${s.upload}`), 'select prior_items as the app role');
   });
 });

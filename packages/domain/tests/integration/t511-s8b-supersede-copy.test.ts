@@ -9,7 +9,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
  * docs/tasks/511-settlement-upload-s8-spec.md "S8b" items 3 and 4. Real Postgres, real ingest, real posting.
  *
  *  3  A statement (it read order rows) keeps channel + kind + period as its key. A CHARGE-ONLY invoice (no orders) is superseded only by the SAME invoice number with different bytes,
- *     never by period: the two real small invoices (200223033317 and 200711317519, the same order date) both stay current. A re-issue of one invoice, or the same workbook
+ *     never by period: the two real small invoices (299999000001 and 299999000003, the same order date) both stay current. A re-issue of one invoice, or the same workbook
  *     uploaded alone after it came out of a many-invoice zip, supersedes the earlier copy.
  *  4  Two charges that both carry a document number are copies only when the numbers are equal AND the old figures (date, net, description) match: the original (+100), its
  *     reversal (-100) and the re-bill (+100) all book; a re-issue of the original is still refused; a charge with no document keeps the old rule.
@@ -24,7 +24,7 @@ import { closeDb } from '@shareat/db';
 import { ingestSettlementUpload, inMemoryDriver, setStorageDriver } from '@shareat/domain';
 import { zipBytes } from '../unit/t511-s3-helpers';
 import { fpPriorRow } from '../unit/t511-s3-helpers';
-import { REAL_DOCS, REAL_INVOICES, asOrg, entryCount, ingest, netDebit, postCharge, sentenceOf, setDestination, smallInvoice, weekly, zipFile, type SmallInvoice } from './_fixtures/t511-s8b-world';
+import { TEST_DOCS, TEST_INVOICES, asOrg, entryCount, ingest, netDebit, postCharge, sentenceOf, setDestination, smallInvoice, weekly, zipFile, type SmallInvoice } from './_fixtures/t511-s8b-world';
 import { s7World } from './_fixtures/t511-s7a-world';
 
 const sql = postgres(url, { max: 6 });
@@ -36,9 +36,9 @@ afterAll(async () => {
 });
 
 /** The real descriptions: a PandaGO row names its order date month-first, so it carries a date and a period (and is a `pandago` line). */
-const PANDAGO = 'PandaGO Order-10.31.2026-o6jz-xgu1tm';
-const real = (which: keyof typeof REAL_INVOICES, net: number, over: Partial<SmallInvoice> = {}): SmallInvoice => ({
-  invoice: REAL_INVOICES[which], doc: REAL_DOCS[which], net, description: PANDAGO, ...over,
+const PANDAGO = 'PandaGO Order-10.31.2026-zz99-test01';
+const real = (which: keyof typeof TEST_INVOICES, net: number, over: Partial<SmallInvoice> = {}): SmallInvoice => ({
+  invoice: TEST_INVOICES[which], doc: TEST_DOCS[which], net, description: PANDAGO, ...over,
 });
 
 interface UploadRow { id: string; invoice_number: string; superseded_by: string | null; orders_read: number; period_from: string | null; period_to: string | null }
@@ -50,12 +50,12 @@ const lineOf = async (orgId: string, doc: string, uploadId?: string): Promise<st
     select ol.id::text as id from settlement_other_lines ol where ol.org_id = ${orgId} and ol.official_document = ${doc} ${uploadId ? sql`and ol.upload_id = ${uploadId}` : sql``} order by ol.id desc limit 1`)[0]!.id;
 
 describe('S8b (3) supersede: a charge-only invoice is superseded only by its own invoice number', () => {
-  it('the two real small invoices of one order date (200223033317 and 200711317519) both stay current, each with its charge [kills: a period key that replaces the first invoice by the second (the S4 behaviour on a real file)]', async () => {
+  it('the two real small invoices of one order date (299999000001 and 299999000003) both stay current, each with its charge [kills: a period key that replaces the first invoice by the second (the S4 behaviour on a real file)]', async () => {
     const w = await s7World(sql, 's8b-sup1', { loanPeriods: false });
     await ingest(w, w.managerA, zipFile(smallInvoice(real('original', 89.29))));
     await ingest(w, w.managerA, zipFile(smallInvoice(real('rebill', 89.29))));
     const ups = await uploadsOf(w.orgId);
-    expect(ups.map((u) => [u.invoice_number, u.superseded_by])).toEqual([[REAL_INVOICES.original, null], [REAL_INVOICES.rebill, null]]);
+    expect(ups.map((u) => [u.invoice_number, u.superseded_by])).toEqual([[TEST_INVOICES.original, null], [TEST_INVOICES.rebill, null]]);
     // the same period on both, which is exactly what used to make one replace the other
     expect([ups[0]!.period_from, ups[0]!.period_to]).toEqual(['2026-10-31', '2026-10-31']);
     expect([ups[1]!.period_from, ups[1]!.period_to]).toEqual(['2026-10-31', '2026-10-31']);
@@ -90,20 +90,20 @@ describe('S8b (3) supersede: a charge-only invoice is superseded only by its own
     const ma = (await openSettlementZipMembers(a))[0]!;
     const mb = (await openSettlementZipMembers(b))[0]!;
     const big = zipBytes([
-      { name: `20261031_${REAL_INVOICES.original}.xls`, data: ma.workbook },
-      { name: `20261031_${REAL_INVOICES.original}.pdf`, data: ma.pdf! },
-      { name: `20261031_${REAL_INVOICES.rebill}.xls`, data: mb.workbook },
-      { name: `20261031_${REAL_INVOICES.rebill}.pdf`, data: mb.pdf! },
+      { name: `20261031_${TEST_INVOICES.original}.xls`, data: ma.workbook },
+      { name: `20261031_${TEST_INVOICES.original}.pdf`, data: ma.pdf! },
+      { name: `20261031_${TEST_INVOICES.rebill}.xls`, data: mb.workbook },
+      { name: `20261031_${TEST_INVOICES.rebill}.pdf`, data: mb.pdf! },
     ]);
     const out = await ingestSettlementUpload((fn) => asOrg(w.orgId, fn), w.managerA, { bytes: big, contentType: 'application/zip', fileName: 'big.zip' });
     expect(out.every((o) => o.outcome.ok)).toBe(true);
-    expect(await currentInvoices(w.orgId)).toEqual([REAL_INVOICES.original, REAL_INVOICES.rebill].sort());
+    expect(await currentInvoices(w.orgId)).toEqual([TEST_INVOICES.original, TEST_INVOICES.rebill].sort());
     // the first workbook alone (a one-workbook zip with its ORIGINAL bytes: another fingerprint than the mini zip)
     const alone = await ingest(w, w.managerA, zipFile(a));
     expect(alone.alreadyUploaded).toBe(false);
     const ups = await uploadsOf(w.orgId);
-    expect(ups.filter((u) => u.invoice_number === REAL_INVOICES.original).map((u) => u.superseded_by !== null)).toEqual([true, false]);
-    expect(await currentInvoices(w.orgId)).toEqual([REAL_INVOICES.original, REAL_INVOICES.rebill].sort());
+    expect(ups.filter((u) => u.invoice_number === TEST_INVOICES.original).map((u) => u.superseded_by !== null)).toEqual([true, false]);
+    expect(await currentInvoices(w.orgId)).toEqual([TEST_INVOICES.original, TEST_INVOICES.rebill].sort());
   });
 });
 
@@ -113,8 +113,8 @@ describe('S8b (3) supersede: statements keep channel + kind + period', () => {
 
   it('two different statements of the same period: the later one replaces the earlier [kills: the S4 rule lost for statements]', async () => {
     const w = await s7World(sql, 's8b-sup5', { loanPeriods: false });
-    const a = await ingest(w, w.managerA, zipFile(week('200691218801', 'a')));
-    const b = await ingest(w, w.managerA, zipFile(week('200691218802', 'b')));
+    const a = await ingest(w, w.managerA, zipFile(week('299999000021', 'a')));
+    const b = await ingest(w, w.managerA, zipFile(week('299999000022', 'b')));
     const ups = await uploadsOf(w.orgId);
     expect(ups.map((u) => [u.id, u.superseded_by])).toEqual([[a.uploadId, b.uploadId], [b.uploadId, null]]);
   });
@@ -122,13 +122,13 @@ describe('S8b (3) supersede: statements keep channel + kind + period', () => {
   it('a charge-only invoice is neither replaced by a statement nor replaces one, even with the same period [kills: the statement key reaching charge-only uploads]', async () => {
     const w = await s7World(sql, 's8b-sup6', { loanPeriods: false });
     // a statement whose period is exactly one day (2 Nov) and a charge-only invoice whose charge is dated 2 Nov
-    const stmt = await ingest(w, w.managerA, zipFile(weekly({ invoice: '200691218803', tag: 's', orders: [{ date: '2026-11-02', revenue: 100000n }] }).zip));
-    const small = await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: '200223033399', doc: '2000000005099999', net: 10, description: 'PandaGO Order-11.02.2026-o6jz-aaa' })));
+    const stmt = await ingest(w, w.managerA, zipFile(weekly({ invoice: '299999000023', tag: 's', orders: [{ date: '2026-11-02', revenue: 100000n }] }).zip));
+    const small = await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: '299999000099', doc: '2000000005099999', net: 10, description: 'PandaGO Order-11.02.2026-o6jz-aaa' })));
     expect(small.alreadyUploaded).toBe(false);
     const ups = await uploadsOf(w.orgId);
     expect(ups.map((u) => [u.id, u.superseded_by])).toEqual([[stmt.uploadId, null], [small.uploadId, null]]);
     // and a second statement of that same period still replaces only the first statement
-    const stmt2 = await ingest(w, w.managerA, zipFile(weekly({ invoice: '200691218804', tag: 's2', orders: [{ date: '2026-11-02', revenue: 100000n }] }).zip));
+    const stmt2 = await ingest(w, w.managerA, zipFile(weekly({ invoice: '299999000024', tag: 's2', orders: [{ date: '2026-11-02', revenue: 100000n }] }).zip));
     const after = await uploadsOf(w.orgId);
     expect(after.map((u) => [u.id, u.superseded_by])).toEqual([[stmt.uploadId, stmt2.uploadId], [small.uploadId, null], [stmt2.uploadId, null]]);
   });
@@ -138,10 +138,10 @@ describe('S8b (4) the duplicate-copy check keys on the official document number'
   it('the original (+100), its reversal (-100) and the re-bill (+100) all book; 1220 ends at -100.00 against 6400 +100.00 (three charges, one net cost) [kills: the re-bill refused as a copy of the original; a reversal refused]', async () => {
     const w = await s7World(sql, 's8b-copy1', { loanPeriods: false });
     // bookable twins of the real three: same date, same description for the original and the re-bill (what made the old rule refuse it)
-    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: REAL_INVOICES.original, doc: REAL_DOCS.original, net: 89.29 })));
-    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: REAL_INVOICES.reversal, doc: REAL_DOCS.reversal, net: -89.29, description: 'Incorrect Invoice Amount Reversal: 200223033317' })));
-    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: REAL_INVOICES.rebill, doc: REAL_DOCS.rebill, net: 89.29 })));
-    for (const doc of [REAL_DOCS.original, REAL_DOCS.reversal, REAL_DOCS.rebill]) expect((await postCharge(w, w.admin, await lineOf(w.orgId, doc))).posted, doc).toBe(true);
+    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: TEST_INVOICES.original, doc: TEST_DOCS.original, net: 89.29 })));
+    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: TEST_INVOICES.reversal, doc: TEST_DOCS.reversal, net: -89.29, description: 'Incorrect Invoice Amount Reversal: 299999000001' })));
+    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: TEST_INVOICES.rebill, doc: TEST_DOCS.rebill, net: 89.29 })));
+    for (const doc of [TEST_DOCS.original, TEST_DOCS.reversal, TEST_DOCS.rebill]) expect((await postCharge(w, w.admin, await lineOf(w.orgId, doc))).posted, doc).toBe(true);
     const rows = await sql<{ total_amount: string; net_amount: string; vat_amount: string }[]>`select total_amount::text, net_amount::text, vat_amount::text from channel_period_charges where org_id = ${w.orgId} order by posted_at, id`;
     expect(rows.map((r) => [r.net_amount, r.vat_amount, r.total_amount])).toEqual([['89.29', '10.71', '100.00'], ['-89.29', '-10.71', '-100.00'], ['89.29', '10.71', '100.00']]);
     expect(await netDebit(sql, w.orgId, '1220')).toBe('-100.00');
@@ -150,11 +150,11 @@ describe('S8b (4) the duplicate-copy check keys on the official document number'
 
   it('a re-issue of the original (same document, other bytes) is refused as a copy once the original is booked; nothing is written; the sentence says so in words [kills: the same charge booked twice; a UUID in the sentence]', async () => {
     const w = await s7World(sql, 's8b-copy2', { loanPeriods: false });
-    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: REAL_INVOICES.original, doc: REAL_DOCS.original, net: 89.29, pdfTag: 'one' })));
-    expect((await postCharge(w, w.admin, await lineOf(w.orgId, REAL_DOCS.original))).posted).toBe(true);
-    const again = await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: REAL_INVOICES.original, doc: REAL_DOCS.original, net: 89.29, pdfTag: 'two' })));
+    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: TEST_INVOICES.original, doc: TEST_DOCS.original, net: 89.29, pdfTag: 'one' })));
+    expect((await postCharge(w, w.admin, await lineOf(w.orgId, TEST_DOCS.original))).posted).toBe(true);
+    const again = await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: TEST_INVOICES.original, doc: TEST_DOCS.original, net: 89.29, pdfTag: 'two' })));
     const entries = await entryCount(sql, w.orgId);
-    const sentence = await sentenceOf(postCharge(w, w.admin, await lineOf(w.orgId, REAL_DOCS.original, again.uploadId)));
+    const sentence = await sentenceOf(postCharge(w, w.admin, await lineOf(w.orgId, TEST_DOCS.original, again.uploadId)));
     expect(sentence).toMatch(/already booked/);
     expect(sentence).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
     expect(await entryCount(sql, w.orgId)).toBe(entries);
@@ -248,21 +248,21 @@ describe('S8b (1, 2) staging keeps the document number on each charge and the ea
     const w = await s7World(sql, 's8b-stage', { loanPeriods: false });
     await setDestination(sql, w, w.fpA);
     const wk = weekly({
-      invoice: '200691218807', tag: 'stage', orders: [{ date: '2026-11-02', revenue: 100000n }, { date: '2026-11-03', revenue: 100000n }],
+      invoice: '299999000010', tag: 'stage', orders: [{ date: '2026-11-02', revenue: 100000n }, { date: '2026-11-03', revenue: 100000n }],
       ads: [{ date: '2026-11-02', net: 10 }], fee: 20, other: [{ category: 'Admin Adjustment Fee', description: 'Admin Adjustment Fee', net: 5 }],
-      prior: [fpPriorRow(REAL_DOCS.original, -100), fpPriorRow(REAL_DOCS.reversal, 100), fpPriorRow(REAL_DOCS.rebill, -100)],
+      prior: [fpPriorRow(TEST_DOCS.original, -100), fpPriorRow(TEST_DOCS.reversal, 100), fpPriorRow(TEST_DOCS.rebill, -100)],
     });
     const r = await ingest(w, w.managerA, zipFile(wk.zip));
     const docs = await sql<{ kind: string; official_document: string | null }[]>`select kind, official_document from settlement_other_lines where org_id = ${w.orgId} and upload_id = ${r.uploadId} order by kind`;
     expect(docs.length).toBeGreaterThanOrEqual(3);
-    expect(docs.every((d) => d.official_document === '2000000005141222')).toBe(true);
+    expect(docs.every((d) => d.official_document === '2999999900000009')).toBe(true);
     const [u] = await sql<{ prior_items: unknown }[]>`select prior_items from settlement_uploads where id = ${r.uploadId}`;
     expect(u!.prior_items).toEqual([
-      { document: REAL_DOCS.original, date: '2026-10-31', amount: '-100.00', remaining: '-100.00' },
-      { document: REAL_DOCS.reversal, date: '2026-10-31', amount: '100.00', remaining: '100.00' },
-      { document: REAL_DOCS.rebill, date: '2026-10-31', amount: '-100.00', remaining: '-100.00' },
+      { document: TEST_DOCS.original, date: '2026-10-31', amount: '-100.00', remaining: '-100.00' },
+      { document: TEST_DOCS.reversal, date: '2026-10-31', amount: '100.00', remaining: '100.00' },
+      { document: TEST_DOCS.rebill, date: '2026-10-31', amount: '-100.00', remaining: '-100.00' },
     ]);
-    const small = await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: '200223033399', doc: '2000000005099999', net: 10 })));
+    const small = await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: '299999000099', doc: '2000000005099999', net: 10 })));
     const [s] = await sql<{ prior_items: unknown }[]>`select prior_items from settlement_uploads where id = ${small.uploadId}`;
     expect(s!.prior_items).toEqual([]);
   });

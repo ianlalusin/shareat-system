@@ -1,7 +1,7 @@
 /**
  * T-511 S8b (BUILDER) - the world the earlier-invoice tests run in (NOT a test file). It builds on the S7a world (Lipa with its real Foodpanda code O6JZ, a destination
  * account, Oct and Nov 2026 open, managers, sales days verified through the real domain) and adds the files of the REAL "lipa nov 11" zip, in miniature:
- *  - a charge-only invoice (Appendix B alone, one row with its OFFICIAL document number), like 200223033317 / 200372998561 / 200711317519,
+ *  - a charge-only invoice (Appendix B alone, one row with its OFFICIAL document number), like 299999000001 / 299999000002 / 299999000003,
  *  - a weekly statement with order rows whose identities hold, Appendix B charges that carry the weekly's own document number, and an Appendix C of earlier items.
  * Bytes only; staging goes through the real `ingestSettlementFile`.
  */
@@ -12,9 +12,9 @@ import { LIPA_FP } from './t511-s5-world';
 export * from './t511-s7a-world';
 
 /** The official document numbers printed on the three small invoices of the real file (the original, its reversal and the re-bill), each 89.29 + 12% VAT = 100.00. */
-export const REAL_DOCS = { original: '2000000005092538', reversal: '3000000000090835', rebill: '2000000005094869' } as const;
+export const TEST_DOCS = { original: '2999999900000001', reversal: '3999999900000002', rebill: '2999999900000003' } as const;
 /** The invoice numbers of the same three. */
-export const REAL_INVOICES = { original: '200223033317', reversal: '200372998561', rebill: '200711317519' } as const;
+export const TEST_INVOICES = { original: '299999000001', reversal: '299999000002', rebill: '299999000003' } as const;
 
 let seq = 0;
 export const stamp = (p: string): string => `${p}-${Date.now()}-${++seq}`;
@@ -102,7 +102,7 @@ export interface Weekly {
 
 /** A weekly statement zip for Lipa's real vendor code. Returns the zip and the sum of the order balances in centavos. */
 export function weekly(o: Weekly): { zip: Buffer; balance: bigint; withholding: bigint } {
-  const doc = o.doc ?? '2000000005141222';
+  const doc = o.doc ?? '2999999900000009';
   const t = o.tag ?? stamp('wk');
   let balance = 0n;
   let withholding = 0n;

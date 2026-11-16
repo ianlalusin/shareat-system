@@ -21,7 +21,7 @@ import { closeDb } from '@shareat/db';
 import { inMemoryDriver, setStorageDriver } from '@shareat/domain';
 import { fpPriorRow } from '../unit/t511-s3-helpers';
 import {
-  MALVAR_FP, REAL_DOCS, REAL_INVOICES, approve, auditRows, blockersOf, chargeLinks, entryCount, ingest, lineOn, netDebit, postCharge, postedDay, s7World, sentenceOf, setDestination, settlementFull, settlementsOf,
+  MALVAR_FP, TEST_DOCS, TEST_INVOICES, approve, auditRows, blockersOf, chargeLinks, entryCount, ingest, lineOn, netDebit, postCharge, postedDay, s7World, sentenceOf, setDestination, settlementFull, settlementsOf,
   smallInvoice, weekly, zipFile, lineOfDoc, type S7World,
 } from './_fixtures/t511-s8b-world';
 
@@ -35,8 +35,8 @@ afterAll(async () => {
 
 const D1 = '2026-11-02';
 const D2 = '2026-11-03';
-const PRIOR = [fpPriorRow(REAL_DOCS.original, -100), fpPriorRow(REAL_DOCS.reversal, 100), fpPriorRow(REAL_DOCS.rebill, -100)];
-const PANDAGO = 'PandaGO Order-10.31.2026-o6jz-xgu1tm';
+const PRIOR = [fpPriorRow(TEST_DOCS.original, -100), fpPriorRow(TEST_DOCS.reversal, 100), fpPriorRow(TEST_DOCS.rebill, -100)];
+const PANDAGO = 'PandaGO Order-10.31.2026-zz99-test01';
 
 interface Setup {
   w: S7World;
@@ -50,17 +50,17 @@ async function setup(hint: string, o: { prior?: Parameters<typeof weekly>[0]['pr
   await setDestination(sql, w, w.fpA);
   const small = [
     { which: 'original' as const, net: 89.29, description: o.real === false ? undefined : PANDAGO },
-    { which: 'reversal' as const, net: -89.29, description: 'Incorrect Invoice Amount Reversal: 200223033317' },
+    { which: 'reversal' as const, net: -89.29, description: 'Incorrect Invoice Amount Reversal: 299999000001' },
     { which: 'rebill' as const, net: 89.29, description: o.real === false ? undefined : PANDAGO },
   ];
   // the REAL descriptions are the default now (S8b item 9: a "Delivery Service Fees" row books, "PandaGO Order-..." or not); `cod` makes the re-bill a PandaGO cash-on-delivery row instead
   for (const s of small) {
     const category = o.cod && s.which === 'rebill' ? 'Pandago COD' : undefined;
-    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: REAL_INVOICES[s.which], doc: REAL_DOCS[s.which], net: s.net, ...(s.description ? { description: s.description } : {}), ...(category ? { category } : {}) })));
+    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: TEST_INVOICES[s.which], doc: TEST_DOCS[s.which], net: s.net, ...(s.description ? { description: s.description } : {}), ...(category ? { category } : {}) })));
   }
-  for (const which of o.book ?? ['original', 'reversal', 'rebill']) expect((await postCharge(w, w.admin, await lineOfDoc(sql, w.orgId, REAL_DOCS[which]))).posted).toBe(true);
+  for (const which of o.book ?? ['original', 'reversal', 'rebill']) expect((await postCharge(w, w.admin, await lineOfDoc(sql, w.orgId, TEST_DOCS[which]))).posted).toBe(true);
   for (const d of [D1, D2]) await postedDay(w, w.fpA, d, '1000.00');
-  await ingest(w, w.managerA, zipFile(weekly({ invoice: '200691218807', tag: o.tag ?? hint, orders: [{ date: D1, revenue: 100000n }, { date: D2, revenue: 100000n }], prior: o.prior ?? PRIOR }).zip));
+  await ingest(w, w.managerA, zipFile(weekly({ invoice: '299999000010', tag: o.tag ?? hint, orders: [{ date: D1, revenue: 100000n }, { date: D2, revenue: 100000n }], prior: o.prior ?? PRIOR }).zip));
   return { w, d1: (await lineOn(sql, w.orgId, w.fpA, D1)).id, d2: (await lineOn(sql, w.orgId, w.fpA, D2)).id };
 }
 
@@ -106,7 +106,7 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
     await approve(w, w.managerA2, s.d2);
     expect(await chargeLinks(sql, w.orgId)).toHaveLength(3);
     for (const d of ['2026-11-09', '2026-11-10']) await postedDay(w, w.fpA, d, '1000.00');
-    await ingest(w, w.managerA, zipFile(weekly({ invoice: '200691218808', tag: 'twice-2', orders: [{ date: '2026-11-09', revenue: 100000n }, { date: '2026-11-10', revenue: 100000n }], prior: PRIOR }).zip));
+    await ingest(w, w.managerA, zipFile(weekly({ invoice: '299999000011', tag: 'twice-2', orders: [{ date: '2026-11-09', revenue: 100000n }, { date: '2026-11-10', revenue: 100000n }], prior: PRIOR }).zip));
     const n1 = await lineOn(sql, w.orgId, w.fpA, '2026-11-09');
     const n2 = await lineOn(sql, w.orgId, w.fpA, '2026-11-10');
     expect(await codes(s, n2.id)).toEqual([]);
@@ -118,7 +118,7 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
   });
 
   it('a document with no charge on file blocks the carrier in plain words; approving it is refused with that sentence and writes nothing; the other day is not held; rejecting the carrier is the way out [kills: a payout booked around a hole (it would show as a 100.00 variance); a UUID in the sentence]', async () => {
-    const s = await setup('missing', { prior: [fpPriorRow(REAL_DOCS.original, -100), fpPriorRow(REAL_DOCS.reversal, 100), fpPriorRow('2000000009999990', -100)] });
+    const s = await setup('missing', { prior: [fpPriorRow(TEST_DOCS.original, -100), fpPriorRow(TEST_DOCS.reversal, 100), fpPriorRow('2000000009999990', -100)] });
     const { w } = s;
     expect(await codes(s, s.d1)).toEqual([]);
     const blockers = await blockersWithoutOrder(w, s.d2);
@@ -132,11 +132,11 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
   });
 
   it('an amount that does not match the charges on file blocks with both sums; nothing is written [kills: a payout that guesses; the cross-check with the sign of the printed amount ignored]', async () => {
-    const s = await setup('mismatch', { prior: [fpPriorRow(REAL_DOCS.original, -100), fpPriorRow(REAL_DOCS.reversal, 100), fpPriorRow(REAL_DOCS.rebill, -90)] });
+    const s = await setup('mismatch', { prior: [fpPriorRow(TEST_DOCS.original, -100), fpPriorRow(TEST_DOCS.reversal, 100), fpPriorRow(TEST_DOCS.rebill, -90)] });
     const { w } = s;
     const blockers = await blockersWithoutOrder(w, s.d2);
     expect(blockers.map((b) => b.code)).toEqual(['prior_items_mismatch']);
-    expect(blockers[0]!.sentence).toBe('Foodpanda says this payout settles earlier items worth 90.00 deducted, but the charges on file add up to 100.00 deducted (document 2000000005094869). Check that the right invoices were uploaded, or reject this day.');
+    expect(blockers[0]!.sentence).toBe('Foodpanda says this payout settles earlier items worth 90.00 deducted, but the charges on file add up to 100.00 deducted (document 2999999900000003). Check that the right invoices were uploaded, or reject this day.');
     await approve(w, w.managerA2, s.d1);
     const before = await snapshot(w.orgId);
     await expect(approve(w, w.managerA2, s.d2)).rejects.toMatchObject({ userMessage: blockers[0]!.sentence });
@@ -148,11 +148,11 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
     const { w } = s;
     const blockers = await blockersWithoutOrder(w, s.d2);
     expect(blockers.map((b) => b.code)).toEqual(['prior_item_not_booked']);
-    expect(blockers[0]!.sentence).toContain(REAL_DOCS.rebill);
+    expect(blockers[0]!.sentence).toContain(TEST_DOCS.rebill);
     expect(blockers[0]!.sentence).toMatch(/Book it first/);
     await approve(w, w.managerA2, s.d1);
     await expect(approve(w, w.managerA2, s.d2)).rejects.toMatchObject({ userMessage: blockers[0]!.sentence });
-    expect((await postCharge(w, w.admin, await lineOfDoc(sql, w.orgId, REAL_DOCS.rebill))).posted).toBe(true);
+    expect((await postCharge(w, w.admin, await lineOfDoc(sql, w.orgId, TEST_DOCS.rebill))).posted).toBe(true);
     expect(await codes(s, s.d2)).toEqual([]);
     expect((await approve(w, w.managerA2, s.d2)).chargeIds).toHaveLength(3);
   });
@@ -161,7 +161,7 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
     const s = await setup('pandago', { book: [] });
     const { w } = s;
     expect((await blockersWithoutOrder(w, s.d2)).map((b) => b.code), 'unbooked: held, and told to book it').toEqual(['prior_item_not_booked', 'prior_item_not_booked', 'prior_item_not_booked']);
-    for (const doc of [REAL_DOCS.original, REAL_DOCS.reversal, REAL_DOCS.rebill]) expect((await postCharge(w, w.admin, await lineOfDoc(sql, w.orgId, doc))).posted, doc).toBe(true);
+    for (const doc of [TEST_DOCS.original, TEST_DOCS.reversal, TEST_DOCS.rebill]) expect((await postCharge(w, w.admin, await lineOfDoc(sql, w.orgId, doc))).posted, doc).toBe(true);
     const dates = await sql<{ charge_date: string; entry_date: string }[]>`select charge_date::text, entry_date::text from channel_period_charges where org_id = ${w.orgId} order by charge_date`;
     expect(dates.filter((d) => d.charge_date === '2026-10-31')).toHaveLength(2); // the two PandaGO orders; the reversal row has no date of its own (the invoice date)
     expect(await codes(s, s.d2)).toEqual([]);
@@ -177,9 +177,9 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
     const { w } = s;
     const blockers = await blockersWithoutOrder(w, s.d2);
     expect(blockers.map((b) => b.code)).toEqual(['prior_item_cannot_book']);
-    expect(blockers[0]!.sentence).toContain(REAL_DOCS.rebill);
+    expect(blockers[0]!.sentence).toContain(TEST_DOCS.rebill);
     expect(blockers[0]!.sentence).toMatch(/does not book from a file/);
-    const sentence = await sentenceOf(postCharge(w, w.admin, await lineOfDoc(sql, w.orgId, REAL_DOCS.rebill)));
+    const sentence = await sentenceOf(postCharge(w, w.admin, await lineOfDoc(sql, w.orgId, TEST_DOCS.rebill)));
     expect(sentence).toMatch(/not a charge without a sales day|never booked from a statement/);
   });
 
@@ -187,10 +187,10 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
     const w = await s7World(sql, 's8b-chan', { loanPeriods: false });
     await setDestination(sql, w, w.fpA);
     // Malvar's own Foodpanda channel books a charge whose document number is the one Lipa's weekly prints
-    await ingest(w, w.admin, zipFile(smallInvoice({ invoice: "200223033399", doc: REAL_DOCS.original, net: 89.29, vendor: MALVAR_FP })));
-    expect((await postCharge(w, w.admin, await lineOfDoc(sql, w.orgId, REAL_DOCS.original))).posted).toBe(true);
+    await ingest(w, w.admin, zipFile(smallInvoice({ invoice: "299999000099", doc: TEST_DOCS.original, net: 89.29, vendor: MALVAR_FP })));
+    expect((await postCharge(w, w.admin, await lineOfDoc(sql, w.orgId, TEST_DOCS.original))).posted).toBe(true);
     for (const d of [D1, D2]) await postedDay(w, w.fpA, d, '1000.00');
-    await ingest(w, w.managerA, zipFile(weekly({ invoice: '200691218807', tag: 'chan', orders: [{ date: D1, revenue: 100000n }, { date: D2, revenue: 100000n }], prior: [fpPriorRow(REAL_DOCS.original, -100)] }).zip));
+    await ingest(w, w.managerA, zipFile(weekly({ invoice: '299999000010', tag: 'chan', orders: [{ date: D1, revenue: 100000n }, { date: D2, revenue: 100000n }], prior: [fpPriorRow(TEST_DOCS.original, -100)] }).zip));
     const d2 = await lineOn(sql, w.orgId, w.fpA, D2);
     const blockers = await blockersWithoutOrder(w, d2.id);
     expect(blockers.map((b) => b.code)).toEqual(['prior_item_not_uploaded']);
@@ -201,7 +201,7 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
     const s = await setup('reissue');
     const { w } = s;
     // the same weekly (same figures, same invoice number) now printing two of the three items; its day lines are "unchanged", so they keep their first upload as the source
-    const second = await ingest(w, w.managerA, zipFile(weekly({ invoice: '200691218807', tag: 'reissue-2', orders: [{ date: D1, revenue: 100000n }, { date: D2, revenue: 100000n }], prior: PRIOR.slice(0, 2) }).zip));
+    const second = await ingest(w, w.managerA, zipFile(weekly({ invoice: '299999000010', tag: 'reissue-2', orders: [{ date: D1, revenue: 100000n }, { date: D2, revenue: 100000n }], prior: PRIOR.slice(0, 2) }).zip));
     expect(second.alreadyUploaded).toBe(false);
     expect(second.daysStaged, 'the figures did not change').toBe(0);
     const [first] = await sql<{ source_upload_id: string }[]>`select source_upload_id::text from settlement_day_lines where id = ${s.d2}`;
@@ -218,7 +218,7 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
     const s = await setup('smallreissue');
     const { w } = s;
     // the rebill invoice comes again (same invoice number and document, other bytes): a second staged line of a charge that is already booked
-    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: REAL_INVOICES.rebill, doc: REAL_DOCS.rebill, net: 89.29, description: PANDAGO, pdfTag: 'again' })));
+    await ingest(w, w.managerA, zipFile(smallInvoice({ invoice: TEST_INVOICES.rebill, doc: TEST_DOCS.rebill, net: 89.29, description: PANDAGO, pdfTag: 'again' })));
     expect(await codes(s, s.d2)).toEqual([]);
     await approve(w, w.managerA2, s.d1);
     const r = await approve(w, w.managerA2, s.d2);
@@ -228,11 +228,11 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
   });
 
   it('audit 1: an item Foodpanda only PARTLY settled (Remaining Amount is not the Amount) holds the carrier in plain words and approve writes nothing [kills: a half-settled earlier charge netted as whole]', async () => {
-    const s = await setup('partly', { prior: [fpPriorRow(REAL_DOCS.original, -100), fpPriorRow(REAL_DOCS.reversal, 100), fpPriorRow(REAL_DOCS.rebill, -100, '31.10.2026', -40)] });
+    const s = await setup('partly', { prior: [fpPriorRow(TEST_DOCS.original, -100), fpPriorRow(TEST_DOCS.reversal, 100), fpPriorRow(TEST_DOCS.rebill, -100, '31.10.2026', -40)] });
     const { w } = s;
     const blockers = await blockersWithoutOrder(w, s.d2);
     expect(blockers.map((b) => b.code)).toEqual(['prior_item_partly_settled']);
-    expect(blockers[0]!.sentence).toBe(`Foodpanda only partly settled an earlier item (document ${REAL_DOCS.rebill}); this cannot be booked automatically. Reject the day or ask for help.`);
+    expect(blockers[0]!.sentence).toBe(`Foodpanda only partly settled an earlier item (document ${TEST_DOCS.rebill}); this cannot be booked automatically. Reject the day or ask for help.`);
     await approve(w, w.managerA2, s.d1);
     const before = await snapshot(w.orgId);
     await expect(approve(w, w.managerA2, s.d2)).rejects.toMatchObject({ userMessage: blockers[0]!.sentence });
@@ -240,18 +240,18 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
   });
 
   it('audit 2: the check is per document: Appendix C (original -300, re-bill +100) against books original +100 and re-bill +100 add up the same in total and are still blocked, once per document [kills: one total over all items]', async () => {
-    const s = await setup('perdoc', { prior: [fpPriorRow(REAL_DOCS.original, -300), fpPriorRow(REAL_DOCS.rebill, 100)], book: ['original', 'reversal', 'rebill'] });
+    const s = await setup('perdoc', { prior: [fpPriorRow(TEST_DOCS.original, -300), fpPriorRow(TEST_DOCS.rebill, 100)], book: ['original', 'reversal', 'rebill'] });
     const blockers = await blockersWithoutOrder(s.w, s.d2);
     expect(blockers.map((b) => b.code)).toEqual(['prior_items_mismatch', 'prior_items_mismatch']);
-    expect(blockers[0]!.sentence).toContain(`(document ${REAL_DOCS.original})`);
-    expect(blockers[1]!.sentence).toContain(`(document ${REAL_DOCS.rebill})`);
+    expect(blockers[0]!.sentence).toContain(`(document ${TEST_DOCS.original})`);
+    expect(blockers[1]!.sentence).toContain(`(document ${TEST_DOCS.rebill})`);
   });
 
   it('audit 4: a charge staged before document numbers were kept is not "upload that invoice first": the sentence says it was uploaded before numbers were kept and asks for the file again; the repeat upload of the same bytes fills the number and the carrier is free [kills: the wrong instruction for a charge that is on file; a legacy charge matched by nothing]', async () => {
     const s = await setup('legacy', {});
     const { w } = s;
-    const bytes = zipFile(smallInvoice({ invoice: REAL_INVOICES.original, doc: REAL_DOCS.original, net: 89.29, description: PANDAGO }));
-    await sql`update settlement_other_lines ol set official_document = null from settlement_uploads u where u.id = ol.upload_id and u.org_id = ${w.orgId} and u.invoice_number = ${REAL_INVOICES.original}`;
+    const bytes = zipFile(smallInvoice({ invoice: TEST_INVOICES.original, doc: TEST_DOCS.original, net: 89.29, description: PANDAGO }));
+    await sql`update settlement_other_lines ol set official_document = null from settlement_uploads u where u.id = ol.upload_id and u.org_id = ${w.orgId} and u.invoice_number = ${TEST_INVOICES.original}`;
     const blockers = await blockersWithoutOrder(w, s.d2);
     expect(blockers.map((b) => b.code)).toEqual(['prior_item_not_uploaded']);
     expect(blockers[0]!.sentence).toContain('That earlier invoice was uploaded before document numbers were kept. Upload its file again.');
@@ -267,7 +267,7 @@ describe('S8b (5) the carrier day nets the earlier invoices its upload prints', 
     const w = await s7World(sql, 's8b-plain', { loanPeriods: false });
     await setDestination(sql, w, w.fpA);
     for (const d of [D1, D2]) await postedDay(w, w.fpA, d, '1000.00');
-    await ingest(w, w.managerA, zipFile(weekly({ invoice: '200691218807', tag: 'plain', orders: [{ date: D1, revenue: 100000n }, { date: D2, revenue: 100000n }] }).zip));
+    await ingest(w, w.managerA, zipFile(weekly({ invoice: '299999000010', tag: 'plain', orders: [{ date: D1, revenue: 100000n }, { date: D2, revenue: 100000n }] }).zip));
     const d1 = await lineOn(sql, w.orgId, w.fpA, D1);
     const d2 = await lineOn(sql, w.orgId, w.fpA, D2);
     await approve(w, w.managerA2, d1.id);

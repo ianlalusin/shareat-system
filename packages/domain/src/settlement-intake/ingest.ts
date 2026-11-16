@@ -165,7 +165,7 @@ const sameFigures = (line: SettlementDayLineRow, d: StagedDay): boolean => SAME_
  *   - Foodpanda STATEMENT (it read order rows): another statement of the same period. A charge-only invoice is not a statement of that period and is never replaced by one.
  *   - Foodpanda, any file: an upload of the SAME INVOICE NUMBER with different bytes (the same bytes never get here: "already uploaded"). That is a re-issue, or the same workbook
  *     uploaded alone after it came out of a many-invoice zip (S8a): never two current copies of one invoice.
- *   A charge-only invoice is replaced by NOTHING else: two different invoices dated the same day (the real 200223033317 and 200711317519) both stay current.
+ *   A charge-only invoice is replaced by NOTHING else: two different invoices dated the same day (the real 299999000001 and 299999000003) both stay current.
  */
 function replacesUpload(parsed: StoredUpload, u: SettlementUploadRow): boolean {
   if (parsed.platform === 'foodpanda') {

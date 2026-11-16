@@ -92,7 +92,7 @@ describe('the list is short, the detail keeps the sentence', () => {
       ['Foodpanda printed document', 'Earlier items differ'],
     ] as const) {
       expect(src, fragment).toContain(fragment);
-      const sentence = fragment === 'Foodpanda printed document' ? `${fragment} 2000000005092538 more than once on this statement.` : /^Foodpanda (says|only)/.test(fragment) ? `${fragment} 90.00 deducted.` : `Foodpanda settles an earlier item in this payout (document 2000000005092538, deducted 100.00), but ${fragment}.`;
+      const sentence = fragment === 'Foodpanda printed document' ? `${fragment} 2999999900000001 more than once on this statement.` : /^Foodpanda (says|only)/.test(fragment) ? `${fragment} 90.00 deducted.` : `Foodpanda settles an earlier item in this payout (document 2999999900000001, deducted 100.00), but ${fragment}.`;
       expect(shortBlocker(sentence, null)).toBe(words);
       expect(words.split(' ').length).toBeLessThanOrEqual(4);
     }

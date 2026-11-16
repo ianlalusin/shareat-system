@@ -349,7 +349,7 @@ describe('T-511 S2a / 0228 - grants for the app role are column-level (BOSS ruli
       [`update settlement_day_lines set changed_since_booked = true where id = '${fx.dlA}'`, 'settlement_day_lines.changed_since_booked'],
       [`update settlement_loan_lines set is_active = false where id = '${fx.llA}'`, 'settlement_loan_lines.is_active'],
       [`update settlement_other_lines set is_current = false where id = '${fx.olA}'`, 'settlement_other_lines.is_current'],
-      [`update settlement_other_lines set official_document = '2000000005092538' where id = '${fx.olA}'`, 'settlement_other_lines.official_document'],
+      [`update settlement_other_lines set official_document = '2999999900000001' where id = '${fx.olA}'`, 'settlement_other_lines.official_document'],
     ];
     for (const [q, what] of probes) {
       const o = await runAsApp(A.orgId, (tx) => tx.unsafe(q));

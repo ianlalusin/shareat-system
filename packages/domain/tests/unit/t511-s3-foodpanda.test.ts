@@ -484,7 +484,7 @@ describe('readFoodpandaInvoice: generated invoices (the generator itself is prov
   it('Appendix B kinds (S8b item 9): the CATEGORY "Delivery Service Fees" is kind delivery_fee (a PandaGO order row keeps its month-first date, a reversal row has none), any other PandaGO row stays pandago, an unrecognised category is kind other [kills: a PandaGO COD row read as a fee; a reversal row left unbooked]', async () => {
     const charges = [
       fpChargeRow('Delivery Service Fees', 'PandaGO Order-1.05.2026-zz99-abc123', 50),
-      fpChargeRow('Delivery Service Fees', 'Incorrect Invoice Amount Reversal: 200223033317', -50),
+      fpChargeRow('Delivery Service Fees', 'Incorrect Invoice Amount Reversal: 299999000001', -50),
       fpChargeRow('Pandago COD', 'PandaGO Order-12.31.2026-zz99-abc124', -20, '0%'),
       fpChargeRow('Mystery Fee', 'Something we have never seen', 5),
       fpChargeRow('  delivery service FEES ', 'PandaGO Order-2.03.2026-zz99-abc125', 7),
