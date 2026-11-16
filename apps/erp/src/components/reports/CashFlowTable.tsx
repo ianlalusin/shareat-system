@@ -82,9 +82,8 @@ export function CashFlowReconciliationIndicator({
       </p>
       {!reconciles ? (
         <p className="mt-2 text-sm text-danger">
-          This should never happen — a balance-sheet account posted since this design was written
-          may not be classified. Stop and investigate before trusting any other figure on this
-          screen.
+          The two should always match. An account may be missing from this report. Stop and ask
+          for help before trusting any other figure on this screen.
         </p>
       ) : null}
     </div>

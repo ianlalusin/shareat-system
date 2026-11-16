@@ -5,7 +5,7 @@ import { packageCapExcess, unpostedUsageDraftCount, isAfterV1DayFeed, V1_DAY_FEE
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { addDays, formatBusinessDateTime, formatBusinessDayLong, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listActingPersons, getStoreLink } from '../lib';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { canReadAtStore } from '@/lib/can-read-at-store';
 import { postPosCorrectionAction, recheckPosDayAction, reimportSalesDayAction, editSalesDayAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
 import { withOrgPrincipal } from '../../expenses/lib';
@@ -44,7 +44,8 @@ export default async function SalesDayDetailPage({
   const { id } = await params;
   const sp = await withFlash(searchParams);
 
-  const { actor } = await requireSession(`/sales-days/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/sales-days/${id}`);
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
   const day = await withOrgPrincipal(orgId, (tx) => salesDaysRepo.getById(tx, orgId, id));

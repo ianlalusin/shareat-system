@@ -1,6 +1,6 @@
-import { expenseItemLines, expenseItemsReport, unitemisedExpenses, UNITEMISED_NAME } from '@shareat/domain';
+import { expenseItemLines, expenseItemsReport, unitemisedExpenses } from '@shareat/domain';
 import { formatMoney } from '@shareat/core/money';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { reportScope, runReport } from '../lib';
 import { resolveRange, storeColumns } from './range';
 import { EmptyState } from '@/components/reports/EmptyState';
@@ -64,7 +64,7 @@ export default async function ExpenseItemsPage({ searchParams }: { searchParams:
         <h1 className="text-2xl font-semibold">Spending by Item</h1>
         <PageDescription>
           What was spent, by group, category, sub-category and item, from posted expenses only. Each expense is split over the items on
-          its bill; money that matches no item is shown as {UNITEMISED_NAME}.
+          its bill; money that matches no item is listed on its own line.
         </PageDescription>
       </div>
 
@@ -104,7 +104,7 @@ export default async function ExpenseItemsPage({ searchParams }: { searchParams:
             {scope.orgName} ({scope.orgCode})
           </span>
           {' · '}
-          {from} to {to}
+          {formatBusinessDayLong(from)} to {formatBusinessDayLong(to)}
           {' · '}
           Total {formatMoney(report.total)}
         </p>
@@ -131,7 +131,7 @@ export default async function ExpenseItemsPage({ searchParams }: { searchParams:
                 {lines.map((l) => (
                   <LinkRow key={`${l.invoiceId}-${l.lineNo}`}>
                     <Td>
-                      <RowLink href={`/ap/invoices/${l.invoiceId}`}>{l.invoiceDate}</RowLink>
+                      <RowLink href={`/ap/invoices/${l.invoiceId}`}>{formatBusinessDayLong(l.invoiceDate)}</RowLink>
                     </Td>
                     <Td>{storeName.get(l.storeId) ?? 'Store'}</Td>
                     <NumTd>
@@ -159,7 +159,7 @@ export default async function ExpenseItemsPage({ searchParams }: { searchParams:
                   <Th>Date</Th>
                   <Th>Store</Th>
                   <Th numeric>Amount</Th>
-                  <Th numeric>Unitemised part</Th>
+                  <Th numeric>Part not matched to an item</Th>
                   <Th>Particulars</Th>
                 </tr>
               </thead>
@@ -167,7 +167,7 @@ export default async function ExpenseItemsPage({ searchParams }: { searchParams:
                 {loose.map((e) => (
                   <LinkRow key={e.expenseId}>
                     <Td>
-                      <RowLink href={`/ap/invoices/${e.invoiceId}`}>{e.businessDate}</RowLink>
+                      <RowLink href={`/ap/invoices/${e.invoiceId}`}>{formatBusinessDayLong(e.businessDate)}</RowLink>
                     </Td>
                     <Td>{storeName.get(e.storeId) ?? 'Store'}</Td>
                     <NumTd>{formatMoney(e.amount)}</NumTd>

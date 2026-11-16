@@ -88,7 +88,8 @@ const REGISTRY_BEFORE_S4 = 100;
 // T-511 S6a (0242): +3 (two deferred leg-sum validators, channel_settlement_loan_legs_append_only). 66 -> 69; S6b (0243): +1 (sales_day_platform_corrections_append_only). 69 -> 70; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
 // T-511 S6c (0244): +2 (channel_period_charges_append_only, channel_settlement_charge_links_append_only history guards), 70 -> 72; re-measured after rebase on main (0238-0243 present), 8 Nov 2026, BOSS approved.
 // T-565 (0253): +3 (menu_daypart_versions_append_guard history guard; menu_dayparts_version_insert_trg and _update_trg derivations), 72 -> 75; re-measured as Object.keys(TRIGGER_REGISTRY).length = 230 on a tree with 0253 applied.
-const REGISTRY_ADDED_AFTER_S4 = 75;
+// T-584 (0259): +6 (document_template_versions_append_only, issued_document_versions_append_only, issued_document_signatures_append_only, issued_documents_guard history guards; issued_document_versions_sequence, issued_document_signatures_current_version validators), 75 -> 81; Object.keys(TRIGGER_REGISTRY).length 230 -> 236.
+const REGISTRY_ADDED_AFTER_S4 = 81;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;

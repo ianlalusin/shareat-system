@@ -1,4 +1,4 @@
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { POS_EXPORT_MAX_DAYS } from '@shareat/domain';
 import { reportScope } from '../lib';
 import { Page } from '@/components/shell/Page';
@@ -17,9 +17,9 @@ const FILES: { table: string; label: string }[] = [
   { table: 'receipt-line-discounts', label: 'Line discounts' },
   { table: 'payments', label: 'Payments' },
   { table: 'day-closes', label: 'Day closes' },
-  { table: 'day-close-tenders', label: 'Day close tenders' },
+  { table: 'day-close-tenders', label: 'Day close payments' },
   { table: 'table-sessions', label: 'Table sessions' },
-  { table: 'device-events', label: 'Device log' },
+  { table: 'device-events', label: 'Device activity' },
 ];
 
 interface SearchParams {
@@ -47,7 +47,7 @@ export default async function PosDataPage({ searchParams }: { searchParams: Prom
       <div>
         <h1 className="text-2xl font-semibold">POS data download</h1>
         <PageDescription>
-          Download every POS v2 record for one store and date range before the 2027 clean-up. One file per table; open them in Excel. Close the day (Z) before downloading, so every receipt is on its business day.
+          Download every POS record for one store and date range. You get one file per list, and each opens in Excel. Close the day before downloading, so every receipt falls on its own day.
         </PageDescription>
       </div>
 
@@ -83,7 +83,7 @@ export default async function PosDataPage({ searchParams }: { searchParams: Prom
       {storeId ? (
         <>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            {scope.stores.find((s) => s.id === storeId)?.name} · {from} to {to} · at most {POS_EXPORT_MAX_DAYS} days at a time
+            {scope.stores.find((s) => s.id === storeId)?.name} · {formatBusinessDayLong(from)} to {formatBusinessDayLong(to)} · at most {POS_EXPORT_MAX_DAYS} days at a time
           </p>
           <ul className="flex flex-wrap gap-3">
             {FILES.map((f) => (

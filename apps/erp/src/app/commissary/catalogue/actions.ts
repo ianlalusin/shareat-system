@@ -37,9 +37,9 @@ export async function upsertLinkAction(fd: FormData): Promise<void> {
     message =
       status === 'active'
         ? result.customerCreated
-          ? 'Linked. An internal customer record was created so this branch can be named on a trade order.'
+          ? 'Linked. An internal customer record was created so this store can be named on a trade order.'
           : 'Linked.'
-        : 'Link set to inactive — the branch can no longer be mapped or ordered from here.';
+        : 'Link set to inactive — the store can no longer be mapped or ordered from here.';
   } catch (err) {
     return await redirectWithFlash('/commissary/catalogue', { commissary: commissaryStoreId }, { error: errorMessage(err) });
   }

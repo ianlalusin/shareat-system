@@ -11,7 +11,7 @@
 import { toBusinessDate } from '@shareat/core/datetime';
 import { accessRepo, deductionAgreementsRepo, employmentRepo, personsRepo, sessionsRepo, statutoryRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow, type Tx } from '@shareat/db';
 import { authorize, can, type Actor, type Capability } from '@shareat/auth';
-import { deductionCapPercent, searchPersons, staffMediaView } from '@shareat/domain';
+import { deductionCapPercent, listIssuedDocuments, searchPersons, staffMediaView, type IssuedDocumentSummary } from '@shareat/domain';
 import { listStores, withOrgPrincipal, type StoreOption } from '../expenses/lib';
 import { heldStoresFor } from '../../lib/held-stores';
 
@@ -226,5 +226,16 @@ export async function deductionAgreementsFor(actor: Actor, personId: string, sto
         .reverse()
         .map((a) => ({ id: a.id, sourceType: a.sourceType, amount: a.amount, perPayrollLimit: a.perPayrollLimit, recovered: a.recovered, left: left(a.amount, a.recovered), signedOn: a.signedOn, noticeGivenAt: a.noticeGivenAt, status: a.status, chargeDate: a.chargeDate ?? '', explanation: a.employeeExplanation, evidenceFileId: a.evidenceFileId })),
     };
+  });
+}
+
+/**
+ * T-584 - the documents issued for this employment (certificates, memos, notices, contracts), newest first. Shown only to someone holding `view_documents` at the
+ * employment's store; null hides the section. The domain call authorizes again at every store it lists.
+ */
+export async function documentsFor(actor: Actor, employmentId: string, storeId: string): Promise<IssuedDocumentSummary[] | null> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    if (!(await can(tx, actor, 'view_documents', { storeId }))) return null;
+    return listIssuedDocuments(tx, actor, { employmentId, storeId });
   });
 }

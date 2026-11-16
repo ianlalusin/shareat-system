@@ -25,12 +25,13 @@ import {
 import { PageDescription } from '@/components/shell/PageDescription';
 import { PhotoThumb } from '@/components/upload/PhotoThumb';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 
 export const metadata = { title: 'Delivery — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 const KIND_LABEL: Record<string, string> = { supplier: 'Supplier delivery', purchase: 'Cash purchase', commissary: 'Commissary delivery', inter_entity: 'Shipment from another company' };
-/** ⭐ `not_received` is auto-set by the server on a zero-received line — a system conclusion,
+/** `not_received` is auto-set by the server on a zero-received line — a system conclusion,
  *  never an operator's picker choice (T-166's own design). */
 const PICKABLE_REASONS = SHORTAGE_REASONS.filter((r) => r !== 'not_received');
 const REASON_LABEL: Record<string, string> = {
@@ -51,7 +52,7 @@ const DELIVERY_HERO: Record<string, { kind: StatusIconKind; tone: Tone; line: st
 };
 
 function when(d: Date | null): string {
-  return d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '—';
+  return d ? formatBusinessDateTime(new Date(d), { dateStyle: 'long', timeStyle: 'short' }) : '—';
 }
 
 export default async function DeliveryPage({
@@ -88,7 +89,7 @@ export default async function DeliveryPage({
           {doc.supplierName && <> — {doc.supplierName}</>}
         </h1>
         <PageDescription className="mt-1">
-          {doc.deliveredOn}
+          {formatBusinessDayLong(doc.deliveredOn)}
           {doc.referenceNo && <> · ref {doc.referenceNo}</>}
         </PageDescription>
         {doc.proofFileId && canViewProof && (
@@ -212,14 +213,13 @@ export default async function DeliveryPage({
             <div className="grow">
               <h2 className="font-medium">Receive</h2>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                ⭐ This is the event: quantity moves, cost is layered FIFO, and the value posts to
-                the books — the stock accounts (raw materials, supplies, prepared goods) go up and goods received, bill not yet in, goes up by the same amount, in one transaction. A line left short needs a
-                reason above; a line answered 0 is treated as not received.
+                Receiving adds the stock to the room and puts its cost on the books. A line left short needs a
+                reason above; a line answered 0 counts as not received.
               </p>
               <label className="mt-2 flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-300">
                 <input type="checkbox" name="overReceiptOk" />
                 Allow receiving over what was ordered
-                <span className="text-neutral-500">(needs a manager or admin — a cashier ticking this is refused)</span>
+                <span className="text-neutral-500">(needs a manager or admin)</span>
               </label>
             </div>
           </div>

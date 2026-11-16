@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
 import { asClock, asHours, loadDay } from '../lib';
@@ -85,7 +86,7 @@ export default async function AttendanceDayPage({
           ← Attendance review
         </Link>
         <h1 className="text-2xl font-semibold">
-          {day.personName} · {day.shiftDay}
+          {day.personName} · {formatBusinessDayLong(day.shiftDay)}
         </h1>
         <PageDescription>
           {asHours(day.computedMinutes)} paid{day.isHalfDay ? ' (half day)' : ''} ·{' '}
@@ -97,7 +98,7 @@ export default async function AttendanceDayPage({
       <FlashBanner flash={sp} />
       {lockedReason && (
         <Banner tone="warning">
-          🔒 <strong>No decision can be made on this day.</strong> {lockedReason}
+          <strong>No decision can be made on this day.</strong> {lockedReason}
         </Banner>
       )}
 
@@ -161,7 +162,7 @@ function Evidence({ detail }: { detail: DayReviewDetail }) {
           <ul className="mt-2 space-y-1 text-sm text-warning-ink">
             {day.anomalies.map((a) => (
               <li key={a}>
-                {isBlockingAnomaly(a) ? <strong>Blocking: </strong> : '⚠️ '}{ANOMALY_LABEL[a] ?? a}
+                {isBlockingAnomaly(a) ? <strong>Blocking: </strong> : null}{ANOMALY_LABEL[a] ?? a}
                 {!isBlockingAnomaly(a) && (
                   <span className="ml-1 text-xs text-warning-ink">
                     — advisory, does not block sign-off
@@ -230,7 +231,7 @@ function Overtime({ day, locked }: { day: Day; locked: boolean }) {
         Overtime — {asHours(day.pendingOtMinutes)} recorded
         {day.approvedOtMinutes !== null && (
           <span className="ml-2 text-xs font-normal text-success">
-            ✅ {asHours(day.approvedOtMinutes)} already approved
+            {asHours(day.approvedOtMinutes)} already approved
           </span>
         )}
       </h3>
@@ -259,12 +260,12 @@ function StartAnchor({ day, locked }: { day: Day; locked: boolean }) {
         Paid from
         {day.hasStartAnchor && (
           <span className="ml-2 text-xs font-normal text-success">
-            ✅ decided
+            decided
           </span>
         )}
       </h3>
       <p className="text-xs text-neutral-500">
-        Currently {asClock(day.anchorMinute)} ({day.anchorMode}). ⚠️ This sets the start the day is
+        Currently {asClock(day.anchorMinute)} ({day.anchorMode}). This sets the start the day is
         PAID from. The tap itself does not move.
       </p>
       <div className="flex flex-wrap items-end gap-2">
@@ -287,7 +288,7 @@ function EarlyOut({ day, locked }: { day: Day; locked: boolean }) {
         Paid until
         {day.hasEarlyOut && (
           <span className="ml-2 text-xs font-normal text-success">
-            ✅ decided
+            decided
           </span>
         )}
       </h3>
@@ -315,7 +316,7 @@ function HalfDay({ day, locked }: { day: Day; locked: boolean }) {
         Half day
         {day.hasHalfDayOverride && (
           <span className="ml-2 text-xs font-normal text-success">
-            ✅ overridden
+            overridden
           </span>
         )}
       </h3>

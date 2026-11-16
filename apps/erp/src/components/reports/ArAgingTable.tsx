@@ -59,13 +59,13 @@ export function ArAgingReconciliationIndicator({
             : 'mt-1 text-base font-semibold text-danger'
         }
       >
-        Aging total {formatMoney(agingTotal)} {reconciles ? '=' : '≠'} control account (1210){' '}
+        Aging total {formatMoney(agingTotal)} {reconciles ? '=' : '≠'} owed by customers in the books{' '}
         {formatMoney(controlBalance)}
       </p>
       {!reconciles ? (
         <p className="mt-2 text-sm text-danger">
-          This should never happen — the subledger and the ledger have drifted. Stop and
-          investigate before trusting any other figure on this screen.
+          The customer balances and the books should always agree. Stop and ask for help before
+          trusting any other figure on this screen.
         </p>
       ) : null}
     </div>

@@ -9,6 +9,7 @@ import { INVENTORY_COUNT_OPEN_RULES, nativeAttrs } from '@shareat/domain/field-r
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 
 export const metadata = { title: 'Physical counts — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function when(d: Date): string {
-  return new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
+  return formatBusinessDateTime(new Date(d), { dateStyle: 'long', timeStyle: 'short' });
 }
 
 function today(): string {
@@ -61,8 +62,8 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
         </Link>
       </div>
       <PageDescription>
-        Freeze a room, count it, and the difference between what was counted and what the ledger said
-        posts to <strong>stock count differences</strong> at FIFO cost.
+        Freeze a room, count it, and any difference from what the books expected is posted to{' '}
+        <strong>stock count differences</strong>.
       </PageDescription>
 
       <FlashBanner flash={sp} />
@@ -83,8 +84,8 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
       <Card>
         <h2 className="font-semibold">Open a count</h2>
         <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-          Every room ticked freezes the moment you submit — usage, wastage, transfers and receipts into
-          it are refused until this count is committed or cancelled.
+          Ticked rooms are frozen as soon as you open the count. Nothing can be used, wasted, transferred or
+          received into them until the count is committed or cancelled.
         </p>
         {locations.length === 0 ? (
           <p className="mt-3 text-sm text-warning-ink">This store has no active rooms yet.</p>
@@ -153,7 +154,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
                     </RowLink>
                     {s.note && <div className="text-xs text-muted">{s.note}</div>}
                   </Td>
-                  <Td className="tabular-nums">{s.countedOn}</Td>
+                  <Td className="tabular-nums">{formatBusinessDayLong(s.countedOn)}</Td>
                   <Td>
                     <Badge tone={statusTone(s.status)} label={STATUS_LABEL[s.status] ?? s.status} />
                   </Td>

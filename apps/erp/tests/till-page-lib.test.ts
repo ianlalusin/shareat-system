@@ -100,7 +100,7 @@ describe('the variance sentence — the guard T-153 §13.4 asked for', () => {
   });
 
   it('a match says so plainly', () => {
-    expect(varianceSentence(0, peso)).toMatch(/exactly what the ledger says/i);
+    expect(varianceSentence(0, peso)).toMatch(/exactly what the books say/i);
   });
 });
 

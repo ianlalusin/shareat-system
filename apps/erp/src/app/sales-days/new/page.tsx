@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { isAfterV1DayFeed, V1_DAY_FEED_LAST_DATE, V1_DAY_FEED_STOPPED_SENTENCE } from '@shareat/domain';
 import { listStores, listChannels, listStoreMoneyAccounts, getStoreLink } from '../lib';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { createSalesDayAction, importSalesDayAction } from '../actions';
 import { SalesDayForm } from '../SalesDayForm';
 import { CheckedForm, FieldCheck } from '@/components/forms';
@@ -26,7 +26,8 @@ const LABEL = 'text-xs font-medium text-neutral-500 dark:text-neutral-400';
 export default async function NewSalesDayPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
 
-  const { actor } = await requireSession('/sales-days/new');
+  const { actor, refusal } = await requirePageAccess('/sales-days/new');
+  if (refusal) return refusal;
   const orgId = actor.orgId;
   const stores = await listStores(orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;

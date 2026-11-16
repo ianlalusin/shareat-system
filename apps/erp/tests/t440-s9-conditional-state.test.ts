@@ -16,7 +16,9 @@ describe('conditional field state follows the payment terms controller', () => {
     ctx = checkContextValue(SUPPLIER_ADD_RULES, state);
     expect(ctx.applies('creditTermsDays')).toBe(true);
     expect(ctx.failing).toEqual(['creditTermsDays']);
-    expect(ctx.summary).toContain('whole number');
+    expect(ctx.summary).toBe('To save, fix the field marked above.');
+    const credit = ctx.result('creditTermsDays');
+    expect(credit && !credit.ok && credit.requirement).toContain('whole number');
     state = checkedFormReducer(state, { type: 'input', name: 'termsMode', value: 'cod' });
     ctx = checkContextValue(SUPPLIER_ADD_RULES, state);
     expect(ctx.blocked).toBe(false);

@@ -1,8 +1,7 @@
-import { accountCodeAndName } from '@/lib/account-label';
 import { getApAgingReport } from '@shareat/domain';
 import { apRepo } from '@shareat/db';
 import { reportScope, runReport } from '../lib';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { AgingFilters } from '@/components/reports/AgingFilters';
 import { ApAgingTable, ApAgingReconciliationIndicator, type ApAgingTableRow } from '@/components/reports/ApAgingTable';
@@ -63,9 +62,8 @@ export default async function ApAgingPage({
       <div>
         <h1 className="text-2xl font-semibold">AP Aging</h1>
         <PageDescription>
-          Every open payable, bucketed by due date. The total below is checked against the
-          {accountCodeAndName('2110')} control account on every load — two independent queries that must agree to the
-          centavo.
+          Every unpaid supplier bill, grouped by how overdue it is. The total is checked against what
+          the books say is owed to suppliers.
         </PageDescription>
       </div>
 
@@ -84,23 +82,26 @@ export default async function ApAgingPage({
           {' · '}
           {currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
           {' · '}
-          as of {asOfDate}
+          as of {formatBusinessDayLong(asOfDate)}
         </p>
         <CsvExportLink
           href={`/reports/ap-aging/export?${new URLSearchParams({ ...(storeId ? { store: storeId } : {}), asOf: asOfDate }).toString()}`}
         />
       </div>
 
-      <ApAgingReconciliationIndicator
-        reconciles={report.reconciles}
-        agingTotal={report.totals.total}
-        controlBalance={report.controlBalance}
-      />
+      {/* An empty report claims nothing; a mismatch is still shown, since it is a real fault. */}
+      {rows.length > 0 || !report.reconciles ? (
+        <ApAgingReconciliationIndicator
+          reconciles={report.reconciles}
+          agingTotal={report.totals.total}
+          controlBalance={report.controlBalance}
+        />
+      ) : null}
 
       {rows.length > 0 ? (
         <ApAgingTable rows={rows} totals={report.totals} />
       ) : (
-        <EmptyState message={`No open payables as of ${asOfDate}.`} />
+        <EmptyState message={`No open payables as of ${formatBusinessDayLong(asOfDate)}.`} />
       )}
     </Page>
   );

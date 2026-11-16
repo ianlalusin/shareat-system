@@ -11,6 +11,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { Badge, Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_REFUND_RULES, INVENTORY_RETURN_RULES, INVENTORY_RETURN_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -23,6 +24,8 @@ interface SearchParams {
   error?: string;
   ok?: string;
 }
+
+const BASIS_LABEL: Record<string, string> = { grni: 'Goods not yet billed', supplier_advance: 'Billed (supplier credit)', mixed: 'Mixed' };
 
 export default async function ReturnsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -43,7 +46,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
   }
 
   const { returnableLines, suppliers, credits, recent, locations, moneyAccountId } = await withOrgPrincipal(actor.orgId, async (tx) => {
-    // ⭐ Returnable = received − already returned (posted only) — invariant 2's cap, rendered.
+    // Returnable = received − already returned (posted only) — invariant 2's cap, rendered.
     const lines = await tx.execute(dsql`
       select dl.id as delivery_line_id, d.id as delivery_id, d.supplier_id, s.name as supplier_name,
              i.id as item_id, i.name as item_name, i.kind as item_kind, i.base_unit,
@@ -129,8 +132,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
         </Link>
       </div>
       <PageDescription className="mt-1">
-        The goods go back, and we hold a credit. ⭐ Which account it lands in is derived from
-        whether the receipt was invoiced — never a choice on this form.
+        The goods go back to the supplier and we hold a credit with them. The books pick the right account for you.
       </PageDescription>
 
       <FlashBanner flash={sp} />
@@ -243,9 +245,9 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
           <tbody>
             {recent.map((r) => (
               <tr key={r.id} className="border-b border-neutral-200 dark:border-neutral-800">
-                <td className="py-2 pr-4">{r.returnedOn}</td>
+                <td className="py-2 pr-4">{formatBusinessDayLong(r.returnedOn)}</td>
                 <td className="py-2 pr-4">{supplierName.get(r.supplierId) ?? r.supplierId}</td>
-                <td className="py-2 pr-4">{r.creditBasis}</td>
+                <td className="py-2 pr-4">{BASIS_LABEL[r.creditBasis] ?? r.creditBasis}</td>
                 <td className="py-2 pr-4">
                   <Badge status={r.status} />
                 </td>

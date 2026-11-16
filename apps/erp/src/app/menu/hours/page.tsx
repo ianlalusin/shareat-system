@@ -38,7 +38,7 @@ export default async function MenuHoursPage({ searchParams }: { searchParams: Pr
     <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Menu hours</h1>
-        <PageDescription>The hours a price can follow at {store.name}, like Lunch from 08:00 to 17:00.</PageDescription>
+        <PageDescription>The hours a price can follow at {store.name}, like Lunch from 8:00 AM to 5:00 PM.</PageDescription>
       </div>
 
       <FlashBanner flash={sp} />

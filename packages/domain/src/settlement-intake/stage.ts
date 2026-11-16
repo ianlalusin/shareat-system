@@ -44,6 +44,8 @@ export interface StagedOtherLine {
   description: string | null;
   /** T-511 S6c: the VAT of THIS line (same sign as `amount`, 2 decimals); set for `period_charge` only, whose VAT rides in no day. Elsewhere the VAT is inside the day's platformFee. */
   vat?: Money;
+  /** T-511 S8b: the Official Document Number printed on the Appendix B row this line was staged from (Foodpanda charges); absent when the row printed none and for every other line */
+  officialDocument?: string;
 }
 
 export interface StagedDay {
@@ -386,7 +388,12 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
   const weekly: FoodpandaCharge[] = [];
   const charge = (c: FoodpandaCharge, line: Omit<StagedOtherLine, 'amount' | 'lineDate'>, day: FoodpandaAcc | undefined): void => {
     // a charge with no sales day and no date of its own is dated by the invoice (its date is read from the file); a date the file gives still wins
-    const l: StagedOtherLine = { ...line, amount: c.netTotal, lineDate: line.kind === 'period_charge' ? (c.date ?? invoice.invoiceDate) : c.date };
+    const l: StagedOtherLine = {
+      ...line,
+      amount: c.netTotal,
+      lineDate: line.kind === 'period_charge' ? (c.date ?? invoice.invoiceDate) : c.date,
+      ...(c.officialDocument ? { officialDocument: c.officialDocument } : {}),
+    };
     if (day) day.otherLines.push(l);
     else periodLines.push(l);
   };

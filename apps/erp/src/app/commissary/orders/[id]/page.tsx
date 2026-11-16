@@ -33,6 +33,7 @@ import {
 import { branchOrderSteps, Button, ConfirmDestructive, DialogActions, exitStepFromTimestamps, Field, FlashBanner, FormGrid, FormModal, Input, isExitStage, nextLineFor, Select, StatusHero, type StatusIconKind, stepIndexFor, type Tone } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
 import { COMMISSARY_LINE_FULFIL, COMMISSARY_LINE_UPDATE } from './typed-forms';
 
@@ -65,7 +66,7 @@ const STAGE_HERO: Record<string, { kind: StatusIconKind; word: string; tone: Ton
 };
 
 function when(d: Date | null): string {
-  return d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '—';
+  return d ? formatBusinessDateTime(new Date(d), { dateStyle: 'long', timeStyle: 'short' }) : '—';
 }
 
 export default async function BranchOrderPage({
@@ -114,7 +115,7 @@ export default async function BranchOrderPage({
           {commissary.name} → {branch.name}
         </h1>
         <PageDescription className="mt-1">
-          {order.orderDate} · {peso(order.totalAmount)}
+          {formatBusinessDayLong(order.orderDate)} · {peso(order.totalAmount)}
           {order.referenceNo && <> · ref {order.referenceNo}</>}
         </PageDescription>
         {order.notes && <p className="mt-1 text-xs text-neutral-500">{order.notes}</p>}
@@ -123,7 +124,7 @@ export default async function BranchOrderPage({
           {branchSide && commissarySide
             ? 'both stores'
             : branchSide
-              ? `the branch (${branch.name})`
+              ? `the ordering store (${branch.name})`
               : commissarySide
                 ? `the commissary (${commissary.name})`
                 : 'neither store — read-only'}
@@ -178,8 +179,8 @@ export default async function BranchOrderPage({
         <div className="flex items-baseline justify-between">
           <h2 className="font-medium">Lines</h2>
           <span className="text-xs text-neutral-500 dark:text-neutral-400">
-            Asked → packed → signed for. The gap between the first two is a fulfilment decision; between
-            the last two, a transit discrepancy.
+            Asked → packed → signed for. A gap between asked and packed is the commissary&rsquo;s call. A gap between packed and
+            signed for becomes a transit discrepancy.
           </span>
         </div>
         {lines.length === 0 && <p className="text-sm text-neutral-500">Nothing on this order yet.</p>}
@@ -194,9 +195,8 @@ export default async function BranchOrderPage({
               <div className="grow">
                 <h3 className="font-medium">Confirm receipt</h3>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Sign for what actually landed, per line. ⭐ This is the event where BOTH stores&rsquo; books move —
-                  your stock arrives at the transfer price, the commissary&rsquo;s in-transit is relieved at cost, and
-                  any shortfall opens a transit discrepancy for the commissary to dispose of.
+                  Sign for what actually arrived, line by line. Receiving puts the stock in your store and takes it off the
+                  commissary&rsquo;s goods on the way. Any shortfall goes to the commissary as a transit discrepancy.
                 </p>
               </div>
               <Field label="Received on" className={LABEL} rule={COMMISSARY_RECEIVE_RULES.receivedOn}>
@@ -216,14 +216,14 @@ export default async function BranchOrderPage({
             <span className="font-mono tabular-nums">{peso(order.totalAmount)}</span>
             {pendingCount > 0 && (
               <span className="ml-2 text-xs text-warning-ink">
-                {pendingCount} proposed line{pendingCount === 1 ? '' : 's'} not counted until the branch answers
+                {pendingCount} proposed line{pendingCount === 1 ? '' : 's'} not counted until the store answers
               </span>
             )}
           </p>
         )}
       </section>
 
-      {/* ---- The branch's controls ------------------------------------------------------------ */}
+      {/* ---- The ordering store's controls ------------------------------------------------------------ */}
       {draft && branchSide && (
         <section className={PANEL}>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -237,7 +237,7 @@ export default async function BranchOrderPage({
                 {catalogue.map((c) => (
                   <option key={c.commissaryItemId} value={c.commissaryItemId}>
                     {c.name} ({c.baseUnit}){c.priced ? ` — ₱${c.price}` : ' — no price, state one'}
-                    {c.blocker ? ` — ⚠ ${c.blocker}` : ''}
+                    {c.blocker ? ` — not ready: ${c.blocker}` : ''}
                   </option>
                 ))}
               </Select>
@@ -258,7 +258,7 @@ export default async function BranchOrderPage({
           </div>
           <div className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
-              Submit is refused while any line is unmapped or has no expense category — fix those under{' '}
+              A line that is not mapped, or has no expense category, blocks submitting. Fix those under{' '}
               <Link href={`/commissary/catalogue?commissary=${commissary.id}&branch=${branch.id}`} className="underline underline-offset-4">
                 Commissary catalogue
               </Link>
@@ -286,8 +286,8 @@ export default async function BranchOrderPage({
           <h2 className="font-medium">Propose a substitution or an addition</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Out of something? Set that line to 0 (or pick it as &ldquo;replaces&rdquo; here) and propose what you can send.
-            A proposed line counts toward nothing until the branch approves it, and the order cannot be marked ready
-            until they answer — the reason goes on the thread.
+            A proposed line does not count until the ordering store approves it, and the order cannot be marked ready
+            until they answer. The reason goes on the thread.
           </p>
           <FormModal trigger="Propose substitution" title="Propose a substitution or an addition" size="lg">
           <CheckedForm rules={COMMISSARY_ORDER_LINE_RULES} action={proposeLineAction} className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 sm:items-end">
@@ -352,7 +352,7 @@ export default async function BranchOrderPage({
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               {stage === 'accepted'
                 ? 'Ready means the list is final — after it the order can only be dispatched or rejected.'
-                : 'Dispatch is the posting event: stock leaves into in-transit at real FIFO cost — manager or admin only. It is refused if the commissary holds less than a line says, or has never tracked the item at all.'}
+                : 'Dispatching takes the stock out of the commissary at its real cost. Manager or admin only. It is refused if the commissary holds less than a line says, or has never tracked the item.'}
             </span>
             <RejectForm orderId={order.id} />
           </div>
@@ -384,7 +384,7 @@ export default async function BranchOrderPage({
             consequence="Reverses the dispatch posting and puts the stock back. An administrator must approve with their own PIN."
           />
           <span className="text-xs text-neutral-500 dark:text-neutral-400">
-            The in-transit posting is <strong>reversed</strong>, never deleted, and the stock returns to its layers.
+            The dispatch is <strong>reversed</strong>, not deleted, and the stock goes back.
           </span>
         </CheckedForm>
       )}
@@ -429,15 +429,14 @@ export default async function BranchOrderPage({
       <section>
         <h2 className="text-lg font-medium">Thread</h2>
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-          Append-only. In v1 this was a phone call, so the reason a line changed did not survive the
-          people who changed it. Proposals, decisions and rejections are written here automatically.
+          Proposals, decisions and rejections are written here automatically. Nothing on the thread can be edited.
         </p>
         <ul className="mt-4 space-y-3">
           {messages.length === 0 && <li className="text-sm text-neutral-500">Nothing said about this order yet.</li>}
           {messages.map((m) => (
             <li key={m.id} className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
               <div className="text-xs text-neutral-500">
-                {authors.get(m.authorId) ?? 'Someone'} · {new Date(m.createdAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}
+                {authors.get(m.authorId) ?? 'Someone'} · {when(m.createdAt)}
               </div>
               <p className="mt-1 whitespace-pre-wrap">{m.body}</p>
             </li>
@@ -464,7 +463,7 @@ function RejectForm({ orderId }: { orderId: string }) {
     <CheckedForm rules={COMMISSARY_REJECT_RULES} action={rejectOrderAction} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="orderId" value={orderId} />
       <Field label="Reject — say why" className={`${LABEL} min-w-[14rem] flex-1`} rule={COMMISSARY_REJECT_RULES.reason}>
-        <Input {...nativeAttrs(COMMISSARY_REJECT_RULES.reason)} placeholder="the branch reads this" className="w-full" />
+        <Input {...nativeAttrs(COMMISSARY_REJECT_RULES.reason)} placeholder="the ordering store reads this" className="w-full" />
       </Field>
       <Button type="submit" variant="danger">
         Reject
@@ -519,10 +518,10 @@ function LineCard({
         {l.origin === 'commissary_added' && (
           <span className="rounded bg-warning-soft px-1.5 py-0.5 text-xs text-warning-ink">
             proposed by the commissary ·{' '}
-            {pending ? 'awaiting the branch' : l.approval === 'approved' ? 'approved' : 'declined'}
+            {pending ? 'awaiting the ordering store' : l.approval === 'approved' ? 'approved' : 'declined'}
           </span>
         )}
-        {l.isLedgerOnly && <span className="text-xs text-neutral-500">ledger-only — moves no branch stock</span>}
+        {l.isLedgerOnly && <span className="text-xs text-neutral-500">books only — moves no stock at the store</span>}
         {l.suggestedQuantity && <span className="text-xs text-neutral-500">auto-suggested {l.suggestedQuantity}</span>}
         {packed !== null && Number(packed) === 0 && !declined && (
           <span className="text-xs text-danger">none of this will be sent</span>

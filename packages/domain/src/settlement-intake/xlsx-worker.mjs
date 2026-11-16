@@ -20,7 +20,8 @@ try {
   const workbook = Buffer.from(workerData.workbook);
   const a = await sheetOrNull(workbook, 'Appendix A');
   const b = await sheetOrNull(workbook, 'Appendix B');
-  parentPort.postMessage({ ok: true, a, b });
+  const c = await sheetOrNull(workbook, 'Appendix C');
+  parentPort.postMessage({ ok: true, a, b, c });
 } catch (e) {
   parentPort.postMessage({ ok: false, message: String((e && e.message) || e).slice(0, 200) });
 }

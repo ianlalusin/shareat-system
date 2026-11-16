@@ -4,7 +4,7 @@ import { useContext } from 'react';
 import { CheckContext } from '@/components/forms/context';
 
 /**
- * The reject form's one line about why Reject is off. The shared "Save is off until: ..." line says "Save" on a button that says Reject, so the form hides it
+ * The reject form's one line about why Reject is off. The shared "To save, ..." line says "Save" on a button that says Reject, so the form hides it
  * and this line takes over as the announced status: empty while the reason is filled in, plain words while it is not. Renders nothing before the checks start.
  */
 export function RejectReasonHint() {

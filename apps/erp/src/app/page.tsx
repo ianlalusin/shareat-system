@@ -4,6 +4,9 @@ import { add, compare, isZero, money, negate, subtract, ZERO } from '@shareat/co
 import { formatBusinessDateTime, formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { reportScope, runReport } from './reports/lib';
+import { holdsAny } from '@/lib/page-access';
+import { requireSession } from '@/lib/session';
+import { WelcomeFallback } from '@/components/dashboard/WelcomeFallback';
 import { monthWords, statutoryTileFor } from './payroll/statutory-payments/lib';
 import { findingsFor, lastCompletedPeriod } from './findings/lib';
 import { dayCount, eachDay, fmtNum, previousRange, resolveRange, shortDay } from './dashboard/lib';
@@ -45,6 +48,11 @@ export default async function DashboardPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
+
+  // T-589 B3a: `/` has no route key (everyone lands here), so `reportScope`'s data gate would THROW for a person without the word.
+  // Probe first and show a plain welcome instead of an error or a refusal card.
+  const { actor } = await requireSession('/');
+  if (!(await holdsAny(actor, ['view_financial_reports']))) return <WelcomeFallback />;
 
   const scope = await reportScope('/', 'view_financial_reports', sp.store);
 

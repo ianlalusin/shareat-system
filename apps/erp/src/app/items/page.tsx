@@ -34,7 +34,7 @@ import Link from 'next/link';
 import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
-import { Banner, Button, Checkbox, DialogActions, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, FormModal } from '@/components/ui';
+import { Banner, Button, Checkbox, DialogActions, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, FormModal, statusLabel } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Items — Shareat System' };
@@ -166,7 +166,7 @@ export default async function ItemsPage({
                 </FormGrid>
               </FormSection>
               {/*
-            ⭐ DEF-130. T-149's three independent facts. Until 2026-09-03 the form never asked, both
+            DEF-130. T-149's three independent facts. Until 2026-09-03 the form never asked, both
             "sold" columns default to false, and every item made here was sold to nobody — which
             `createTradeOrder` then refused, correctly, on its own gate.
           */}
@@ -180,7 +180,7 @@ export default async function ItemsPage({
                   <Checkbox name="sellableWholesale" label="Wholesale" aria-label="Sold to other stores or buyers (wholesale)" />
                 </div>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Buy = bought from suppliers. Retail = sold à la carte. Wholesale = sold to our branches, franchisees or outside buyers like Xlice. These are independent choices; a store can override them on the item&rsquo;s page.
+                  Buy = bought from suppliers. Retail = sold à la carte. Wholesale = sold to our stores, franchisees or outside buyers like Xlice. These are independent choices; a store can override them on the item&rsquo;s page.
                 </p>
               </fieldset>
               {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
@@ -245,7 +245,7 @@ export default async function ItemsPage({
                   <th scope="col" className="px-3 py-2 font-medium">Code</th>
                   <th scope="col" className="px-3 py-2 font-medium">Kind</th>
                   <th scope="col" className="px-3 py-2 font-medium">Priced per</th>
-                  {/* ⭐ DEF-130. The org's default — a store may differ; see the item's page. */}
+                  {/* DEF-130. The org's default — a store may differ; see the item's page. */}
                   <th scope="col" className="px-3 py-2 font-medium">Sold as</th>
                 </tr>
               </thead>
@@ -256,7 +256,7 @@ export default async function ItemsPage({
                       {indented && <span aria-hidden="true" className="mr-1 text-muted">↳</span>}
                       <RowLink href={`/items/${i.id}`}>{i.name}</RowLink>
                       {i.status !== 'active' && (
-                        <span className="ml-2 text-xs text-neutral-500">({i.status})</span>
+                        <span className="ml-2 text-xs text-neutral-500">({statusLabel(i.status)})</span>
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono text-xs">{i.code}</td>
@@ -290,7 +290,7 @@ export default async function ItemsPage({
             {dupes.length === 1 ? 'One pair looks' : `${dupes.length} pairs look`} like the same item
           </h2>
           <p className="text-xs text-warning-ink">
-            Spelling-similarity check. ⚠️ It is a prompt, not a verdict — &ldquo;Coke 1.5&rdquo; and
+            Spelling-similarity check. It is a prompt, not a verdict — &ldquo;Coke 1.5&rdquo; and
             &ldquo;Coke 15&rdquo; look alike and are different products. Merging is permanent:
             every invoice line, price and supplier link moves to the item you keep.
           </p>
@@ -312,7 +312,7 @@ export default async function ItemsPage({
                 </div>
                 {d.unitsDiffer ? (
                   <p className="text-xs text-danger">
-                    ⛔ Measured differently ({d.aUnit} vs {d.bUnit}). Merging is refused until one
+                    Measured differently ({d.aUnit} vs {d.bUnit}). Merging is refused until one
                     of them is corrected — combining them would make every past price incomparable.
                   </p>
                 ) : (
@@ -404,7 +404,7 @@ export default async function ItemsPage({
                 </div>
                 {r.similarWarning && (
                   <Banner tone="warning" className="mt-2">
-                    ⚠️ {r.similarWarning}
+                    {r.similarWarning}
                   </Banner>
                 )}
                 <div className="mt-2 flex flex-wrap items-end gap-2">

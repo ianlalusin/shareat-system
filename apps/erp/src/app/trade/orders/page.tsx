@@ -10,6 +10,7 @@ import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, FlashBanner, FormModal, LinkRow, RowLink, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 
 export const metadata = { title: 'Trade orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -49,10 +50,8 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
         </Link>
       </div>
       <PageDescription>
-        One document for a wholesale sale and an internal transfer alike — the commissary packs the
-        same crates whoever is receiving; only the books differ. <strong>Dispatch is the event</strong>:
-        a sale bills the customer and relieves stock with cost of sales; a transfer puts the goods in
-        transit at cost, and both stores&rsquo; books move when the branch confirms what arrived.
+        Wholesale sales and transfers to other stores, on one document. <strong>Nothing is posted until the order is dispatched.</strong>{' '}
+        A sale then bills the customer. A transfer puts the goods on the way until the receiving store confirms them.
       </PageDescription>
 
       <FlashBanner flash={sp} />
@@ -91,8 +90,8 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
       </div>
 
       {/*
-        ⭐ BOTH directions in one list, deliberately — every order this store is on, as the seller
-        or as the branch a transfer is going to. Same rule as the branch-orders screen: two lists
+        BOTH directions in one list, deliberately: every order this store is on, as the seller
+        or as the store a transfer is going to. Same rule as the branch-orders screen: two lists
         showing "my orders" from opposite ends is how the two sides end up disagreeing.
       */}
       {orders.length === 0 ? (
@@ -117,7 +116,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
                 <LinkRow key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2 tabular-nums">
                     <RowLink href={`/trade/orders/${o.id}`}>
-                      {o.orderDate}
+                      {formatBusinessDayLong(o.orderDate)}
                     </RowLink>
                     {o.referenceNo && <span className="ml-2 text-xs text-neutral-500">{o.referenceNo}</span>}
                   </td>

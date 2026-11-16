@@ -11,7 +11,7 @@ import { ASOF, buildPlatformWorld, type PlatformWorld } from '../../../../packag
  * World and amounts: packages/domain/tests/integration/_fixtures/t507-platform-ar.ts (Lipa 11,500.00 across Foodpanda 9,000.00 and GrabFood 2,500.00;
  * Batangas 1,600.00 across Foodpanda 700.00 and Shopee 900.00 on 1250; org 13,100.00; customer 650.00).
  * Pinned wording (spec build items 1-2): heading "Due from delivery platforms"; the line
- *   "Only verified sales days appear here. {n} day(s) with platform sales are waiting for verification."
+ *   "Only verified sales days appear here. {n} days with platform sales are waiting for verification."
  * with a link to /sales-days; each channel row links to /channel-settlements for that channel (href carries the channel id).
  * CSV (the report has one): the platform section rows follow the customer section, each with the channel name and total.
  * Mutants: section hard-coded to 1220 (Shopee vanishes); no store filter (M-Lipa sees Batangas); unverified counted as receivable.
@@ -74,7 +74,7 @@ describe('T-507 page: the platform section', () => {
   it('the verified-only line with the waiting count (2 org-wide) and a link to the sales-days list', async () => {
     const w = await world();
     const html = await pageFor(w.admin);
-    has(html, 'Only verified sales days appear here.', '2 day(s) with platform sales are waiting for verification.');
+    has(html, 'Only verified sales days appear here.', '2 days with platform sales are waiting for verification.');
     expect(html).toMatch(/href="\/sales-days[^"]*"/);
   });
   it('each channel row drills to /channel-settlements for THAT channel (href carries the channel id)', async () => {
@@ -95,7 +95,7 @@ describe('T-507 page: store scope (manager sees only their stores)', () => {
   it('manager of Lipa: Lipa channels and 11,500.00; NO Batangas channel, no Shopee, no 1,600.00 / 13,100.00; waiting = 1', async () => {
     const w = await world();
     const html = await pageFor(w.mgrLipa);
-    has(html, 'Due from delivery platforms', '9,000.00', '2,500.00', '11,500.00', '1 day(s) with platform sales are waiting for verification.');
+    has(html, 'Due from delivery platforms', '9,000.00', '2,500.00', '11,500.00', '1 day with platform sales is waiting for verification.');
     lacks(html, 'Shopee', '1,600.00', '13,100.00', '900.00', '700.00', w.ch.batFp, w.ch.batShopee);
   });
   it('manager of Batangas: Foodpanda 700.00 + Shopee 900.00 = 1,600.00; NO Lipa amounts', async () => {
@@ -190,7 +190,10 @@ describe('DEF-809: /sales-days is gated by submit_sales_day and scoped to the vi
     await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${w.orgId}, 'staff')`;
     await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${w.lipa})`;
     const html = await daysFor({ personId: p!.id, orgId: w.orgId } as Actor);
-    expect(html).toMatch(/^THROWN/);
+    // T-589 B3a: /sales-days refuses with the access card instead of throwing.
+    expect(html).not.toMatch(/^THROWN/);
+    expect(html).toContain('You do not have access to this screen');
+    expect(html).toContain('submit a sales day or verify a sales day');
     expect(html).not.toContain('2027-03-20');
   });
 });

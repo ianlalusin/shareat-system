@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ORDER_WASTAGE_DISPOSITION_LABEL, orderWastageDispositionLabel, orderWastageRepo, salesDaysRepo, schema, storesRepo } from '@shareat/db';
 import { listPostedSettlementsForStore, matchWastagesToSettlement, type SettleableOrderWastage } from '@shareat/domain';
 import { inArray } from 'drizzle-orm';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { peso } from '../../lib/format';
 import { requireSession } from '../../lib/session';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
@@ -94,8 +94,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
         <div>
           <h1 className="text-2xl font-semibold">Order wastage</h1>
           <PageDescription className="mt-1">
-            A refunded or remade order — economics and staff accountability, never stock. Raw-stock
-            wastage is recorded under Inventory.
+            Orders that were refunded or remade. This records the money lost, not stock. Wasted stock is recorded under Inventory.
           </PageDescription>
         </div>
         <FormModal trigger="+ Record wastage" title="Record a wastage" size="lg">
@@ -162,7 +161,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
             {monitor ? (
               <>
                 this store&apos;s Wastage Monitor, <strong>{monitor.displayName}</strong>
-                {!monitor.isActive && <> ⚠️ (no longer active)</>}
+                {!monitor.isActive && <> (no longer active)</>}
               </>
             ) : (
               <strong>nobody — no Monitor is named at this store</strong>
@@ -170,8 +169,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
             .{' '}
             {!monitor && (
               <>
-                ⚠️ It will be created ownerless, and after 15 days the store absorbs it: nothing is
-                recovered and nothing errors.{' '}
+                It will have no owner, and after 15 days the store absorbs the loss. Nothing is recovered.{' '}
               </>
             )}
             A &ldquo;{ORDER_WASTAGE_DISPOSITION_LABEL.charged}&rdquo; disposition needs an allocation, which this quick form does not
@@ -208,17 +206,16 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
       {matches.length > 0 && (
         <Banner tone="warning">
         <section className="text-sm">
-          <h2 className="font-medium">⭐ {matches.length} possible settlement match{matches.length === 1 ? '' : 'es'}</h2>
+          <h2 className="font-medium">{matches.length} possible settlement match{matches.length === 1 ? '' : 'es'}</h2>
           <p className="mt-1">
-            A posted channel settlement exists for the same store, channel and business date as
-            these open wastages. Review each before deciding — this list proposes; nothing here
-            posts on its own.
+            A posted channel settlement exists for the same store, channel and date as these open wastages.
+            Review each one before deciding. Nothing here is posted on its own.
           </p>
           <ul className="mt-3 space-y-1">
             {matches.map((m) => (
               <li key={`${m.wastageId}:${m.settlementId}`}>
                 <Link href={`/wastage/${m.wastageId}`} className="underline underline-offset-4">
-                  {m.channel} · {m.businessDate} · {peso(m.amount)}
+                  {m.channel} · {formatBusinessDayLong(m.businessDate)} · {peso(m.amount)}
                 </Link>{' '}
                 — {m.rationale}
               </li>
@@ -247,7 +244,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                 <LinkRow key={w.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2 tabular-nums">
                     <RowLink href={`/wastage/${w.id}`}>
-                      {toBusinessDate(w.openedAt)}
+                      {formatBusinessDayLong(toBusinessDate(w.openedAt))}
                     </RowLink>
                   </td>
                   <td className="px-3 py-2">{w.channel}</td>
@@ -279,14 +276,14 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                   <LinkRow key={w.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2 tabular-nums">
                       <RowLink href={`/wastage/${w.id}`}>
-                        {toBusinessDate(w.openedAt)}
+                        {formatBusinessDayLong(toBusinessDate(w.openedAt))}
                       </RowLink>
                     </td>
                     <td className="px-3 py-2">{w.channel}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(w.amount)}</td>
                     <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
                       {w.disposition ? orderWastageDispositionLabel(w.disposition) : ''}
-                      {w.autoCharged ? ' (15-day backstop)' : ''}
+                      {w.autoCharged ? ' (charged after 15 days)' : ''}
                     </td>
                   </LinkRow>
                 ))}

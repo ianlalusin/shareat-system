@@ -22,6 +22,9 @@ vi.mock('next/navigation', () => ({
   notFound: () => {
     throw new Error('notFound');
   },
+  // T-590: the staff page now holds FormModals, which read the address.
+  usePathname: () => '/staff/emp-1',
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
 // Every real export becomes an inert function (the builder's rename action is unknown to this file, so no names are listed).
@@ -46,6 +49,7 @@ vi.mock('../src/app/staff/lib', async (orig) => {
     otherOpenBranchesFor: vi.fn(async () => ({ branches: [], hiddenCount: 0 })),
     governmentIdsFor: vi.fn(async () => null),
     deductionAgreementsFor: vi.fn(async () => null),
+    documentsFor: vi.fn(async () => null), // T-584: the Documents panel is hidden (null) here
     mediaFor: vi.fn(async () => ({ hasSignature: false, canViewSignature: false, photoFileId: null })),
     employmentDetail: vi.fn(async () => ({
       employment: { id: 'emp-1', personId: 'person-1', orgId: 'org-1', storeId: 'store-1', staffCode: 'SE-001', employmentStatus: 'regular', startedOn: '2026-01-01', endedOn: null },

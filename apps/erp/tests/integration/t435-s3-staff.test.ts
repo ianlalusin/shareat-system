@@ -59,7 +59,7 @@ describe('T-435 S3 staff - case 23: a cashier sees no colleague', () => {
     for (const [route, run] of pages) {
       const html = await run();
       expectRefusalCard(html, `C ${route}`);
-      if (route !== '/staff/hire') expect(plain(html), `C ${route}: the card names both ways in`).toContain('enrol_staff or manage_attendance');
+      if (route !== '/staff/hire') expect(html, `C ${route}: the card names both ways in`).toMatch(/data-capability="(?=[^"]*\benrol_staff\b)(?=[^"]*\bmanage_attendance\b)[^"]*"/); // T-589 B3a: keys on data-capability, plain words on screen
       expectAbsent(html, `C ${route}`, M.e1Name, M.e2Name, M.f1Name, M.qName, M.uName, M.e2Phone);
     }
   });

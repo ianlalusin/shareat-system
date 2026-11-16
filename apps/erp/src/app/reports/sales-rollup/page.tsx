@@ -3,7 +3,7 @@ import { reportsRepo } from '@shareat/db';
 import { reportScope, runReport } from '../lib';
 
 type SalesRollupGrouping = reportsRepo.SalesRollupGrouping;
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import {
@@ -74,9 +74,8 @@ export default async function SalesRollupPage({
       <div>
         <h1 className="text-2xl font-semibold">Sales Rollup</h1>
         <PageDescription>
-          Recognised sales revenue (verified sales days only), by period, channel, and mode.
-          Every total below is computed live and checked against the other two, which are sourced
-          independently.
+          Sales from verified days, by period, channel and payment mode. Each of the three totals is
+          checked against the other two.
         </PageDescription>
       </div>
 
@@ -121,7 +120,7 @@ export default async function SalesRollupPage({
           {' · '}
           {currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
           {' · '}
-          {fromDate} to {toDate}
+          {formatBusinessDayLong(fromDate)} to {formatBusinessDayLong(toDate)}
           {' · '}
           grouped by {groupBy}
         </p>
@@ -130,12 +129,15 @@ export default async function SalesRollupPage({
         />
       </div>
 
-      <SalesReconciliationIndicator
-        reconciles={result.reconciles}
-        ledgerTotal={result.ledgerTotal}
-        channelTotal={result.channelTotal}
-        modeTotal={result.modeTotal}
-      />
+      {/* An empty report claims nothing; a mismatch is still shown, since it is a real fault. */}
+      {hasAnyActivity || !result.reconciles ? (
+        <SalesReconciliationIndicator
+          reconciles={result.reconciles}
+          ledgerTotal={result.ledgerTotal}
+          channelTotal={result.channelTotal}
+          modeTotal={result.modeTotal}
+        />
+      ) : null}
 
       {hasAnyActivity ? (
         <>
@@ -146,7 +148,7 @@ export default async function SalesRollupPage({
           </div>
         </>
       ) : (
-        <EmptyState message={`No verified sales days for ${fromDate} to ${toDate}.`} />
+        <EmptyState message={`No verified sales days for ${formatBusinessDayLong(fromDate)} to ${formatBusinessDayLong(toDate)}.`} />
       )}
     </Page>
   );

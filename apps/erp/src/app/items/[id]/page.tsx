@@ -25,7 +25,8 @@ import { typedFor } from '@/lib/keep-typing';
 import { ITEM_ALIAS, ITEM_CATEGORY, ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord, RecordSummary } from '@/components/forms';
-import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select, SplitWorkspace } from '@/components/ui';
+import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select, SplitWorkspace, statusLabel } from '@/components/ui';
+import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 
 export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -252,7 +253,7 @@ export default async function ItemDetailPage({
                 <li key={v.id}>
                   <a href={`/items/${v.id}`} className="inline-block py-0.5 underline underline-offset-2">{v.name}</a>{' '}
                   <span className="font-mono text-xs text-neutral-500">{v.code}</span>
-                  {v.status !== 'active' && <span className="ml-2 text-xs text-neutral-500">({v.status})</span>}
+                  {v.status !== 'active' && <span className="ml-2 text-xs text-neutral-500">({statusLabel(v.status)})</span>}
                 </li>
               ))}
             </ul>
@@ -316,7 +317,7 @@ export default async function ItemDetailPage({
       </section>
 
       {/*
-        ⭐ DEF-130 / T-149. Three independent facts, and TWO layers: the organisation's answer,
+        DEF-130 / T-149. Three independent facts, and TWO layers: the organisation's answer,
         then the store that differs. Bulgogi sauce is one item — one identity, one price history —
         but Lipa MAKES it and sells it wholesale while another branch buys it in. The override
         table holds only the exceptions, so a store that agrees with the org has no row at all.
@@ -325,10 +326,8 @@ export default async function ItemDetailPage({
         <div>
           <h2 className="font-medium">What it may be bought and sold as</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            The organisation&rsquo;s answer first. A wholesale order is refused for an item the{' '}
-            <strong>selling store</strong> does not sell wholesale, and a supplier invoice is refused
-            for one the store makes rather than buys — so an item nobody has flagged can be
-            neither sold nor bought.
+            Tick what applies to this item everywhere. A store can answer differently below. An item with
+            nothing ticked can be neither bought nor sold.
           </p>
         </div>
 
@@ -344,9 +343,8 @@ export default async function ItemDetailPage({
           <div className="space-y-2">
             <h3 className="text-sm font-medium">Where a store differs</h3>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              ⚠️ &ldquo;Follow the organisation&rdquo; is not the same as &ldquo;no&rdquo; — it keeps
-              tracking the default above when that changes; a store that says &ldquo;no&rdquo;
-              freezes its own answer.
+              &ldquo;Use the default&rdquo; is not the same as &ldquo;No&rdquo;. It keeps following the default
+              above if that changes. A store that says &ldquo;No&rdquo; keeps its own answer.
             </p>
             <ul className="space-y-2">
               {byStore.map((s) => (
@@ -355,7 +353,7 @@ export default async function ItemDetailPage({
                   className="space-y-2 rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800"
                 >
                   {/*
-                    ⚠️ Save and Clear are TWO forms, side by side, not one form with a
+                    Save and Clear are TWO forms, side by side, not one form with a
                     `formAction` button. A click that lands before React hydrates submits the
                     form natively, and a native submit ignores a server-action `formAction` —
                     "Clear" then SAVED the override instead. Two plain forms behave the same
@@ -383,7 +381,7 @@ export default async function ItemDetailPage({
                         <div className="min-w-[8rem]">
                           <div className="font-medium">{s.storeName}</div>
                           <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                            {s.override ? 'has its own answer' : 'follows the organisation'}
+                            {s.override ? 'set for this store' : 'uses the default'}
                             {' · here: '}
                             {soldAsLabel(s.resolved)}
                           </div>
@@ -392,7 +390,7 @@ export default async function ItemDetailPage({
                           <label key={f.key} className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                             {f.label}
                             <Select name={f.key} defaultValue={triValue(s.override?.[f.key])}>
-                              <option value="">Follow the organisation ({f.org ? 'yes' : 'no'})</option>
+                              <option value="">Use the default ({f.org ? 'yes' : 'no'})</option>
                               <option value="yes">Yes, here</option>
                               <option value="no">No, here</option>
                             </Select>
@@ -417,7 +415,7 @@ export default async function ItemDetailPage({
                       <div className="min-w-[8rem]">
                         <div className="font-medium">{s.storeName}</div>
                         <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                          {'follows the organisation'}
+                          {'uses the default'}
                           {' · here: '}
                           {soldAsLabel(s.resolved)}
                         </div>
@@ -426,7 +424,7 @@ export default async function ItemDetailPage({
                         <label key={f.key} className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                           {f.label}
                           <Select name={f.key} defaultValue={triValue(undefined)}>
-                            <option value="">Follow the organisation ({f.org ? 'yes' : 'no'})</option>
+                            <option value="">Use the default ({f.org ? 'yes' : 'no'})</option>
                             <option value="yes">Yes, here</option>
                             <option value="no">No, here</option>
                           </Select>
@@ -519,7 +517,7 @@ export default async function ItemDetailPage({
               <dt className="text-muted">Code</dt><dd className="font-mono">{item.code}</dd>
               <dt className="text-muted">Kind</dt><dd>{itemKindLabel(item.kind)}</dd>
               <dt className="text-muted">Measured in</dt><dd>{item.baseUnit}</dd>
-              <dt className="text-muted">Status</dt><dd className="capitalize">{item.status}</dd>
+              <dt className="text-muted">Status</dt><dd>{statusLabel(item.status)}</dd>
             </dl>
           </section>
       {sellers.length > 0 && (
@@ -527,7 +525,7 @@ export default async function ItemDetailPage({
           <h2 className="font-medium">Who sells this</h2>
           {sellers.length === 1 && (
             <p className="text-xs text-warning-ink">
-              ⚠️ Only one supplier &mdash; a single point of supply for this item.
+              Only one supplier, so there is no backup for this item.
             </p>
           )}
           <ul className="flex flex-wrap gap-2 text-sm">
@@ -541,7 +539,7 @@ export default async function ItemDetailPage({
                 </a>
                 <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
                   {s.source === 'observed'
-                    ? `billed ${s.timesBilled}× since ${s.firstSeenOn}`
+                    ? `billed ${s.timesBilled}× since ${s.firstSeenOn ? formatBusinessDayLong(s.firstSeenOn) : 'the start'}`
                     : 'declared — never billed'}
                 </span>
               </li>
@@ -552,22 +550,19 @@ export default async function ItemDetailPage({
 
       {history.length === 0 ? (
         <p className="rounded-lg border border-neutral-200 p-4 text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-          No prices yet. Record a supplier invoice with this item on a line, and its history starts
-          here — nothing is typed in twice.
+          No prices yet. Record a supplier invoice with this item on a line and its history starts here.
         </p>
       ) : (
         <>
           <section className="space-y-2">
             <h2 className="font-medium">Price by month</h2>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              The average is <strong>weighted</strong> — total spent ÷ total {item.baseUnit} — never
-              an average of averages. Buying 100{item.baseUnit} cheap and 1{item.baseUnit} dear is
-              not a mid-price month.
+              The average is total spent ÷ total {item.baseUnit} bought, so a big cheap purchase counts for more than a small dear one.
             </p>
             <div className="overflow-x-auto space-y-1">
               {movement.map((m) => (
                 <div key={m.month} className="flex min-w-[30rem] items-center gap-3 text-sm">
-                  <span className="w-16 shrink-0 font-mono text-xs">{m.month}</span>
+                  <span className="w-28 shrink-0 text-xs">{formatBusinessDateTime(new Date(`${m.month}-01T00:00:00+08:00`), { month: 'long', year: 'numeric' })}</span>
                   <div className="h-5 flex-1 overflow-hidden rounded bg-neutral-100 dark:bg-neutral-900">
                     <div
                       className="h-full rounded bg-neutral-800 dark:bg-neutral-200"
@@ -605,7 +600,7 @@ export default async function ItemDetailPage({
                         <td className="px-3 py-2 text-right font-mono tabular-nums">{per(s.avgPrice)}</td>
                         <td className="px-3 py-2 text-right font-mono tabular-nums">
                           {per(s.lastPrice)}
-                          <span className="ml-2 text-xs text-neutral-500">{s.lastDate}</span>
+                          <span className="ml-2 text-xs text-neutral-500">{formatBusinessDayLong(s.lastDate)}</span>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{s.observations}</td>
                       </tr>
@@ -631,7 +626,7 @@ export default async function ItemDetailPage({
                 <tbody>
                   {history.map((h) => (
                     <tr key={h.invoiceId + h.invoiceDate} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                      <td className="px-3 py-2">{h.invoiceDate}</td>
+                      <td className="px-3 py-2">{formatBusinessDayLong(h.invoiceDate)}</td>
                       <td className="px-3 py-2">{h.supplierName}</td>
                       <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400">
                         {h.quantity} {h.purchaseUnit} @ {per(h.unitPrice)}

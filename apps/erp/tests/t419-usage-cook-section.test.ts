@@ -125,7 +125,7 @@ describe('T-419 case 9 - the section, its labels and links', () => {
     const section = cookSection(html);
     expect(section, 'no "Used in cooking on" section on the page').not.toBe('');
     const t = text(section);
-    expect(t).toContain(`Used in cooking on ${DATE}`);
+    expect(t).toContain('Used in cooking on August 10, 2026');
     expect(t).toContain('Recipe: Adobo base');
     expect(t).toContain('Recipe: Sinigang base');
     expect(t).toContain('Pork');

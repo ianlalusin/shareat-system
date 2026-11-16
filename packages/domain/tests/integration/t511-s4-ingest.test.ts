@@ -186,15 +186,15 @@ describe('T-511 S4 ingest - a real Foodpanda invoice', () => {
     expect((await storedFile(u!.file_id)).store_id).toBe(w.storeA);
   });
 
-  it('PandaGO-only invoice: an upload row and three `none` lines with no day, zero day lines [kills: PandaGO booked; a day invented; lines lost]', async () => {
+  it('PandaGO-only invoice: an upload row and three `none` lines with no day, zero day lines; the delivery fee is a period charge (S8b item 9), the others stay pandago [kills: PandaGO cash booked; a day invented; lines lost]', async () => {
     const w = await world(sql, 'fp-pandago');
     const r = await ingest(w, w.managerA, zip(upload('foodpanda-lipa-oct5a-appendix-b-only-pandago.zip').bytes));
     expect(r).toMatchObject({ kind: 'foodpanda_invoice', daysStaged: 0 });
     expect((await lines(w.orgId, w.fpA)).length).toBe(0);
     const o = await otherLines(w.orgId);
     expect(o.length).toBe(3);
-    for (const l of o) expect(l).toMatchObject({ kind: 'pandago', booked_as: 'none', upload_id: r.uploadId, sales_date: null, line_date: '2026-09-24' });
-    expect(o.map((l) => l.amount).sort()).toEqual(['-476.00', '1.68', '89.29']);
+    for (const l of o) expect(l).toMatchObject({ booked_as: 'none', upload_id: r.uploadId, sales_date: null, line_date: '2026-09-24' });
+    expect(o.map((l) => [l.amount, l.kind]).sort()).toEqual([['-476.00', 'pandago'], ['1.68', 'pandago'], ['89.29', 'period_charge']]);
   });
 });
 

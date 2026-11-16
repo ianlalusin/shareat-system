@@ -27,7 +27,7 @@ interface SearchParams {
   ok?: string;
 }
 
-const TYPE_LABEL: Record<string, string> = { a_la_carte: 'A la carte', package: 'Package', refill: 'Refill' };
+const TYPE_LABEL: Record<string, string> = { a_la_carte: 'À la carte', package: 'Package', refill: 'Refill' };
 
 /** How a request ended, in words. */
 function outcome(r: RequestRow): string {
@@ -111,7 +111,7 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
                 </Field>
                 <Field label="Type" className="text-sm">
                   <Select name="itemType" defaultValue={one('itemType') || 'a_la_carte'} className="w-full">
-                    <option value="a_la_carte">A la carte</option>
+                    <option value="a_la_carte">À la carte</option>
                     <option value="package">Package</option>
                     <option value="refill">Refill</option>
                   </Select>
@@ -146,7 +146,7 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
 
       {resolver && (
         <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
-          <h2 className="text-lg font-semibold">{`Waiting for a decision (${queue.length})`}</h2>
+          <h2 className="text-lg font-semibold">{queue.length > 0 ? `Waiting for a decision (${queue.length})` : 'Waiting for a decision'}</h2>
           {queue.length === 0 && <p className="text-sm text-muted">Nothing is waiting.</p>}
           {queue.map((q) => {
             const matches = likely.get(q.id) ?? [];

@@ -233,6 +233,8 @@ export const FILE_REFERENCES: readonly FileReference[] = [
   ref('channel_settlements', 'withholding_certificate_file_id', ['receipt_photo', 'ar_collection_proof', 'memo_document', 'wastage_dispute', 'onboarding_document']),
   ref('employments', 'photo_file_id', ['staff_photo']),
   ref('persons', 'signature_file_id', ['staff_signature']),
+  // T-584: the saved signature copied onto a document version at signing time (a second holder of the same file, so the orphan sweep must keep it).
+  ref('issued_document_signatures', 'file_id', ['staff_signature']),
   // T-511 S2a (migration 0228): the uploaded statement (the CSV or zip) and, for Foodpanda, its PDF. Only the settlement purpose.
   ref('settlement_uploads', 'file_id', ['channel_settlement_file']),
   ref('settlement_uploads', 'pdf_file_id', ['channel_settlement_file']),

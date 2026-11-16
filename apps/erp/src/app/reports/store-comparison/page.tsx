@@ -2,7 +2,7 @@ import { getStorePLComparison } from '@shareat/domain';
 import { authorize } from '@shareat/auth';
 import { storesRepo } from '@shareat/db';
 import { reportScope, runReport } from '../lib';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { StoreComparisonTable, type StoreComparisonColumn } from '@/components/reports/StoreComparisonTable';
@@ -71,8 +71,8 @@ export default async function StoreComparisonPage({
       s.openingDate === null
         ? 'Not yet open — no opening date set'
         : storesRepo.isPreOpening(s.openingDate, today)
-          ? `Opens ${s.openingDate}`
-          : `Opened ${s.openingDate}`,
+          ? `Opens ${formatBusinessDayLong(s.openingDate)}`
+          : `Opened ${formatBusinessDayLong(s.openingDate)}`,
     revenue: s.statement.revenue,
     costOfSales: s.statement.costOfSales,
     grossProfit: s.statement.grossProfit,
@@ -87,9 +87,8 @@ export default async function StoreComparisonPage({
       <div>
         <h1 className="text-2xl font-semibold">Store Comparison</h1>
         <PageDescription>
-          Each store's income statement, side by side — every figure calls the same
-          `getIncomeStatement` the single-store screen does, never a second definition of the same
-          number.
+          Each store's income statement side by side, with the same figures as the single-store
+          Income Statement.
         </PageDescription>
       </div>
 
@@ -128,7 +127,7 @@ export default async function StoreComparisonPage({
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
           <span className="font-medium text-neutral-800 dark:text-neutral-200">{scope.orgName} ({scope.orgCode})</span>
           {' · '}
-          {fromDate} to {toDate}
+          {formatBusinessDayLong(fromDate)} to {formatBusinessDayLong(toDate)}
           {' · '}
           year-close entry {includeYearClose ? 'included' : 'excluded'}
         </p>

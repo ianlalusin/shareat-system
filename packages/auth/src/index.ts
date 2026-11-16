@@ -73,6 +73,8 @@ export type { AdminApprovalInput } from './admin-approval';
 /** T-424 - the POS v2 manager-PIN approval (refund, tender correction, unpaid-session void) and the terminal link it resolves through. */
 export { verifyPosManagerApproval, recordPosApprovalMiss, POS_APPROVAL_REFUSED, POS_APPROVAL_PIN_CAPPED, POS_TERMINAL_NOT_REGISTERED } from './pos-approval';
 export type { PosApprovalInput } from './pos-approval';
+export { verifySignerPin, SIGNER_PIN_REFUSED, SIGNER_PIN_CAPPED } from './signer-pin';
+export type { SignerPinInput } from './signer-pin';
 export { resolvePosTerminalLink, isPosDeviceId, POS_DEVICE_ID_INVALID } from './pos-terminal-link';
 export { hashPin, verifyPin, pinLookupHash, posTabletTokenHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';
 /** T-237 / DEF-224 — administering someone else's sign-in credentials. Gated on `manage_users`,

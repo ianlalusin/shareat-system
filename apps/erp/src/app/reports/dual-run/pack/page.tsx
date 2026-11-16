@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { dualRunOverview, dualRunPack } from '@shareat/domain';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { reportScope, runReport } from '../../lib';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { Page } from '@/components/shell/Page';
@@ -55,7 +56,7 @@ export default async function DualRunPackPage({ searchParams }: { searchParams: 
       {/* Print: hide the app shell (sidebar and top bar) so only the pack prints. Scoped to this page. */}
       <style>{'@media print { .shell-sidebar, header.shell-nav-row { display: none !important; } }'}</style>
       <div>
-        <h1 className="text-2xl font-semibold">Dual run: go / no-go pack</h1>
+        <h1 className="text-2xl font-semibold">Dual run: go-live check</h1>
         <p className="mt-1 text-sm text-muted">
           Only the newest report of each store and week counts. Weeks with no data are listed apart and not counted.
         </p>
@@ -116,22 +117,24 @@ export default async function DualRunPackPage({ searchParams }: { searchParams: 
         )}
       </section>
 
+      {pack.weeks.length > 0 ? (
       <section className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Weeks</h2>
         <ul className="flex flex-col gap-1 text-sm">
           {pack.weeks.map((w) => (
             <li key={`${w.storeId}|${w.weekStart}`} className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border py-1">
               <Link href={`/reports/dual-run/${encodeURIComponent(storeCode.get(w.storeId) ?? '')}/${w.weekStart}`} className="inline-flex min-h-11 items-center text-sm underline">
-                {nameOf(w.storeId)} · {w.weekStart}
+                {nameOf(w.storeId)} · {formatBusinessDayLong(w.weekStart)}
               </Link>
               <span className="flex items-center gap-2">
-                <span className="tabular-nums text-muted">{w.comparedDays} d</span>
+                <span className="tabular-nums text-muted">{w.comparedDays} {w.comparedDays === 1 ? 'day' : 'days'}</span>
                 <VerdictBadge verdict={w.verdict} />
               </span>
             </li>
           ))}
         </ul>
       </section>
+      ) : null}
 
       {pack.noData.length > 0 ? (
         <section className="flex flex-col gap-2">
@@ -139,7 +142,7 @@ export default async function DualRunPackPage({ searchParams }: { searchParams: 
           <ul className="list-disc pl-5 text-sm">
             {pack.noData.map((w) => (
               <li key={`${w.storeId}|${w.weekStart}`}>
-                {nameOf(w.storeId)} · {w.weekStart}
+                {nameOf(w.storeId)} · {formatBusinessDayLong(w.weekStart)}
               </li>
             ))}
           </ul>
@@ -153,7 +156,7 @@ export default async function DualRunPackPage({ searchParams }: { searchParams: 
           <ul className="list-disc pl-5 text-sm">
             {pack.stale.map((w) => (
               <li key={`${w.storeId}|${w.weekStart}`}>
-                {nameOf(w.storeId)} · {w.weekStart}
+                {nameOf(w.storeId)} · {formatBusinessDayLong(w.weekStart)}
               </li>
             ))}
           </ul>
@@ -190,7 +193,7 @@ export default async function DualRunPackPage({ searchParams }: { searchParams: 
             {pack.defects.map((d) => (
               <li key={`${d.storeId}|${d.weekStart}|${d.kind}|${d.lineKey}`} className="flex flex-wrap justify-between gap-2 border-b border-surface-border py-1">
                 <span>
-                  {nameOf(d.storeId)} · {d.weekStart} · {d.label}
+                  {nameOf(d.storeId)} · {formatBusinessDayLong(d.weekStart)} · {d.label}
                 </span>
                 <span className="font-medium">
                   {d.class} {d.ref || '(no reference found)'}
@@ -202,7 +205,7 @@ export default async function DualRunPackPage({ searchParams }: { searchParams: 
       </section>
 
       <p className="hidden text-xs text-muted print:block">
-        Range {pack.fromWeek} to {pack.toWeek}.
+        Range {formatBusinessDayLong(pack.fromWeek)} to {formatBusinessDayLong(pack.toWeek)}.
       </p>
     </Page>
   );

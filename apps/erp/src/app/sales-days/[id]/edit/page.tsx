@@ -4,7 +4,7 @@ import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { isZero, money } from '@shareat/core/money';
 import { salesDaysRepo } from '@shareat/db';
 import { listStores, listChannels, listStoreMoneyAccounts, getStoreLink, withOrgPrincipal, type ChannelOption } from '../../lib';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { canReadAtStore } from '@/lib/can-read-at-store';
 import { editSalesDayAction } from '../../actions';
 import { SalesDayForm, type SalesDayDefaults } from '../../SalesDayForm';
@@ -40,7 +40,8 @@ export default async function EditSalesDayPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/sales-days/${id}/edit`);
+  const { actor, refusal } = await requirePageAccess(`/sales-days/${id}/edit`);
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
   const day = await withOrgPrincipal(orgId, (tx) => salesDaysRepo.getById(tx, orgId, id));

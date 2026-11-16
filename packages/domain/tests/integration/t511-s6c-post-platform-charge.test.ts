@@ -17,7 +17,7 @@ import postgres from 'postgres';
  *      `postPlatformChargeOnClock(tx, actor, input, today)` is the seam; it is NOT on the barrel. `postPlatformCharge` is on the barrel.
  *  P2  total = net + VAT in whole centavos. total > 0: Dr 6400 (one line) / Cr 1220; total < 0: the same pair reversed; the 1220 line carries party channel (the channel's id)
  *      and the upload's store; the 6400 line the store and no party. Entry: source_type 'channel_charge', source_id = the charge row's id, status posted, key
- *      `channel_charge:{otherLineId}:post`, dated on the line_date when its month is open, else the first open date on or after it (never a reopened period).
+ *      `channel_charge:{otherLineId}:post`, dated on the line_date when its month is open, else TODAY when this month is open (T-511 S8b, Ian 15 Nov; it was the first open date on or after it), never a reopened period.
  *  P3  `channel_period_charges` columns used: id, org_id, store_id, channel_id, other_line_id, upload_id, charge_date (= line_date), net_amount, vat_amount, total_amount,
  *      entry_date, journal_entry_id, description (= the line's description), posted_by.
  *  P4  audit `channel_charge.posted`: one row per posted charge, entity_id = the charge id, store_id = the upload's store, actor = the caller. Nothing for a no-op or a refusal.
@@ -43,7 +43,7 @@ import { compareStoreWeek } from '../../../etl/src/dual-run/compare';
 import { day as isoDay, fp34Order, fpChargeRow, fpWorkbook, zipBytes } from '../unit/t511-s3-helpers';
 import { LIPA_FP, world as intakeWorld } from './_fixtures/t511-s4-world';
 import {
-  CHARGE_DATE, DATE, NEXT_OPEN, UUID_RE, asOrg, auditRows, charges, entriesOf, entryCount, linesOf, lineText, netDebit, periodCharge, postCharge, postChargeProd,
+  CHARGE_DATE, DATE, TODAY, UUID_RE, asOrg, auditRows, charges, entriesOf, entryCount, linesOf, lineText, netDebit, periodCharge, postCharge, postChargeProd,
   sentenceOf, world,
 } from './_fixtures/t511-s6c-world';
 
@@ -174,15 +174,15 @@ describe('S6c VAT NULL - a line staged before S6c is refused in plain words', ()
   });
 });
 
-describe('S6c dating - the charge date if its month is open, else the first open date on or after it', () => {
-  it('October closed after the invoice, November open: the entry and the row are dated 1 Nov; the charge date stays 14 Oct; October is never reopened [kills: dating in the closed month (postEntry refuses); reopening the period; dating on today; the charge date overwritten]', async () => {
+describe('S6c dating - the charge date if its month is open, else TODAY (T-511 S8b, Ian 15 Nov: was "the first open date on or after it")', () => {
+  it('October closed after the invoice, November open: the entry and the row are dated TODAY (5 Nov); the charge date stays 14 Oct; October is never reopened [kills: dating in the closed month (postEntry refuses); reopening the period; dating on the first open date after the charge (1 Nov, the S6c rule Ian replaced); the charge date overwritten]', async () => {
     const f = await world(sql, 'closed');
     const ol = await periodCharge(sql, f);
     await sql`update fiscal_periods set status = 'closed' where org_id = ${f.orgId} and starts_on = '2026-10-01'`;
     expect((await postCharge(f, f.admin, ol)).posted).toBe(true);
     const c = (await charges(sql, f.orgId))[0]!;
-    expect([c.entry_date, c.charge_date]).toEqual([NEXT_OPEN, CHARGE_DATE]);
-    expect((await entriesOf(sql, f.orgId)).find((e) => e.id === c.journal_entry_id)!.entry_date).toBe(NEXT_OPEN);
+    expect([c.entry_date, c.charge_date]).toEqual([TODAY, CHARGE_DATE]);
+    expect((await entriesOf(sql, f.orgId)).find((e) => e.id === c.journal_entry_id)!.entry_date).toBe(TODAY);
     const [p] = await sql<{ status: string }[]>`select status from fiscal_periods where org_id = ${f.orgId} and starts_on = '2026-10-01'`;
     expect(p!.status, 'a period is never reopened').toBe('closed');
   });
@@ -193,7 +193,7 @@ describe('S6c dating - the charge date if its month is open, else the first open
     expect((await charges(sql, f.orgId))[0]!.entry_date).toBe(CHARGE_DATE);
   });
 
-  it('every period up to today shut: a plain refusal (no UUID, says the books are closed), nothing written, nothing reopened; control: once November is open again it posts on 1 Nov [kills: a crash; a silent post into a closed month; reopening]', async () => {
+  it('every period up to today shut: a plain refusal (no UUID, says the books are closed), nothing written, nothing reopened; control: once November is open again it posts today [kills: a crash; a silent post into a closed month; reopening]', async () => {
     const f = await world(sql, 'allshut');
     const ol = await periodCharge(sql, f);
     await sql`update fiscal_periods set status = 'closed' where org_id = ${f.orgId}`;
@@ -206,7 +206,7 @@ describe('S6c dating - the charge date if its month is open, else the first open
 
     await sql`update fiscal_periods set status = 'open' where org_id = ${f.orgId} and starts_on = '2026-11-01'`;
     await postCharge(f, f.admin, ol);
-    expect((await charges(sql, f.orgId))[0]!.entry_date, 'control').toBe(NEXT_OPEN);
+    expect((await charges(sql, f.orgId))[0]!.entry_date, 'control').toBe(TODAY);
   });
 });
 

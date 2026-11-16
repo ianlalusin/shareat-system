@@ -100,6 +100,8 @@ export interface PostChargeResult {
   posted: boolean;
   chargeId?: string;
   journalEntryId?: string;
+  /** T-511 S8b: why the entry is not dated on the charge, when it is not */
+  dateNote?: string | null;
 }
 interface ChargeModule {
   postPlatformCharge: (tx: Tx, actor: Actor, input: Record<string, unknown>) => Promise<PostChargeResult>;

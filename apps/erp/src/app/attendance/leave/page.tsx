@@ -5,7 +5,7 @@ import {
   nativeAttrs,
 } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import {
   groupByRequest,
@@ -126,7 +126,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                 {labelFor(mine.types, detail.leaveType)} · <Badge status={detail.status} />
                 {detail.hasProof ? <span className="ml-2 text-xs text-neutral-500">Proof attached</span> : null}
               </p>
-              <p className="text-xs tabular-nums text-neutral-500">{detail.days.map((d) => d.date).join(', ')}</p>
+              <p className="text-xs tabular-nums text-neutral-500">{detail.days.map((d) => formatBusinessDayLong(d.date)).join(', ')}</p>
               <p className="text-sm">
                 <span className="text-neutral-500">Reason or note: </span>
                 {detail.note ?? 'none'}
@@ -140,10 +140,12 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">My leave</h2>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Service Incentive Leave {mine.year}: <strong>{mine.balance.remaining}</strong> of {mine.balance.entitlement} paid days left.
-          Unused days are paid out in cash at year end.
-        </p>
+        {mine.employments.length > 0 && (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            Service Incentive Leave {mine.year}: <strong>{mine.balance.remaining}</strong> of {mine.balance.entitlement} paid days left.
+            Unused days are paid out in cash at year end.
+          </p>
+        )}
         {mine.employments.length === 0 ? (
           <p className="rounded border border-dashed border-surface-border p-6 text-center text-sm text-neutral-500">
             You have no open job on record, so there is nothing to request leave against.
@@ -233,8 +235,8 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
               <li key={r.requestId} className="flex flex-wrap items-center justify-between gap-2 rounded border border-surface-border p-3 text-sm">
                 <span>
                   <span className="tabular-nums">
-                    {r.firstDate === r.lastDate ? r.firstDate : `${r.firstDate} to ${r.lastDate}`}
-                    <span className="text-neutral-500"> ({r.dayCount} d)</span>
+                    {r.firstDate === r.lastDate ? formatBusinessDayLong(r.firstDate) : `${formatBusinessDayLong(r.firstDate)} to ${formatBusinessDayLong(r.lastDate)}`}
+                    <span className="text-neutral-500"> ({r.dayCount} {r.dayCount === 1 ? 'day' : 'days'})</span>
                   </span>
                   {' · '}
                   {labelFor(mine.types, r.leaveType)}
@@ -465,8 +467,8 @@ function RequestHead({ group, kinds }: { group: RequestGroup; kinds: readonly { 
         </span>
       </div>
       <p className="text-xs tabular-nums text-neutral-500">
-        {group.dates.join(', ') || '—'}
-        {group.restDays.length > 0 ? ` · rest days: ${group.restDays.join(', ')}` : ''}
+        {group.dates.map(formatBusinessDayLong).join(', ') || '—'}
+        {group.restDays.length > 0 ? ` · rest days: ${group.restDays.map(formatBusinessDayLong).join(', ')}` : ''}
       </p>
     </div>
   );
