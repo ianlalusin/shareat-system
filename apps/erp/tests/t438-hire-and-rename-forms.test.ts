@@ -22,6 +22,9 @@ vi.mock('next/navigation', () => ({
   notFound: () => {
     throw new Error('notFound');
   },
+  // T-590: the staff page now holds FormModals, which read the address.
+  usePathname: () => '/staff/emp-1',
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
 // Every real export becomes an inert function (the builder's rename action is unknown to this file, so no names are listed).
