@@ -2,7 +2,7 @@
 
 Status: SPEC (Opus), 2026-11-15. Ian: "C:\Users\ianla\SE\FOODPANDA INVOICES\2026\nov\lipa nov 11.zip must handle that kind of file."
 Branch `lane/t511-fp-lipa-nov11` (worktree `wt-fpnov`, base origin/main c7c5275). BOSS commits/merges. S8a first (no migration), then S8b
-(migration 0258, ask BOSS to confirm the number on the board; its `when` = previous journal `when` + 86,400,000).
+(migration 0260, ask BOSS to confirm the number on the board; its `when` = previous journal `when` + 86,400,000).
 
 ## What the real file is (measured 15 Nov, Sonnet probe + my own read)
 Zip `lipa nov 11.zip` = 4 pairs (invoice workbook `.xls` + `.pdf`), store Lipa, partner code O6JZ. The `.xls` files are really OOXML.
@@ -40,14 +40,14 @@ Zip `lipa nov 11.zip` = 4 pairs (invoice workbook `.xls` + `.pdf`), store Lipa, 
   ones, pdf pairing, caps. Plus ONE test over the real file that skips when `C:\Users\ianla\SE\FOODPANDA INVOICES\2026\nov\lipa nov 11.zip`
   is absent: 4 uploads accepted, invoice numbers and charge figures as above. UI result text plain, no codes.
 
-## S8b — earlier-invoice deductions, same-day charges (migration 0258)
+## S8b — earlier-invoice deductions, same-day charges (migration 0260)
 Decisions (mine, flagged to BOSS/Ian in the hand-back):
 1. **Reader.** `FoodpandaCharge` gains `officialDocument` (Appendix B rows only; `FP_BANNED_KEYS` keeps banning it on orders; change that pin
    deliberately and say why). New `priorItems: { document, date, amount }[]` from Appendix C (sheet optional; absent = `[]`; blank rows
    skipped; at most 50; amount = signed "Invoice Amount" as printed, money parsed like the other sheets). Worker/host/`WorkerSheets` get a `c`.
-2. **Migration 0258** (hand-authored, ADR-012 §5): `settlement_other_lines.official_document text` (nullable, partial index on
+2. **Migration 0260** (hand-authored, ADR-012 §5): `settlement_other_lines.official_document text` (nullable, partial index on
    (org_id, official_document) where not null) and `settlement_uploads.prior_items jsonb not null default '[]'` with a CHECK that it is a
-   json array. No new table: registries and classification unchanged (the build will say if wrong). Journal idx 258, `when` = main's last + 1 day.
+   json array. No new table: registries and classification unchanged (the build will say if wrong). Journal idx 260, `when` = main's last + 1 day.
 3. **Supersede.** Statements (uploads that read order rows) keep today's channel + kind + period key. Charge-only invoices (0 orders) are
    superseded only by an upload of the SAME invoice number with different bytes; never by period. Two different invoices on one date both
    stay current. Pin with tests (the two real small invoices + a same-invoice-number re-issue).
