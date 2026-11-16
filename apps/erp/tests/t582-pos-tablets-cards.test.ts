@@ -124,7 +124,7 @@ describe('T-582 forms are behind modal buttons', () => {
     H.view = { active: null, revoked: [], terminals: [] };
     const html = await render();
     expect(html).not.toContain('name="deviceId"');
-    expect(html).toMatch(/Firebase console/);
+    expect(html).toMatch(/system administrator/);
   });
 });
 

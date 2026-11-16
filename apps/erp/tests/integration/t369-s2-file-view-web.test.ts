@@ -539,7 +539,7 @@ describe('AUDIT D — a fault while deciding whether to draw the thumbnail never
     } catch (err) {
       throw new Error(`the bill page threw because the link check faulted: ${String((err as Error).message).slice(0, 160)}`);
     }
-    expect(html, 'the page still renders its evidence panel').toMatch(/photo attached/);
+    expect(html, 'the page still renders its evidence panel').toMatch(/photo attached/i);
     expect(links(html), 'a faulted link check still drew a link').toBe(0);
     expect(html).not.toMatch(/Cannot read properties/);
   });
@@ -553,7 +553,7 @@ describe('AUDIT D — a fault while deciding whether to draw the thumbnail never
     CAN_READ_FILE_STUB.fn = async () => false;
     ACTOR_HOLDER.actor = f.manager;
     const html = renderToStaticMarkup((await InvoicePage({ params: Promise.resolve({ id: inv.id }), searchParams: Promise.resolve({}) })) as never);
-    expect(html).toMatch(/photo attached/);
+    expect(html).toMatch(/photo attached/i);
     expect(html).not.toMatch(/src="\/files\//);
   });
 });

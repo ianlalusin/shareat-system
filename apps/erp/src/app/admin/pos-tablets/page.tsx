@@ -110,8 +110,8 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
         <FormModal trigger="+ Register tablet" title="Register a tablet" size="md">
           {terminals.length === 0 ? (
             <p data-no-terminal className="text-sm text-neutral-600 dark:text-neutral-400">
-              {store.name} has no tablet login yet. Create the store&apos;s tablet login in the Firebase console first, then run the
-              provision-terminal command with that login&apos;s uid. After that it appears here.
+              {store.name} has no tablet login yet. Ask the system administrator to set one up for this store. It will appear here
+              afterwards.
             </p>
           ) : (
             <CheckedForm rules={POS_TABLET_REGISTER_RULES} action={registerTabletAction} className="space-y-3 text-sm">
@@ -174,8 +174,8 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
         {!active && terminals.length === 0 ? (
           <div className={CARD}>
             <p data-no-terminal className="text-sm text-neutral-600 dark:text-neutral-400">
-              {store.name} has no tablet login yet. Create the store&apos;s tablet login in the Firebase console first, then run the
-              provision-terminal command with that login&apos;s uid. After that it appears here.
+              {store.name} has no tablet login yet. Ask the system administrator to set one up for this store. It will appear here
+              afterwards.
             </p>
           </div>
         ) : (
@@ -238,80 +238,6 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
       </section>
 
       <TillsSection store={store} tills={tills} returnTo={RETURN_TO} />
-<<<<<<< HEAD
-
-      <section className="space-y-3 rounded-lg border border-surface-border p-4">
-        <h2 className="font-medium">Register a tablet</h2>
-        {terminals.length === 0 ? (
-          <p data-no-terminal className="text-sm text-neutral-600 dark:text-neutral-400">
-            {store.name} has no tablet login yet. Ask the system administrator to set one up for this store. It will appear here
-            afterwards.
-          </p>
-        ) : (
-          <CheckedForm rules={POS_TABLET_REGISTER_RULES} action={registerTabletAction} className="space-y-3 text-sm">
-            <input type="hidden" name="storeId" value={store.id} />
-            {active && (
-              <Banner tone="warning">
-                This replaces the tablet ending {deviceTail(active.deviceId)}. That tablet stops working for approvals.
-              </Banner>
-            )}
-            <FormGrid layout="fields">
-              <Field label="Device id" width="long" rule={POS_TABLET_REGISTER_RULES.deviceId}>
-                <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.deviceId)} placeholder="Paste from the tablet: Settings, Terminal, Copy" autoComplete="off" />
-              </Field>
-              <Field label="Terminal number (1 to 99)" width="short" rule={POS_TABLET_REGISTER_RULES.terminalNo}>
-                <Input {...nativeAttrs(POS_TABLET_REGISTER_RULES.terminalNo)} defaultValue="1" />
-              </Field>
-              <Field label="Tablet login" width="name">
-                <Select name="terminalPersonId">
-                  {terminals.map((t) => (
-                    <option key={t.personId} value={t.personId}>
-                      {t.displayName}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="primary">
-              Register tablet
-            </Button>
-          </CheckedForm>
-        )}
-      </section>
-
-      <section className="space-y-3 rounded-lg border border-surface-border p-4">
-        <h2 className="font-medium">Approval lock</h2>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Five wrong manager PINs in a day lock the tablet&apos;s refund approvals. The lock lifts by itself after 24 hours.
-        </p>
-        {terminals.length === 0 ? (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">No tablet login at this store.</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {terminals.map((t) => (
-              <li key={t.personId} className="flex flex-wrap items-center gap-3">
-                <span className="font-medium">{t.displayName}</span>
-                {t.capped ? (
-                  <>
-                    <span data-locked>Locked since {when(t.cappedAt)}. It lifts by itself after 24 hours.</span>
-                    <form action={clearLockAction}>
-                      <input type="hidden" name="personId" value={t.personId} />
-                      <input type="hidden" name="storeId" value={store.id} />
-                      <Button type="submit" variant="primary">
-                        Clear the lock
-                      </Button>
-                    </form>
-                  </>
-                ) : (
-                  <span className="text-neutral-600 dark:text-neutral-400">Not locked.</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-=======
->>>>>>> origin/main
     </Page>
   );
 }
