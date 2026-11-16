@@ -61,7 +61,7 @@ export function FindSetting() {
         value={query}
         placeholder="Try VAT, stations or hours"
         autoComplete="off"
-        className="w-full sm:max-w-sm"
+        className="w-full"
         onChange={(e) => change(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Escape' && query) change('');
