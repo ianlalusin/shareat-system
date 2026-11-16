@@ -253,7 +253,7 @@ describe('T-348 S2 — SW6: class B/C/D sites keep their exact class strings (mu
     ],
     'admin/users/[personId]/page.tsx': ['text-sm text-neutral-500 dark:text-neutral-400'],
     'items/[id]/page.tsx': ['text-sm text-neutral-500 dark:text-neutral-400'],
-    'staff/[employmentId]/page.tsx': ['text-sm text-neutral-500 dark:text-neutral-400'],
+    // T-590 A1: this page's grey meta line is no longer a <p> next to the <h1> (it holds the Edit positions button), so it has no class C site now.
     // class D — not a description at all
     'ap/suppliers/[id]/page.tsx': ['text-xs text-neutral-500 dark:text-neutral-400'],
     "customers/[customerId]/page.tsx": ["text-xs ${TREATMENT_TONE[customer.treatment] ?? ''}"],

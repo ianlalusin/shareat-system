@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
 export type ActionIconName =
   | 'plus' | 'check' | 'edit' | 'close' | 'trash' | 'eye' | 'filter' | 'download' | 'upload'
   | 'search' | 'send' | 'star' | 'refresh' | 'print' | 'back' | 'next' | 'copy' | 'calculator' | 'save'
-  | 'lock' | 'thumbsUp' | 'book';
+  | 'lock' | 'thumbsUp' | 'book' | 'camera';
 
 const PATHS: Record<ActionIconName, ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
@@ -34,6 +34,12 @@ const PATHS: Record<ActionIconName, ReactNode> = {
     <>
       <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" />
       <path d="M13.5 6.5l4 4" />
+    </>
+  ),
+  camera: (
+    <>
+      <path d="M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
+      <circle cx="12" cy="13.5" r="3.5" />
     </>
   ),
   close: <path d="M6 6l12 12M18 6 6 18" />,

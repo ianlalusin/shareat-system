@@ -34,7 +34,7 @@
  "sales-days/new/page.tsx": 2,
  "service-charge/page.tsx": 1,
  "settings/sales-channels/page.tsx": 1,
- "staff/[employmentId]/page.tsx": 1,
+ "staff/[employmentId]/page.tsx": 3,
  "staff/hire/page.tsx": 1,
  "till/page.tsx": 1,
  "trade/orders/[id]/page.tsx": 1,
