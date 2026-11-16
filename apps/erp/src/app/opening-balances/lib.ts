@@ -192,3 +192,8 @@ export async function loadPendingShells(orgId: string): Promise<{ id: string; st
 export async function loadTieOut(orgId: string): Promise<TieOut> {
   return withOrgPrincipal(orgId, (tx) => openingTieOut(tx, orgId));
 }
+
+/** T-591 B: have the books been opened? Once they have, the count screen shows the figures and takes no more edits. */
+export async function loadOpeningPosted(orgId: string): Promise<{ posted: boolean; entryDate: string | null }> {
+  return withOrgPrincipal(orgId, (tx) => cutoverRepo.openingPosted(tx, orgId));
+}

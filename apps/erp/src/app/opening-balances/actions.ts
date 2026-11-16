@@ -63,7 +63,9 @@ export async function recordCountAction(formData: FormData): Promise<void> {
   const itemId = str(formData, 'itemId');
   // T-390 R1 / DEF-630: the count belongs to a ROOM. Blank = the store's default room (the domain's rule).
   const locationId = str(formData, 'locationId');
-  const nav = locationId ? { store: storeId, room: locationId } : { store: storeId };
+  // T-591 B: the 'Not counted yet' filter rides along (a closed word), so saving an item leaves the person on the short list.
+  const show = str(formData, 'show') === 'uncounted' ? { show: 'uncounted' } : {};
+  const nav = { store: storeId, ...(locationId ? { room: locationId } : {}), ...show };
   try {
     await recordingRefusalsFor(actor.orgId, () =>
       withOrgPrincipal(actor.orgId, (tx: Tx) =>
