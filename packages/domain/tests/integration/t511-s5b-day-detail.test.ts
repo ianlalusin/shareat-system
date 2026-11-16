@@ -241,13 +241,13 @@ describe('T-511 S5b day detail - Foodpanda figures re-read from the stored file'
     expect(grab.vatOnFees).toBeNull();
   });
 
-  it('the PandaGO-only invoice: the approved sentence with 374.32, and one note with the workbook date and a pointer to the PDF [kills: PandaGO booked or silent; wording drift]', async () => {
+  it('the PandaGO-only invoice: the approved sentence with 474.32 (the delivery fee books as a charge now), and one note with the workbook date and a pointer to the PDF [kills: PandaGO booked or silent; wording drift]', async () => {
     const w = await world3(sql, 'detail-pandago');
     await ingest(w, w.managerA, { bytes: upload('foodpanda-lipa-oct5a-appendix-b-only-pandago.zip').bytes, contentType: 'application/zip' });
     const out = await asOrg(w.orgId, (tx) => listReviewDays(tx, w.managerA, {}));
     const p = (out as unknown as { pandagoOnly: { sentence: string; dateNote: string; workbookDate: string }[] }).pandagoOnly[0]!;
     expect(p.sentence).toMatch(
-      /^PandaGO: \S*374\.32 will be paid to you by Foodpanda \(cash on delivery that PandaGO riders collected for you, less PandaGO fees\)\. It is not part of the sales receivable and is not booked here; record it yourself\.$/,
+      /^PandaGO: \S*474\.32 will be paid to you by Foodpanda \(cash on delivery that PandaGO riders collected for you, apart from the delivery fees, which are booked as charges\)\. It is not part of the sales receivable and is not booked here; record it yourself\.$/,
     );
     expect(p.workbookDate).toBe('2026-10-02');
     expect(p.dateNote).toMatch(/2026-10-02|2 Oct/);

@@ -22,7 +22,9 @@ import {
   assertNoLeak,
   day,
   fixture,
+  foodpandaChargeDocuments,
   foodpandaSensitive,
+  withoutChargeDocuments,
   fp32Order,
   fp34Order,
   fpChargeRow,
@@ -218,7 +220,7 @@ describe.each(INVOICES)('readFoodpandaInvoice: $zip', (f) => {
     expect(inv.invoiceDate).toBe(f.date);
     expect(inv.vendorCode.toLowerCase()).toBe(f.vendor.toLowerCase());
     expect(inv.partnerName).toBe(f.partner);
-    expect(Object.keys(JSON.parse(JSON.stringify(inv))).sort()).toEqual(['charges', 'invoiceDate', 'invoiceNumber', 'layout', 'orders', 'partnerName', 'readerVersion', 'vendorCode']);
+    expect(Object.keys(JSON.parse(JSON.stringify(inv))).sort()).toEqual(['charges', 'invoiceDate', 'invoiceNumber', 'layout', 'orders', 'partnerName', 'priorItems', 'readerVersion', 'vendorCode']);
   });
 
   it('every order row: exactly the 24 spec keys, ISO date, and both identity differences are 0.00', async () => {
@@ -260,7 +262,12 @@ describe.each(INVOICES)('readFoodpandaInvoice: $zip', (f) => {
     const wb = await workbookOf(f.zip);
     const sensitive = await foodpandaSensitive(wb);
     expect(sensitive.size).toBeGreaterThan(f.orders - f.reversals);
-    expect(assertNoLeak(await read(f.zip), sensitive, FP_BANNED_KEYS)).toEqual([]);
+    const inv = await read(f.zip);
+    // S8b: an Appendix B document number is a deliberate field of a CHARGE, so the whole-invoice scan leaves those numbers out of the set ...
+    expect(assertNoLeak(inv, withoutChargeDocuments(sensitive, await foodpandaChargeDocuments(wb)), FP_BANNED_KEYS)).toEqual([]);
+    // ... and the pin that used to be the banned key `officialDocument` everywhere holds for ORDERS in full: no order field is, or contains, any order code or document number (Appendix A or B)
+    expect(assertNoLeak(inv.orders, sensitive, FP_BANNED_KEYS)).toEqual([]);
+    for (const o of inv.orders) expect('officialDocument' in o).toBe(false);
   });
 });
 
@@ -304,19 +311,19 @@ describe('readFoodpandaInvoice: anchors on known rows (these make the other chec
     expect(o).toMatchObject({ orderDate: '2026-10-04', gross: '0.00', cancellationFee: '50.00', balance: '-56.00', commission: '0.00' });
   });
 
-  it('the Appendix-B-only invoice reads with no orders and 3 PandaGO charges (date from month-first M.DD.YYYY)', async () => {
+  it('the Appendix-B-only invoice reads with no orders and 3 charges: the Delivery Service Fees row is a `delivery_fee` (it books, S8b item 9), the COD and withholding rows stay `pandago` (date from month-first M.DD.YYYY)', async () => {
     const inv = await read('foodpanda-lipa-oct5a-appendix-b-only-pandago.zip');
     expect(inv.orders).toEqual([]);
     expect(inv.charges).toHaveLength(3);
-    expect(inv.charges.every((c) => c.kind === 'pandago')).toBe(true);
-    expect(inv.charges.map((c) => c.category).sort()).toEqual(['1/2% Withholding Tax', 'Delivery Service Fees', 'Pandago COD']);
+    expect(inv.charges.map((c) => [c.category, c.kind]).sort()).toEqual([['1/2% Withholding Tax', 'pandago'], ['Delivery Service Fees', 'delivery_fee'], ['Pandago COD', 'pandago']]);
     expect(inv.charges.every((c) => c.date === '2026-09-24')).toBe(true);
     expect(add(...inv.charges.map((c) => c.netTotal))).toBe('-385.03');
     expect(inv.charges.find((c) => c.category === 'Pandago COD')?.netTotal).toBe('-476.00');
     expect(inv.invoiceNumber).toBe('200199709701');
     expect(inv.invoiceDate).toBe('2026-10-02');
     expect(inv.vendorCode.toLowerCase()).toBe('o6jz');
-    expect(assertNoLeak(inv, await foodpandaSensitive(await workbookOf('foodpanda-lipa-oct5a-appendix-b-only-pandago.zip')), FP_BANNED_KEYS)).toEqual([]);
+    const pandagoWb = await workbookOf('foodpanda-lipa-oct5a-appendix-b-only-pandago.zip');
+    expect(assertNoLeak(inv, withoutChargeDocuments(await foodpandaSensitive(pandagoWb), await foodpandaChargeDocuments(pandagoWb)), FP_BANNED_KEYS)).toEqual([]);
   });
 
   it('the inline-strings variant (another generator) reads the same as the Malvar workbook it was made from', async () => {
@@ -474,16 +481,19 @@ describe('readFoodpandaInvoice: generated invoices (the generator itself is prov
     expect(inv.orders).toHaveLength(1);
   });
 
-  it('Appendix B kinds: a PandaGO description gives its month-first date, an unrecognised category is kind other', async () => {
+  it('Appendix B kinds (S8b item 9): the CATEGORY "Delivery Service Fees" is kind delivery_fee (a PandaGO order row keeps its month-first date, a reversal row has none), any other PandaGO row stays pandago, an unrecognised category is kind other [kills: a PandaGO COD row read as a fee; a reversal row left unbooked]', async () => {
     const charges = [
       fpChargeRow('Delivery Service Fees', 'PandaGO Order-1.05.2026-zz99-abc123', 50),
+      fpChargeRow('Delivery Service Fees', 'Incorrect Invoice Amount Reversal: 200223033317', -50),
       fpChargeRow('Pandago COD', 'PandaGO Order-12.31.2026-zz99-abc124', -20, '0%'),
       fpChargeRow('Mystery Fee', 'Something we have never seen', 5),
+      fpChargeRow('  delivery service FEES ', 'PandaGO Order-2.03.2026-zz99-abc125', 7),
+      fpChargeRow('Delivery Service Fees Extra', 'PandaGO Order-2.04.2026-zz99-abc126', 7),
     ];
     const inv = (await readFoodpandaInvoice(fpWorkbook({ chargeRows: charges }))) as unknown as Invoice;
-    expect(inv.charges.map((c) => c.kind)).toEqual(['pandago', 'pandago', 'other']);
-    expect(inv.charges.map((c) => c.date ?? null)).toEqual(['2026-01-05', '2026-12-31', null]);
-    expect(inv.charges.map((c) => c.netTotal)).toEqual(['50.00', '-20.00', '5.00']);
+    expect(inv.charges.map((c) => c.kind)).toEqual(['delivery_fee', 'delivery_fee', 'pandago', 'other', 'delivery_fee', 'pandago']);
+    expect(inv.charges.map((c) => c.date ?? null)).toEqual(['2026-01-05', null, '2026-12-31', null, '2026-02-03', '2026-02-04']);
+    expect(inv.charges.map((c) => c.netTotal)).toEqual(['50.00', '-50.00', '-20.00', '5.00', '7.00', '7.00']);
   });
 
   it('a B-only workbook built here (no Appendix A sheet at all) has no orders and takes its invoice fields from Appendix B', async () => {

@@ -24,6 +24,8 @@ export interface StoredUpload {
   ordersRead: number;
   loanRowsRead: number;
   otherRowsRead: number;
+  /** T-511 S8b: the earlier items Appendix C prints (Foodpanda); `[]` for Grab and for an invoice without that sheet */
+  priorItems: { document: string; date: string | null; amount: string; remaining: string | null }[];
   transactions?: GrabTransactionsFile;
   transfers?: GrabTransfersFile;
   foodpanda?: FoodpandaInvoice;
@@ -40,7 +42,7 @@ export async function readSettlementBytes(kind: SettlementFileKind, bytes: Buffe
     const { from, to } = extent(invoice.orders.length > 0 ? invoice.orders.map((o) => o.orderDate) : invoice.charges.flatMap((c) => (c.date ? [c.date] : [])));
     return {
       kind, platform: 'foodpanda', code: invoice.vendorCode, periodFrom: from, periodTo: to, invoiceNumber: invoice.invoiceNumber,
-      ordersRead: invoice.orders.length, loanRowsRead: 0, otherRowsRead: invoice.charges.length, foodpanda: invoice,
+      ordersRead: invoice.orders.length, loanRowsRead: 0, otherRowsRead: invoice.charges.length, priorItems: invoice.priorItems.map((p) => ({ document: p.document, date: p.date, amount: String(p.amount), remaining: p.remaining === null ? null : String(p.remaining) })), foodpanda: invoice,
     };
   }
   if (kind === 'grab_transactions') {
@@ -48,12 +50,12 @@ export async function readSettlementBytes(kind: SettlementFileKind, bytes: Buffe
     const count = (k: string): number => file.rows.filter((r) => r.kind === k).length;
     return {
       kind, platform: 'grab', code: file.storeId, periodFrom: file.periodFrom, periodTo: file.periodTo, invoiceNumber: null,
-      ordersRead: count('payment'), loanRowsRead: count('loan'), otherRowsRead: count('adjustment') + count('advertisement'), transactions: file,
+      ordersRead: count('payment'), loanRowsRead: count('loan'), otherRowsRead: count('adjustment') + count('advertisement'), priorItems: [], transactions: file,
     };
   }
   const file = readGrabTransfers(bytes);
   const { from, to } = extent(file.rows.map((r) => r.payoutDate.date));
-  return { kind, platform: 'grab', code: file.storeId, periodFrom: from, periodTo: to, invoiceNumber: null, ordersRead: 0, loanRowsRead: 0, otherRowsRead: 0, transfers: file };
+  return { kind, platform: 'grab', code: file.storeId, periodFrom: from, periodTo: to, invoiceNumber: null, ordersRead: 0, loanRowsRead: 0, otherRowsRead: 0, priorItems: [], transfers: file };
 }
 
 /**

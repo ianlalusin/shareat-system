@@ -182,6 +182,8 @@ export * from './settlement-intake';
 // T-511 S4 - ingest one settlement file into the staging tables (the upload screen's action calls this; the stage and match steps stay internal).
 export { ingestSettlementFile } from './settlement-intake/ingest';
 export type { IngestInput, IngestResult } from './settlement-intake/ingest';
+export { ingestSettlementUpload } from './settlement-intake/ingest-many';
+export type { RunInTx, UploadMemberResult } from './settlement-intake/ingest-many';
 // T-511 S5b - the review stage: re-read a stored file, a staged day as a settlement input, the company-wide Grab loan check, the day blockers, and the review list / detail / decisions.
 export { readStoredUpload } from './settlement-intake/stored-upload';
 export type { StoredUpload } from './settlement-intake/stored-upload';

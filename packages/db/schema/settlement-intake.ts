@@ -25,7 +25,7 @@
  * `sales_channels_org_id_id_store_id_unique` (that FK's target; see schema/sales-days.ts). The partial unique `settlement_day_lines_settlement_id_key` is mirrored below.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, foreignKey, index, integer, numeric, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { boolean, check, date, foreignKey, index, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { channelSettlements } from './channel-settlements';
 import { journalEntries } from './journal';
 import { loans } from './loans';
@@ -102,6 +102,11 @@ export const settlementUploads = pgTable(
     ordersRead: integer('orders_read').notNull().default(0),
     loanRowsRead: integer('loan_rows_read').notNull().default(0),
     otherRowsRead: integer('other_rows_read').notNull().default(0),
+    /**
+     * T-511 S8b (0260): the items of the invoice's "Appendix C" (Outstanding Amount From Previous Periods) as the reader returned them, `[{ document, date, amount }]`, the amount
+     * signed as printed. A fact of the file, written once at upload; `[]` for every upload before S8b, for Grab and for an invoice with no such sheet.
+     */
+    priorItems: jsonb('prior_items').$type<{ document: string; date: string | null; amount: string; remaining: string | null }[]>().notNull().default(sql`'[]'::jsonb`),
     /** The upload that replaced this one; NULL = current. */
     supersededBy: uuid('superseded_by'),
     uploadedBy: uuid('uploaded_by').notNull(),
@@ -114,6 +119,7 @@ export const settlementUploads = pgTable(
     check('settlement_uploads_platform_check', sql`${t.platform} in ('grab', 'foodpanda')`),
     check('settlement_uploads_file_kind_check', sql`${t.fileKind} in ('grab_transactions', 'grab_transfers', 'foodpanda_invoice')`),
     check('settlement_uploads_counts_check', sql`${t.ordersRead} >= 0 and ${t.loanRowsRead} >= 0 and ${t.otherRowsRead} >= 0`),
+    check('settlement_uploads_prior_items_array_check', sql`jsonb_typeof(${t.priorItems}) = 'array'`),
     // 3 columns (delta, BOSS 3 Nov): pins the org AND the store, so an upload's store_id is always its channel's store. Replaces the (org_id, channel_id) twin.
     // Targets the hand-added `sales_channels_org_id_id_store_id_unique` (migration 0228; see schema/sales-days.ts).
     foreignKey({ columns: [t.orgId, t.channelId, t.storeId], foreignColumns: [salesChannels.orgId, salesChannels.id, salesChannels.storeId], name: 'settlement_uploads_channel_store_same_org_fk' }).onDelete('restrict'),
@@ -275,15 +281,23 @@ export const settlementOtherLines = pgTable(
     description: text('description'),
     /** T-511 S6c (0244): the VAT of a `period_charge` line (net x the file's rate, half up, once; signed like `amount`). NULL = staged before S6c or not a period charge. */
     vatAmount: numeric('vat_amount', { precision: 14, scale: 2 }),
+    /**
+     * T-511 S8b (0260): the Official Document Number printed on this charge's Appendix B row (Foodpanda). An earlier-invoice deduction on a later payout's Appendix C names it, and
+     * the duplicate-copy rule compares it. NULL for Grab, for a row that printed none and for every line staged before S8b. 1 to 40 characters when present.
+     */
+    officialDocument: text('official_document'),
     isCurrent: boolean('is_current').notNull().default(true),
   },
   (t) => [
     index('settlement_other_lines_org_upload_idx').on(t.orgId, t.uploadId),
+    // NOTE: partial, hand-added in migration 0260 exactly as written here (the lookup the netting does); kept in the builder too so the two never drift.
+    index('settlement_other_lines_org_official_document_idx').on(t.orgId, t.officialDocument).where(sql`${t.officialDocument} is not null`),
+    check('settlement_other_lines_official_document_check', sql`${t.officialDocument} is null or char_length(${t.officialDocument}) between 1 and 40`),
     unique('settlement_other_lines_org_id_id_unique').on(t.orgId, t.id),
     check('settlement_other_lines_vat_amount_finite_check', sql`${t.vatAmount} > '-Infinity'::numeric and ${t.vatAmount} < 'Infinity'::numeric`),
     check('settlement_other_lines_kind_check', sql`${t.kind} in ('adjustment', 'compensation', 'chargeback', 'withholding_tax', 'advertisement', 'cancelled_order', 'period_charge', 'platform_fee_weekly', 'pandago')`),
     check('settlement_other_lines_booked_as_check', sql`${t.bookedAs} in ('platformFee', 'marketing', 'none')`),
-    /** PandaGO is never booked from a settlement statement. */
+    /** A `pandago` line (cash on delivery, withholding) is never booked from a settlement statement; a "Delivery Service Fees" row is a `period_charge` since T-511 S8b item 9. */
     check('settlement_other_lines_pandago_check', sql`${t.kind} <> 'pandago' or ${t.bookedAs} = 'none'`),
     check('settlement_other_lines_description_length_check', sql`${t.description} is null or char_length(${t.description}) <= 200`),
     check('settlement_other_lines_amount_finite_check', finite(t.amount)),
@@ -339,7 +353,7 @@ export const salesDayPlatformCorrections = pgTable(
 
 /**
  * T-511 S6c (migration 0244) - the append-only record of a platform charge booked with no sales day (`postPlatformCharge`): Dr 6400 (fee + VAT) / Cr 1220 that channel,
- * dated on the charge (or the first open date after it). `totalAmount = netAmount + vatAmount`, signed (a platform credit note is negative), never zero.
+ * dated on the charge when its month is open, else on the day it was booked (T-511 S8b). `totalAmount = netAmount + vatAmount`, signed (a platform credit note is negative), never zero.
  *
  * NOTE: hand-added in 0244: ENABLE and FORCE ROW LEVEL SECURITY, the policy channel_period_charges_org_isolation (app_current_org()), the grants (SELECT and INSERT only),
  * the append-only refuse trigger channel_period_charges_append_only (ENABLE ALWAYS), the finite checks and the total identity check. The channel and store are ONE 3-column
