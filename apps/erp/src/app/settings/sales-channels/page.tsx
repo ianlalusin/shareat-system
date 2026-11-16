@@ -20,7 +20,7 @@ import { typedFor } from '@/lib/keep-typing';
 import { BANK_HINTS_EDIT, SALES_CHANNEL_EDIT, STORE_SETTLEMENT_EDIT } from './typed-forms';
 import { accountLabel } from '@/lib/account-label';
 
-export const metadata = { title: 'Sales channels — Shareat System' };
+export const metadata = { title: 'Sales channels (walk-in, Grab, Foodpanda) — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
@@ -70,7 +70,7 @@ export default async function SalesChannelsSettingsPage({
     return (
       <Page density="table" className="space-y-4">
         <Crumb />
-        <h1 className="text-2xl font-semibold">Sales channels</h1>
+        <h1 className="text-2xl font-semibold">Sales channels (walk-in, Grab, Foodpanda)</h1>
         <PageDescription>
           This organisation has no stores yet. Create one under{' '}
           <a href="/admin/stores" className="underline">
@@ -98,7 +98,7 @@ export default async function SalesChannelsSettingsPage({
     <Page density="table">
       <div>
         <Crumb />
-        <h1 className="text-2xl font-semibold">Sales channels</h1>
+        <h1 className="text-2xl font-semibold">Sales channels (walk-in, Grab, Foodpanda)</h1>
         <PageDescription>
           How this store sells: walk-in, and each delivery platform. A channel decides{' '}
           <strong>whether its money reaches the till on the day</strong> or is owed to us until the
@@ -208,7 +208,7 @@ function Crumb() {
       <a href="/settings" className="underline">
         Settings
       </a>{' '}
-      / Sales channels
+      / Sales channels (walk-in, Grab, Foodpanda)
     </p>
   );
 }
@@ -268,7 +268,7 @@ function ChannelCard({
         summary={[
           { label: 'Channel name', value: channel.name },
           { label: 'Where the money goes', value: channel.isRemittedDaily ? 'Reaches the till' : 'Settles later' },
-          { label: 'Receivable account', value: receivable ? receivable.name : channel.receivableAccountCode },
+          { label: 'Receivable account', value: receivable ? `${receivable.code} · ${receivable.name}` : channel.receivableAccountCode },
           { label: 'Wasted or refunded orders', value: channel.wastageTypeMode === 'tracked' ? 'Review it' : 'Decide on the spot' },
         ]}
         hidden={{ storeId, channelId: channel.id }}

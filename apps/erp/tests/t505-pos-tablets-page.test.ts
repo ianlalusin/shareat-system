@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +17,8 @@ const STORE = { id: 'store-1', name: 'SharEat Lipa', code: 'LIPA' };
 const H: { allowed: boolean; view: Record<string, unknown> } = { allowed: true, view: {} };
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/admin/pos-tablets', // T-582: Register a tablet is a FormModal, which reads the address
+  useSearchParams: () => new URLSearchParams(),
   redirect: (to: string) => { throw new Error(`redirect:${to}`); },
   notFound: () => { throw new Error('notFound'); },
 }));
@@ -55,10 +59,10 @@ describe('P8 - the route is mapped, in the nav, and gated', () => {
     expect(capabilityForRoute('/admin/pos-tablets')).toBe('provision_clock_terminal');
   });
 
-  it('is in the Setup group, right after "Clock terminals", labelled "POS tablets"', () => {
-    const group = GROUPS.find((g) => g.links.some((l) => l.href === '/attendance/terminals'))!;
-    const i = group.links.findIndex((l) => l.href === '/attendance/terminals');
-    expect(group.links[i + 1]).toEqual({ href: '/admin/pos-tablets', label: 'POS tablets' });
+  // T-587 S3: the sidebar Setup group shrank to three links, so this screen is reached from the Settings hub (a literal row there; tests/t587-s1/s2/s3).
+  it('is not in the sidebar, and the Settings hub links it', () => {
+    expect(GROUPS.flatMap((g) => g.links).map((l) => l.href)).not.toContain('/admin/pos-tablets');
+    expect(readFileSync(join(__dirname, '../src/app/settings/page.tsx'), 'utf8')).toContain('href="/admin/pos-tablets"');
   });
 
   it('a person without the capability gets the refusal, not the page', async () => {
@@ -74,17 +78,17 @@ describe('P9 and the page states', () => {
     expect(html).toContain('data-no-terminal');
     expect(html).toMatch(/system administrator/);
     expect(html).not.toContain('name="deviceId"');
-    expect(html).not.toContain('Register tablet');
+    expect(html).toContain('Register a tablet'); // T-582: the button stays; its modal holds the instruction, not the form
   });
 
-  it('a locked tablet shows "Locked since" and one Clear the lock button; an unlocked one shows "Not locked."', async () => {
+  it('a locked tablet shows "Locked since" and one Clear the lock button; an unlocked one reads "Approvals ready"', async () => {
     H.view = { active: null, revoked: [], terminals: [{ personId: 'term-1', displayName: 'Terminal Lipa', capped: true, cappedAt: new Date('2026-11-01T02:00:00Z') }] };
     const locked = await render();
     expect(locked).toMatch(/Locked since/);
     expect(locked.match(/Clear the lock/g)).toHaveLength(1);
     H.view = { active: null, revoked: [], terminals: [{ personId: 'term-1', displayName: 'Terminal Lipa', capped: false, cappedAt: null }] };
     const free = await render();
-    expect(free).toContain('Not locked.');
+    expect(free).toContain('Approvals ready');
     expect(free).not.toContain('Clear the lock');
   });
 
@@ -102,6 +106,6 @@ describe('P9 and the page states', () => {
     const html = await render();
     expect(html).not.toContain('Revoke tablet link');
     expect(html).not.toContain('This replaces');
-    expect(html).toContain('Register tablet');
+    expect(html).toContain('Register a tablet');
   });
 });

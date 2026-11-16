@@ -161,7 +161,7 @@ describe('T-511 S5b screen - what a person reads', () => {
   it('the detail has a "VAT on fees" label and the approved PandaGO wording exists (screen or domain) [kills: VAT hidden inside the fee; PandaGO silent]', () => {
     expect(codeOnly(detail())).toContain('VAT on fees');
     const tail =
-      'will be paid to you by Foodpanda (cash on delivery that PandaGO riders collected for you, less PandaGO fees). It is not part of the sales receivable and is not booked here; record it yourself.';
+      'will be paid to you by Foodpanda (cash on delivery that PandaGO riders collected for you, apart from the delivery fees, which are booked as charges). It is not part of the sales receivable and is not booked here; record it yourself.';
     const domain = existsSync(join(DOMAIN, 'settlement-intake', 'review.ts')) ? readFileSync(join(DOMAIN, 'settlement-intake', 'review.ts'), 'utf8') : '';
     expect(`${all()}\n${domain}`.replace(/\s+/g, ' ')).toContain(tail);
   });

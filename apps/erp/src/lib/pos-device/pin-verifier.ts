@@ -4,8 +4,10 @@
  */
 
 /**
- * Security constant, not a business setting: the current OWASP figure for PBKDF2-HMAC-SHA256 (210,000). A verifier made with fewer
- * is refused on both sides, so a weakened record cannot be planted. Raise it with the OWASP figure; old verifiers expire in a day.
+ * Security constant, not a business setting: 210,000 PBKDF2-HMAC-SHA256 rounds. This is BELOW the current OWASP figure (600,000,
+ * Password Storage Cheat Sheet); release 1 keeps 210,000 so offline sign-in stays fast on the Lipa tablet, and raising it waits
+ * until after go-live (bible row 455, DEF-868). A verifier made with fewer is refused on both sides, so a weakened record cannot be
+ * planted. When raised, old verifiers expire in a day.
  */
 export const POS_VERIFIER_ITERATIONS = 210_000;
 /** A stored record claiming more than this is refused unrun: a planted verifier must not be able to freeze the tablet with a huge PBKDF2 (about ten times the floor). */

@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { createDaypart, setMenuOffer } from '@shareat/domain';
+import { time12 } from '../../src/app/menu/daypart-text';
 import { asOrg, cast, expectAccessRefused, expectSentenceError, fd, plain, rawItem, rawRule, render, run, sql, type Cast } from './t401-s4-common';
 
 /**
@@ -91,10 +92,10 @@ describe('Lunch and Dinner side by side', () => {
     const t = plain(sa);
     expect(t).toMatch(/Lunch .*338\.00/);
     expect(t).toMatch(/Dinner .*358\.00/);
-    expect(t).toContain(`${LUNCH.start} to ${LUNCH.end}`);
+    expect(t).toContain(`${time12(LUNCH.start)} to ${time12(LUNCH.end)}`);
     expect(t).toContain('On now');
-    expect(t).toContain(`Not offered now, from ${DINNER.start}`);
-    expect(t).toContain(`Not offered now, from ${DAY_NAMES[aheadDow]} 10:00`);
+    expect(t).toContain(`Not offered now, from ${time12(DINNER.start)}`);
+    expect(t).toContain(`Not offered now, from ${DAY_NAMES[aheadDow]} 10:00 AM`);
     // super admin: the When select (All day + both windows) and the slot Withdraw controls
     expect(sa).toMatch(/<select[^>]*name="daypartId"/);
     expect(t).toContain('All day');
@@ -164,7 +165,7 @@ describe('/admin/stores/[id]: lunch and dinner hours', () => {
     const [d] = await sql<{ id: string }[]>`select id from menu_dayparts where store_id = ${c.storeA} and name = 'Dinner'`;
     const page = plain(await render(STORE_PAGE, c.admin, { params: { id: c.storeA } }));
     expect(page).toContain('Menu hours');
-    expect(page).toContain('Dinner 17:00 to 08:00 next day Every day');
+    expect(page).toContain('Dinner 5:00 PM to 8:00 AM next day Every day');
 
     const edit = await run(STORES, 'updateDaypartAction', c.admin, f({ daypartId: d!.id, name: 'Late dinner', days: ['5', '6'], start: '18:00', end: '02:00' }));
     expect(edit.flash.ok).toBe('Hours saved.');
@@ -210,7 +211,7 @@ describe("/menu/hours: a store manager's door to the hours", () => {
     await asOrg(c.orgId, (tx) => createDaypart(c.admin, { storeId: c.storeB, name: 'Supper', days: ALL_DAYS, start: '18:00', end: '23:00' }, tx));
 
     const a = await render(HOURS_PAGE, c.managerA, {});
-    expect(plain(a)).toContain('Lunch 08:00 to 17:00');
+    expect(plain(a)).toContain('Lunch 8:00 AM to 5:00 PM');
     expect(a).toContain('>Add hours<');
     expect(a).toContain(`name="storeId" value="${c.storeA}"`);
     expect(a).toContain('name="from" value="hours"');
@@ -222,7 +223,7 @@ describe("/menu/hours: a store manager's door to the hours", () => {
     expect(forged).not.toContain('Add hours');
 
     const both = await render(HOURS_PAGE, c.manager, { search: { store: c.storeB } });
-    expect(plain(both)).toContain('Supper 18:00 to 23:00');
+    expect(plain(both)).toContain('Supper 6:00 PM to 11:00 PM');
     expect(both).toContain('>Add hours<');
     expect(both).toContain(`name="storeId" value="${c.storeB}"`);
 

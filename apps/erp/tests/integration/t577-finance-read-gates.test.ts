@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import type { Actor, Capability } from '@shareat/auth';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { M, asOrg, expectAbsent, expectPresent, expectRefusalCard, pageError, plain, render, session, sql, uid, world, type World } from './t435-fixture';
 import { ROUTE_CAPABILITY, capabilitiesForRoute } from '../../src/lib/route-capability';
@@ -254,7 +255,7 @@ describe('T-577 - a signed-in person without the capability is refused on every 
 describe('T-577 - single-record pages: a record outside the viewer\'s stores is a not-found (M3, M4)', () => {
   const kinds = [
     { name: 'expenses/[id]', load: 'expense' as const, s1: (r: Records) => r.expenseS1, s2: (r: Records) => r.expenseS2, mark1: EX.s1, mark2: EX.s2, caps: ['create_expense', 'edit_own_expense', 'approve_expense'] },
-    { name: 'sales-days/[id]', load: 'salesDay' as const, s1: (r: Records) => r.dayS1, s2: (r: Records) => r.dayS2, mark1: '2026-01-11', mark2: '2026-01-12', caps: ['submit_sales_day', 'verify_sales_day'] },
+    { name: 'sales-days/[id]', load: 'salesDay' as const, s1: (r: Records) => r.dayS1, s2: (r: Records) => r.dayS2, mark1: formatBusinessDayLong('2026-01-11'), mark2: formatBusinessDayLong('2026-01-12'), caps: ['submit_sales_day', 'verify_sales_day'] },
     { name: 'wastage/[id]', load: 'wastage' as const, s1: (r: Records) => r.wastageS1, s2: (r: Records) => r.wastageS2, mark1: WA.s1, mark2: WA.s2, caps: ['record_order_wastage', 'resolve_order_wastage'] },
   ];
 

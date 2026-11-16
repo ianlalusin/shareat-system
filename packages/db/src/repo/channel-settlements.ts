@@ -551,12 +551,20 @@ export async function chargeForOtherLine(tx: Tx, orgId: string, otherLineId: str
 /**
  * A charge already booked for a DIFFERENT staged line that looks like the same one (same store, channel, date, net amount and description): the copy a re-uploaded,
  * changed file stages again. Ingest supersedes the old upload but never retires its period lines, so this is the only guard once the first copy is booked.
+ *
+ * T-511 S8b: when BOTH lines carry an official document number, different numbers are different documents, never copies (the original +100, its reversal -100 and the
+ * re-bill +100 all book; the re-bill has the original's date, net and description). Equal numbers (or a line with none) leave the figures to decide, so a row of a document
+ * that prints several rows is not a copy of its sibling unless the figures match too.
+ *
+ * T-511 S8b audit 3: a charge booked from the SAME upload is never a copy of this line (a file that prints two identical rows, such as two same-day, same-net delivery fees,
+ * means two charges; copies come from ANOTHER file, a re-upload or a re-issue).
  */
 export async function bookedCopyOfCharge(
   tx: Tx,
   orgId: string,
-  c: { otherLineId: string; storeId: string; channelId: string; chargeDate: string; netAmount: string; description: string | null },
+  c: { otherLineId: string; uploadId: string; storeId: string; channelId: string; chargeDate: string; netAmount: string; description: string | null; officialDocument?: string | null },
 ): Promise<PeriodChargeRow | null> {
+  const doc = c.officialDocument ?? null;
   const [row] = await tx
     .select()
     .from(channelPeriodCharges)
@@ -569,10 +577,36 @@ export async function bookedCopyOfCharge(
         eq(channelPeriodCharges.netAmount, c.netAmount),
         sql`${channelPeriodCharges.description} is not distinct from ${c.description}`,
         ne(channelPeriodCharges.otherLineId, c.otherLineId),
+        ne(channelPeriodCharges.uploadId, c.uploadId),
+        sql`not exists (
+          select 1 from settlement_other_lines o
+           where o.org_id = ${channelPeriodCharges.orgId} and o.id = ${channelPeriodCharges.otherLineId}
+             and o.official_document is not null and ${doc}::text is not null and o.official_document <> ${doc}::text)`,
       ),
     )
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * T-511 S8b audit 6. A charge already booked from ANOTHER upload of the same channel whose staged line carries the same official document number but different figures (date, net
+ * or description): Foodpanda printed the document before with other figures. Rows of one document inside one file never count (a document may print several rows).
+ */
+export async function bookedChargeOfDocumentWithOtherFigures(
+  tx: Tx,
+  orgId: string,
+  c: { otherLineId: string; uploadId: string; channelId: string; officialDocument: string; chargeDate: string; netAmount: string; description: string | null },
+): Promise<{ id: string } | null> {
+  const rows = (await tx.execute(sql`
+    select pc.id::text as id
+      from channel_period_charges pc
+      join settlement_other_lines o on o.org_id = pc.org_id and o.id = pc.other_line_id
+     where pc.org_id = ${orgId} and pc.channel_id = ${c.channelId} and o.official_document = ${c.officialDocument}
+       and pc.other_line_id <> ${c.otherLineId} and pc.upload_id <> ${c.uploadId}
+       and not (pc.charge_date = ${c.chargeDate} and pc.net_amount = ${c.netAmount} and pc.description is not distinct from ${c.description}::text)
+     limit 1
+  `)) as unknown as { id: string }[];
+  return rows[0] ?? null;
 }
 
 export async function insertPeriodCharge(tx: Tx, input: InsertPeriodChargeInput): Promise<void> {

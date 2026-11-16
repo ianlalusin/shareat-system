@@ -19,7 +19,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
 import { ZERO, add, compare, fromCentavos, isZero, money, subtract, toCentavos, type Money } from '@shareat/core/money';
 import { auditLogRepo, channelSettlementsRepo, fiscalPeriodsRepo, loansRepo, settlementIntakeRepo, storesRepo, type PeriodChargeFact, type SettlementDayLineRow, type Tx } from '@shareat/db';
-import { pastTolerance, postPlatformCharge, toleranceMillsFor, varianceRulesOn, VARIANCE_RULE_KEYS, type PostPlatformChargeResult } from '../channel-settlements';
+import { lateChargeNote, pastTolerance, postPlatformCharge, toleranceMillsFor, varianceRulesOn, VARIANCE_RULE_KEYS, type PostPlatformChargeResult } from '../channel-settlements';
 import { SETTLEMENT_DAY_REJECT_REASON_MAX, SETTLEMENT_DAY_REJECT_RULES } from '../field-rules/channel-settlements';
 import { capAuditText } from '../shared/audit-text';
 import { assertFieldRules } from '../shared/field-rules-assert';
@@ -27,6 +27,7 @@ import { refuse } from '../shared/refusal';
 import { loadRuleBook } from '../business-rules/rules';
 import type { RuleBook } from '../business-rules/book';
 import { carrierOfLine, dayBlockers, dayBlockersForLines, type DayBlocker } from './day-checks';
+import type { EarlierChargeView } from './prior-items';
 import { LOAN_RULE_KEYS, loadLoanCheckContext, loanCheckViewerOf, loanCheckForDay, primeLoanCheckCoverage, type LoanCheckContext, type LoanCheckViewer, type LoanCheckViewerView } from './loan-check';
 import { intakeRefusal } from './refusal';
 import { invoiceOf } from './settlement-input';
@@ -194,7 +195,7 @@ async function rereadStored(tx: Tx, orgId: string, uploadId: string): Promise<St
 const UNREADABLE_PANDAGO = 'This PandaGO-only invoice could not be read again from the stored file, so its amount is not shown now. Try again later.';
 
 const PANDAGO_TAIL =
-  'will be paid to you by Foodpanda (cash on delivery that PandaGO riders collected for you, less PandaGO fees). It is not part of the sales receivable and is not booked here; record it yourself.';
+  'will be paid to you by Foodpanda (cash on delivery that PandaGO riders collected for you, apart from the delivery fees, which are booked as charges). It is not part of the sales receivable and is not booked here; record it yourself.';
 
 async function pandagoOnlyInvoices(tx: Tx, orgId: string, storeIds: readonly string[], book: RuleBook, period?: string): Promise<PandagoOnlyInvoice[]> {
   const out: PandagoOnlyInvoice[] = [];
@@ -278,6 +279,13 @@ export interface ReviewDayDetail {
   isCarrier: boolean;
   /** the sentence saying so, when charges are booked and waiting to be netted */
   carrierNote: string | null;
+  /**
+   * T-511 S8b. The carrier only: the charges of EARLIER invoices this payout settles (matched on the official document number printed on its Appendix C), booked or already settled by
+   * another payout. Empty for every other day.
+   */
+  earlierCharges: EarlierChargeView[];
+  /** T-511 S8b. The carrier only: the earlier items the file's Appendix C prints (document number and the signed amount as printed), for the screen. Empty otherwise. */
+  priorItems: { document: string; amount: string }[];
   /** Foodpanda: the charges of this day's invoice, shown on every day of the invoice (empty for Grab and for an invoice with none) */
   invoiceCharges: PeriodChargeView[];
   /** a booked day: the date its payout was booked on, and how to undo it; null otherwise */
@@ -365,8 +373,14 @@ export async function getReviewDayDetail(tx: Tx, actor: Actor, input: { lineId: 
   const carrier = await carrierOfLine(tx, orgId, line);
   const inv = invoiceOf(line);
   const invoiceCharges = inv ? await chargeViews(tx, actor, await settlementIntakeRepo.periodChargeFacts(tx, orgId, { invoices: [inv] }), administrator) : [];
+  const earlierOpen = carrier.earlierViews.filter((e) => !e.netted).length;
+  const ownCount = (carrier.charges?.ids.length ?? 0) - (carrier.problems.length === 0 ? earlierOpen : 0);
+  const settled = carrier.charges ? `${carrier.charges.ids.length} ${carrier.charges.ids.length === 1 ? 'charge' : 'charges'}` : '';
+  const whose = ownCount > 0 ? `(${ownCount} of this invoice and ${earlierOpen} from earlier invoices)` : 'from earlier invoices';
   const carrierNote = carrier.charges
-    ? `This payout also settles ${carrier.charges.ids.length} ${carrier.charges.ids.length === 1 ? 'charge' : 'charges'} of this invoice. The bank deposit is the file's net minus ${groupedMoney(carrier.charges.total)}.`
+    ? carrier.problems.length === 0 && earlierOpen > 0
+      ? `This payout also settles ${settled} ${whose}. The bank deposit is the file's net minus ${groupedMoney(carrier.charges.total)}.`
+      : `This payout also settles ${settled} of this invoice. The bank deposit is the file's net minus ${groupedMoney(carrier.charges.total)}.`
     : null;
   const settlement = line.reviewState === 'booked' && line.settlementId ? await channelSettlementsRepo.getById(tx, orgId, line.settlementId) : null;
 
@@ -398,6 +412,8 @@ export async function getReviewDayDetail(tx: Tx, actor: Actor, input: { lineId: 
     approveWhy: uploaderBlocked ? UPLOADER_APPROVE_SENTENCE : null,
     isCarrier: carrier.isCarrier,
     carrierNote,
+    earlierCharges: carrier.earlierViews,
+    priorItems: carrier.priorItems,
     invoiceCharges,
     bookedOn: settlement?.settledOn ?? null,
     undoNote: settlement ? UNDO_SENTENCE : null,
@@ -427,6 +443,8 @@ export interface PeriodChargeView {
   why: string | null;
   /** the "Book this charge" button shows only when true */
   canBook: boolean;
+  /** T-511 S8b: when the charge was booked on another date than its own because its month was closed, the sentence saying so; null otherwise */
+  dateNote: string | null;
 }
 
 /** The refusals `postPlatformCharge` would give, told in advance (it stays the backstop: it checks all of them again, and more, such as a closed month). */
@@ -463,6 +481,7 @@ async function chargeViews(tx: Tx, actor: Actor, facts: readonly PeriodChargeFac
       state,
       why: state === 'not_booked' && own ? UPLOADER_CHARGE_SENTENCE : why,
       canBook: state === 'not_booked' && permitted.get(f.storeId)! && !own,
+      dateNote: f.booked && f.lineDate !== null && f.booked.entryDate !== f.lineDate ? lateChargeNote(f.lineDate, f.booked.entryDate) : null,
     });
   }
   return out;

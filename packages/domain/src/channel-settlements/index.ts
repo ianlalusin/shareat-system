@@ -1216,5 +1216,5 @@ export { correctPlatformSales } from './correction';
 export type { CorrectPlatformSalesInput, CorrectPlatformSalesResult } from './correction';
 
 // T-511 S6c: a platform charge with no sales day is booked once (no caller until slice 7 approves an upload). The clock seam stays off the barrel.
-export { postPlatformCharge } from './charge';
+export { lateChargeNote, postPlatformCharge } from './charge';
 export type { PostPlatformChargeInput, PostPlatformChargeResult } from './charge';

@@ -30,7 +30,7 @@ export default async function UploadSettlementFilesPage() {
       <section className="space-y-2" aria-label="Days still waiting for a file">
         <h2 className="text-lg font-semibold">Days with sales and no file yet</h2>
         {waiting.length === 0 ? (
-          <p className="text-sm">Every verified day with sales already has its file.</p>
+          <p className="text-sm">Every verified day with sales already has its figures loaded from a file.</p>
         ) : (
           <Table>
             <thead>

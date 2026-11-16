@@ -32,10 +32,11 @@ export const XLSX_WORKER_TIMEOUT_MS = 5000;
 export const XLSX_WORKER_LIMITS = { maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 32, stackSizeMb: 4 } as const;
 export const WORKER_CONCURRENCY = 2;
 
-/** The rows of the two Foodpanda sheets as plain arrays; a sheet that is not in the workbook is null. */
+/** The rows of the three Foodpanda sheets as plain arrays (`c` is Appendix C, S8b); a sheet that is not in the workbook is null. */
 export interface WorkerSheets {
   a: unknown[][] | null;
   b: unknown[][] | null;
+  c: unknown[][] | null;
 }
 
 const unreadable = (): Error => intakeRefusal('FOODPANDA_NO_SHEETS', 'The workbook could not be read as a spreadsheet.');
@@ -123,9 +124,10 @@ function runWorker(workbook: Buffer, options: { workerUrl?: URL; timeoutMs?: num
     timer = setTimeout(() => finish(() => reject(tooSlow())), options.timeoutMs ?? XLSX_WORKER_TIMEOUT_MS);
     worker.on('message', (m: unknown) =>
       finish(() => {
-        const msg = m as { ok?: unknown; a?: unknown; b?: unknown } | null;
-        if (msg && msg.ok === true) resolve({ a: Array.isArray(msg.a) ? (msg.a as unknown[][]) : null, b: Array.isArray(msg.b) ? (msg.b as unknown[][]) : null });
-        else reject(unreadable());
+        const msg = m as { ok?: unknown; a?: unknown; b?: unknown; c?: unknown } | null;
+        if (msg && msg.ok === true) {
+          resolve({ a: Array.isArray(msg.a) ? (msg.a as unknown[][]) : null, b: Array.isArray(msg.b) ? (msg.b as unknown[][]) : null, c: Array.isArray(msg.c) ? (msg.c as unknown[][]) : null });
+        } else reject(unreadable());
       }),
     );
     worker.on('error', (e: Error & { code?: string }) =>

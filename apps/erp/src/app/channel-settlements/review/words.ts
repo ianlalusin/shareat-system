@@ -58,6 +58,13 @@ const BLOCKER_SHORT: readonly (readonly [RegExp, string])[] = [
   [/^Staff recorded no sales for this day/, 'Sales not posted'],
   [/^A charge on the same statement has not been booked/, 'Charge not booked'],
   [/^Every month up to today is closed/, 'No open month'],
+  // T-511 S8b: the earlier items Foodpanda settles in this payout that the books cannot match
+  [/no charge with that document number is on file/, 'Earlier invoice missing'],
+  [/That charge is on file but not booked yet/, 'Earlier charge not booked'],
+  [/of a kind this system does not book from a file/, 'Earlier item not bookable'],
+  [/^Foodpanda says this payout settles earlier items worth/, 'Earlier items differ'],
+  [/^Foodpanda printed document .* more than once/, 'Earlier items differ'],
+  [/^Foodpanda only partly settled an earlier item/, 'Earlier item part-settled'],
 ];
 const LOAN_BLOCKER_SHORT: Record<keyof typeof LOAN, string> = {
   ok: 'Loan check',
@@ -181,6 +188,18 @@ const CHARGE_STATE: Record<PeriodChargeState, { label: string; tone: Tone }> = {
   cannot_book: { label: 'Cannot be booked', tone: 'danger' },
 };
 export const chargeStateWord = (state: PeriodChargeState) => CHARGE_STATE[state];
+
+/** T-511 S8b: what an earlier invoice's charge is called on the carrier day (never the stored word). */
+const EARLIER_CHARGE_STATE: Record<'open' | 'held' | 'netted', { label: string; tone: Tone }> = {
+  open: { label: 'Settled by this payout', tone: 'progress' },
+  // while ANY blocker holds the day nothing is settled yet, so the screen must not promise it (audit 5)
+  held: { label: 'Not settled yet - see the reason above', tone: 'warning' },
+  netted: { label: 'Already settled by another payout', tone: 'closed' },
+};
+export const earlierChargeWord = (netted: boolean, held = false) => EARLIER_CHARGE_STATE[netted ? 'netted' : held ? 'held' : 'open'];
+
+/** An Appendix C item as the screen says it: a printed minus is money Foodpanda deducted, a plus a credit; never a bare signed number. `figure` is the already formatted magnitude. */
+export const printedItemWords = (amount: string, figure: string): string => (/^-0*\.?0*$/.test(amount) || /^0*\.?0*$/.test(amount) ? figure : amount.startsWith('-') ? `deducted ${figure}` : `credited ${figure}`);
 
 /**
  * The `ack` address key of the reason round trip, `short-3000.00` or `over-3000.00`, as a figure and a direction; anything else is null. It only says what the person
