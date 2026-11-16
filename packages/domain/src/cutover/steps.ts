@@ -16,7 +16,7 @@ export interface StepDef {
   /** One row PER STORE. ⭐ A single tick across four stores hides the store nobody visited. */
   perStore: boolean;
   /**
-   * ⚠️ **USER-FACING COPY, rendered on the wizard.** Plain prose only — no ⭐/⚠️/⛔ markers, which
+   * ⚠️ **USER-FACING COPY, rendered on the opening-balances screen.** Plain prose only — no ⭐/⚠️/⛔ markers, which
    * are a convention for readers of this source and read as noise to somebody doing a stock count.
    * Found the hard way: they shipped to the screen and were spotted by looking at it.
    */
@@ -30,7 +30,7 @@ export interface StepDef {
 }
 
 export const CUTOVER_STEPS: readonly StepDef[] = [
-  // ---------------------------------------------------------------- Phase A — in v1, in December
+  // ---------------------------------------------------------------- Phase A — in the old system, in December
   {
     code: 'A1',
     phase: 'A',
@@ -66,7 +66,7 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     perStore: false,
     why:
       'A transfer that left one account and never arrived in the other is the commonest way a ' +
-      'conversion goes wrong, and an unreconciled bank account is the step most often skipped. It ' +
+      'switch-over goes wrong, and an unreconciled bank account is the step most often skipped. It ' +
       'used to be assumed inside the export — and assumed is how a step gets missed.',
   },
   {
@@ -143,17 +143,17 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
   {
     code: 'C3P',
     phase: 'C',
-    title: "Opening party balances agree with v1's aged lists",
+    title: "Opening party balances agree with the old system's aged lists",
     kind: 'attested',
     perStore: false,
     why:
       "Customer, supplier, loan and advance balances can only be checked here for valid parties, not " +
-      "for totals. Somebody has to compare them with v1's aged lists and say so, by name.",
+      "for totals. Somebody has to compare them with the old system's aged lists and say so, by name.",
   },
   {
     code: 'C4',
     phase: 'C',
-    title: '3900 nets to zero and every register ties',
+    title: 'The opening difference is zero and every register ties',
     kind: 'verified',
     perStore: false,
     why:
@@ -161,12 +161,12 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
       'a holding account and open the books anyway; that exists for people who cannot ask anyone. ' +
       'A difference here has to be found. It also checks every register against its control ' +
       'account: assets, prepaids, loans, advances, parties, money accounts, the store-to-store ' +
-      'balances and 3900 store by store.',
+      'balances and the opening-difference account store by store.',
   },
   {
     code: 'C5',
     phase: 'C',
-    title: 'Trial balance ties, then POST',
+    title: 'Trial balance ties, then post',
     kind: 'performed',
     perStore: false,
     why: 'Posting is what makes the opening entry final. After this, the books are open.',
@@ -202,7 +202,7 @@ export const CUTOVER_GATES: readonly { after: string; before: string; because: s
   {
     after: 'C3P',
     before: 'C5',
-    because: "Nobody has confirmed the customer, supplier, loan and advance balances against v1's lists.",
+    because: "Nobody has confirmed the customer, supplier, loan and advance balances against the old system's lists.",
   },
 ] as const;
 

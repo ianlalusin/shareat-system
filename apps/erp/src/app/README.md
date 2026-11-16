@@ -25,7 +25,6 @@ Parent blueprint: [up one directory](../README.md).
 - [clock](./clock/README.md) — Handlers and helpers at `/clock`. Offline attendance kiosk using device-authenticated Firebase client SDK reads and queued punches.
 - [commissary](./commissary/README.md) — Route namespace `/commissary`. Commissary catalogue, branch-order conversations and transit discrepancy resolution.
 - [customers](./customers/README.md) — Customers at `/customers`. Customer credit, receivables, collections and wholesale price lists.
-- [cutover](./cutover/README.md) — The conversion at `/cutover`. Conversion checklist, counted opening stock and opening balance-sheet figures.
 - [dashboard](./dashboard/README.md) — Handlers and helpers at `/dashboard`. Pure inclusive business-date range helpers used by the ERP dashboard.
 - [expenses](./expenses/README.md) — Expenses at `/expenses`. Expense drafts, posting, recurring templates and staff reimbursement payouts.
 - [files](./files/README.md) — Route namespace `/files`. Authenticated upload and purpose-scoped evidence viewing routes.
@@ -38,6 +37,7 @@ Parent blueprint: [up one directory](../README.md).
 - [menu](./menu/README.md) — Menu at `/menu`. Menu catalogue, store prices, item requests and POS depletion-source controls.
 - [money-accounts](./money-accounts/README.md) — Money accounts at `/money-accounts`. Money-account creation, naming and retirement with custody/instrument labels.
 - [money-transfers](./money-transfers/README.md) — Money transfers at `/money-transfers`. Movement between money accounts and settlement between stores.
+- [opening-balances](./opening-balances/README.md) — Opening balances at `/opening-balances`. Checklist, counted opening stock and opening balance-sheet figures.
 - [owners](./owners/README.md) — Owners at `/owners`. Owner contributions, drawings, receivable settlement and monthly close.
 - [payroll](./payroll/README.md) — Payroll at `/payroll`. Pay-run previews and posting, effective-dated statutory reference rates and final/13th-month pay.
 - [prepaid](./prepaid/README.md) — Prepaid expenses at `/prepaid`. Prepaid cost register, term confirmation, amortisation and write-off.

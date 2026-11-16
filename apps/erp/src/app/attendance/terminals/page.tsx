@@ -1,4 +1,4 @@
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { mintTerminalTokenAction, provisionTerminalAction, revokeTerminalAction } from './actions';
 import { isReady, listStores, terminalsForStore, type ClockTerminalRow } from './lib';
 import { ProvisionForm } from './ProvisionForm';
@@ -56,7 +56,9 @@ export default async function TerminalsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/attendance/terminals');
+  const { actor, refusal } = await requirePageAccess('/attendance/terminals');
+  // T-587 S2: the READ gate (`manage_attendance`), same map the sidebar filters by.
+  if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
 

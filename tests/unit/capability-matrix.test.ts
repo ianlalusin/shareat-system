@@ -248,7 +248,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // `edit_loan_repayment_amount` both store, super/admin yes, manager/staff no). RED until the builder adds the rows + the capabilities.
     // T-510 S2 (2026-11-05): 123 -> 124 (`pair_menu_dayparts`, org, super_admin only). Re-measured: the parsed matrix has 124 rows.
     // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (`manage_business_rules`).
-    expect(rows.length).toBe(128);
+    expect(rows.length).toBe(131); // T-584: 128 -> 131 (+manage_document_templates, issue_documents, view_documents), 15 Nov 2026, re-measured on main 140d31a
     // T-524: 125 -> 128 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
     // ⭐ 109 -> 111 (T-402 S1b): `view_activity_log` (store) and `view_activity_log_restricted` (org).
     // ⭐ 108 -> 109 (T-403): `manage_recipes` (org, admin-only).
@@ -330,9 +330,9 @@ describe('invariant 1 — every capability has an explicit decision for all four
     // T-511 S2a: 120 -> 123 (upload_settlement_files, edit_platform_store_code, edit_loan_repayment_amount).
     // T-510 S2: 123 -> 124 (pair_menu_dayparts).
     // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (`manage_business_rules`).
-    expect(CAPABILITIES.length).toBe(128);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(128);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(128);
+    expect(CAPABILITIES.length).toBe(131); // T-584: 128 -> 131
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(131);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(131);
     // T-524: 125 -> 128 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
     // ⭐ 108 -> 109 (T-403): `manage_recipes`.
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
@@ -493,6 +493,8 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         'edit_loan_repayment_amount',
         // T-512 (T-511 S5c, 6 Nov 2026): `manage_business_rules` is admin-yes / manager-no (org), so the derived set gains it.
         'manage_business_rules',
+        // T-584 (15 Nov 2026): `manage_document_templates` is admin-yes / manager-no (org), so the derived set gains it. issue_documents and view_documents are manager-yes and do not join.
+        'manage_document_templates',
       ].sort(),
     );
   });

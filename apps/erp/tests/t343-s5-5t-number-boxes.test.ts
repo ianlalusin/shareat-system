@@ -8,7 +8,7 @@
  * ⚠️ Spec-count discrepancy, measured not presumed: the spec's own prose says "Seven inputs in
  * five files" and "R-legs, one per converted box (7)", but the classification section itself names
  * only SIX locations across FOUR files (attendance/[dayId]/page.tsx:253,289,324,
- * cutover/count/page.tsx:153, till/page.tsx:209, ap/invoices/[id]/page.tsx:181) — confirmed by a
+ * opening-balances/stock-count/page.tsx:153, till/page.tsx:209, ap/invoices/[id]/page.tsx:181) — confirmed by a
  * direct `grep 'type="number"'` over all four files: 9 total matches, of which 3 are explicitly
  * OUT of scope (cutover's `quantity` at :140 — a required spinner, same class as
  * ap/invoices' `line{i}_quantity`/`line{i}_unitPrice` at :167/:190, all named out of scope in
@@ -33,10 +33,10 @@ const repoRoot = resolve(__dirname, '..', '..', '..');
  * ⭐ Same orchestrator ruling as S5.5s's own `inputTagFor` — asserts the box is found EXACTLY ONCE
  * before checking anything about it.
  */
-// 2026-10-09, T-384 sweep fallout (A6): cutover/count renders each row's box twice - an open ADD form (no saved count) and an
+// 2026-10-09, T-384 sweep fallout (A6): opening-balances/stock-count renders each row's box twice - an open ADD form (no saved count) and an
 // EditableRecord EDIT form (saved count) - so `name="quantity"` / `name="unitCost"` appear in exactly two <input>s there.
 // Every other site still appears exactly once. For the two-site file, every site must satisfy the same assertions.
-const TWO_SITE_FILES = new Set(['apps/erp/src/app/cutover/count/page.tsx']);
+const TWO_SITE_FILES = new Set(['apps/erp/src/app/opening-balances/stock-count/page.tsx']);
 
 function inputTagFor(filePath: string, nameLiteral: string): string {
   const src = readControlSource(resolve(repoRoot, filePath), 'utf8');
@@ -90,8 +90,8 @@ describe('R-legs — source-text: each converted box has no type="number"/step/m
   it('attendance/[dayId]/page.tsx — effectiveOutMinute (numeric)', () => {
     assertConverted('apps/erp/src/app/attendance/[dayId]/page.tsx', '"effectiveOutMinute"', 'numeric');
   });
-  it('cutover/count/page.tsx — unitCost (decimal)', () => {
-    assertConverted('apps/erp/src/app/cutover/count/page.tsx', '"unitCost"', 'decimal');
+  it('opening-balances/stock-count/page.tsx — unitCost (decimal)', () => {
+    assertConverted('apps/erp/src/app/opening-balances/stock-count/page.tsx', '"unitCost"', 'decimal');
   });
   it('till/page.tsx — count:${a.id} (decimal)', () => {
     assertConverted('apps/erp/src/app/till/page.tsx', '{`count:${a.id}`}', 'decimal');
@@ -102,8 +102,8 @@ describe('R-legs — source-text: each converted box has no type="number"/step/m
 });
 
 describe('⚠️ RULED EDIT (T-343 S5.5w) — the three legs below no longer pin "stays type=number": S5.5w converts cutover quantity and AP quantity/unitPrice too, so they flip to R-legs here', () => {
-  it('R-leg (S5.5w) — cutover/count/page.tsx quantity: no type="number"/step/min, inputMode="decimal" (still required)', () => {
-    const tag = inputTagFor('apps/erp/src/app/cutover/count/page.tsx', '"quantity"');
+  it('R-leg (S5.5w) — opening-balances/stock-count/page.tsx quantity: no type="number"/step/min, inputMode="decimal" (still required)', () => {
+    const tag = inputTagFor('apps/erp/src/app/opening-balances/stock-count/page.tsx', '"quantity"');
     expect(tag, 'must not carry type="number"').not.toMatch(/type=["']number["']/);
     expect(tag, 'must not carry a step= attribute').not.toMatch(/\bstep=/);
     expect(tag, 'must not carry a min= attribute').not.toMatch(/\bmin=/);

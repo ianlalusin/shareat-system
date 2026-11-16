@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
  * docs/tasks/412-confirm-destructive-tiers.md "Census" + "Tests / Census" + invariants V6, V9.
  *
  * THE LITERAL MAP below is the spec's census (counted at 76ba502): 60 `variant="danger"` buttons in 47 files, plus the
- * three that are not danger today (cutover/opening "Post the opening balances", payroll/separations "Post separation",
+ * three that are not danger today (opening-balances/balance-sheet "Post the opening balances", payroll/separations "Post separation",
  * inventory/locations "Deactivate") = 63 controls:  P 35 (admin PIN) / R 14 (retype) / W 10 (unguarded workflow) /
  * X 4 (client-only line removers, exempt).
  *
@@ -67,8 +67,8 @@ const rows: Row[] = [
   { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Void charge', danger: true, visible: 'Void charge', action: 'voidChargeAction', actionFile: 'app/customers/actions.ts', mutation: 'voidCharge' },
   // DEF-654: the collection 'void' was a plain <button className={ACTION_LINK}> (not danger), so the census missed it. Tier P.
   { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Void collection', danger: false, visible: 'Void collection', action: 'voidCollectionAction', actionFile: 'app/customers/actions.ts', mutation: 'voidCollection' },
-  { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Remove opening figure', danger: true, visible: 'Remove opening figure', action: 'removeOpeningFigureAction', actionFile: 'app/cutover/actions.ts', mutation: 'removeOpeningFigure' },
-  { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Post the opening balances', danger: false, visible: 'Post the opening balances', action: 'postOpeningBalancesAction', actionFile: 'app/cutover/actions.ts', mutation: 'postOpeningBalances' },
+  { file: 'app/opening-balances/balance-sheet/page.tsx', tier: 'P', label: 'Remove opening figure', danger: true, visible: 'Remove opening figure', action: 'removeOpeningFigureAction', actionFile: 'app/opening-balances/actions.ts', mutation: 'removeOpeningFigure' },
+  { file: 'app/opening-balances/balance-sheet/page.tsx', tier: 'P', label: 'Post the opening balances', danger: false, visible: 'Post the opening balances', action: 'postOpeningBalancesAction', actionFile: 'app/opening-balances/actions.ts', mutation: 'postOpeningBalances' },
   { file: 'app/expenses/[id]/page.tsx', tier: 'W', label: 'Delete draft', danger: true, action: 'deleteDraftAction', actionFile: 'app/expenses/actions.ts' }, // T-418: a draft delete is a Tier W step (Ian row 348)
   { file: 'app/expenses/[id]/page.tsx', tier: 'P', label: 'Void expense', danger: true, visible: 'Void expense', action: 'voidExpenseAction', actionFile: 'app/expenses/actions.ts', mutation: 'voidExpense' },
   { file: 'app/expenses/recurring/page.tsx', tier: 'W', label: 'Delete template', danger: true, action: 'deleteTemplateAction', actionFile: 'app/expenses/recurring/actions.ts' }, // T-418: a draft delete is a Tier W step (Ian row 348)
@@ -105,6 +105,7 @@ const rows: Row[] = [
   { file: 'app/kitchen/KitchenSections.tsx', tier: 'R', label: 'Retire kitchen station', danger: true, visible: 'Retire station', action: 'retireKitchenStationAction', actionFile: 'app/admin/stores/kitchen-actions.ts', mutation: 'retireKitchenStation' }, // T-508 S2b
   { file: 'app/menu/DaypartsSection.tsx', tier: 'R', label: 'Retire lunch or dinner hours', danger: true, visible: 'Retire hours', action: 'retireDaypartAction', actionFile: 'app/admin/stores/actions.ts', mutation: 'retireDaypart' }, // T-510 S3 (retiring is for good)
   { file: 'app/admin/pos-tablets/page.tsx', tier: 'R', label: 'Revoke tablet link', danger: true, visible: 'Revoke tablet link', action: 'revokeTabletAction', actionFile: 'app/admin/pos-tablets/actions.ts', mutation: 'revokePosTerminalLink' }, // T-505
+  { file: 'app/documents/[id]/page.tsx', tier: 'R', label: 'Void document', danger: true, visible: 'Void document', action: 'voidDocumentAction', actionFile: 'app/documents/actions.ts', mutation: 'voidDocument' }, // T-584 (NEEDS BOSS APPROVAL): retype the document number
   { file: 'app/attendance/terminals/page.tsx', tier: 'R', label: 'Revoke terminal', danger: true, visible: 'Revoke terminal', action: 'revokeTerminalAction', actionFile: 'app/attendance/terminals/actions.ts', mutation: 'revokeTerminal' },
   { file: 'app/budgets/page.tsx', tier: 'R', label: 'Remove cap', danger: true, visible: 'Remove cap', action: 'removeBudgetAction', actionFile: 'app/budgets/actions.ts', mutation: 'removeExpenseBudget' },
   { file: 'app/commissary/catalogue/page.tsx', tier: 'R', label: 'Remove mapping', danger: true, visible: 'Remove mapping', action: 'removeMapAction', actionFile: 'app/commissary/catalogue/actions.ts', mutation: 'removeMap' },
@@ -224,11 +225,11 @@ const FORM_READ = /formData|\bfd\b|str\(|opt\(|requireId\(|\.get\(/;
 describe('the census arithmetic (green today: the literal map matches the spec + the audit-round conditionals)', () => {
   it('69 controls: P 33 (36 - the 3 T-418 draft deletes), R 19 (18 + T-464 Un-pair tablet), W 13 (10 + the 3 T-418 draft deletes), X 4; 64 are danger (2 conditional), in 50 files', () => {
     const by = (t: Tier) => rows.filter((r) => r.tier === t).length;
-    expect([by('P'), by('R'), by('W'), by('X'), by('C')]).toEqual([34, 22, 12, 4, 5]); // T-589 B3d: +5 C (tier=confirm); Withdraw sales day moved W -> C (13 -> 12); // T-550: P 34 -> 33 (the retired POS usage pull page's Void this pull; BOSS approved), then +1 (Void POS pull moved to usage/[id], net 34, pending BOSS approval); T-510 S3: +1 R (Retire hours, NEEDS BOSS APPROVAL 21 -> 22); T-508 S2b: +1 R (Retire station); T-418: three draft deletes moved P -> W; T-464: +1 R; T-505: +1 R (Revoke tablet link)
-    expect(rows).toHaveLength(77); // T-550: 73 -> 72 (BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: +Retire hours (72 -> 73); T-505: +Revoke tablet link; T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
-    expect(rows.filter((r) => r.danger)).toHaveLength(67); // T-589 B3d: 68 -> 67 (Withdraw sales day is no longer a bare danger button); // T-550: 68 -> 67 (BOSS approved), then +1 Void POS pull (net 68, pending BOSS approval); T-510 S3: 67 -> 68
+    expect([by('P'), by('R'), by('W'), by('X'), by('C')]).toEqual([34, 23, 12, 4, 5]); // T-589 B3d: +5 C (tier=confirm); Withdraw sales day moved W -> C; T-584: +1 R (Void document, NEEDS BOSS APPROVAL 22 -> 23); T-550: P 34 -> 33 (the retired POS usage pull page's Void this pull; BOSS approved), then +1 (Void POS pull moved to usage/[id], net 34, pending BOSS approval); T-510 S3: +1 R (Retire hours, NEEDS BOSS APPROVAL 21 -> 22); T-508 S2b: +1 R (Retire station); T-418: three draft deletes moved P -> W; T-464: +1 R; T-505: +1 R (Revoke tablet link)
+    expect(rows).toHaveLength(78); // T-589 B3d: 74 -> 78 (+5 tier=confirm, net +4 after Withdraw sales day moved); T-584: 73 -> 74 (Void document); T-550: 73 -> 72 (BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: +Retire hours (72 -> 73); T-505: +Revoke tablet link; T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
+    expect(rows.filter((r) => r.danger)).toHaveLength(68); // T-589 B3d: 69 -> 68 (Withdraw sales day is no longer a bare danger button); T-584: 68 -> 69 (Void document); T-550: 68 -> 67 (BOSS approved), then +1 Void POS pull (net 68, pending BOSS approval); T-510 S3: 67 -> 68
     expect(rows.filter((r) => r.conditional)).toHaveLength(2);
-    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(53); // T-550: 54 -> 53 (app/inventory/pos-usage/page.tsx is gone; BOSS approved); T-510 S3: 53 -> 54 (menu/DaypartsSection.tsx)
+    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(54); // T-584: 53 -> 54 (app/documents/[id]/page.tsx); T-550: 54 -> 53 (app/inventory/pos-usage/page.tsx is gone; BOSS approved); T-510 S3: 53 -> 54 (menu/DaypartsSection.tsx)
   });
   it('every P / R row names its visible label (audit L8), and no two rows in one file share an action AND a label by accident', () => {
     for (const r of rows.filter((x) => x.tier === 'P' || x.tier === 'R')) {
@@ -313,7 +314,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       const src = readFileSync(abs, 'utf8');
       total += count(src, DANGER) + confirmWindows(src).length;
     }
-    expect(total).toBe(77); // T-550: 73 -> 72 (the retired POS usage pull page's Void this pull, BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: 72 -> 73 (Retire hours); T-193 S5: +Void payment (statutory payments); T-505: +Revoke tablet link
+    expect(total).toBe(78); // T-589 B3d: 74 -> 78 (+5 tier=confirm, Withdraw sales day moved W -> C); T-584: 73 -> 74 (Void document); T-550: 73 -> 72 (the retired POS usage pull page's Void this pull, BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: 72 -> 73 (Retire hours); T-193 S5: +Void payment (statutory payments); T-505: +Revoke tablet link
   });
 });
 
@@ -480,7 +481,7 @@ describe('T-418: the three draft deletes are Tier W with no approval step; the c
   it('Remove opening figure is still Tier P (Ian 16 Oct, answer 1)', () => {
     const r = rows.find((x) => x.label === 'Remove opening figure');
     expect(r?.tier).toBe('P');
-    expect(functionBody(read('app/cutover/actions.ts'), 'removeOpeningFigureAction')!).toMatch(/verifyAdminApproval\(/);
+    expect(functionBody(read('app/opening-balances/actions.ts'), 'removeOpeningFigureAction')!).toMatch(/verifyAdminApproval\(/);
   });
 });
 

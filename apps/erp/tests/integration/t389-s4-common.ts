@@ -16,7 +16,7 @@ export { asOrg, actor, fixture, markup, plain, sql, uid, LONG, type BaseCtx, typ
  * draws STORED values only). It is S2's `createHarness` (t389-s2-common.ts) with four changes the S4 forms need, kept here
  * because S2's file is not this slice's to edit:
  *
- *  1. `ok` may be null: cutover/count saves with NO banner (it redirects with an empty flash), so the good leg asserts "no
+ *  1. `ok` may be null: opening-balances/stock-count saves with NO banner (it redirects with an empty flash), so the good leg asserts "no
  *     error, no ok, no typed slot".
  *  2. a good save may RETURN instead of redirecting (inventory/low-stock revalidates and returns); the good leg then
  *     asserts the return and an unchanged jar.
@@ -141,7 +141,7 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
         expect(plain(html), 'the refusal banner').toMatch(c.refusal);
         const seg = pickForm(html, c.has(ctx));
         expect(seg, 'reopened: not locked').not.toContain('<fieldset disabled');
-        expect(seg, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*>/); // T-448: Save is an icon button (words are aria-label + data-tip)
+        expect(seg, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*(?:aria-label="Save"[^>]*>|>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>)/); // T-589 B4a: a primary Save carries its word; a secondary Save is still an icon named by aria-label
         await c.stored(ctx, seg, markup);
         for (const typed of notDrawnOf(ctx)) expect(seg, `"${typed}" is typed, never drawn by the server (the browser applies it)`).not.toContain(typed);
         const rec = find(c.sel(ctx));

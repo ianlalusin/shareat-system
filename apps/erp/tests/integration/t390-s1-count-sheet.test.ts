@@ -19,7 +19,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { closeDb, transaction, APP_ROLE, cutoverRepo, type Tx } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
-import { loadMergedLines } from '../../src/app/cutover/lib';
+import { loadMergedLines } from '../../src/app/opening-balances/lib';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 5 });

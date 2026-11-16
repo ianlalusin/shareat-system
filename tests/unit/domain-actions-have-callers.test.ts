@@ -160,6 +160,9 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — `createSalesDay` and `editSalesDay` call it (`sales-days/create.ts`, `sales-days/edit.ts`) ' +
     'to write the per-wallet tender rows a sales day owns. Exported (T-369 S3) so the edit path shares the ' +
     'same validation, not as an entry point.',
+  authorizeViewStoreless:
+    'INTERNAL — `issueDocument` (`documents/issue.ts:34`) and `signDocument` (`documents/sign.ts:166`) call it (T-584) ' +
+    'to gate a store-less document view by the `view_documents` capability. A gate inside those two, not a human boundary of its own.',
 
   canBypassBlock:
     'INTERNAL — `assertCanOpenDay` calls it (`sales-days/create-block.ts:124`) to decide whether an actor skips the ' +
@@ -349,6 +352,8 @@ const EXEMPT: Record<string, string> = {
     'UNWIRED — T-526 / T-533: T-525 built the quarantine review (docs/tasks/525-pos-v2-apis.md R6) as domain functions only; the quarantine screen for managers is their caller. Remove this row when it lands (7 Nov 2026).',
   discardQuarantinedEvent:
     'UNWIRED — T-526 / T-533: T-525 built the quarantine review (docs/tasks/525-pos-v2-apis.md R6) as domain functions only; the quarantine screen for managers is their caller. Remove this row when it lands (7 Nov 2026).',
+  ingestSettlementFile:
+    'INTERNAL — T-511 S8a: `ingestSettlementUpload` (packages/domain/src/settlement-intake/ingest-many.ts) calls it once per invoice, each in its own transaction, after its own capability check; the upload screen action calls `ingestSettlementUpload`, so this is no longer a screen action of its own.',
   readingFor:
     'INTERNAL — T-531: `xReading` (the X-reading, route GET /api/pos/x-reading and the Till tab) and `closeDay` / `closeBacklog` (packages/domain/src/pos/day-close.ts) call it after their own capability check; it is exported only so a test can read a window at a chosen time, so it is not a screen action of its own.',
   deriveSalesDayFromZ:

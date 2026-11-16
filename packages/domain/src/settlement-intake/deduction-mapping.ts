@@ -62,7 +62,8 @@ const FOODPANDA: Readonly<Record<string, Deduction>> = {
   // Appendix B charge kinds.
   cpc_ad: cost('marketing'),
   platform_fee: cost('platformFee'),
-  // PandaGO rows are shown, never booked.
+  // PandaGO rows that are not delivery fees (cash on delivery, withholding) are shown, never booked. A "Delivery Service Fees" row is NOT a day deduction: it stages as a period
+  // charge (`delivery_fee`, T-511 S8b item 9) and `postPlatformCharge` books it (6400 / 1220), so it has no entry here.
   pandago: NONE,
 };
 

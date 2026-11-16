@@ -89,7 +89,7 @@ describe('S2 delivery receipt (print view)', () => {
     const html = await printHtml(o.orderId);
     const [cust] = await sql<{ name: string }[]>`select name from customers where id = ${o.customerId}`;
     expect(html).toContain(cust!.name);
-    expect(html).toContain('2026-10-10');
+    expect(html).toContain('October 10, 2026');
     expect(html).toContain('WO-555');
     expect(html).toMatch(/Paid on this order[\s\S]{0,200}2,000\.00/);
     expect(html).toMatch(/Balance due on this order[\s\S]{0,200}3,000\.00/);

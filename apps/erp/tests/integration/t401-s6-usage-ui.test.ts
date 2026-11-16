@@ -228,7 +228,7 @@ describe('A7 - the queue flags a draft left behind by a voided pull', () => {
     const Page = (await import('../../src/app/inventory/usage/page')).default as (p: unknown) => Promise<unknown>;
     const html = text(renderToStaticMarkup((await Page({ searchParams: Promise.resolve({ store: w.a.storeId, date: DAY }) })) as never));
     expect(html, 'the edited draft is still in the queue').toContain('10.5');
-    expect(html, 'and says why it needs a look').toMatch(/pull voided/i);
+    expect(html, 'and says why it needs a look').toMatch(/POS usage import was voided/i);
   }, 180_000);
 });
 

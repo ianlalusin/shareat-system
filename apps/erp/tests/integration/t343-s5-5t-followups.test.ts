@@ -300,7 +300,7 @@ describe('⛔ green, must stay unedited — a typed 0 or a real minute is still 
 });
 
 // =================================================================================================
-// U1 — cutover/actions.ts recordCountAction (unitCost)
+// U1 — opening-balances/actions.ts recordCountAction (unitCost)
 // =================================================================================================
 
 async function cutoverFixture(hint: string) {
@@ -344,7 +344,7 @@ describe('U1 (DEF-470) — cutover unitCost="1,5"', () => {
     async () => {
       const f = await cutoverFixture('u1');
       ACTOR_HOLDER.actor = f.admin;
-      const { recordCountAction } = await import('../../src/app/cutover/actions');
+      const { recordCountAction } = await import('../../src/app/opening-balances/actions');
       const fd = new FormData();
       fd.set('storeId', f.storeId);
       fd.set('itemId', f.itemId);
@@ -360,7 +360,7 @@ describe('U1 (DEF-470) — cutover unitCost="1,5"', () => {
   it('⛔ green, unedited — unitCost="" saves null; "   " saves null too (spaces-only = blank)', async () => {
     const f = await cutoverFixture('u1n');
     ACTOR_HOLDER.actor = f.admin;
-    const { recordCountAction } = await import('../../src/app/cutover/actions');
+    const { recordCountAction } = await import('../../src/app/opening-balances/actions');
 
     const fd = new FormData();
     fd.set('storeId', f.storeId);

@@ -180,7 +180,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 126 -> 127, T-569: /reports/pos-data carries its <PageDescription>; measured by walking app/.
     // 126 -> 127, T-568 S1: the Inventory landing's description moved to the shared <PageDescription> component; measured by walking app/.
     // 128 -> 129, T-533 S3: /admin/stores/[id]/pos-preflight carries its <PageDescription>; measured by walking app/.
-    expect(count).toBe(129);
+    // 129 -> 132, T-584: Documents, Issue a document, Document templates; measured by walking app/.
+    expect(count).toBe(132);
   });
 });
 
@@ -229,7 +230,7 @@ describe('T-348 S2 — SW6: class B/C/D sites keep their exact class strings (mu
     'commissary/discrepancies/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'commissary/orders/page.tsx': ['mt-4 text-sm text-neutral-600'],
     // T-390 S5 added a second class B empty state here (a store with no stock room).
-    'cutover/count/page.tsx': ['mt-2 text-sm text-neutral-600 dark:text-neutral-400', 'mt-2 text-sm text-neutral-600 dark:text-neutral-400'],
+    'opening-balances/stock-count/page.tsx': ['mt-2 text-sm text-neutral-600 dark:text-neutral-400', 'mt-2 text-sm text-neutral-600 dark:text-neutral-400'],
     'inventory/counts/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/deliveries/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/locations/page.tsx': ['mt-4 text-sm text-neutral-600', 'mt-4 text-sm text-neutral-600'],
@@ -252,7 +253,7 @@ describe('T-348 S2 — SW6: class B/C/D sites keep their exact class strings (mu
     ],
     'admin/users/[personId]/page.tsx': ['text-sm text-neutral-500 dark:text-neutral-400'],
     'items/[id]/page.tsx': ['text-sm text-neutral-500 dark:text-neutral-400'],
-    'staff/[employmentId]/page.tsx': ['text-sm text-neutral-500 dark:text-neutral-400'],
+    // T-590 A1: this page's grey meta line is no longer a <p> next to the <h1> (it holds the Edit positions button), so it has no class C site now.
     // class D — not a description at all
     'ap/suppliers/[id]/page.tsx': ['text-xs text-neutral-500 dark:text-neutral-400'],
     "customers/[customerId]/page.tsx": ["text-xs ${TREATMENT_TONE[customer.treatment] ?? ''}"],

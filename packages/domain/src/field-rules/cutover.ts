@@ -1,11 +1,11 @@
 /**
- * T-440 field rules for app/cutover. The figure and asset sentences are the ones the opening-balance domain already speaks
+ * T-440 field rules for app/opening-balances. The figure and asset sentences are the ones the opening-balance domain already speaks
  * ("An opening figure has to be greater than zero."); a count of zero is a real answer, so it is allowed.
  */
 import { defineFieldRules } from './check';
 import { MANUAL_COST_PATTERN } from '../shared/manual-cost-pattern';
 
-/** Add an opening figure (/cutover/opening). Which accounts take a party, and which are generated, is the domain's call. */
+/** Add an opening figure (/opening-balances/balance-sheet). Which accounts take a party, and which are generated, is the domain's call. */
 export const CUTOVER_FIGURE_RULES = defineFieldRules('cutover.addOpeningFigure', {
   accountCode: { label: 'The account', kind: 'text', requires: 'Choose the account.' },
   storeId: { label: 'The store', kind: 'text', requires: 'Choose the store.' },

@@ -2,6 +2,7 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { addShiftDays, toShiftDay } from '@shareat/domain';
 import { addLeaveTypeAction, saveLeaveCapAction, setLeaveTypeActiveAction, updateAttendanceConfigAction } from './actions';
 import { leaveSettingsFor, liveConfigFor, listStores } from './lib';
+import { ACTION_LINK } from '@/components/action-link';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
@@ -79,6 +80,12 @@ export default async function AttendanceSettingsPage({
   return (
     <Page density="table">
       <div>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          <a href="/settings" className={ACTION_LINK}>
+            Settings
+          </a>{' '}
+          / Attendance & payroll
+        </p>
         <h1 className="text-2xl font-semibold">Attendance & payroll settings</h1>
         <PageDescription>
           One policy per store, starting from a day you choose. A change never rewrites a day already

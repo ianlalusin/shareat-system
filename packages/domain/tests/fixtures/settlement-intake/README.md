@@ -43,8 +43,6 @@ Redacted: `Official Document Number` (16 digits, first 10 kept), `Invoice Number
 
 | File | What it is |
 |---|---|
-| hostile-zip-11-entries.zip | 11 entries (cap 10) |
-| hostile-zip-expands-over-5mb.zip | 2 entries; the pdf expands to 6 MB of zeros; the zip is 23 KB; headers tell the truth |
 | hostile-zip-lying-size.zip | 1 entry; the headers say 100 bytes, the stream inflates to 6 MB |
 | hostile-zip-nested-archive.zip | contains `inner.zip` |
 | hostile-zip-bad-extension.zip | contains `payload.exe` (plain text bytes) |

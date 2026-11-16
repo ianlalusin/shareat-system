@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 /**
- * T-390 S5 (TESTER) - /cutover/count with a room per count. DEF-630 (editing a merged two-room line double-counts) and bible row 300
+ * T-390 S5 (TESTER) - /opening-balances/stock-count with a room per count. DEF-630 (editing a merged two-room line double-counts) and bible row 300
  * (the typed slot keeps typing; its record is now per ITEM AND ROOM).
  * Spec: docs/tasks/390-opening-stock-and-subledger-tieout.md s5.4, s7 S5; docs/DEFECTS-REGISTER.md DEF-630; t389-s4-common.ts harness.
  *
@@ -77,8 +77,8 @@ async function countCtx(hint: string, record: 'kit' | 'frz' = 'kit'): Promise<Co
   return ctx;
 }
 
-const page = async () => (await import('../../src/app/cutover/count/page')).default as never;
-const actions = () => import('../../src/app/cutover/actions');
+const page = async () => (await import('../../src/app/opening-balances/stock-count/page')).default as never;
+const actions = () => import('../../src/app/opening-balances/actions');
 const fdOf = (base: Record<string, string>, over: Record<string, string | string[] | null> = {}): FormData => {
   const fd = new FormData();
   for (const [k, v] of Object.entries({ ...base, ...over })) if (v !== null) fd.set(k, v as string);

@@ -71,7 +71,8 @@ describe('at most WORKER_CONCURRENCY workers run at a time', () => {
     const js = "import { parentPort } from 'node:worker_threads'; setTimeout(() => parentPort.postMessage({ ok: true, a: null, b: null }), 300);";
     const t0 = Date.now();
     const outs = await Promise.all(Array.from({ length: 4 }, () => readSheetsInWorker(wb(), { workerUrl: dataUrl(js), timeoutMs: 500 })));
-    expect(outs).toEqual(Array.from({ length: 4 }, () => ({ a: null, b: null })));
+    // S8b: the host hands back a third sheet (Appendix C); a stub that does not send one reads as null
+    expect(outs).toEqual(Array.from({ length: 4 }, () => ({ a: null, b: null, c: null })));
     expect(Date.now() - t0).toBeGreaterThan(550);
   });
 

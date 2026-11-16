@@ -10,10 +10,10 @@ import { sql as dsql } from 'drizzle-orm';
  * docs/tasks/454-drop-banay-banay.md section 4 S4 last bullet, section 6 T13. Real PostgreSQL.
  *
  * (a) openingTieOut with an inactive, empty store: passes and never names it.      GREEN-AS-GUARD (measured: it already does).
- * (b) the cutover wizard's store list (apps/erp/src/app/cutover/lib.ts `listStores`, which re-exports expenses/lib `listStores`)
+ * (b) the cutover wizard's store list (apps/erp/src/app/opening-balances/lib.ts `listStores`, which re-exports expenses/lib `listStores`)
  *     leaves the inactive store out, so cutoverProgress(tx, org, ids) is never asked for per-store steps of it.
  *     RED today: that query is `where org_id = ...` with no is_active filter (apps/erp/src/app/expenses/lib.ts:66-73), and
- *     apps/erp/src/app/cutover/page.tsx:26-31 feeds every returned id to cutoverProgress.
+ *     apps/erp/src/app/opening-balances/page.tsx:26-31 feeds every returned id to cutoverProgress.
  *     Mutant killed: inactive store demanded (no is_active filter on the wizard's store list).
  */
 config({ path: '.env.local' });
@@ -73,13 +73,13 @@ describe('T-454 T13a the tie-out does not demand anything of an inactive, empty 
 describe('T-454 T13b the cutover wizard asks about active stores only', () => {
   it('its store list holds the active store and not the inactive one', async () => {
     // Imported lazily: the module pulls the ERP app's server helpers.
-    const lib = await import('../../src/app/cutover/lib');
+    const lib = await import('../../src/app/opening-balances/lib');
     const ids = (await lib.listStores(orgId)).map((s) => s.id);
     expect(ids).toContain(activeId);
     expect(ids).not.toContain(inactiveId);
   });
   it('cutoverProgress over that list has no per-store step for the inactive store', async () => {
-    const lib = await import('../../src/app/cutover/lib');
+    const lib = await import('../../src/app/opening-balances/lib');
     const ids = (await lib.listStores(orgId)).map((s) => s.id);
     const p = await asOrg(orgId, (tx) => cutoverProgress(tx, orgId, ids));
     const mine = (p.steps as unknown as Array<{ storeId?: string | null }>).filter((s) => s.storeId === inactiveId);

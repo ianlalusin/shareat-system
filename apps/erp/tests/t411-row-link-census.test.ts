@@ -34,6 +34,7 @@ const ROW_LINK: readonly string[] = [
   'app/commissary/orders/page.tsx',
   'app/customers/[customerId]/page.tsx',
   'app/customers/page.tsx',
+  'app/documents/page.tsx', // T-584: each issued document row opens the document
   'app/expenses/page.tsx',
   'app/fixed-assets/page.tsx',
   'app/inventory/counts/page.tsx',
@@ -61,8 +62,6 @@ const ROW_LINK: readonly string[] = [
 
 /** Tables with no row destination: reports, editing grids, read-only detail lines. Untouched by T-411. */
 const NO_ROW_TARGET: readonly string[] = [
-  // T-546, 8 Nov 2026, BOSS approved: tills list, no row target
-  'app/admin/pos-tablets/TillsSection.tsx',
   // T-502 S4: the import preview rows are findings about lines of an uploaded file; there is nothing to open
   'app/items/import/page.tsx',
   // T-511 S4: the days still waiting for a file, per channel: a summary, nothing to open yet (the review screen is slice 5)
@@ -79,7 +78,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'components/reports/StoreComparisonTable.tsx',
   'components/reports/TrialBalanceTable.tsx',
   'components/expenses/InvoiceBatchRecord.tsx', // T-502 s12: the batch's tick table is a form (one row per part of the bill), no row destination
-  // Editing grids / rows are forms (21)
+  // Editing grids / rows are forms (20)
   'app/trade/orders/[id]/print/page.tsx', // T-433 S2: the printable delivery receipt, a print page with no row destination
   'app/page.tsx', // T-401 S6: the usage check scorecard on the dashboard, one row per store, no row destination
   'app/admin/access-defaults/grid.tsx',
@@ -89,7 +88,6 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/franchise/views.tsx', // T-398 S6d: franchisor sales/stock result tables, no per-row record page
   'app/inventory/counts/[id]/page.tsx',
   'app/inventory/deliveries/inbound/[shipmentId]/page.tsx', // T-398 S5: shipment line items, no per-row record page
-  'app/inventory/locations/page.tsx',
   'app/inventory/low-stock/page.tsx',
   'app/inventory/returns/page.tsx',
   'app/inventory/transfers/page.tsx',
@@ -109,7 +107,7 @@ const NO_ROW_TARGET: readonly string[] = [
   // Read-only detail lines with nowhere to go (16)
   'app/admin/prerequisite-refusals/page.tsx',
   'app/customers/price-lists/[id]/page.tsx',
-  'app/cutover/count/sheet/page.tsx',
+  'app/opening-balances/stock-count/sheet/page.tsx',
   'app/expenses/[id]/page.tsx',
   'app/findings/scorecard/page.tsx',
   'app/fixed-assets/[id]/page.tsx',

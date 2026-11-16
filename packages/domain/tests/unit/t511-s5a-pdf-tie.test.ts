@@ -113,14 +113,13 @@ describe(`T-511 S5a - the five real Foodpanda invoices tie to the PDF "${PDF_LAB
 });
 
 describe('T-511 S5a - the Appendix-B-only invoice stays out of the receivable', () => {
-  it('stays none: zero days, its three PandaGO lines booked as none, no rounding line, no VAT line; the file carries the PandaGO net total -385.03 and the receivable 374.32 for the screen note [kills: PandaGO booked; a day invented; figures missing]', async () => {
+  it('stays out of the sales receivable: zero days, its two PandaGO lines (withholding, COD) booked as none and the delivery fee a period charge (S8b item 9), no rounding line; the file carries the PandaGO net total of the rows that stay shown-only, -474.32, and the receivable 474.32 for the screen note [kills: PandaGO cash booked; a day invented; figures missing; the booked fee counted in the shown-only figure]', async () => {
     const staged = stageFoodpandaDays(await readFpFixture('foodpanda-lipa-oct5a-appendix-b-only-pandago.zip'), MATCHED) as S5aFile;
     expect(staged.days).toEqual([]);
     expect(staged.periodLines.length).toBe(3);
-    for (const l of staged.periodLines) expect(l).toMatchObject({ kind: 'pandago', bookedAs: 'none' });
-    expect(staged.periodLines.map((l) => l.amount).sort()).toEqual(['-476.00', '1.68', '89.29']);
-    expect(staged.pandagoNetTotal).toBe('-385.03');
-    expect(staged.pandagoReceivable).toBe('374.32');
+    expect(staged.periodLines.map((l) => [l.amount, l.kind, l.bookedAs]).sort()).toEqual([['-476.00', 'pandago', 'none'], ['1.68', 'pandago', 'none'], ['89.29', 'period_charge', 'none']]);
+    expect(staged.pandagoNetTotal).toBe('-474.32');
+    expect(staged.pandagoReceivable).toBe('474.32');
   });
 
   it('an invoice with orders carries no PandaGO figures [kills: figures on every file]', async () => {

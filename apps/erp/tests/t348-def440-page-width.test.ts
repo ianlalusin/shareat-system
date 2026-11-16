@@ -76,7 +76,7 @@ function mainDensity(rel: string): string {
 const EIGHT = [
   'admin/stores/[id]/page.tsx',
   'admin/users/[personId]/page.tsx',
-  'cutover/opening/page.tsx',
+  'opening-balances/balance-sheet/page.tsx',
   'expenses/new/page.tsx',
   'fixed-assets/new/page.tsx',
   'settings/attendance/page.tsx',

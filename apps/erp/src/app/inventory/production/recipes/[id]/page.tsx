@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { convertUnit, quantity } from '@shareat/domain';
-import { requireSession } from '../../../../../lib/session';
+import { requirePageAccess } from '../../../../../lib/page-access';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner } from '@/components/ui';
@@ -24,7 +24,8 @@ export default async function RecipePage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`${RECIPES_PATH}/${id}`);
+  const { actor, refusal } = await requirePageAccess(`${RECIPES_PATH}/${id}`);
+  if (refusal) return refusal;
   const recipe = await recipeDetail(actor.orgId, id);
   if (!recipe) notFound();
   const canManage = await canManageRecipes(actor.orgId, actor);

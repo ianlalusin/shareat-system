@@ -371,6 +371,31 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Per-store channel-settlement wiring (T-564): the store key, match labels, file hints and the wastage-email opt-in. ' +
       'Org-scoped because it is configuration that names a store to outside matching, so one org must never read the wiring of another.',
   },
+  document_templates: {
+    scope: 'org_column',
+    reason:
+      "HR document templates (T-584). Org-scoped: one organisation's standard wording is not another's.",
+  },
+  document_template_versions: {
+    scope: 'org_column',
+    reason:
+      "Template versions (T-584). Org-scoped through their own org_id, also pinned by a same-org foreign key to the template.",
+  },
+  issued_documents: {
+    scope: 'org_column',
+    reason:
+      "Issued HR documents (T-584): they name an employee and carry employment facts. Org-scoped; store scope is the domain's (issue_documents and view_documents are store capabilities).",
+  },
+  issued_document_versions: {
+    scope: 'org_column',
+    reason:
+      "The text of every version of an issued HR document (T-584): personal employment data. Org-scoped, same-org foreign key to its document.",
+  },
+  issued_document_signatures: {
+    scope: 'org_column',
+    reason:
+      "Which saved signature file was attached to which document version (T-584). A signature can be forged, so a foreign org must never read the row or learn the file id. Org-scoped, same-org keys to the version, the person and the file.",
+  },
   statutory_discount_records: {
     scope: 'org_column',
     reason:

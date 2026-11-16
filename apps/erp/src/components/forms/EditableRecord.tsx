@@ -312,6 +312,9 @@ function applyTyped(form: HTMLFormElement, fields: Record<string, string | strin
 /** `useLayoutEffect` warns when a component renders on the server; the effect is browser-only, so use `useEffect` there. */
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
+/** For a form in a modal that refills like a record (the staff page's Edit name and Edit positions). Below the helpers so the source-slicing tests still cut them whole. */
+export { applyTyped, formChangedNames };
+
 export interface SummaryRow {
   label: string;
   value: string | null | undefined;
@@ -362,8 +365,9 @@ export interface EditableRecordViewProps extends EditableRecordProps {
 
 // Single string literals (no template or `+`): the touch-target census resolves only literal initializers.
 // T-448 (Ian: white icon on a red or black round button, name on hover): Save is red, Edit and Cancel are ink.
+// T-589 B4a (Ian R1): Save is the form's main action, so it carries its word beside the icon.
 const PRIMARY =
-  'erp-icon-btn inline-flex h-11 w-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full p-0 text-sm border border-transparent bg-brand text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-40';
+  'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold border border-transparent bg-brand text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-40';
 const SECONDARY =
   'erp-icon-btn inline-flex h-11 w-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full p-0 text-sm border border-transparent bg-ink text-canvas hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
@@ -452,8 +456,9 @@ export function EditableRecordView({
           {editing ? (
             <DialogActions>
               <CheckSummary active={check?.active === true} summary={check?.summary ?? null} className="w-full text-left" />
-              <button type="submit" className={PRIMARY} disabled={blocked} data-check-aware="true" aria-label={saveLabel} data-tip={saveLabel}>
+              <button type="submit" className={PRIMARY} disabled={blocked} data-check-aware="true">
                 <ActionIcon name="save" />
+                {saveLabel}
               </button>
               <button type="button" className={SECONDARY} onClick={onCancel} aria-label="Cancel" data-tip="Cancel">
                 <ActionIcon name="close" />

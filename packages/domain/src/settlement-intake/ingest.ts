@@ -67,7 +67,7 @@ const asBuffer = (bytes: Uint8Array): Buffer => (Buffer.isBuffer(bytes) ? bytes 
 
 const starts = (bytes: Uint8Array, sig: readonly number[]): boolean => sig.every((b, i) => bytes[i] === b);
 /** ZIP local-file-header, empty archive and spanned archive: all go to the zip reader, which names what is wrong with them. */
-const looksZipped = (bytes: Uint8Array): boolean => starts(bytes, [0x50, 0x4b, 0x03, 0x04]) || starts(bytes, [0x50, 0x4b, 0x05, 0x06]) || starts(bytes, [0x50, 0x4b, 0x07, 0x08]);
+export const looksZipped = (bytes: Uint8Array): boolean => starts(bytes, [0x50, 0x4b, 0x03, 0x04]) || starts(bytes, [0x50, 0x4b, 0x05, 0x06]) || starts(bytes, [0x50, 0x4b, 0x07, 0x08]);
 
 const overlap = (have: ReadonlySet<string>, known: readonly string[]): number => known.filter((h) => have.has(h)).length;
 
@@ -159,6 +159,22 @@ function mergeTransactions(files: GrabTransactionsFile[]): { file: GrabTransacti
 const SAME_FIGURES = ['orderValue', 'grossInfo', 'commission', 'marketing', 'platformFee', 'vendorDiscount', 'loanDeduction', 'loanDisbursal', 'netPayout', 'unexplained', 'payoutReference', 'payoutDate', 'paymentArrivalDate', 'paidState', 'feeMonthNote'] as const;
 const sameFigures = (line: SettlementDayLineRow, d: StagedDay): boolean => SAME_FIGURES.every((f) => line[f] === d[f]);
 
+/**
+ * T-511 S8b - does the file just read replace this CURRENT upload of the same channel and kind?
+ *   - Grab: the same period (as always).
+ *   - Foodpanda STATEMENT (it read order rows): another statement of the same period. A charge-only invoice is not a statement of that period and is never replaced by one.
+ *   - Foodpanda, any file: an upload of the SAME INVOICE NUMBER with different bytes (the same bytes never get here: "already uploaded"). That is a re-issue, or the same workbook
+ *     uploaded alone after it came out of a many-invoice zip (S8a): never two current copies of one invoice.
+ *   A charge-only invoice is replaced by NOTHING else: two different invoices dated the same day (the real 299999000001 and 299999000003) both stay current.
+ */
+function replacesUpload(parsed: StoredUpload, u: SettlementUploadRow): boolean {
+  if (parsed.platform === 'foodpanda') {
+    if (parsed.invoiceNumber !== null && u.invoiceNumber === parsed.invoiceNumber) return true;
+    return parsed.ordersRead > 0 && u.ordersRead > 0 && parsed.periodFrom !== null && parsed.periodTo !== null && u.periodFrom === parsed.periodFrom && u.periodTo === parsed.periodTo;
+  }
+  return parsed.periodFrom !== null && parsed.periodTo !== null && u.periodFrom === parsed.periodFrom && u.periodTo === parsed.periodTo;
+}
+
 const days = (n: number): string => `${n} day${n === 1 ? '' : 's'}`;
 
 export async function ingestSettlementFile(tx: Tx, actor: Actor, input: IngestInput): Promise<IngestResult> {
@@ -202,7 +218,10 @@ export async function ingestSettlementFile(tx: Tx, actor: Actor, input: IngestIn
 
   // (7) a repeat of the same bytes writes nothing.
   const earlier = await settlementIntakeRepo.findUploadByFingerprint(tx, orgId, fingerprint);
-  if (earlier) return repeatOf(kind, matched, earlier);
+  if (earlier) {
+    await fillMissingDocuments(tx, orgId, matched, parsed, earlier.id);
+    return repeatOf(kind, matched, earlier);
+  }
 
   // (8) stage: Foodpanda from the invoice alone; Grab from the pair, once both files are in.
   const warnings: string[] = [];
@@ -230,10 +249,10 @@ export async function ingestSettlementFile(tx: Tx, actor: Actor, input: IngestIn
     } else if (transfersFiles.length > 0) {
       waitingFor = 'transactions_file';
       staged.waitingForRows = transfersFiles[0]!.rows.map((t) => ({ settlementId: t.settlementId, salesDate: t.payoutDate.date }));
-      warnings.push('The Transfers file is saved. It is waiting for the Transactions file before any day can be staged.');
+      warnings.push('The Transfers file is saved. It is waiting for the Transactions file before any day can be loaded.');
     } else {
       waitingFor = 'transfers_file';
-      warnings.push('The Transactions file is saved. It is waiting for the Transfers file before any day can be staged.');
+      warnings.push('The Transactions file is saved. It is waiting for the Transfers file before any day can be loaded.');
     }
   }
   warnings.push(...staged.warnings);
@@ -258,22 +277,23 @@ export async function ingestSettlementFile(tx: Tx, actor: Actor, input: IngestIn
     ordersRead: parsed.ordersRead,
     loanRowsRead: parsed.loanRowsRead,
     otherRowsRead: parsed.otherRowsRead,
+    priorItems: parsed.priorItems,
     uploadedBy: actor.personId,
   });
   // not reachable behind the channel lock; if it ever is, the answer is still "already uploaded" (the extra stored file is an orphan the sweep collects)
   if (!created) return repeatOf(kind, matched, upload);
 
-  // (10) the same channel, kind and period replace the earlier upload; a file with fewer days than the one it replaces says so.
-  if (parsed.periodFrom !== null && parsed.periodTo !== null) {
-    const replaced = (await settlementIntakeRepo.findCurrentUploads(tx, orgId, matched.channelId, kind)).filter(
-      (u) => u.id !== upload.id && u.periodFrom === parsed.periodFrom && u.periodTo === parsed.periodTo,
-    );
-    if (replaced.length > 0 && waitingFor === null) {
-      const before = await settlementIntakeRepo.countCurrentDaysInPeriod(tx, orgId, matched.channelId, parsed.periodFrom, parsed.periodTo);
-      if (staged.days.length < before) warnings.push(`This file covers fewer days (${staged.days.length}) than the file it replaces (${before}). Days it does not have keep their earlier figures.`);
-    }
-    for (const u of replaced) await settlementIntakeRepo.markSuperseded(tx, orgId, u.id, upload.id);
+  // (10) which earlier uploads this one replaces (T-511 S8b; the rule is `replacedBy` below); a file with fewer days than the statement it replaces says so.
+  const replaced = (await settlementIntakeRepo.findCurrentUploads(tx, orgId, matched.channelId, kind)).filter(
+    (u) => u.id !== upload.id && replacesUpload(parsed, u),
+  );
+  // Grab as before; a Foodpanda file only when a statement replaces a statement (a charge-only re-issue has no days to compare)
+  const comparesDays = parsed.platform === 'grab' || (parsed.ordersRead > 0 && replaced.some((u) => u.ordersRead > 0));
+  if (replaced.length > 0 && waitingFor === null && comparesDays && parsed.periodFrom !== null && parsed.periodTo !== null) {
+    const before = await settlementIntakeRepo.countCurrentDaysInPeriod(tx, orgId, matched.channelId, parsed.periodFrom, parsed.periodTo);
+    if (staged.days.length < before) warnings.push(`This file covers fewer days (${staged.days.length}) than the file it replaces (${before}). Days it does not have keep their earlier figures.`);
   }
+  for (const u of replaced) await settlementIntakeRepo.markSuperseded(tx, orgId, u.id, upload.id);
 
   // (11) each day: unchanged -> nothing; changed -> a new version, the old one retired (a booked one is never touched, its replacement is flagged).
   // Grab: a day's source is the Transactions upload that holds its rows, its payout upload the Transfers upload that holds its payout; Foodpanda: this invoice
@@ -331,7 +351,7 @@ export async function ingestSettlementFile(tx: Tx, actor: Actor, input: IngestIn
     daysStaged += 1;
   }
   await settlementIntakeRepo.insertOtherLines(tx, orgId, upload.id, null, staged.periodLines);
-  if (waitingForSalesDay > 0) warnings.push(`${days(waitingForSalesDay)} staged but waiting for the sales day to be verified before the figure staff recorded can be compared.`);
+  if (waitingForSalesDay > 0) warnings.push(`${days(waitingForSalesDay)} ${waitingForSalesDay === 1 ? 'is' : 'are'} loaded but waiting for the sales day to be verified before the figure staff recorded can be compared.`);
   if (unbalanced > 0) warnings.push(`${days(unbalanced)} do not add up to the payout: see the unexplained amount on each.`);
 
   // (12) the audit entry, in the same transaction.
@@ -349,6 +369,33 @@ export async function ingestSettlementFile(tx: Tx, actor: Actor, input: IngestIn
     kind, platform: parsed.platform, channelId: matched.channelId, storeId: matched.storeId, storeName: matched.storeName, uploadId: upload.id,
     alreadyUploaded: false, uploadedOn: null, daysStaged, daysUnchanged, waitingForRows: staged.waitingForRows.length, waitingFor, warnings,
   };
+}
+
+/**
+ * T-511 S8b audit 4. A Foodpanda upload made before migration 0260 has charge lines with no official document number, so a later payout cannot match them. Uploading the SAME
+ * bytes again says "already uploaded" and writes nothing, except this: each line of that upload whose number is empty gets the number its row of the file prints. A line is
+ * matched to a staged row by kind, booking, amount, date and description; when identical rows print different numbers nothing is guessed. A line that already has a number, a row that
+ * prints none and every other column are left alone (a booked charge stays exactly as booked). It runs after the fine gate of the matched store, like the repeat lookup itself.
+ */
+async function fillMissingDocuments(tx: Tx, orgId: string, matched: MatchedChannel, parsed: StoredUpload, uploadId: string): Promise<void> {
+  if (!parsed.foodpanda) return;
+  const empty = await settlementIntakeRepo.otherLinesWithoutDocument(tx, orgId, uploadId);
+  if (empty.length === 0) return;
+  const rules = stageRulesOn(await loadRuleBook(tx, orgId, STAGE_RULE_KEYS), foodpandaRuleDate(parsed.foodpanda));
+  const staged = stageFoodpandaDays(parsed.foodpanda, matched, rules);
+  const key = (l: { kind: string; bookedAs: string; amount: string; lineDate: string | null; description: string | null }): string =>
+    JSON.stringify([l.kind, l.bookedAs, String(l.amount), l.lineDate, l.description]);
+  const printed = new Map<string, Set<string>>();
+  for (const l of [...staged.periodLines, ...staged.days.flatMap((d) => d.otherLines)]) {
+    if (!l.officialDocument) continue;
+    const docs = printed.get(key(l)) ?? new Set<string>();
+    docs.add(l.officialDocument);
+    printed.set(key(l), docs);
+  }
+  for (const line of empty) {
+    const docs = printed.get(key(line));
+    if (docs && docs.size === 1) await settlementIntakeRepo.fillOfficialDocument(tx, orgId, line.id, [...docs][0]!);
+  }
 }
 
 function repeatOf(kind: SettlementFileKind, matched: MatchedChannel, earlier: SettlementUploadRow): IngestResult {

@@ -118,7 +118,7 @@ export function manyEntries(n: number, ext: string, prefix = 'f'): ZipEntry[] {
   return Array.from({ length: n }, (_, i) => ({ name: `${prefix}${i}.${ext}`, data: Buffer.from(`entry ${i}`) }));
 }
 
-export const SIX_MB_OF_ZEROS = (): Buffer => Buffer.alloc(6 * 1024 * 1024);
+export const SIXTEEN_MB_OF_ZEROS = (): Buffer => Buffer.alloc(16 * 1024 * 1024);
 
 /* ------------------------------------------------------------------ xlsx writer */
 
@@ -285,6 +285,14 @@ export function fp32Order(code: string, over34: Record<number, Cell> = {}): Cell
   return fp34Order(code, over34).filter((_, i) => i !== 18 && i !== 21);
 }
 
+/** Appendix C, "Outstanding Amount From Previous Periods": the five real headers (S8b). */
+export const FPC_HEADERS: string[] = ['Invoice Number', 'Invoice Date', 'Invoice Period', 'Invoice Amount', 'Remaining Amount'];
+
+/** One Appendix C row as the real file prints it: the document number as text, the date as DD.MM.YYYY text, the amounts as numbers (S8b). */
+export function fpPriorRow(document: string, amount: number, date = '31.10.2026', remaining: number | null = amount): Cell[] {
+  return [document, date, null, amount, remaining];
+}
+
 export interface FpBuild {
   layout?: '34' | '32';
   orders?: number;
@@ -294,11 +302,17 @@ export interface FpBuild {
   headers?: string[];
   /** Appendix B rows (header NOT included) */
   chargeRows?: Cell[][];
+  /** replaces the Appendix B header row */
+  chargeHeaders?: string[];
+  /** T-511 S8b: when given, an "Appendix C" sheet is added with these rows (header NOT included) */
+  priorRows?: Cell[][];
+  /** replaces the Appendix C header row */
+  priorHeaders?: string[];
   sheetNames?: [string, string];
 }
 
-export function fpChargeRow(category: string, description: string, net: number, vat = '12%', vendor = 'zz99'): Cell[] {
-  return ['2000000009999999', '200999999999', day('2026-10-19'), category, description, vendor, vat, 1, net, net, 0];
+export function fpChargeRow(category: string, description: string, net: number, vat = '12%', vendor = 'zz99', official = '2000000009999999', invoice = '200999999999'): Cell[] {
+  return [official, invoice, day('2026-10-19'), category, description, vendor, vat, 1, net, net, 0];
 }
 
 /** A baseline valid Foodpanda invoice workbook (default: 3 orders of balance 74.50 each, plus 1 CPC item and the Platform Fee). */
@@ -316,7 +330,8 @@ export function fpWorkbook(b: FpBuild = {}): Buffer {
   const names = b.sheetNames ?? ['Appendix A', 'Appendix B'];
   return xlsxBytes([
     { name: names[0], rows: [headers, ...orders] },
-    { name: names[1], rows: [FPB_HEADERS, ...charges] },
+    { name: names[1], rows: [b.chargeHeaders ?? FPB_HEADERS, ...charges] },
+    ...(b.priorRows ? [{ name: 'Appendix C', rows: [b.priorHeaders ?? FPC_HEADERS, ...b.priorRows] }] : []),
   ]);
 }
 
@@ -426,8 +441,13 @@ export function assertNoLeak(result: unknown, sensitive: Iterable<string>, banne
 }
 
 export const GRAB_BANNED_KEYS = /transaction|linked|order|booking|bank|receiving|appeal|customer|refund|incident|terminal|partner|merchant/i;
-/** Foodpanda keeps `customerRefund` (a boolean per the spec) and `invoiceNumber`; everything else about the customer or the order code is banned. */
-export const FP_BANNED_KEYS = /orderCode|order_code|customer(?!Refund)|phone|email|address|officialDocument|bank|transaction/i;
+/**
+ * Foodpanda keeps `customerRefund` (a boolean per the spec) and `invoiceNumber`; everything else about the customer or the order code is banned.
+ * T-511 S8b CHANGED THIS PIN ON PURPOSE: `officialDocument` used to be banned everywhere. It is now a deliberate field of an Appendix B CHARGE (and `priorItems[].document`
+ * is the same kind of number): the earlier-invoice deduction is matched on it, and it is a financial document number, not a customer or order field. It stays banned on
+ * ORDERS: `t511-s3-foodpanda.test.ts` pins each order's exact key list, and `foodpandaSensitive` below still treats an Appendix A document number as sensitive.
+ */
+export const FP_BANNED_KEYS = /orderCode|order_code|customer(?!Refund)|phone|email|address|bank|transaction/i;
 
 /** Sensitive Grab Transaction-file cells (ids, links, order ids, funding source). */
 export function grabTransactionSensitive(buf: Buffer): Set<string> {
@@ -474,6 +494,18 @@ export async function foodpandaSensitive(workbook: Buffer): Promise<Set<string>>
   }
   return out;
 }
+
+/**
+ * T-511 S8b: the document numbers of Appendix B, which a CHARGE now carries on purpose (`officialDocument`). The full set above stays what ORDERS must never carry; a test that scans a
+ * whole invoice takes these out of it (`withoutChargeDocuments`) and scans the orders alone against the full set.
+ */
+export async function foodpandaChargeDocuments(workbook: Buffer): Promise<Set<string>> {
+  const out = new Set<string>();
+  const b = (await readSheet(workbook, 'Appendix B').catch(() => [])) as unknown[][];
+  for (const r of b.slice(1)) if (r[0] !== null && r[0] !== undefined) out.add(String(r[0]));
+  return out;
+}
+export const withoutChargeDocuments = (sensitive: ReadonlySet<string>, chargeDocuments: ReadonlySet<string>): Set<string> => new Set([...sensitive].filter((s) => !chargeDocuments.has(s)));
 
 export function dayBefore(iso: string): string {
   const d = new Date(`${iso}T00:00:00.000Z`);

@@ -22,7 +22,7 @@ import { itemKindsOf, planOpeningStock } from './opening-stock';
 
 /**
  * The conversion date every opening figure, inventory draft and movement carries (POSTING-PATTERNS `opening_balance.load`).
- * ⚠️ R14 moves the app's copy (`apps/erp/src/app/cutover/lib.ts`) here; S5 makes the app re-export this one.
+ * ⚠️ R14 moves the app's copy (`apps/erp/src/app/opening-balances/lib.ts`) here; S5 makes the app re-export this one.
  */
 export { CONVERSION_DATE };
 
@@ -287,7 +287,7 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
     .map(([account, c]) => ({
       account,
       amount: `${pesos(c)} ${c > 0n ? 'debit' : 'credit'}`,
-      reason: "This system has no register to compare it with. Agree it with v1's trial balance at the rehearsal.",
+      reason: "This system has no register to compare it with. Agree it with the old system's trial balance at the rehearsal.",
     }));
 
   for (const [account, c] of [...partyless.entries()].sort(([a], [b]) => a.localeCompare(b))) {

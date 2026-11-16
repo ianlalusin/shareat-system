@@ -16,7 +16,7 @@ import { Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, 
 import { PageDescription } from '@/components/shell/PageDescription';
 import { NAV_LINK } from '@/components/action-link';
 
-export const metadata = { title: 'POS link — Shareat System' };
+export const metadata = { title: 'Link to POS store — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
@@ -52,9 +52,9 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
           <a href="/settings" className={NAV_LINK}>
             Settings
           </a>{' '}
-          / POS link
+          / Link to POS store
         </p>
-        <h1 className="text-2xl font-semibold">POS link</h1>
+        <h1 className="text-2xl font-semibold">Link to POS store</h1>
         <PageDescription>
           Which POS store each store sells under. A linked store&apos;s sales days come from POS and cannot be typed;
           a store that is not linked keeps typing them in.

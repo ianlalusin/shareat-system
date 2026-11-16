@@ -2,9 +2,11 @@
  * T-511 S3 - the safe zip reader (`docs/tasks/511-settlement-upload-s3-spec.md` item 2). Everything happens in memory from a Buffer:
  * nothing is extracted to disk, no path is read, no temp file is made.
  *
- * Order of checks (pinned by tests): length 0, over 1 MB, open fails (not a zip), unsafe name (yauzl refuses it while listing), more than
- * 10 entries, nested archive (BEFORE the allow-list), name allow-list, declared sizes over 5 MB (nothing inflated), then READ every entry
- * through a byte counter (size mismatch), and only THEN require exactly one workbook. `normalizeXlsx` runs the same listing and streaming
+ * Order of checks (pinned by tests): length 0, over 3 MB, open fails (not a zip), unsafe name (yauzl refuses it while listing), more than
+ * 40 entries, nested archive (BEFORE the allow-list), name allow-list, declared sizes over 15 MB (nothing inflated), then READ every entry
+ * through a byte counter (size mismatch), and only THEN look for the workbooks. T-511 S8a: a zip may hold several invoice workbooks (the
+ * caps grew from 1 MB / 10 files / 5 MB to fit a week of Foodpanda invoices); `openSettlementZipMembers` lists them, `openSettlementZip`
+ * still insists on exactly one (a stored upload is always one workbook). `normalizeXlsx` runs the same listing and streaming
  * checks on the inner workbook, then re-packs it, because neither xlsx library caps its own inflation. No time limit: a synchronous parse cannot be
  * interrupted; if a slow file ever appears, a worker thread is the fix.
  */
@@ -14,9 +16,12 @@ import { intakeRefusal, megabytes, shown } from './refusal';
 import { storedZip } from './zip-repack';
 
 const MB = 1024 * 1024;
-export const ZIP_MAX_BYTES = 1 * MB;
-export const ZIP_MAX_EXPANDED = 5 * MB;
-export const ZIP_MAX_ENTRIES = 10;
+// 3 MB = the per-file upload limit (`PURPOSE_LIMITS.channel_settlement_file`; a test keeps the two equal)
+export const ZIP_MAX_BYTES = 3 * MB;
+export const ZIP_MAX_EXPANDED = 15 * MB;
+export const ZIP_MAX_ENTRIES = 40;
+// 20 invoices (a pair each = the 40 entries): bounds the worker reads a zip can cause
+export const ZIP_MAX_WORKBOOKS = 20;
 // 8 MB: a 5,000-row invoice opens to about 6.8 MB (1.4 KB a row), so the 5,000-row cap must be reachable; real files peak near 437 KB.
 // What the library then does with the sheets is contained by the worker (`xlsx-worker-host.ts`), not predicted here.
 export const XLSX_MAX_EXPANDED = 8 * MB;
@@ -130,10 +135,22 @@ function checkNotEmptyOrHuge(bytes: Buffer, maxBytes: number | null): void {
   }
 }
 
+/** One invoice in a settlement zip: its workbook and, when a pdf has the same name, that pdf (never read). */
+export interface SettlementZipMember {
+  /** the workbook's name inside the zip */
+  name: string;
+  workbook: Buffer;
+  pdfName: string | null;
+  pdf: Buffer | null;
+}
+
+const withoutExtension = (name: string): string => name.replace(/\.(xls|pdf)$/i, '').toLowerCase();
+
 /**
- * A Foodpanda settlement zip: one `.xls` (really an xlsx) and, usually, one `.pdf`. Returns both as Buffers; the PDF is never read.
+ * A Foodpanda settlement zip: every `.xls` (really an xlsx), each with the `.pdf` of the same name (an unpaired pdf is ignored), in listing order.
+ * Zero members when the zip holds no workbook; the caller decides what that means. Same checks, same order, as `openSettlementZip` always had.
  */
-export async function openSettlementZip(zip: Buffer): Promise<{ workbook: Buffer; pdf: Buffer | null }> {
+export async function openSettlementZipMembers(zip: Buffer): Promise<SettlementZipMember[]> {
   checkNotEmptyOrHuge(zip, ZIP_MAX_BYTES);
   const zipfile = await openZip(zip);
   try {
@@ -149,17 +166,31 @@ export async function openSettlementZip(zip: Buffer): Promise<{ workbook: Buffer
         throw intakeRefusal('ZIP_ENTRY_NOT_ALLOWED', `The zip holds "${shown(e.fileName)}", which is not an invoice workbook (.xls) or a PDF.`);
       }
     }
+    const invoices = entries.filter((e) => /\.xls$/i.test(e.fileName)).length;
+    if (invoices > ZIP_MAX_WORKBOOKS) {
+      throw intakeRefusal('ZIP_TOO_MANY_ENTRIES', `The zip holds ${invoices} invoices, more than the ${ZIP_MAX_WORKBOOKS} one zip may hold, so it was refused. Split it into smaller zips.`);
+    }
     checkDeclaredSize(entries, ZIP_MAX_EXPANDED);
     const bytes = await readAll(zipfile, entries, ZIP_MAX_EXPANDED);
-    const workbooks = entries.flatMap((e, i) => (/\.xls$/i.test(e.fileName) ? [bytes[i] as Buffer] : []));
-    if (workbooks.length !== 1) {
-      throw intakeRefusal('ZIP_NO_WORKBOOK', `The zip must hold exactly one invoice workbook (.xls); it holds ${workbooks.length}.`);
-    }
-    const pdfAt = entries.findIndex((e) => /\.pdf$/i.test(e.fileName));
-    return { workbook: workbooks[0] as Buffer, pdf: pdfAt < 0 ? null : (bytes[pdfAt] as Buffer) };
+    return entries.flatMap((e, i) => {
+      if (!/\.xls$/i.test(e.fileName)) return [];
+      const key = withoutExtension(e.fileName);
+      const pdfAt = entries.findIndex((p) => /\.pdf$/i.test(p.fileName) && withoutExtension(p.fileName) === key);
+      return [{ name: e.fileName, workbook: bytes[i] as Buffer, pdfName: pdfAt < 0 ? null : (entries[pdfAt] as Entry).fileName, pdf: pdfAt < 0 ? null : (bytes[pdfAt] as Buffer) }];
+    });
   } finally {
     zipfile.close();
   }
+}
+
+/** A zip that holds exactly one invoice workbook (the shape every stored upload has). Returns it and its pdf. */
+export async function openSettlementZip(zip: Buffer): Promise<{ workbook: Buffer; pdf: Buffer | null }> {
+  const members = await openSettlementZipMembers(zip);
+  if (members.length !== 1) {
+    throw intakeRefusal('ZIP_NO_WORKBOOK', `The zip must hold exactly one invoice workbook (.xls); it holds ${members.length}.`);
+  }
+  const only = members[0] as SettlementZipMember;
+  return { workbook: only.workbook, pdf: only.pdf };
 }
 
 /** A rels part is a short list of links; anything bigger than this is not one. */

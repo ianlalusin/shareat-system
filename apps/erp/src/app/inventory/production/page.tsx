@@ -3,7 +3,9 @@ import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { saveProductionDraftAction } from './actions';
 import { listStores, productionScreenData } from './lib';
+import { cookbookShortcut } from './recipes/lib';
 import { Page } from '@/components/shell/Page';
+import { ActionIcon } from '@/components/ui/action-icons';
 import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_PRODUCTION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -45,7 +47,17 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
   }
 
   const kind: Kind = KINDS.find((k) => k === sp.kind) ?? 'slice';
-  const { locations, items, inputItems, recipes, records } = await productionScreenData(actor.orgId, storeId);
+  const [{ locations, items, inputItems, recipes, records }, shortcut] = await Promise.all([
+    productionScreenData(actor.orgId, storeId),
+    kind === 'cook' ? cookbookShortcut(actor.orgId, actor) : Promise.resolve(null),
+  ]);
+  // T-583 S2: the Cook tab's shortcut to the cookbook, matching what the recipes screens' read gate lets this person do (a hidden button is not a permission).
+  const cookbookLink = shortcut ? (
+    <Link href="/inventory/production/recipes" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas">
+      {shortcut === 'read' ? <ActionIcon name="book" /> : null}
+      {shortcut === 'settings' ? 'Cookbook settings' : 'Recipes'}
+    </Link>
+  ) : null;
   // T-409 R4: the pickers offer only what the server will accept. A slice takes a slab and makes sliced meat; a convert
   // re-cuts sliced meat into sliced meat. (The server refuses anything else too; this only saves the trip.)
   const slabInputs = inputItems.filter((i) => i.kind === 'meat_slab');
@@ -63,9 +75,6 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
           </PageDescription>
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm">
-          <Link href="/inventory/production/recipes" className="inline-flex min-h-11 items-center underline underline-offset-4">
-            Recipes
-          </Link>
           <Link href={`/inventory?store=${storeId}`} className={NAV_LINK}>
             ← Stock on hand
           </Link>
@@ -111,12 +120,16 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               </Link>
             ))}
           </nav>
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
           {kind === 'cook' && recipes.length === 0 ? (
-            <Banner tone="warning" className="mt-3">
-              A cook starts from a recipe, and there is no active recipe yet. Ask an admin to add one; recipes can only be added by an admin.
-            </Banner>
+            <>
+              <Banner tone="warning">
+                A cook starts from a recipe, and there is no active recipe yet. Ask an admin to add one; recipes can only be added by an admin.
+              </Banner>
+              {cookbookLink}
+            </>
           ) : (
+          <>
           <FormModal trigger="+ New production record" title={`New production record — ${KIND_LABEL[kind]}`} size="lg">
           <CheckedForm rules={INVENTORY_PRODUCTION_RULES} action={saveProductionDraftAction} className="mt-3 space-y-4">
             <input type="hidden" name="storeId" value={storeId} />
@@ -174,6 +187,8 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
             </DialogActions>
           </CheckedForm>
           </FormModal>
+          {cookbookLink}
+          </>
           )}
           </div>
         </section>

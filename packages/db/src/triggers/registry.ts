@@ -214,6 +214,30 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'A business rule row is never changed or removed; a change is a newer row with its own date and reason (0239, T-512). Decides only from TG_OP.',
   },
+  document_template_versions_append_only: {
+    table: 'document_template_versions',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A template version is never changed or removed; a change is a new version (0259, T-584). Decides only from TG_OP.',
+  },
+  issued_document_versions_append_only: {
+    table: 'issued_document_versions',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A version of an issued document is never changed or removed; a revision is a new version (0259, T-584, R7). Decides only from TG_OP.',
+  },
+  issued_document_signatures_append_only: {
+    table: 'issued_document_signatures',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A signature on a document version is never changed or removed (0259, T-584). Decides only from TG_OP.',
+  },
+  issued_documents_guard: {
+    table: 'issued_documents',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'An issued document is never deleted and only its void columns change, once (0259, T-584). Decides only from OLD/NEW of that row.',
+  },
   trade_orders_ready_is_final_trg: {
     table: 'trade_orders',
     mode: 'always',
@@ -1592,5 +1616,17 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'always',
     kind: 'history_guard',
     reason: 'No discount is added to a line of a sales receipt written by an earlier transaction (reads the receipt of the PARENT line, by xmin) (0240, T-524 R11).',
+  },
+  issued_document_versions_sequence: {
+    table: 'issued_document_versions',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'Checks a new version number against the CURRENT highest version of its document, and whether the document is void (0259, T-584). It reads the mutable state of another row, so a replay must not re-run it.',
+  },
+  issued_document_signatures_current_version: {
+    table: 'issued_document_signatures',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'Checks a new signature against the CURRENT version of its document and its void state (0259, T-584). It reads the mutable state of another row, so a replay must not re-run it.',
   },
 } as const;

@@ -10,6 +10,7 @@ import { fromCentavos, isZero, money, toCentavos } from '@shareat/core/money';
 import type { RecordSettlementInput } from '../channel-settlements';
 import { CHANNEL_SETTLEMENT_REFERENCE_MAX } from '../field-rules/channel-settlements';
 import type { LoanCheckResult } from './loan-check';
+import { evaluatePriorItems, type EarlierChargeView, type EarlierItemFact, type PriorProblem } from './prior-items';
 
 /** The fields of a staged day line this needs (a `DayLineRow` has them all). */
 export interface SettlementInputLine {
@@ -115,23 +116,42 @@ export function invoiceOf(line: { platform: string; channelId: string; payoutRef
 export interface CarrierSource {
   carrierDate: string | null;
   charges: readonly { chargeId: string | null; totalAmount: string | null; nettedBySettlementId: string | null }[];
+  /** T-511 S8b: what the books hold for each item the carrier's upload prints on Appendix C; absent for an invoice with none */
+  earlier?: readonly EarlierItemFact[];
 }
 
 /**
- * T-511 S7a, Ruling 6. The platform nets a period charge out of the invoice payout, so ONE day carries it: the latest-dated CURRENT day line of the invoice (whatever its
- * review state, whichever upload brought it). `unbooked` counts the charges of the invoice still staged and not booked (they hold the carrier); `charges` is the booked, not yet netted ones and their
- * total, or null when this day is not the carrier or there is none. Pure.
+ * T-511 S7a, Ruling 6, extended by S8b. The platform nets a period charge out of the invoice payout, so ONE day carries it: the latest-dated CURRENT day line of the invoice (whatever its
+ * review state, whichever upload brought it). `unbooked` counts the charges of the invoice still staged and not booked (they hold the carrier); `charges` is the booked, not yet netted
+ * ones and their total, or null when this day is not the carrier or there is none.
+ *
+ * S8b: the carrier ALSO nets the booked, not yet netted charges of EARLIER invoices that its upload prints on Appendix C (matched on the official document number, chosen from the file's
+ * facts only; see `prior-items.ts`). `problems` are the blockers that matched nothing or disagreed (empty when all is well); while there is one, the earlier charges are not offered for
+ * netting. `earlierViews` lists every matched earlier charge for the screen and `priorItems` the items the file printed. Pure.
  */
 export function carrierChargesFor(
   line: { salesDate: string; isCurrent: boolean },
   upload: CarrierSource | undefined,
-): { isCarrier: boolean; unbooked: number; charges: { ids: string[]; total: string } | null } {
-  if (!upload || !line.isCurrent || upload.carrierDate !== line.salesDate) return { isCarrier: false, unbooked: 0, charges: null };
-  const open = upload.charges.filter((c) => c.chargeId !== null && c.nettedBySettlementId === null);
-  const total = open.reduce((t, c) => t + toCentavos(money(c.totalAmount ?? '0')), 0n);
+): {
+  isCarrier: boolean;
+  unbooked: number;
+  charges: { ids: string[]; total: string } | null;
+  problems: PriorProblem[];
+  earlierViews: EarlierChargeView[];
+  priorItems: { document: string; amount: string }[];
+} {
+  if (!upload || !line.isCurrent || upload.carrierDate !== line.salesDate) return { isCarrier: false, unbooked: 0, charges: null, problems: [], earlierViews: [], priorItems: [] };
+  const own = upload.charges.filter((c) => c.chargeId !== null && c.nettedBySettlementId === null).map((c) => ({ id: c.chargeId!, total: toCentavos(money(c.totalAmount ?? '0')) }));
+  const verdict = evaluatePriorItems(upload.earlier ?? []);
+  const take = new Map(own.map((c) => [c.id, c.total]));
+  if (verdict.problems.length === 0) for (const c of verdict.charges) if (!take.has(c.chargeId)) take.set(c.chargeId, toCentavos(money(c.totalAmount)));
+  const total = [...take.values()].reduce((t, n) => t + n, 0n);
   return {
     isCarrier: true,
     unbooked: upload.charges.filter((c) => c.chargeId === null).length,
-    charges: open.length > 0 ? { ids: open.map((c) => c.chargeId!), total: String(fromCentavos(total)) } : null,
+    charges: take.size > 0 ? { ids: [...take.keys()], total: String(fromCentavos(total)) } : null,
+    problems: verdict.problems,
+    earlierViews: verdict.views,
+    priorItems: (upload.earlier ?? []).map((e) => ({ document: e.document, amount: e.amount })),
   };
 }

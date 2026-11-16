@@ -47,18 +47,16 @@ function declarationsOf(selector: string): Record<string, { value: string; impor
   return found;
 }
 
-/** `calc(2 * 1.4em)` and `calc(2*1.4em)` are the same declaration; compare without spacing noise. */
-const compact = (value: string | undefined): string | undefined => value?.replace(/\s+/g, '');
-
-describe('T-538 — phone card title wraps to two lines', () => {
-  it('the card title clamps at two lines', () => {
+describe('T-538 — phone card title wraps (T-589 B4a: and is never cut)', () => {
+  it('the card title wraps in full', () => {
     const title = declarationsOf(TITLE);
     // A selector typo would make every assertion below vacuously true, so prove the rule was found.
     expect(Object.keys(title).length, `no rule with selector exactly ${TITLE}`).toBeGreaterThan(0);
 
-    // Two lines, never more. `line-height` is 1.4, so 2 × 1.4em is exactly two lines and the cut
-    // falls between line 2 and line 3 — if line-height ever changes, this multiplier has to follow.
-    expect(compact(title['max-height']?.value)).toBe('calc(2*1.4em)');
+    // T-589 B4a: NOT cut any more. The title cell also holds the row's own second line (an owner's role),
+    // and the two-line max-height sliced that line in half under the subtitle. MUTANT: restore
+    // `max-height: calc(2 * 1.4em)` + `overflow: hidden` and the two assertions below go red.
+    expect(title['max-height']).toBeUndefined();
     expect(title['line-height']?.value).toBe('1.4');
 
     // Wrapping is the whole point, and it must out-rank the card's own cell reset (which sets
@@ -66,8 +64,8 @@ describe('T-538 — phone card title wraps to two lines', () => {
     expect(title['white-space']).toEqual({ value: 'normal', important: true });
     // A long unbroken name still has to be breakable, or it overflows instead of being cut.
     expect(title['overflow-wrap']).toEqual({ value: 'anywhere', important: false });
-    // The cut itself: `max-height` only hides anything when the overflow is clipped.
-    expect(title['overflow']).toEqual({ value: 'hidden', important: false });
+    // Nothing is clipped: the grid row grows with the title.
+    expect(title['overflow']).toEqual({ value: 'visible', important: false });
 
     // Revision 1's `-webkit-line-clamp` is GONE, and must stay gone — it is inert on a grid item,
     // so leaving it in would look like a clamp while doing nothing, and the next reader would
@@ -88,14 +86,13 @@ describe('T-538 — phone card title wraps to two lines', () => {
     expect(title['font-weight']?.value).toBe('600');
   });
 
-  it('the subtitle still stays on one line', () => {
+  // T-589 B4a: the subtitle wraps too (a room name read "Main stoc"). MUTANT: restore `nowrap` + `ellipsis` and this goes red.
+  it('the subtitle wraps instead of ending in an ellipsis', () => {
     const subtitle = declarationsOf(SUBTITLE);
     expect(Object.keys(subtitle).length, `no rule with selector exactly ${SUBTITLE}`).toBeGreaterThan(0);
 
-    // One line is right for the subtitle: it is the secondary detail, and the title now carries
-    // the extra height.
-    expect(subtitle['white-space']).toEqual({ value: 'nowrap', important: true });
-    expect(subtitle['text-overflow']).toEqual({ value: 'ellipsis', important: false });
+    expect(subtitle['white-space']).toEqual({ value: 'normal', important: true });
+    expect(subtitle['text-overflow']).toBeUndefined();
     // Neither the clamp of revision 1 nor the height cut of revision 2 may have leaked next door.
     expect(subtitle['max-height']).toBeUndefined();
     expect(subtitle['display']).toBeUndefined();

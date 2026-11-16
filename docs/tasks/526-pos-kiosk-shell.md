@@ -132,7 +132,7 @@ Further rules:
 - **The pending verifier.** `TabletSignInForm.tsx` gets an `onSubmit` hook that runs before the Server Action submits.
   It:
   1. derives a verifier from the typed PIN in the browser, with WebCrypto `PBKDF2-SHA256`, a random 16-byte salt and
-     `POS_VERIFIER_ITERATIONS` (a security constant, at least 210,000, the current OWASP figure, with its reason);
+     `POS_VERIFIER_ITERATIONS` (a security constant, at least 210,000, with its reason; OWASP's current figure is 600,000, and raising it waits until after go-live, bible row 455 / DEF-868);
   2. stores it as **pending** in `sessionStorage` under `shareat_pos_pending_verifier`, as
      `{employeeId, salt, hash, iterations, createdAtMs}`. The PIN itself is never stored, logged or sent anywhere new.
   The form still submits exactly as today.
