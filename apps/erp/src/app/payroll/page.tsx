@@ -96,8 +96,8 @@ export default async function PayrollPage({
         <div>
           <h1 className="text-2xl font-semibold">Payroll</h1>
           <PageDescription>
-            Pay computed from attendance: gross, minus advances and agreed charge repayments already drawn. ⭐ Posting <strong>freezes</strong> the days it paid — after that a
-            correction goes through payroll, not by restating the day.
+            Pay worked out from attendance: gross pay, minus advances and agreed repayments already taken. Posting <strong>locks</strong> the days it paid. After that,
+            fix a mistake through payroll, not by changing the day.
           </PageDescription>
         </div>
         <span className="flex shrink-0 gap-3 text-sm">
@@ -181,7 +181,7 @@ export default async function PayrollPage({
           <span>
             Periods{' '}
             <b className="text-neutral-700 dark:text-neutral-300">
-              {cfg.payrollPeriodType.replace('_', '-')}
+              {cfg.payrollPeriodType === 'semi_monthly' ? 'twice a month' : cfg.payrollPeriodType}
               {cfg.payrollPeriodType === 'semi_monthly' && `, cut on the ${cfg.semiMonthlyCutoffDay}th`}
             </b>
             {cfg.payoutMode === 'fixed_days'
@@ -191,7 +191,7 @@ export default async function PayrollPage({
                 : ''}
           </span>
           <span className="text-muted">
-            Hours count in half-hour steps; anything under is not paid. Late is exact.
+            Hours count in half-hour steps. Anything under half an hour is not paid. Late time is counted exactly.
           </span>
         </p>
       )}
@@ -204,19 +204,21 @@ export default async function PayrollPage({
         <section className="space-y-3 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-medium">
-              {periodStart} → {periodEnd}
+              {formatBusinessDayLong(periodStart)} to {formatBusinessDayLong(periodEnd)}
             </h2>
             <span className="text-xs text-neutral-500">
-              {pv.slips.length} payslip(s) · gross {peso(Number(pv.totalGross))} · net{' '}
+              {pv.slips.length} {pv.slips.length === 1 ? 'payslip' : 'payslips'} · gross {peso(Number(pv.totalGross))} · net{' '}
               {peso(Number(pv.totalNet))}
               {cfg && (
                 <>
                   {' '}
                   · payable{' '}
-                  {payoutDateFor(
-                    { start: periodStart, end: periodEnd, label: '' },
-                    cfg,
-                    Math.max(0, periodOptions.findIndex((o) => o.start === periodStart)),
+                  {formatBusinessDayLong(
+                    payoutDateFor(
+                      { start: periodStart, end: periodEnd, label: '' },
+                      cfg,
+                      Math.max(0, periodOptions.findIndex((o) => o.start === periodStart)),
+                    ),
                   )}
                 </>
               )}
@@ -225,22 +227,18 @@ export default async function PayrollPage({
 
           {pv.needsReviewDays > 0 && (
             <Banner tone="warning">
-              <strong>{pv.needsReviewDays} day(s) still need a manager&rsquo;s review</strong> and
-              are excluded from this run. They are counted here on purpose — a run that silently
-              skipped them would look identical to a run where nobody worked.
+              <strong>{pv.needsReviewDays} {pv.needsReviewDays === 1 ? 'day still needs' : 'days still need'} a manager&rsquo;s review</strong> and
+              {pv.needsReviewDays === 1 ? ' is' : ' are'} left out of this run.
             </Banner>
           )}
 
           {pv.heldZeroCreditDays > 0 && (
             <Banner tone="warning">
               <strong>
-                {pv.heldZeroCreditDays} day(s) were too short to credit a day at all
+                {pv.heldZeroCreditDays} {pv.heldZeroCreditDays === 1 ? 'day was' : 'days were'} too short to count as a day
               </strong>{' '}
-              and are <strong>held</strong> — not paid here, and deliberately{' '}
-              <strong>not frozen</strong>. The whole stint is waiting as overtime for a
-              manager&rsquo;s decision; once decided, the next run pays it. Held, not lost —
-              paying them at ₱0 now would freeze them and put that overtime permanently out of
-              reach.
+              and {pv.heldZeroCreditDays === 1 ? 'is' : 'are'} <strong>held</strong>: not paid in this run and not locked. The time is waiting as overtime for a
+              manager&rsquo;s decision, and the next run pays it once decided.
             </Banner>
           )}
 
@@ -250,8 +248,7 @@ export default async function PayrollPage({
                 {Math.floor(pv.unapprovedOtMinutes / 60)}h {pv.unapprovedOtMinutes % 60}m of
                 overtime is awaiting a manager&rsquo;s approval
               </strong>{' '}
-              and is <strong>not</strong> in these figures. Pending overtime is never paid
-              unapproved — approve it on the attendance day, then preview again.
+              and is <strong>not</strong> in these figures. Approve it on the attendance day, then preview again.
             </Banner>
           )}
 
@@ -259,8 +256,7 @@ export default async function PayrollPage({
             <Banner tone="error">
               <strong>No pay rate in force</strong> for{' '}
               {pv.unratedEmployments.map((u) => `${u.personName} (${u.days}d)`).join(', ')}. Set a
-              rate below — a day priced at ₱0 is indistinguishable from a day nobody worked, so the
-              run refuses rather than guessing.
+              rate below before you post this run.
             </Banner>
           )}
 
@@ -278,15 +274,14 @@ export default async function PayrollPage({
               {pv.missingGovernmentIds
                 .map((m) => `${m.personName} (${m.agency === 'sss' ? 'SSS' : m.agency === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG'})`)
                 .join(', ')}
-              . An agency with no number on file is skipped for that person (both shares), and not caught up later; add the number on the
+              . Nothing is deducted for an agency with no number on file, and it is not made up later. Add the number on the
               staff page.
             </Banner>
           )}
 
           {pv.slips.length === 0 ? (
             <p className="rounded-[20px] border border-dashed border-surface-border p-6 text-center text-sm text-muted">
-              Nothing payable in this period — no attendance or leave in this window produced a
-              payslip.
+              Nothing is payable in this period. No attendance or leave in these dates produced a payslip.
             </p>
           ) : (
             <Table card={{ title: 'Person', keys: ['Net', 'Gross'] }}>
@@ -358,7 +353,7 @@ export default async function PayrollPage({
               </label>
               <Input name="notes" placeholder="Notes (optional)" className="min-w-0 flex-1 basis-48" />
               <Button type="submit" variant="primary">
-                Post {pv.slips.length} payslip(s)
+                Post {pv.slips.length} {pv.slips.length === 1 ? 'payslip' : 'payslips'}
               </Button>
             </form>
           )}
@@ -370,9 +365,8 @@ export default async function PayrollPage({
         <div className="flex items-center gap-1">
           <h2 className="text-sm font-medium">Pay rates</h2>
           <HelpTip label="Pay rates">
-            A rate is never edited — a new one <strong>supersedes</strong> it from its effective
-            date, because a payslip already posted was computed under the old one and has to stay
-            explicable. Only a <strong>daily</strong> basis has a compute path.
+            A rate is never edited. A new one takes over from its start date, so a payslip already posted still
+            matches the rate it used.
           </HelpTip>
         </div>
         <Table card={{ title: 'Person', keys: ['Rate in force today'] }}>
@@ -455,7 +449,7 @@ export default async function PayrollPage({
                 <span className="text-sm font-medium">{periodLabel(run)}</span>
                 <Badge status={run.status} />
                 {run.voidReason && (
-                  <span className="text-xs text-neutral-500">voided — {run.voidReason}</span>
+                  <span className="text-xs text-neutral-500">Voided: {run.voidReason}</span>
                 )}
               </div>
 
@@ -463,7 +457,7 @@ export default async function PayrollPage({
                 <ul className="text-xs text-neutral-600 dark:text-neutral-400">
                   {latestSlips.map((s) => (
                     <li key={s.id}>
-                      {s.personName} — {s.daysWorked} day(s), net{' '}
+                      {s.personName} — {s.daysWorked} {Number(s.daysWorked) === 1 ? 'day' : 'days'}, net{' '}
                       <span className="font-mono">{peso(Number(s.netPay))}</span>
                       {compare(money(s.advanceRecovered), ZERO) > 0 &&
                         (repayments[s.journalEntryId ?? ''] ?? [{ amount: s.advanceRecovered, signedOn: '' }])

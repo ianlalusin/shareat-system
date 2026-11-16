@@ -137,15 +137,15 @@ export default async function EmploymentDetailPage({
               <div className="space-y-3">
                 {otherBranches.branches.length + otherBranches.hiddenCount > 0 && (
                   <Banner tone="warning">
-                    ⚠️ This person works at{' '}
+                    This person works at{' '}
                     <strong>
                       {[detail.storeName, ...otherBranches.branches.map((b) => b.storeName)].join(', ')}
                       {otherBranches.hiddenCount > 0 &&
                         ` and ${otherBranches.hiddenCount} other store${otherBranches.hiddenCount === 1 ? '' : 's'}`}
                     </strong>. They have one PIN
                     for the whole business, so issuing a new one here{' '}
-                    <strong>changes the PIN they use there too</strong> — tell them the new digits before
-                    their next shift at either store.
+                    <strong>changes the PIN they use there too</strong>. Tell them the new digits before
+                    their next shift at any of these stores.
                   </Banner>
                 )}
                 <CheckedForm rules={STAFF_PIN_RULES} action={issuePinAction} className="flex flex-wrap items-end gap-3">
@@ -159,8 +159,7 @@ export default async function EmploymentDetailPage({
                 </CheckedForm>
                 {livePin && (
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    Re-issuing replaces the current PIN and ends this person&rsquo;s live sessions
-                    everywhere, right now — not only at {detail.storeName}.
+                    Re-issuing replaces the current PIN and signs this person out everywhere right now, not only at {detail.storeName}.
                   </p>
                 )}
               </div>
@@ -169,7 +168,7 @@ export default async function EmploymentDetailPage({
         </div>
         {isEnded && (
           <p className="inline-block rounded bg-neutral-100 px-2 py-1 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
-            This employment has ended. The record stays visible — ending is not deleting.
+            This employment has ended. The record stays visible; ending is not deleting.
           </p>
         )}
       </div>
@@ -183,7 +182,7 @@ export default async function EmploymentDetailPage({
               <h2 className="font-medium">Name</h2>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 {detail.nameParts.lastName === null
-                  ? `Saved as "${detail.personName}" (one box, from before names were split). Type the last, first and middle name once to fix it; it then reads "Last, First M.".`
+                  ? `Saved as "${detail.personName}" in one box. Type the last, first and middle name to split it; it then reads "Last, First M.".`
                   : 'Shown everywhere as "Last, First M.".'}
               </p>
               <EditableRecord action={renamePersonAction} label="name"

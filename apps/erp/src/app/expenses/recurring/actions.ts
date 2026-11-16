@@ -95,7 +95,7 @@ export async function setTemplateStatusAction(formData: FormData): Promise<void>
     ok:
       status === 'paused'
         ? 'Paused. It keeps its history and stops coming due.'
-        : 'Resumed. ⚠️ Its next due date was moved forward to the next one from today — a template that woke up months behind would try to catch up.',
+        : 'Resumed. Its next due date was moved forward to the next one from today, so it does not try to catch up on the months it was paused.',
   });
 }
 

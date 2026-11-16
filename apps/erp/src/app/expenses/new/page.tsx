@@ -1,5 +1,6 @@
 import { listStores, listActiveCategoriesGrouped } from '../lib';
 import { loadMoneyLines } from '@/lib/money-lines/load';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { listOpenInvoicesForPicker, peso } from '../../ap/lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
@@ -66,12 +67,9 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
       <div>
         <h1 className="text-2xl font-semibold">New expense</h1>
         <PageDescription>
-          Saves as a <strong>draft</strong> against the supplier invoice you pick — verified or
-          still pending. No manager and no verification wait: verifying the invoice later posts
-          this automatically, or approve it yourself from the expense once you can (T-196). No
-          invoice to pick from?{' '}
-          <a href="/ap" className="underline">Log one first</a>. <strong>Pick the store first</strong> —
-          the invoices and the cash requests offered are that store&apos;s, and switching store starts the form over.
+          Pick the store, then the supplier invoice. This saves as a <strong>draft</strong>; it posts when the invoice
+          is verified, or when you approve it. No invoice yet?{' '}
+          <a href="/ap" className="underline">Log one first</a>. Changing the store starts the form over.
         </PageDescription>
       </div>
 
@@ -132,7 +130,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                 {invoices.map((inv) => (
                   <option key={inv.id} value={inv.id}>
                     {/* One string (not several text nodes), so the mark reads as one label everywhere. F5: an inactive supplier's invoice is listed but marked. */}
-                    {`${inv.supplierName} — ${inv.invoiceNo ?? inv.id.slice(0, 8)} (${inv.invoiceDate}) — ${peso(inv.remaining)} left${inv.status === 'pending' ? ' — pending' : ' — verified'}${inv.supplierStatus === 'active' ? '' : ' — supplier inactive'}`}
+                    {`${inv.supplierName} — ${inv.invoiceNo ?? inv.id.slice(0, 8)} (${formatBusinessDayLong(inv.invoiceDate)}) — ${peso(inv.remaining)} left${inv.status === 'pending' ? ' — pending' : ' — verified'}${inv.supplierStatus === 'active' ? '' : ' — supplier inactive'}`}
                   </option>
                 ))}
               </Select>

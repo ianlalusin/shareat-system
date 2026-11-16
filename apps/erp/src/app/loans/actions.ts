@@ -55,7 +55,7 @@ export async function createLoanAction(formData: FormData): Promise<void> {
     return await redirectWithFlash('/loans', {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/loans/${id}`, {}, {
-    ok: 'Recorded. ⚠️ No money has moved — a signed loan is a commitment until it is drawn.',
+    ok: 'Recorded. No money has moved yet. The loan counts as a debt only once it is drawn.',
   });
 }
 
@@ -99,7 +99,7 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
         ? 'That clears the loan.'
         : `₱${result.outstanding} still outstanding.`);
     const warning = (result as { warning?: string }).warning;
-    if (warning) summary += ` ⚠️ ${warning}`;
+    if (warning) summary += ` ${warning}`;
   } catch (err) {
     return await redirectWithFlash(`/loans/${id}`, {}, { error: errorMessage(err) });
   }

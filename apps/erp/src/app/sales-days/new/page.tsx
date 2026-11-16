@@ -62,12 +62,12 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
           {link ? (
             <>
               This store&apos;s sales come from POS. <strong>Nothing posts to the ledger until the imported day is
-              verified</strong> — and verifying is what recognises the revenue.
+              verified.</strong> Verifying is what counts the revenue.
             </>
           ) : (
             <>
-              Saved as a draft. <strong>Nothing posts to the ledger until it is verified</strong> — and
-              verifying is what recognises the revenue.
+              Saved as a draft. <strong>Nothing posts to the ledger until it is verified.</strong> Verifying
+              is what counts the revenue.
             </>
           )}
         </PageDescription>

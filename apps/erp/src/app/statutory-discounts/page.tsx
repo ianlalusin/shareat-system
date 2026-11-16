@@ -1,4 +1,4 @@
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { listStatutoryDiscounts, summariseStatutoryDiscounts } from '@shareat/domain';
 // ⛔ `peso()` and NOT `₱${formatMoney(...)}` — formatMoney already emits the symbol, and
 // prefixing another rendered every figure on this page as ₱₱0.00. See lib/format.ts's header:
@@ -175,20 +175,20 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
           POSTING-PATTERNS.md is doing real work and must not be quietly dropped; this is the same
           sentence where a reader will actually meet it. */}
       <Banner tone="warning">
-        <strong>This is a business record, not a BIR return.</strong> Shareat System is a management
-        ledger and computes no VAT — amounts here are recorded as the till calculated them. Nothing
-        on this page posts to the ledger; the daily senior/PWD totals on the sales day remain the
-        only figures that reach sales discounts in the ledger.
+        <strong>This is a business record, not a BIR return.</strong> The system does not work out
+        VAT. Amounts are recorded as the till calculated them, and nothing on this page is posted
+        to the books. The daily senior and PWD totals on the sales day are the only figures that
+        reach the books.
       </Banner>
 
       {/* ⛔ The honest caveat, and it is the important one on this screen. There is no paper
           logbook to copy from (bible row 164) — so a missing record cannot be recovered later, and
           a reader who assumes this register is complete will assume wrong. */}
       <div className="rounded border border-neutral-300 bg-neutral-50 p-3 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
-        <strong>A record must be entered while the customer is still at the counter.</strong> The
-        till does not capture the holder&apos;s name or ID number and no paper logbook is kept, so
-        nothing can reconstruct a sale that was not written down here. POS captures this itself from
-        v2, after January.
+        <strong>Enter a record while the customer is still at the counter.</strong> The till does not
+        capture the holder&apos;s name or ID number and no paper logbook is kept, so a sale that
+        was not written down here cannot be reconstructed. The POS will capture this itself after
+        January.
       </div>
 
       <FlashBanner flash={sp} />
@@ -266,7 +266,7 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
                     key={r.id}
                     className={`border-b border-neutral-200 dark:border-neutral-800 ${r.voidedAt ? 'text-neutral-500 line-through dark:text-neutral-400' : ''}`}
                   >
-                    <td className="p-2 tabular-nums">{r.businessDate}</td>
+                    <td className="p-2">{formatBusinessDayLong(r.businessDate)}</td>
                     <td className="p-2">{r.invoiceNumber}</td>
                     <td className="p-2">{r.kind === 'pwd' ? 'PWD' : 'Senior'}</td>
                     <td className="p-2">{r.holderName}</td>

@@ -39,7 +39,7 @@ export async function setPayRateAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(
     '/payroll',
     { store },
-    { ok: 'Rate recorded. ⚠️ It applies from its effective date — earlier days keep the old rate.' },
+    { ok: 'Rate recorded. It applies from its start date; earlier days keep the old rate.' },
   );
 }
 
@@ -65,7 +65,7 @@ export async function postPayRunAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(
     '/payroll',
     { store },
-    { stamp: 'POSTED', ok: `Posted ${out.payslips} payslip(s), ${out.totalNet} net. The days they paid are now frozen.` },
+    { stamp: 'POSTED', ok: `Posted ${out.payslips} payslip${out.payslips === 1 ? '' : 's'}, ${out.totalNet} net. The days they paid are now frozen.` },
   );
 }
 
@@ -91,7 +91,7 @@ export async function voidPayRunAction(formData: FormData): Promise<void> {
     { store },
     {
       stamp: 'VOID',
-      ok: `Voided — ${out.reversed} entry(s) reversed and ${out.unfrozenDays} day(s) unfrozen, so the period is payable again.`,
+      ok: `Voided. ${out.reversed} ${out.reversed === 1 ? 'entry' : 'entries'} reversed and ${out.unfrozenDays} ${out.unfrozenDays === 1 ? 'day' : 'days'} unfrozen, so the period is payable again.`,
     },
   );
 }

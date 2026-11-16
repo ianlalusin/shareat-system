@@ -118,7 +118,7 @@ export default async function PosTabletPage({ searchParams }: { searchParams: Pr
                   )}
                   <label className="flex flex-col gap-1">
                     <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name for this tablet</span>
-                    <Input name="label" placeholder="Lipa counter" />
+                    <Input name="label" placeholder="Front counter" />
                   </label>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
                     You will be signed out here, and this browser becomes the {s.name} tablet.

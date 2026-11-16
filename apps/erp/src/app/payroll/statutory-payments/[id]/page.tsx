@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { add, formatMoney, money } from '@shareat/core/money';
 import { requirePageAccess } from '../../../../lib/page-access';
 import { voidStatutoryPaymentAction } from '../actions';
@@ -66,7 +67,7 @@ export default async function StatutoryPaymentPage({
             {agencyLabel(payment.agency)} payment, {payment.referenceNo}
           </h1>
           <PageDescription>
-            For {monthWords(month)}, paid on {String(payment.paidOn).slice(0, 10)} from {accountName || 'a money account'}.
+            For {monthWords(month)}, paid on {formatBusinessDayLong(String(payment.paidOn).slice(0, 10))} from {accountName || 'a money account'}.
           </PageDescription>
         </div>
         <Badge status={payment.status} />
@@ -115,7 +116,7 @@ export default async function StatutoryPaymentPage({
             ))}
           </tbody>
         </Table>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">{payment.lines.length} store(s). Together {formatMoney(total)} before any penalty.</p>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">{payment.lines.length} {payment.lines.length === 1 ? 'store' : 'stores'}. Together {formatMoney(total)} before any penalty.</p>
       </section>
 
       {!voided && (

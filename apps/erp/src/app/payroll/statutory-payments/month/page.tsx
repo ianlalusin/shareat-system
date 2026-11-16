@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { add, formatMoney, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../../../lib/page-access';
 import { agencyLabel, isAgency, isMonthStart, monthDetailFor, monthWords, storeNamesFor } from '../lib';
@@ -53,10 +54,10 @@ export default async function StatutoryMonthPage({ searchParams }: { searchParam
       </div>
 
       {detail.dueDate === null ? (
-        <Banner tone="info">No due day is set for {label} yet, so no due date is shown. An accountant can set it under Payroll rates, Employer numbers.</Banner>
+        <Banner tone="info">No due day is set for {label} yet, so no due date is shown. An accountant can set it under Payroll rates, in Employer numbers.</Banner>
       ) : detail.daysLate > 0 ? (
         <Banner tone="error">
-          {detail.fullyPaid ? `Paid ${detail.daysLate} ${detail.daysLate === 1 ? 'day' : 'days'} late (due ${detail.dueDate}). ` : `Due ${detail.dueDate}. ${detail.daysLate} ${detail.daysLate === 1 ? 'day' : 'days'} late. `}
+          {detail.fullyPaid ? `Paid ${detail.daysLate} ${detail.daysLate === 1 ? 'day' : 'days'} late (due ${formatBusinessDayLong(detail.dueDate)}). ` : `Due ${formatBusinessDayLong(detail.dueDate)}. ${detail.daysLate} ${detail.daysLate === 1 ? 'day' : 'days'} late. `}
           {detail.estimatedPenalty === null
             ? detail.fullyPaid
               ? 'Estimated penalty: not calculated because the agency’s rate is not on file.'
@@ -64,9 +65,9 @@ export default async function StatutoryMonthPage({ searchParams }: { searchParam
             : `Estimated penalty (an estimate only, not posted): ${formatMoney(money(detail.estimatedPenalty))}.`}
         </Banner>
       ) : detail.dueSoon ? (
-        <Banner tone="warning">Due {detail.dueDate}. That is within 5 days.</Banner>
+        <Banner tone="warning">Due {formatBusinessDayLong(detail.dueDate)}. That is within 5 days.</Banner>
       ) : (
-        <p className="text-sm text-muted">Due {detail.dueDate}.</p>
+        <p className="text-sm text-muted">Due {formatBusinessDayLong(detail.dueDate)}.</p>
       )}
 
       <div>
@@ -144,7 +145,7 @@ export default async function StatutoryMonthPage({ searchParams }: { searchParam
                       {p.referenceNo}
                     </RowLink>
                   </Td>
-                  <Td>{String(p.paidOn).slice(0, 10)}</Td>
+                  <Td>{formatBusinessDayLong(String(p.paidOn).slice(0, 10))}</Td>
                   <NumTd>{formatMoney(add(ZERO, ...p.lines.map((l) => money(l.amount))))}</NumTd>
                   <Td>
                     <Badge status={p.status} />

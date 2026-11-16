@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
+import { accountLabel } from '@/lib/account-label';
 import { requirePageAccess } from '../../../lib/page-access';
 import {
   addOpeningFigureAction,
@@ -173,7 +174,7 @@ export default async function OpeningPage({
               balanced ? 'text-success' : 'text-warning-ink'
             }`}
           >
-            {balanced ? 'Everything balances' : 'Difference still to explain'}
+            {balanced ? 'The figures entered add up' : 'Difference still to explain'}
           </span>
           <span
             className={`font-mono text-2xl font-semibold tabular-nums ${
@@ -190,9 +191,11 @@ export default async function OpeningPage({
         >
           {balanced
             ? drafts.length > 0
-              ? 'Ready to post. Everything entered so far accounts for itself.'
+              ? tie.lines.length > 0
+                ? 'The figures entered add up, but some registers below do not agree with them yet.'
+                : 'Ready to post. The figures entered so far add up.'
               : 'Nothing entered yet.'
-            : 'Something on one side has no matching figure on the other. It has to be found — there is nowhere to park it.'}
+            : 'Something on one side has no matching figure on the other. It cannot be parked; it has to be found.'}
         </p>
       </section>
 
@@ -273,8 +276,9 @@ export default async function OpeningPage({
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">Tie-out</h2>
         <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-          Each register in the new system is compared with the opening figures. Party balances (customers, suppliers, loans, advances) are
-          checked for valid parties only; their totals are compared with v1 at the rehearsal.
+          Each register in the new system is compared with the opening figures. Party balances
+          (customers, suppliers, loans, advances) are checked for valid parties only. Their totals
+          are compared with the old system at the rehearsal.
         </p>
         {tie.lines.length === 0 ? (
           <p className="mt-3 rounded border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
@@ -299,7 +303,7 @@ export default async function OpeningPage({
             <ul className="mt-1 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
               {tie.notChecked.map((n, k) => (
                 <li key={`${n.account}:${k}`}>
-                  <span className="font-mono">{n.account}</span> — {n.amount} — {n.reason}
+                  {accountLabel(n.account)} — {n.amount} — {n.reason}
                 </li>
               ))}
             </ul>
@@ -313,7 +317,7 @@ export default async function OpeningPage({
               <div key={`${st.def.code}:${st.storeId ?? ''}`} className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span>
-                    <span className="font-mono text-xs">{st.def.code}</span> {st.def.title}
+                    {st.def.title}
                   </span>
                   <span className="text-xs">{st.done ? 'Done' : st.blockedBy ? 'Blocked' : 'Not done'}</span>
                 </div>
@@ -323,7 +327,7 @@ export default async function OpeningPage({
                     <input type="hidden" name="stepCode" value="C3P" />
                     <input type="hidden" name="returnTo" value="/cutover/opening" />
                     <input type="hidden" name="storeId" value="" />
-                    <input type="text" name="note" placeholder="Which v1 lists you compared (optional)" className={INPUT} />
+                    <input type="text" name="note" placeholder="Which old-system lists you compared (optional)" className={INPUT} />
                     <button type="submit" className={BUTTON}>
                       I confirm this is done
                     </button>
@@ -354,8 +358,8 @@ export default async function OpeningPage({
               className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
             >
               <div className="min-w-0">
-                <span className="font-mono text-xs text-neutral-500 dark:text-neutral-500">
-                  {d.accountCode}
+                <span className="text-xs text-neutral-500 dark:text-neutral-500">
+                  {accountLabel(d.accountCode)}
                 </span>{' '}
                 <span className="text-sm">{d.memo}</span>
                 <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-500">
@@ -404,7 +408,7 @@ export default async function OpeningPage({
           <Banner tone="warning" className="mt-3">
             {drafts.length === 0
               ? 'Nothing to post yet.'
-              : `₱${Math.abs(residual).toFixed(2)} is still unexplained, so this cannot be posted. There is no holding account to put it in — the difference has to be found.`}
+              : `${peso(Math.abs(residual))} is still unexplained, so this cannot be posted. The difference has to be found.`}
           </Banner>
         )}
       </section>

@@ -24,7 +24,7 @@ interface SearchParams {
 }
 
 function fmt(d: Date): string {
-  return d.toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
+  return d.toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'long', timeStyle: 'short' });
 }
 
 function summaryLine(c: CredentialSummary): string {
@@ -76,7 +76,7 @@ export default async function CredentialsPage({
     return (
       <Page density="table">
         <h1 className="text-2xl font-semibold">Credentials</h1>
-        <p className="mt-4 text-sm">You do not have access to this screen. Credentials need the manage_attendance capability at this store.</p>
+        <p className="mt-4 text-sm">You do not have access to this screen. Ask an administrator to give you attendance access at this store.</p>
       </Page>
     );
   }
@@ -101,8 +101,7 @@ export default async function CredentialsPage({
         </h1>
         <PageDescription>
           <span className="font-mono">{employment.staffCode}</span> · {storeName}
-          {employment.endedOn ? ' · employment ended' : ''}. What is enrolled here — hint and
-          metadata only, never a secret a badge could be cloned from.
+          {employment.endedOn ? ' · employment ended' : ''}. Only a short hint of each card is shown, never the full number.
         </PageDescription>
       </div>
 
@@ -146,8 +145,7 @@ export default async function CredentialsPage({
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Enrol a card</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Type the card id, or scan it with a keyboard-wedge reader — it types the digits and Enter
-          exactly like a keyboard, the same interface the clock terminal&rsquo;s own scan box uses.
+          Type the card id, or scan the card with a card reader plugged into this computer.
         </p>
         <CheckedForm rules={STAFF_CARD_RULES} action={enrolCardAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="employmentId" value={employmentId} />
@@ -162,13 +160,11 @@ export default async function CredentialsPage({
 
       <section className="space-y-3 rounded-lg border border-warning bg-warning-soft p-4">
         <h2 className="font-medium text-warning-ink">
-          Enrol a fingerprint — not a working capture flow
+          Enrol a fingerprint (testing only)
         </h2>
         <p className="text-xs text-warning-ink">
-          ⚠️ There is no fingerprint reader wired into this app anywhere — that needs the native
-          reader in the APK D2 parked. This form accepts raw template text, typed or pasted, one per
-          line. It is useful only for seeding test data or as a target for a future reader
-          integration; it is <strong>not</strong> how a real fingerprint gets enrolled today.
+          No fingerprint reader is connected to this app yet, so a real fingerprint <strong>cannot</strong> be enrolled here today.
+          This form takes template text, one per line, for testing only.
         </p>
         <form action={enrolFingerprintAction} className="space-y-2">
           <input type="hidden" name="employmentId" value={employmentId} />
@@ -179,7 +175,7 @@ export default async function CredentialsPage({
             className="w-full font-mono text-xs"
           />
           <Button type="submit" variant="secondary">
-            Enrol fingerprint (test/dev only)
+            Enrol fingerprint
           </Button>
         </form>
       </section>

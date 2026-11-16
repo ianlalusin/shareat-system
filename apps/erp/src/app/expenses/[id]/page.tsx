@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { expensesRepo, journalRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
+import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { previewExpenseApproval } from '@shareat/domain';
 import { buildCategoryFacts } from '@shareat/domain/business-rules';
 import { listStores, listActingPersons, listCategoriesGrouped } from '../lib';
@@ -153,7 +154,7 @@ export default async function ExpenseDetailPage({
           </a>
           <h1 className="mt-1 text-2xl font-semibold">{expense.particulars}</h1>
           <PageDescription>
-            {expense.businessDate} · {storeById.get(expense.storeId)?.name ?? expense.storeId} · {categoryLabel}
+            {formatBusinessDayLong(expense.businessDate)} · {storeById.get(expense.storeId)?.name ?? expense.storeId} · {categoryLabel}
           </PageDescription>
         </div>
         <div className="text-right">
@@ -171,7 +172,7 @@ export default async function ExpenseDetailPage({
           <dl className="space-y-1.5">
             <Row label="Created by" value={personName(persons, expense.createdBy)} />
             <Row label="Approved by" value={personName(persons, expense.approvedBy)} />
-            <Row label="Posted at" value={expense.postedAt ? expense.postedAt.toISOString() : '—'} />
+            <Row label="Posted at" value={expense.postedAt ? formatBusinessDateTime(expense.postedAt) : '—'} />
             {expense.status === 'voided' && (
               <>
                 <Row label="Voided by" value={personName(persons, expense.voidedBy)} />
@@ -182,7 +183,7 @@ export default async function ExpenseDetailPage({
               label="Supplier invoice"
               value={
                 <a href={`/ap/invoices/${expense.supplierInvoiceId}`} className="underline hover:no-underline">
-                  view — the evidence lives there now (T-130)
+                  View the supplier invoice
                 </a>
               }
             />

@@ -3,7 +3,7 @@ import { authorize, can as canDo } from '@shareat/auth';
 import { salesDaysRepo, journalRepo, posV1Repo } from '@shareat/db';
 import { packageCapExcess, unpostedUsageDraftCount, isAfterV1DayFeed, V1_DAY_FEED_STOPPED_SENTENCE } from '@shareat/domain';
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
-import { addDays, formatBusinessDateTime, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
+import { addDays, formatBusinessDateTime, formatBusinessDayLong, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listActingPersons, getStoreLink } from '../lib';
 import { requirePageAccess } from '@/lib/page-access';
 import { canReadAtStore } from '@/lib/can-read-at-store';
@@ -173,7 +173,7 @@ export default async function SalesDayDetailPage({
           >
             ← All sales days
           </a>
-          <h1 className="mt-1 text-2xl font-semibold">{day.businessDate}</h1>
+          <h1 className="mt-1 text-2xl font-semibold">{formatBusinessDayLong(day.businessDate)}</h1>
           <PageDescription>
             {storeName} ·{' '}
             {isFeedDay
@@ -194,7 +194,7 @@ export default async function SalesDayDetailPage({
 
       {day.status !== 'verified' && day.status !== 'voided' && (
         <Banner tone="warning">
-          ⚠️ <strong>This day recognises no revenue yet.</strong> Nothing is posted to the ledger
+          <strong>This day&apos;s revenue is not counted yet.</strong> Nothing is posted to the ledger
           until it is verified, and no newer day can be created for this store meanwhile.
         </Banner>
       )}
@@ -202,8 +202,8 @@ export default async function SalesDayDetailPage({
       {unpostedUsage > 0 && (
         <Banner tone="warning">
           <strong>Yesterday&apos;s usage not posted.</strong> {unpostedUsage} usage {unpostedUsage === 1 ? 'draft is' : 'drafts are'} still waiting for
-          a manager. Check each line against what POS says was sold, then post it; a draft made from POS sales that is still
-          unposted is posted at the expected quantity at 14:00 the next day. This does not stop the day from being submitted or verified.{' '}
+          a manager. Check each line against what POS says was sold, then post it. If nobody does, a draft made from POS sales is posted at
+          the expected quantity at 2:00 p.m. the next day. This does not stop the day from being submitted or verified.{' '}
           <a href={`/inventory/usage?store=${day.storeId}`} className={ACTION_LINK}>
             Open the usage queue →
           </a>
@@ -345,7 +345,7 @@ export default async function SalesDayDetailPage({
                 <tbody>
                   {corrections.map((c) => (
                     <tr key={c.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                      <td className="px-3 py-2">{c.entryDate}</td>
+                      <td className="px-3 py-2">{formatBusinessDayLong(c.entryDate)}</td>
                       <td className="px-3 py-2">{c.reason}</td>
                       <td className="px-3 py-2">{personName(persons, c.postedBy)}</td>
                       <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">{c.journalEntryId}</td>
@@ -497,7 +497,7 @@ export default async function SalesDayDetailPage({
             <DraftMark personId={actor.personId} storeId={day.storeId} businessDate={day.businessDate} />
             <h2 className="font-medium">Submit</h2>
             <p className="text-neutral-600 dark:text-neutral-400">
-              Hands the day on for checking. <strong>Still recognises nothing</strong> — submitting
+              Hands the day on for checking. <strong>Its revenue is still not counted.</strong> Submitting
               is not verifying.
             </p>
             <p className="text-neutral-600 dark:text-neutral-400">
@@ -522,8 +522,8 @@ export default async function SalesDayDetailPage({
             <div>
               <h2 className="font-medium">Verify &amp; post</h2>
               <p className="mt-1 text-neutral-600 dark:text-neutral-400">
-                <strong>This is what recognises the revenue.</strong> The entry dates on{' '}
-                {day.businessDate}, not today.
+                <strong>This is what counts the revenue.</strong> The entry is dated{' '}
+                {formatBusinessDayLong(day.businessDate)}, not today.
               </p>
             </div>
             {closedMonth && (
@@ -555,13 +555,16 @@ export default async function SalesDayDetailPage({
             counted handover) has to be undone first. A reason is required. A manager can enter this
             date again afterwards.
           </p>
-          <div className="flex gap-2">
-            <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="flex-1">
+          <div className="flex flex-wrap gap-2">
+            <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="min-w-[12rem] flex-1">
               <Input {...nativeAttrs(SALES_DAY_VOID_RULES.reason)} placeholder="Why is this being withdrawn?" />
             </Field>
-            <Button type="submit" variant="danger">
-              Withdraw day
-            </Button>
+            <ConfirmDestructive
+              tier="confirm"
+              showLabel
+              label="Withdraw day"
+              consequence="Takes this unverified day off the books. Nothing was posted, so nothing is reversed. A manager can enter this date again afterwards."
+            />
           </div>
         </CheckedForm>
       )}
@@ -574,8 +577,8 @@ export default async function SalesDayDetailPage({
             A verified day is voided by <strong>reversing</strong> its entry — the original stays
             visible and both sides remain in the ledger. A reason is required.
           </p>
-          <div className="flex gap-2">
-            <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="flex-1">
+          <div className="flex flex-wrap gap-2">
+            <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="min-w-[12rem] flex-1">
               <Input {...nativeAttrs(SALES_DAY_VOID_RULES.reason)} placeholder="Why is this being voided?" />
             </Field>
             <ConfirmDestructive

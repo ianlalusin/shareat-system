@@ -1,3 +1,4 @@
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { PAYROLL_BRACKET_SET_RULES, PAYROLL_MIN_WAGE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
 import { requirePageAccess } from '../../../lib/page-access';
@@ -30,7 +31,7 @@ const EMPLOYER_AGENCIES = [
   { value: 'pagibig', label: 'Pag-IBIG' },
   { value: 'bir', label: 'BIR' },
 ] as const;
-const FREQUENCY_NAME = { monthly: 'Monthly', semi_monthly: 'Semi-monthly', weekly: 'Weekly' } as const;
+const FREQUENCY_NAME = { monthly: 'Monthly', semi_monthly: 'Twice a month', weekly: 'Weekly' } as const;
 
 /**
  * `/payroll/rates`. T-190.
@@ -51,9 +52,8 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
         <p className="text-xs text-neutral-500 dark:text-neutral-400">Payroll / Rates</p>
         <h1 className="text-2xl font-semibold">Payroll rates</h1>
         <PageDescription>
-          The contribution and tax tables every payslip is computed from, each effective from a date. A new row is unconfirmed and unused until
-          the accountant confirms it; a confirmed row can never be changed, so an old payslip can always be explained. To correct a rate, add
-          a new row with a later date.
+          The contribution and tax tables every payslip is worked out from, each starting on a date. A new row is not used until the accountant
+          approves it, and an approved row cannot be changed. To correct a rate, add a new row with a later date.
         </PageDescription>
       </div>
 
@@ -75,7 +75,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
             {view.rates.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                 <span className="font-medium">{AGENCY_NAME[r.agency]}</span>
-                <span className="font-mono text-xs">from {r.effectiveFrom}</span>
+                <span className="font-mono text-xs">from {formatBusinessDayLong(r.effectiveFrom)}</span>
                 <span className="flex basis-full flex-col font-mono text-xs">
                   {rateSummary(r).map((line) => (
                     <span key={line}>{line}</span>
@@ -117,7 +117,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
                 <Field label="Pay frequency" width="code">
                   <Select name="frequency" defaultValue="semi_monthly">
                     <option value="monthly">Monthly</option>
-                    <option value="semi_monthly">Semi-monthly</option>
+                    <option value="semi_monthly">Twice a month</option>
                     <option value="weekly">Weekly</option>
                   </Select>
                 </Field>
@@ -143,13 +143,13 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
           </FormModal>
         </div>
         {view.bracketSets.length === 0 ? (
-          <p className="text-sm text-neutral-500">No withholding tables yet. Add a withholding table (the BIR brackets) for your pay frequency, then approve it.</p>
+          <p className="text-sm text-neutral-500">No withholding tables yet. Add a withholding table for your pay frequency, then approve it.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {view.bracketSets.map((b) => (
               <li key={`${b.frequency}-${b.effectiveFrom}`} className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{FREQUENCY_NAME[b.frequency]}</span>
-                <span className="font-mono text-xs">from {b.effectiveFrom}</span>
+                <span className="font-mono text-xs">from {formatBusinessDayLong(b.effectiveFrom)}</span>
                 <span className="text-xs text-neutral-500">
                   {b.rows} rows · {b.sourceRef}
                 </span>
@@ -227,7 +227,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
               <li key={m.id} className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{m.storeName}</span>
                 <span className="font-mono text-xs">
-                  {m.dailyRate} a day from {m.effectiveFrom}
+                  {m.dailyRate} a day from {formatBusinessDayLong(m.effectiveFrom)}
                 </span>
                 <span className="text-xs text-neutral-500">{m.wageOrderRef}</span>
                 {m.confirmedAt ? (

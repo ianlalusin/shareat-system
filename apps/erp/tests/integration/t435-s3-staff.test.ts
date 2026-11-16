@@ -14,7 +14,7 @@ import { M, expectAbsent, expectNotAvailable, expectPresent, expectRefusalCard, 
  *    livePinFor(actor, personId), otherOpenBranchesFor(actor, personId, excludeStoreId). A store the actor does not hold is an
  *    AuthorizationError for enrol_staff/manage_attendance; a by-id loader authorizes on the ROW's store.
  *  - an employment the viewer cannot reach is the same notFound() as a forged id (DEF-497).
- *  - otherOpenBranchesFor names only branches the viewer holds; the rest render as "and N other branch(es)" so the T-302 PIN
+ *  - otherOpenBranchesFor names only branches the viewer holds; the rest render as "and N other store(s)" so the T-302 PIN
  *    warning still fires.
  *
  * Mutants (spec): M23 delete the /staff entry; M24 /staff maps to enrol_staff alone; M25 listStores instead of scopedStores;

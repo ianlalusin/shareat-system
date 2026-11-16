@@ -208,7 +208,7 @@ describe('T-390 S5 /cutover/opening - the Tie-out panel', () => {
 
   it('says party registers are checked for valid parties only, totals at the rehearsal (T-394)', async () => {
     const f = await fixture('op-parties-note');
-    expect(textOf((await renderOpening(f)).html)).toMatch(/compared with v1 at the rehearsal/i);
+    expect(textOf((await renderOpening(f)).html)).toMatch(/compared with the old system at the rehearsal/i);
   });
 
   it('shows C3P, C4 and C5 with their titles and, where the domain gives one, the blockedBy / detail text; C3P has an attest form until attested', async () => {

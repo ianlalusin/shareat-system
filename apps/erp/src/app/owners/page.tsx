@@ -52,9 +52,7 @@ export default async function OwnersPage({
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Owners</h1>
           <PageDescription>
-            What each owner has put in, taken out, and still owes. Every figure is summed from the
-            ledger — <strong>no total is stored anywhere</strong>, so none of them can drift from the
-            books.
+            What each owner has put in, taken out, and still owes.
           </PageDescription>
         </div>
         {/* T-448: the add form is a modal opened from the header. */}
@@ -197,7 +195,7 @@ export default async function OwnersPage({
                     <div className="text-xs text-muted">
                       {o.role ?? '—'}
                       {o.ownershipPercentage && (
-                        <> · {Number(o.ownershipPercentage)}% (indicative)</>
+                        <> · {Number(o.ownershipPercentage)}% share</>
                       )}
                     </div>
                   </Td>

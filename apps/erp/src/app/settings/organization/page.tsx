@@ -71,8 +71,8 @@ export default async function OrganizationSettingsPage({
         </p>
         <h1 className="text-2xl font-semibold">Organisation</h1>
         <PageDescription>
-          The registered identity the books are kept under — what a document printed from this
-          system should carry. Each branch&apos;s own address and TIN branch code live on{' '}
+          The registered identity the books are kept under. It appears on documents printed from this
+          system. Each store&apos;s own address and tax registration code are on{' '}
           <a href="/admin/stores" className="underline">
             its store
           </a>
@@ -88,9 +88,7 @@ export default async function OrganizationSettingsPage({
           <strong>
             This organisation has no {missing.join(', no ')} recorded.
           </strong>{' '}
-          Anything printed from these books will carry the trading name{' '}
-          <strong>{identity.name}</strong> and nothing else — which is not the identity the business
-          is registered under.
+          Printed documents will show only the everyday name <strong>{identity.name}</strong>.
         </Banner>
       )}
 
@@ -141,7 +139,7 @@ export default async function OrganizationSettingsPage({
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Tax type</span>}>
             <Select name="taxType" defaultValue={identity.taxType ?? ''} className="mt-1 w-full">
               {/* ⭐ A real choice, not a placeholder: blank means "not stated" and is stored as null. */}
-              <option value="">— not stated —</option>
+              <option value="">Not stated</option>
               <option value="vat">VAT-registered</option>
               <option value="non_vat">Non-VAT</option>
             </Select>
@@ -150,9 +148,8 @@ export default async function OrganizationSettingsPage({
       </EditableRecord>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        ⚠️ These books are a <strong>management record, not a statutory filing basis</strong>.
-        Recording a tax type here changes nothing that is calculated — no VAT is computed from it —
-        and nothing produced by this system should be treated as a BIR submission.
+        These books are a <strong>management record, not a basis for tax filing</strong>. The tax type
+        changes no calculation.
       </p>
     </Page>
   );

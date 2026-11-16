@@ -182,7 +182,7 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
       // The domain refusal is what makes the two agree; resting this on a client-side gate
       // would contradict docs/RULES.md §1 rule 7.
       (result.varianceId
-        ? ` ⚠️ ${compare(money(result.variance ?? '0'), ZERO) < 0 ? 'SHORT' : 'OVER'} by ${Math.abs(Number(result.variance)).toFixed(2)} — recorded as an open item.`
+        ? ` ${compare(money(result.variance ?? '0'), ZERO) < 0 ? 'Short' : 'Over'} by ${Math.abs(Number(result.variance)).toFixed(2)} — recorded as an open item.`
         : '');
   } catch (err) {
     return await redirectWithFlash('/remittance', { store: storeId }, { error: errorMessage(err) });

@@ -99,7 +99,7 @@ export default async function AssetDetailPage({
           </h1>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             {CATEGORY_LABEL[asset.category] ?? asset.category} · {store?.name ?? '—'} · acquired{' '}
-            {asset.acquiredOn ?? '—'}
+            {asset.acquiredOn ? formatBusinessDayLong(asset.acquiredOn) : '—'}
           </p>
         </div>
       </div>
@@ -108,10 +108,9 @@ export default async function AssetDetailPage({
 
       {asset.needsReview && (
         <Banner tone="warning">
-          <strong className="font-medium">These terms are a default, not a decision.</strong> This
-          asset was capitalised automatically from an expense, so its life and salvage were applied
-          from policy without anyone looking at the thing itself. Editing them below confirms them
-          and clears this flag.
+          <strong className="font-medium">These terms are a standard guess.</strong> This
+          asset was added automatically from an expense, so its life and salvage value came from
+          policy, not from anyone looking at the item. Editing them below confirms them.
         </Banner>
       )}
 
@@ -121,16 +120,16 @@ export default async function AssetDetailPage({
           /* ⚠️ `min-[1440px]:grid-cols-1`: `sm` is a VIEWPORT query, so without it these tiles stay
              three-across inside a 320px rail. T-240 §3.5. */
           <section className="grid gap-4 sm:grid-cols-3 min-[1440px]:grid-cols-1">
-            <Figure label="Cost" value={formatMoney(cost)} note="Stored on the asset" />
+            <Figure label="Cost" value={formatMoney(cost)} note="What it cost" />
             <Figure
               label="Accumulated depreciation"
               value={formatMoney(money(accumulated))}
-              note="⭐ Derived — summed from the ledger, never stored"
+              note="Total depreciation charged so far"
             />
             <Figure
               label="Book value"
               value={formatMoney(bookValue)}
-              note="⭐ Derived — cost less accumulated"
+              note="Cost minus depreciation so far"
             />
           </section>
         }
@@ -154,7 +153,7 @@ export default async function AssetDetailPage({
           </p>
         ) : (
           <p className="text-sm text-neutral-700 dark:text-neutral-300">
-            In service since <strong>{asset.inServiceOn ?? '—'}</strong>
+            In service since <strong>{asset.inServiceOn ? formatBusinessDayLong(asset.inServiceOn) : '—'}</strong>
             {asset.inServiceSource === 'store_opening' && " — follows this store's opening date"}
             {asset.inServiceSource === 'acquired' && ' — the acquisition date'}
             {asset.inServiceSource === 'set' && ' — set directly'}
@@ -169,7 +168,7 @@ export default async function AssetDetailPage({
             )}
             {sp.confirm && sp.reason === undefined && (
               <p className="text-xs text-neutral-500">
-                What you typed could not be carried over. Enter the choice, date and reason again before you confirm.
+                What you typed could not be carried over. Enter the start option, date and reason again before you confirm.
               </p>
             )}
             {sp.confirm && (
@@ -181,7 +180,7 @@ export default async function AssetDetailPage({
                 {sp.reason !== undefined ? (
                   <input type="hidden" name="reason" value={sp.reason} />
                 ) : (
-                  <Field label="Reason" hint="Required — an audit trail with no reason is unauditable" rule={ASSET_IN_SERVICE_CONFIRM_RULES.reason}>
+                  <Field label="Reason" hint="Required, so there is a record of why" rule={ASSET_IN_SERVICE_CONFIRM_RULES.reason}>
                     <Input {...nativeAttrs(ASSET_IN_SERVICE_CONFIRM_RULES.reason)} className="w-full" />
                   </Field>
                 )}
@@ -195,8 +194,8 @@ export default async function AssetDetailPage({
               action={setAssetInServiceAction}
               label={`${asset.name} in-service date`}
               summary={[
-                { label: 'Choice', value: asset.inServiceSource === 'store_opening' ? 'When the store opens' : asset.inServiceSource === 'set' ? 'A specific date' : asset.inServiceSource === 'acquired' ? 'On the acquisition date' : null },
-                { label: 'Specific date', value: asset.inServiceSource === 'set' && asset.inServiceOn ? formatBusinessDayLong(asset.inServiceOn) : null },
+                { label: 'Goes into service', value: asset.inServiceSource === 'store_opening' ? 'When the store opens' : asset.inServiceSource === 'set' ? 'On a date you set' : asset.inServiceSource === 'acquired' ? 'On the acquisition date' : null },
+                { label: 'Date you set', value: asset.inServiceSource === 'set' && asset.inServiceOn ? formatBusinessDayLong(asset.inServiceOn) : null },
               ]}
               hidden={{ assetId: asset.id, filterStore: sp.store ?? '' }}
               typed={typedFor(sp, ASSET_IN_SERVICE_EDIT, asset.id, actor.personId)}
@@ -206,18 +205,18 @@ export default async function AssetDetailPage({
               {/* ⛔ A `<select>`, not radios — a native radio's box is unresolvable-by-construction
                   for the touch-target sweep (Ian's ruling §6.1, T-262); a `<select>` sizes from its
                   own classes exactly like this file's other pickers. */}
-              <Field label="Choice">
+              <Field label="Goes into service">
                 <Select
                   name="mode"
                   defaultValue={sp.mode ?? asset.inServiceSource ?? 'acquired'}
                   className="w-full"
                 >
-                  <option value="acquired">On the acquisition date ({asset.acquiredOn ?? '—'})</option>
+                  <option value="acquired">On the acquisition date ({asset.acquiredOn ? formatBusinessDayLong(asset.acquiredOn) : '—'})</option>
                   <option value="store_opening">When the store opens</option>
-                  <option value="set">A specific date —</option>
+                  <option value="set">On a date I choose</option>
                 </Select>
               </Field>
-              <Field label="Specific date" hint="Only used when 'A specific date' is chosen above" rule={ASSET_IN_SERVICE_RULES.inServiceOn}>
+              <Field label="Date you set" hint="Used only when you choose a date above" rule={ASSET_IN_SERVICE_RULES.inServiceOn}>
                 <Input
                   type="date"
                   {...nativeAttrs(ASSET_IN_SERVICE_RULES.inServiceOn)}
@@ -225,7 +224,7 @@ export default async function AssetDetailPage({
                   className="w-full"
                 />
               </Field>
-              <Field label="Reason" hint="Required — an audit trail with no reason is unauditable" rule={ASSET_IN_SERVICE_RULES.reason}>
+              <Field label="Reason" hint="Required, so there is a record of why" rule={ASSET_IN_SERVICE_RULES.reason}>
                 <Input {...nativeAttrs(ASSET_IN_SERVICE_RULES.reason)} defaultValue={sp.reason ?? ''} className="w-full" />
               </Field>
               {/* ⛔ A hidden input, not a checkbox — clicking "Confirm change" IS the confirmation
@@ -311,7 +310,7 @@ export default async function AssetDetailPage({
               <Row k="Life" v={`${asset.usefulLifeMonths} months`} />
               <Row k="Interval" v={INTERVAL_LABEL[asset.interval] ?? asset.interval} />
               <Row k="Salvage" v={formatMoney(money(asset.salvageValue ?? '0'))} />
-              <Row k="Disposed on" v={asset.disposedOn ?? '—'} />
+              <Row k="Disposed on" v={asset.disposedOn ? formatBusinessDayLong(asset.disposedOn) : '—'} />
               <Row k="Reason" v={asset.disposalReason ?? '—'} />
               {asset.notes && <Row k="Notes" v={asset.notes} />}
             </dl>
@@ -366,9 +365,9 @@ export default async function AssetDetailPage({
             <section className="space-y-3 rounded-lg border border-danger p-4">
               <h2 className="font-medium text-danger">Dispose / write off</h2>
               <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                Clears the accumulated depreciation, removes the cost, and writes the remaining{' '}
-                <strong>{formatMoney(bookValue)}</strong> off to loss on disposal. This is a
-                write-off at zero proceeds — there is no sale-with-proceeds flow.
+                Removes this asset from the books and records its remaining value of{' '}
+                <strong>{formatMoney(bookValue)}</strong> as a loss. Use it for an asset that was
+                scrapped or given away. Selling it for money is not handled here.
               </p>
               <CheckedForm rules={ASSET_DISPOSE_RULES} action={disposeAssetAction} className="space-y-3">
                 <input type="hidden" name="assetId" value={asset.id} />
@@ -382,7 +381,7 @@ export default async function AssetDetailPage({
                       className="w-full"
                     />
                   </Field>
-                  <Field label="Reason" hint="Required — a write-off with no reason is unauditable" rule={ASSET_DISPOSE_RULES.reason}>
+                  <Field label="Reason" hint="Required, so there is a record of why" rule={ASSET_DISPOSE_RULES.reason}>
                     <Input {...nativeAttrs(ASSET_DISPOSE_RULES.reason)} placeholder="Compressor failed" className="w-full" />
                   </Field>
                 </div>

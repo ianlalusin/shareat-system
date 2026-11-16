@@ -167,11 +167,11 @@ describe('W1 — a one-day semi-monthly cycle typed into the form is refused, in
 });
 
 describe('W2 (control) — a valid cycle saves', () => {
-  it('payoutDays "10,25" -> the ok banner ("Saved. The new policy takes effect from 2026-06-01."), and the live row carries [10,25]', async () => {
+  it('payoutDays "10,25" -> the ok banner ("Saved. The new policy takes effect from June 1, 2026."), and the live row carries [10,25]', async () => {
     const f = await fixture('w2');
     const to = await submit(f, form(f, { payoutDays: '10,25' }));
     expect(param(to, 'error'), `refused: ${param(to, 'error')}`).toBeNull();
-    expect(param(to, 'ok')).toBe('Saved. The new policy takes effect from 2026-06-01.');
+    expect(param(to, 'ok')).toBe('Saved. The new policy takes effect from June 1, 2026.');
     expect(await liveDays(f.storeId)).toMatchObject({ payout_mode: 'fixed_days', payout_days: [10, 25] });
   });
 });

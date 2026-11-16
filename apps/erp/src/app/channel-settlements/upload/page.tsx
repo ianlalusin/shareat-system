@@ -1,3 +1,4 @@
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { Page } from '@/components/shell/Page';
 import { Table, Td, Th } from '@/components/ui';
@@ -46,7 +47,7 @@ export default async function UploadSettlementFilesPage() {
                   <Td>{w.storeName}</Td>
                   <Td>{w.channelName}</Td>
                   <Td>{w.days.length}</Td>
-                  <Td>{w.days[0]}</Td>
+                  <Td>{w.days[0] ? formatBusinessDayLong(w.days[0]) : '—'}</Td>
                 </tr>
               ))}
             </tbody>

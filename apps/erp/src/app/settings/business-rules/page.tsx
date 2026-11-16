@@ -46,9 +46,6 @@ export default async function BusinessRulesPage({ searchParams }: { searchParams
         </p>
         <h1 className="text-2xl font-semibold">Business rules</h1>
         <PageDescription>The figures the system checks money against. A new value starts on a day you choose; days before keep the old value.</PageDescription>
-        <p className="mt-1 text-sm text-muted">
-          A statement already read keeps the figure it was read with. Each change records who made it and why.
-        </p>
       </div>
 
       <FlashBanner flash={sp} />

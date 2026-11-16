@@ -36,7 +36,7 @@ import { describe, expect, it } from 'vitest';
  */
 const SRC = join(__dirname, '..', 'src');
 
-type Tier = 'P' | 'R' | 'W' | 'X';
+type Tier = 'P' | 'R' | 'W' | 'X' | 'C'; // C (T-589 B3d): tier="confirm", a plain extra click; the server rule is unchanged
 interface Row {
   file: string; // under apps/erp/src, forward slashes
   tier: Tier;
@@ -121,6 +121,12 @@ const rows: Row[] = [
   { file: 'app/liabilities/[id]/page.tsx', tier: 'R', label: 'Retire liability', danger: false, visible: 'Retire', action: 'retireAction', actionFile: 'app/liabilities/actions.ts', mutation: 'retireLiability' },
   { file: 'app/staff/[employmentId]/credentials/page.tsx', tier: 'R', label: 'Revoke credential', danger: true, visible: 'Revoke credential', action: 'revokeCredentialAction', actionFile: 'app/staff/[employmentId]/credentials/actions.ts', mutation: 'revokeCredential' },
   { file: 'app/inventory/locations/page.tsx', tier: 'R', label: 'Deactivate room', danger: false, visible: 'Deactivate room', action: 'deactivateLocationAction', actionFile: 'app/inventory/locations/actions.ts', mutation: 'deactivateLocation' },
+  // ---- Tier C (T-589 B3d, Ian approved): tier="confirm" - one more click, no typed field, no server check (the server rule is unchanged) ----
+  { file: 'app/settings/expense-categories/page.tsx', tier: 'C', label: 'Retire expense category', danger: false, visible: 'Retire category', action: 'setCategoryActiveAction', actionFile: 'app/settings/expense-categories/actions.ts' },
+  { file: 'app/settings/sales-channels/page.tsx', tier: 'C', label: 'Retire sales channel', danger: false, visible: 'Retire this channel', action: 'setSalesChannelActiveAction', actionFile: 'app/settings/sales-channels/actions.ts' },
+  { file: 'app/sales-days/[id]/page.tsx', tier: 'C', label: 'Withdraw sales day', danger: false, visible: 'Withdraw day', action: 'voidSalesDayAction', actionFile: 'app/sales-days/actions.ts' }, // was W (bare danger); still no server guard (Ian Q2)
+  { file: 'app/owners/[id]/page.tsx', tier: 'C', label: 'Close owner month', danger: false, visible: 'Close month', action: 'closeMonthAction', actionFile: 'app/owners/actions.ts' },
+  { file: 'app/fixed-assets/page.tsx', tier: 'C', label: 'Run depreciation', danger: false, visible: 'Run depreciation', action: 'runDepreciationAction', actionFile: 'app/fixed-assets/actions.ts' },
   // ---- AUDIT ROUND H1 / H2 (orchestrator ruling): the two CONDITIONAL danger buttons `variant={x ? 'danger' : ...}` ----
   { file: 'app/admin/stores/[id]/page.tsx', tier: 'R', label: 'Close this store', danger: true, conditional: true, visibleRe: /Close this store|Deactivate/, action: 'deactivateStoreAction', actionFile: 'app/admin/stores/actions.ts', mutation: 'deactivateStore' },
   { file: 'app/admin/users/[personId]/page.tsx', tier: 'R', label: 'In scope - remove', danger: true, conditional: true, visibleRe: /remove/i, action: 'setStoreScopeAction', actionFile: 'app/admin/users/actions.ts', mutation: 'revokeStoreScope' },
@@ -136,7 +142,6 @@ const rows: Row[] = [
   { file: 'app/items/page.tsx', tier: 'W', label: 'Reject item request', danger: true, action: 'rejectItemRequestAction', actionFile: 'app/items/actions.ts' },
   { file: 'app/menu/requests/page.tsx', tier: 'W', label: 'Reject menu request', danger: true, action: 'rejectItemRequestAction', actionFile: 'app/menu/requests/actions.ts' },
   // ⚠️ SHARED ACTION: voidSalesDayAction serves BOTH "Withdraw day" (unverified) and "Void" (verified). Not asserted unguarded.
-  { file: 'app/sales-days/[id]/page.tsx', tier: 'W', label: 'Withdraw sales day', danger: true },
   // ---- Exempt (4): client-only "remove a line" in an unsaved form ----
   { file: 'app/inventory/deliveries/NewDeliveryForm.tsx', tier: 'X', label: 'Remove delivery line', danger: true },
   { file: 'app/inventory/usage/NewUsageForm.tsx', tier: 'X', label: 'Remove usage line', danger: true },
@@ -175,7 +180,7 @@ function enclosingForm(src: string, at: number): { start: number; between: strin
   const start = Math.max(src.lastIndexOf('<form', at), src.lastIndexOf('<CheckedForm', at));
   return { start, between: start < 0 ? '' : src.slice(start, at) };
 }
-const tierOf = (w: string) => /tier=\{?\s*['"](admin-pin|retype)['"]/.exec(w)?.[1];
+const tierOf = (w: string) => /tier=\{?\s*['"](admin-pin|retype|confirm)['"]/.exec(w)?.[1];
 
 function functionBody(src: string, name: string): string | undefined {
   const m = new RegExp('export async function ' + name + '[^A-Za-z0-9_]').exec(src);
@@ -220,9 +225,9 @@ const FORM_READ = /formData|\bfd\b|str\(|opt\(|requireId\(|\.get\(/;
 describe('the census arithmetic (green today: the literal map matches the spec + the audit-round conditionals)', () => {
   it('69 controls: P 33 (36 - the 3 T-418 draft deletes), R 19 (18 + T-464 Un-pair tablet), W 13 (10 + the 3 T-418 draft deletes), X 4; 64 are danger (2 conditional), in 50 files', () => {
     const by = (t: Tier) => rows.filter((r) => r.tier === t).length;
-    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([34, 23, 13, 4]); // T-584: +1 R (Void document, NEEDS BOSS APPROVAL 22 -> 23); T-550: P 34 -> 33 (the retired POS usage pull page's Void this pull; BOSS approved), then +1 (Void POS pull moved to usage/[id], net 34, pending BOSS approval); T-510 S3: +1 R (Retire hours, NEEDS BOSS APPROVAL 21 -> 22); T-508 S2b: +1 R (Retire station); T-418: three draft deletes moved P -> W; T-464: +1 R; T-505: +1 R (Revoke tablet link)
-    expect(rows).toHaveLength(74); // T-584: 73 -> 74 (Void document); T-550: 73 -> 72 (BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: +Retire hours (72 -> 73); T-505: +Revoke tablet link; T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
-    expect(rows.filter((r) => r.danger)).toHaveLength(69); // T-584: 68 -> 69 (Void document); T-550: 68 -> 67 (BOSS approved), then +1 Void POS pull (net 68, pending BOSS approval); T-510 S3: 67 -> 68
+    expect([by('P'), by('R'), by('W'), by('X'), by('C')]).toEqual([34, 23, 12, 4, 5]); // T-589 B3d: +5 C (tier=confirm); Withdraw sales day moved W -> C; T-584: +1 R (Void document, NEEDS BOSS APPROVAL 22 -> 23); T-550: P 34 -> 33 (the retired POS usage pull page's Void this pull; BOSS approved), then +1 (Void POS pull moved to usage/[id], net 34, pending BOSS approval); T-510 S3: +1 R (Retire hours, NEEDS BOSS APPROVAL 21 -> 22); T-508 S2b: +1 R (Retire station); T-418: three draft deletes moved P -> W; T-464: +1 R; T-505: +1 R (Revoke tablet link)
+    expect(rows).toHaveLength(78); // T-589 B3d: 74 -> 78 (+5 tier=confirm, net +4 after Withdraw sales day moved); T-584: 73 -> 74 (Void document); T-550: 73 -> 72 (BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: +Retire hours (72 -> 73); T-505: +Revoke tablet link; T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
+    expect(rows.filter((r) => r.danger)).toHaveLength(68); // T-589 B3d: 69 -> 68 (Withdraw sales day is no longer a bare danger button); T-584: 68 -> 69 (Void document); T-550: 68 -> 67 (BOSS approved), then +1 Void POS pull (net 68, pending BOSS approval); T-510 S3: 67 -> 68
     expect(rows.filter((r) => r.conditional)).toHaveLength(2);
     expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(54); // T-584: 53 -> 54 (app/documents/[id]/page.tsx); T-550: 54 -> 53 (app/inventory/pos-usage/page.tsx is gone; BOSS approved); T-510 S3: 53 -> 54 (menu/DaypartsSection.tsx)
   });
@@ -239,18 +244,21 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
     const mine = rows.filter((r) => r.file === file);
     const P = mine.filter((r) => r.tier === 'P').length;
     const R = mine.filter((r) => r.tier === 'R').length;
+    const C = mine.filter((r) => r.tier === 'C').length;
     const bare = mine.filter((r) => r.tier === 'W' || r.tier === 'X').length;
-    it(`${file}: ${P} admin-pin, ${R} retype, ${bare} bare danger`, () => {
+    it(`${file}: ${P} admin-pin, ${R} retype, ${C} confirm, ${bare} bare danger`, () => {
       const src = read(file);
       const wins = confirmWindows(src);
       expect(wins.filter((w) => tierOf(w) === 'admin-pin'), 'admin-pin ConfirmDestructive count').toHaveLength(P);
       expect(wins.filter((w) => tierOf(w) === 'retype'), 'retype ConfirmDestructive count').toHaveLength(R);
+      expect(wins.filter((w) => tierOf(w) === 'confirm'), 'confirm ConfirmDestructive count').toHaveLength(C);
       expect(wins.filter((w) => tierOf(w) === undefined), 'a ConfirmDestructive with no recognisable tier').toHaveLength(0);
       // the bare danger buttons that remain outside ConfirmDestructive are exactly the W and X rows
       expect(count(src, DANGER), 'variant="danger" left in the file').toBe(bare);
       // audit L8: each guarded row's VISIBLE label is asserted, so a renamed label (or a button that lost its guard) is caught
-      for (const r of mine.filter((x) => x.tier === 'P' || x.tier === 'R')) {
-        const hit = wins.filter((w) => tierOf(w) === (r.tier === 'P' ? 'admin-pin' : 'retype')).find((w) => {
+      for (const r of mine.filter((x) => x.tier === 'P' || x.tier === 'R' || x.tier === 'C')) {
+        const want = r.tier === 'P' ? 'admin-pin' : r.tier === 'R' ? 'retype' : 'confirm';
+        const hit = wins.filter((w) => tierOf(w) === want).find((w) => {
           const lab = /label=(?:"([^"]*)"|\{['"]([^'"]*)['"]\})/.exec(w);
           const text = lab ? (lab[1] ?? lab[2] ?? '') : '';
           return r.visible !== undefined ? text === r.visible : r.visibleRe!.test(text);
@@ -306,7 +314,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       const src = readFileSync(abs, 'utf8');
       total += count(src, DANGER) + confirmWindows(src).length;
     }
-    expect(total).toBe(74); // T-584: 73 -> 74 (Void document); T-550: 73 -> 72 (the retired POS usage pull page's Void this pull, BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: 72 -> 73 (Retire hours); T-193 S5: +Void payment (statutory payments); T-505: +Revoke tablet link
+    expect(total).toBe(78); // T-589 B3d: 74 -> 78 (+5 tier=confirm, Withdraw sales day moved W -> C); T-584: 73 -> 74 (Void document); T-550: 73 -> 72 (the retired POS usage pull page's Void this pull, BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: 72 -> 73 (Retire hours); T-193 S5: +Void payment (statutory payments); T-505: +Revoke tablet link
   });
 });
 
