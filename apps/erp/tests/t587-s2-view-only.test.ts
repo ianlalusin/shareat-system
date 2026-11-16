@@ -67,6 +67,7 @@ const WRITE: Record<string, { caps: string[]; files: string[] }> = {
   '/admin/access-defaults': { caps: ['grant_capability'], files: [`${D}/people/position-defaults.ts`] },
   '/settings/pos-tablet': { caps: ['pair_pos_tablet'], files: [`${A}/settings/pos-tablet/actions.ts`] },
   '/attendance/terminals': { caps: ['provision_clock_terminal'], files: [`${D}/attendance/terminals.ts`] },
+  '/admin/pos-tablets': { caps: ['provision_clock_terminal'], files: [`${A}/admin/pos-tablets/actions.ts`] },
   '/attendance/lane': { caps: ['manage_attendance', 'provision_clock_terminal'], files: [`${D}/sync/health.ts`] },
   '/settings/pos-link': { caps: ['manage_chart_of_accounts'], files: [`${A}/settings/pos-link/actions.ts`] },
 };
@@ -99,11 +100,11 @@ beforeEach(() => {
 });
 
 describe('T-587 S2 - the View only pill, one test per row', () => {
-  it('there is one entry per hub row (21), so no row is left untested', () => {
+  it('there is one entry per hub row (22), so no row is left untested', () => {
     const src = read(`${A}/settings/page.tsx`);
     const hubHrefs = [...src.matchAll(/<SettingsRow\s+href="([^"]+)"/g)].map((m) => m[1]);
     expect([...hubHrefs].sort()).toEqual([...HREFS].sort());
-    expect(HREFS.length).toBe(21);
+    expect(HREFS.length).toBe(22);
   });
 
   it.each(HREFS)('%s: without its write capability the row is View only (hidden when the route needs that same word); with it, no pill', async (href) => {
