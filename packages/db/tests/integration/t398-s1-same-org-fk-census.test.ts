@@ -77,7 +77,8 @@ const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation',
 // T-557 (0249): +2 option_value_ids columns (snapshot). 31 -> 33.
 const NO_FK_PIN = { count: 33, sha256: '2da266d840985c770afa546da19d4f3bd1a10b42bb9542e68ad68f024eb74bf7' } as const;
 // T-523 (0238): +pos_events.payload (snapshot). 10 -> 11.
-const JSONB_PIN = { count: 11, sha256: '0f3c5edf61b692c8c9675c71c7d3f6879df392fd9c8b1f26a7a010f5403ca8e5' } as const;
+// T-584 (0259): +issued_document_versions.letterhead (snapshot). 11 -> 12.
+const JSONB_PIN = { count: 12, sha256: '13628aa5f394a2b8957477a5d43b9a932c02ff9e5500467b74ea9c24a310007e' } as const;
 
 const openKeys = (l: readonly OpenFkEntry[]) => l.map((e) => e.fk);
 const noFkKeys = (l: readonly { column: string; kind: string }[]) => l.map((e) => `${e.column}|${e.kind}`);

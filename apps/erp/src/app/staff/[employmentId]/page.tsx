@@ -14,7 +14,8 @@ import {
   setStaffSignatureAction,
 } from '../actions';
 import { DeductionAgreementsSection } from './DeductionAgreementsSection';
-import { deductionAgreementsFor, employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import { DocumentsSection } from './DocumentsSection';
+import { deductionAgreementsFor, documentsFor, employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
@@ -49,7 +50,7 @@ export default async function EmploymentDetailPage({
 
   const isEnded = detail.employment.endedOn !== null;
   const roleOnly = detail.role === 'manager' || detail.role === 'admin' || detail.role === 'super_admin';
-  const [positions, livePin, otherBranches, govIds, media, agreements] = await Promise.all([
+  const [positions, livePin, otherBranches, govIds, media, agreements, documents] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
     livePinFor(actor, detail.employment.personId),
     // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
@@ -59,6 +60,8 @@ export default async function EmploymentDetailPage({
     governmentIdsFor(actor, detail.employment.personId, detail.employment.storeId),
     mediaFor(actor, employmentId),
     deductionAgreementsFor(actor, detail.employment.personId, detail.employment.storeId),
+    // T-584: documents issued for this employment; null (hidden) without view_documents at the store.
+    documentsFor(actor, employmentId, detail.employment.storeId),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
@@ -258,6 +261,8 @@ export default async function EmploymentDetailPage({
       )}
 
       <DeductionAgreementsSection view={agreements} employmentId={employmentId} storeId={detail.employment.storeId} />
+
+      <DocumentsSection documents={documents} />
 
       <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Role and access</h2>
