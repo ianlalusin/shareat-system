@@ -29,6 +29,8 @@ export {
   runEditableAction,
   selectIsDirty,
   planApply,
+  applyTyped,
+  formChangedNames,
   changedNames,
   editableRecordInitialState,
   TYPED_DROPPED_MESSAGE,

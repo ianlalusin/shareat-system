@@ -196,6 +196,11 @@ export interface FormCase<C extends BaseCtx> {
   goodAction?(): Promise<(fd: FormData) => Promise<void>>;
   ok: RegExp;
   siblings?(ctx: C): Promise<Sibling[]>;
+  /**
+   * Optional modal mode (T-590b): the form lives in a FormModal with a client RefillForm, not in an EditableRecord. The legs
+   * then read `seen.refills` / `seen.modals` instead of the record's props and `<fieldset disabled`. Omit it and nothing changes.
+   */
+  modal?: { title: string };
   /** why a leg cannot be driven for this form, reported rather than worked around */
   note?: string;
 }
@@ -206,7 +211,12 @@ export interface Harness {
   runTypedLegs<C extends BaseCtx>(c: FormCase<C>): void;
 }
 
-export function createHarness(deps: { h: { actor: Actor | null }; seen: { records: Array<Record<string, unknown>> } }): Harness {
+export interface ModalSeen {
+  refills?: Array<{ formKey?: string; typed?: { kind?: string; fields?: Record<string, unknown> } | null }>;
+  modals?: Array<{ title?: unknown; defaultOpen?: boolean }>;
+}
+
+export function createHarness(deps: { h: { actor: Actor | null }; seen: { records: Array<Record<string, unknown>> } & ModalSeen }): Harness {
   const { h, seen } = deps;
 
   async function payload(): Promise<{ msg: Record<string, string>; keep: Record<string, string>; t?: { form: string; record: string; fields: Record<string, string | string[]>; actor?: string }; td?: { form: string; record: string; actor?: string } }> {
@@ -228,11 +238,23 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
     async function render(ctx: C, params: Record<string, string> = {}, who: Actor = ctx.f.admin): Promise<string> {
       h.actor = who;
       seen.records = [];
+      if (seen.refills) seen.refills = [];
+      if (seen.modals) seen.modals = [];
       const Page = await c.page();
       const el = await Page(c.props(ctx, params));
       return renderToStaticMarkup(el as never);
     }
     const hiddenRe = c.hiddenNames;
+    // Modal mode: the refill is the RefillForm with this form key; the modal is the FormModal with this title.
+    const refill = () => seen.refills?.find((r) => r.formKey === c.form);
+    const modalOpens = () => seen.modals?.find((m) => m.title === c.modal?.title)?.defaultOpen;
+    /** what the page handed this form: the record's `typed` prop, or in modal mode the RefillForm's */
+    const typedOf = (ctx: C) => (c.modal ? refill()?.typed : find(c.sel(ctx))?.typed);
+    function expectModalLocked() {
+      expect(refill(), 'the page rendered this form RefillForm').toBeDefined();
+      expect(refill()?.typed ?? null).toBeNull();
+      expect(modalOpens(), 'the modal stays shut').toBe(false);
+    }
     const notDrawnOf = (ctx: C): string[] => (typeof c.notDrawn === 'function' ? c.notDrawn(ctx) : c.notDrawn);
 
     describe(`T-389 S2 ${c.label} - a refused save keeps what was typed (DEF-617) [${c.form}]`, () => {
@@ -268,13 +290,17 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
         const html = await render(ctx, pageParamsOf(r.signal.url));
         expect(plain(html), 'the refusal banner').toMatch(c.refusal);
         const seg = pickForm(html, c.has(ctx));
-        expect(seg, 'reopened: not locked').not.toContain('<fieldset disabled');
-        expect(seg, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*>/); // T-448: Save is an icon button (words are aria-label + data-tip)
+        if (c.modal) {
+          expect(modalOpens(), 'the modal opens itself').toBe(true);
+          expect(seg, 'a submit button is showing').toMatch(/<button[^>]*type="submit"/);
+        } else {
+          expect(seg, 'reopened: not locked').not.toContain('<fieldset disabled');
+          expect(seg, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*>/); // T-448: Save is an icon button (words are aria-label + data-tip)
+        }
         await c.stored(ctx, seg, markup);
         for (const typed of notDrawnOf(ctx)) expect(seg, `"${typed}" is typed, never drawn by the server (the browser applies it)`).not.toContain(typed);
-        const rec = find(c.sel(ctx));
-        expect(rec, 'the page rendered this record').toBeDefined();
-        expect(rec?.typed, 'the page hands the record the typed view').toEqual({ kind: 'typed', fields: p.t!.fields });
+        expect(c.modal ? refill() : find(c.sel(ctx)), 'the page rendered this record').toBeDefined();
+        expect(typedOf(ctx), 'the page hands the record the typed view').toEqual({ kind: 'typed', fields: p.t!.fields });
         expect(detailsOpenAround(html, seg), 'a <details> around a reopened record must be open').not.toBe(false);
         // Red on HEAD: no typed slot, so the record is locked and `typed` is not passed.
         // Mutant: draw typed values as the defaults -> the notDrawn / stored legs go red. typedFor ignores the record -> siblings leg red.
@@ -285,12 +311,15 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
         const r = await submit(ctx, c.refused(ctx));
         const params = pageParamsOf(r.signal.url);
         await render(ctx, params);
-        expect(find(c.sel(ctx))?.typed?.kind, 'the person whose Save was refused is shown the typing (so "nothing for the other" proves something)').toBe('typed');
+        expect(typedOf(ctx)?.kind, 'the person whose Save was refused is shown the typing (so "nothing for the other" proves something)').toBe('typed');
         const html = await render(ctx, params, ctx.f.other);
-        const rec = find(c.sel(ctx));
-        expect(rec, 'the page rendered this record').toBeDefined();
-        expect(rec?.typed ?? null).toBeNull();
-        expect(pickForm(html, c.has(ctx))).toContain('<fieldset disabled');
+        if (c.modal) expectModalLocked();
+        else {
+          const rec = find(c.sel(ctx));
+          expect(rec, 'the page rendered this record').toBeDefined();
+          expect(rec?.typed ?? null).toBeNull();
+          expect(pickForm(html, c.has(ctx))).toContain('<fieldset disabled');
+        }
         // Mutant: typedFor ignores the actor -> the other person is shown the typing, red. (Also needs the typed slot to exist: red on HEAD only via the slot guard in `slot`.)
       });
 
@@ -300,7 +329,7 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
         const r = await submit(ctx, c.refused(ctx));
         expect((await payload()).t?.form, 'the refused form keeps its typing (so a sibling check proves something)').toBe(c.form);
         const html = await render(ctx, pageParamsOf(r.signal.url));
-        expect(find(c.sel(ctx))?.typed, 'the refused record itself reopens').toEqual({ kind: 'typed', fields: (await payload()).t!.fields });
+        expect(typedOf(ctx), 'the refused record itself reopens').toEqual({ kind: 'typed', fields: (await payload()).t!.fields });
         for (const s of sibs) {
           const rec = find(s.sel);
           expect(rec, `${s.label}: rendered`).toBeDefined();
@@ -319,10 +348,11 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
         expect(p.td).toEqual({ form: c.form, record: ctx.record, actor: ctx.f.admin.personId });
         const html = await render(ctx, pageParamsOf(r.signal.url));
         const seg = pickForm(html, c.has(ctx));
-        expect(seg, 'stays locked').toContain('<fieldset disabled');
+        if (!c.modal) expect(seg, 'stays locked').toContain('<fieldset disabled');
         await c.stored(ctx, seg, markup);
         expect(plain(html)).toContain(TOO_LONG_SENTENCE);
-        expect(find(c.sel(ctx))?.typed).toEqual({ kind: 'dropped' });
+        expect(typedOf(ctx)).toEqual({ kind: 'dropped' });
+        if (c.modal) expect(modalOpens(), 'the modal opens itself so the notice is seen').toBe(true);
         expect(detailsOpenAround(html, seg), 'a <details> around the notice must be open').not.toBe(false);
         expect(seg, 'the long value is never drawn into the record').not.toContain('LongTyping-');
         // Red on HEAD: no td in the cookie. Mutant: shorten the value instead of dropping -> t present, red.
@@ -340,11 +370,14 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
       it('noFlash (green today): with no flash the record is found, locked, nothing typed', async () => {
         const ctx = await c.setup('noflash');
         const html = await render(ctx);
-        const rec = find(c.sel(ctx));
-        expect(rec, 'the selector finds this record (the other legs rely on it)').toBeDefined();
-        expect(rec?.typed ?? null).toBeNull();
         const seg = pickForm(html, c.has(ctx));
-        expect(seg).toContain('<fieldset disabled');
+        if (c.modal) expectModalLocked();
+        else {
+          const rec = find(c.sel(ctx));
+          expect(rec, 'the selector finds this record (the other legs rely on it)').toBeDefined();
+          expect(rec?.typed ?? null).toBeNull();
+          expect(seg).toContain('<fieldset disabled');
+        }
         await c.stored(ctx, seg, markup);
       });
 

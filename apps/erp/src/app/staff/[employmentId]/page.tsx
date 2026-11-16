@@ -15,6 +15,7 @@ import {
 } from '../actions';
 import { DeductionAgreementsSection } from './DeductionAgreementsSection';
 import { Avatar } from './Avatar';
+import { RefillForm } from './RefillForm';
 import { DocumentsSection } from './DocumentsSection';
 import { deductionAgreementsFor, documentsFor, employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
@@ -23,7 +24,8 @@ import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { staffRoleTitle } from '../role-title';
 import { STAFF_END_RULES, STAFF_GOV_ID_RULES, STAFF_PIN_RULES, STAFF_RENAME_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input } from '@/components/ui';
+import { ActionIcon } from '@/components/ui/action-icons';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { STAFF_POSITIONS, STAFF_RENAME } from '../typed-forms';
@@ -81,15 +83,15 @@ export default async function EmploymentDetailPage({
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
-  const primaryName = roleOnly ? staffRoleTitle(detail.role, null) : (detail.positions.find((p) => p.isPrimary)?.name ?? detail.positions[0]?.name ?? null);
-  const meta = [
-    primaryName,
-    detail.storeName,
-    capital(detail.employment.employmentStatus),
-    `Started ${formatBusinessDayLong(detail.employment.startedOn)}`,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const typedName = typedFor(sp, STAFF_RENAME, employmentId, actor.personId);
+  const typedPositions = typedFor(sp, STAFF_POSITIONS, employmentId, actor.personId);
+  // Every assigned position, primary first; "(primary)" only says something when there is more than one.
+  const ordered = [...detail.positions].sort((x, y) => Number(y.isPrimary) - Number(x.isPrimary));
+  const positionsText = ordered.map((p) => (p.isPrimary && ordered.length > 1 ? `${p.name} (primary)` : p.name)).join(', ');
+  const editPositions = !isEnded && (roleOnly ? detail.positions.length > 0 : true);
+  const rest = [detail.storeName, capital(detail.employment.employmentStatus), `Started ${formatBusinessDayLong(detail.employment.startedOn)}`]
+    .map((t) => ` · ${t}`)
+    .join('');
 
   const statePills = (
     <>
@@ -110,13 +112,141 @@ export default async function EmploymentDetailPage({
         </a>
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <div className="flex min-w-0 items-center gap-4">
-            <Avatar name={detail.personName} photoFileId={media.photoFileId} />
+            {isEnded ? (
+              <Avatar name={detail.personName} photoFileId={media.photoFileId} />
+            ) : (
+              <FormModal
+                trigger={
+                  <>
+                    <Avatar name={detail.personName} photoFileId={media.photoFileId} inLink />
+                    <span aria-hidden="true" className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-ink text-canvas ring-2 ring-surface">
+                      <ActionIcon name="camera" size={14} />
+                    </span>
+                  </>
+                }
+                triggerLabel="Change photo"
+                triggerVariant="ghost"
+                triggerClassName="relative h-16 w-16 shrink-0 !border-0 !p-0"
+                title="Staff photo"
+                size="md"
+              >
+                <div className="space-y-3">
+                  <p className="text-sm text-muted">Prints on the ID card.</p>
+                  <form action={setStaffPhotoAction} className="flex flex-wrap items-end gap-3">
+                    <input type="hidden" name="employmentId" value={employmentId} />
+                    <PhotoUpload
+                      name="photo"
+                      purpose="staff_photo"
+                      label="Staff photo"
+                      capture="user"
+                      storeId={detail.employment.storeId}
+                      existing={media.photoFileId ? { fileId: media.photoFileId, kind: 'image' } : undefined}
+                    />
+                    <Button type="submit" variant="primary">
+                      Save photo
+                    </Button>
+                  </form>
+                  {media.photoFileId && (
+                    <form action={removeStaffPhotoAction}>
+                      <input type="hidden" name="employmentId" value={employmentId} />
+                      <Button type="submit" variant="secondary" icon={null}>Remove photo</Button>
+                    </form>
+                  )}
+                </div>
+              </FormModal>
+            )}
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-semibold">{detail.personName}</h1>
+                {!isEnded && (
+                  <FormModal
+                    trigger="Edit name"
+                    triggerVariant="ghost"
+                    triggerClassName="-my-2 h-11 w-11 min-h-11 min-w-11 !bg-transparent !text-muted hover:!bg-canvas hover:!text-ink"
+                    title="Edit name"
+                    size="md"
+                    defaultOpen={typedName !== null}
+                  >
+                    <CheckedForm rules={STAFF_RENAME_RULES} action={renamePersonAction} className="space-y-3">
+                      <RefillForm formKey={STAFF_RENAME.form} typed={typedName} />
+                      <input type="hidden" name="employmentId" value={employmentId} />
+                      {detail.nameParts.lastName === null && (
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                          {`Saved as "${detail.personName}" (one box, from before names were split). Type the last, first and middle name once to fix it; it then reads "Last, First M.".`}
+                        </p>
+                      )}
+                      <FormGrid>
+                        <Field label="Last name" rule={STAFF_RENAME_RULES.lastName}>
+                          <Input {...nativeAttrs(STAFF_RENAME_RULES.lastName)} defaultValue={detail.nameParts.lastName ?? ''} className="mt-1 w-full" />
+                        </Field>
+                        <Field label="First name" rule={STAFF_RENAME_RULES.firstName}>
+                          <Input {...nativeAttrs(STAFF_RENAME_RULES.firstName)} defaultValue={detail.nameParts.firstName ?? ''} className="mt-1 w-full" />
+                        </Field>
+                        <Field label="Middle name (optional)">
+                          <Input name="middleName" defaultValue={detail.nameParts.middleName ?? ''} className="mt-1 w-full" />
+                        </Field>
+                      </FormGrid>
+                      <DialogActions>
+                        <Button type="submit" variant="primary">Save</Button>
+                      </DialogActions>
+                    </CheckedForm>
+                  </FormModal>
+                )}
                 {statePills}
               </div>
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">{meta}</p>
+              <div className="flex flex-wrap items-center gap-x-1 text-sm text-neutral-500 dark:text-neutral-400">
+                {roleOnly ? (
+                  <span>{staffRoleTitle(detail.role, null)}</span>
+                ) : detail.positions.length === 0 ? (
+                  <span className="text-muted">No position yet</span>
+                ) : (
+                  <span>{positionsText}</span>
+                )}
+                {editPositions && (
+                  <FormModal
+                    trigger="Edit positions"
+                    triggerVariant="ghost"
+                    triggerClassName="-my-2 h-11 w-11 min-h-11 min-w-11 !bg-transparent !text-muted hover:!bg-canvas hover:!text-ink"
+                    title="Edit positions"
+                    size="md"
+                    defaultOpen={!roleOnly && typedPositions !== null}
+                  >
+                    {roleOnly ? (
+                      <div className="space-y-3 text-sm">
+                        <p className="text-muted">This role does not need a staff position. Access continues to follow the role and store scope.</p>
+                        <form action={setPositionsAction} className="space-y-2">
+                          <input type="hidden" name="employmentId" value={employmentId} />
+                          <p className="text-xs text-muted">Previous assignments: {detail.positions.map((p) => p.name).join(', ')}.</p>
+                          <Button type="submit" variant="secondary">Remove staff positions</Button>
+                        </form>
+                      </div>
+                    ) : (
+                      <form action={setPositionsAction} className="space-y-3">
+                        <RefillForm formKey={STAFF_POSITIONS.form} typed={typedPositions} />
+                        <input type="hidden" name="employmentId" value={employmentId} />
+                        <div className="space-y-2">
+                          {positions.map((p) => (
+                            <div key={p.id} className="flex items-center gap-3 text-sm">
+                              <label className="flex items-center gap-2">
+                                <input type="checkbox" name="positionIds" value={p.id} defaultChecked={assignedIds.has(p.id)} className="h-4 w-4" />
+                                {p.name}
+                              </label>
+                              <label className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                <input type="radio" name="primaryPositionId" value={p.id} defaultChecked={primaryId === p.id} />
+                                primary
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                        <DialogActions>
+                          <Button type="submit" variant="primary">Save</Button>
+                        </DialogActions>
+                      </form>
+                    )}
+                  </FormModal>
+                )}
+                <span>{rest}</span>
+              </div>
               <p className="text-xs text-muted">Staff code {detail.employment.staffCode}</p>
             </div>
           </div>
@@ -178,94 +308,6 @@ export default async function EmploymentDetailPage({
 
       <div className="grid gap-6 lg:grid-cols-3 xl:gap-4">
         <div className="min-w-0 space-y-4 lg:col-span-2">
-          {!isEnded && (
-            <section className={CARD}>
-              <h2 className="font-medium">Name</h2>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                {detail.nameParts.lastName === null
-                  ? `Saved as "${detail.personName}" (one box, from before names were split). Type the last, first and middle name once to fix it; it then reads "Last, First M.".`
-                  : 'Shown everywhere as "Last, First M.".'}
-              </p>
-              <EditableRecord action={renamePersonAction} label="name"
-                summary={[
-                  { label: 'Last name', value: detail.nameParts.lastName },
-                  { label: 'First name', value: detail.nameParts.firstName },
-                  { label: 'Middle name', value: detail.nameParts.middleName },
-                ]}
-                hidden={{ employmentId }} typed={typedFor(sp, STAFF_RENAME, employmentId, actor.personId)} rules={STAFF_RENAME_RULES}>
-                <FormGrid>
-                  <Field label="Last name" rule={STAFF_RENAME_RULES.lastName}>
-                    <Input {...nativeAttrs(STAFF_RENAME_RULES.lastName)} defaultValue={detail.nameParts.lastName ?? ''} className="mt-1 w-full" />
-                  </Field>
-                  <Field label="First name" rule={STAFF_RENAME_RULES.firstName}>
-                    <Input {...nativeAttrs(STAFF_RENAME_RULES.firstName)} defaultValue={detail.nameParts.firstName ?? ''} className="mt-1 w-full" />
-                  </Field>
-                  <Field label="Middle name (optional)">
-                    <Input name="middleName" defaultValue={detail.nameParts.middleName ?? ''} className="mt-1 w-full" />
-                  </Field>
-                </FormGrid>
-              </EditableRecord>
-            </section>
-          )}
-
-          <section className={CARD}>
-            <h2 className="font-medium">Positions</h2>
-            {isEnded ? (
-              <ul className="flex flex-wrap gap-2 text-sm">
-                {detail.positions.length === 0 ? (
-                  <li className="text-neutral-500 dark:text-neutral-400">No position yet.</li>
-                ) : (
-                  detail.positions.map((p) => (
-                    <li
-                      key={p.positionId}
-                      className="rounded-lg border border-neutral-200 px-3 py-1.5 dark:border-neutral-800"
-                    >
-                      {p.name}
-                      {p.isPrimary && <span className="ml-1 text-xs text-neutral-500 dark:text-neutral-400">(primary)</span>}
-                    </li>
-                  ))
-                )}
-              </ul>
-            ) : roleOnly ? (
-              <div className="space-y-3 text-sm">
-                <p className="font-medium">{staffRoleTitle(detail.role, null)}</p>
-                <p className="text-muted">This role does not need a staff position. Access continues to follow the role and store scope.</p>
-                {detail.positions.length > 0 && (
-                  <form action={setPositionsAction} className="space-y-2">
-                    <input type="hidden" name="employmentId" value={employmentId} />
-                    <p className="text-xs text-muted">Previous assignments: {detail.positions.map(p => p.name).join(', ')}.</p>
-                    <Button type="submit" variant="secondary">Remove staff positions</Button>
-                  </form>
-                )}
-              </div>
-            ) : (
-              <EditableRecord action={setPositionsAction} label="positions"
-                summary={[{ label: 'Positions', value: detail.positions.length === 0 ? null : detail.positions.map((p) => (p.isPrimary ? `${p.name} (primary)` : p.name)).join(', ') }]}
-                hidden={{ employmentId }} typed={typedFor(sp, STAFF_POSITIONS, employmentId, actor.personId)}>
-                <div className="space-y-2">
-                {positions.map((p) => (
-                  <div key={p.id} className="flex items-center gap-3 text-sm">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        name="positionIds"
-                        value={p.id}
-                        defaultChecked={assignedIds.has(p.id)}
-                        className="h-4 w-4"
-                      />
-                      {p.name}
-                    </label>
-                    <label className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                      <input type="radio" name="primaryPositionId" value={p.id} defaultChecked={primaryId === p.id} />
-                      primary
-                    </label>
-                  </div>
-                ))}
-                </div>
-              </EditableRecord>
-            )}
-          </section>
-
           {govIds && (
             <section className={CARD}>
               <h2 className="font-medium">
@@ -346,43 +388,9 @@ export default async function EmploymentDetailPage({
           </section>
 
           <section className={CARD}>
-            <h2 className="font-medium">Photo and signature</h2>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Photo prints on the ID card. Signature prints on payslips and cash forms.
-            </p>
+            <h2 className="font-medium">Signature</h2>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">Prints on payslips and cash forms.</p>
             <div className="space-y-2 text-sm">
-              <h3 className="font-medium">Photo</h3>
-              {isEnded && media.photoFileId && (
-                <a href={`/files/${media.photoFileId}`} className="inline-block py-1 underline underline-offset-4">
-                  View photo
-                </a>
-              )}
-              {isEnded && <p className="text-neutral-500 dark:text-neutral-400">This employment has ended, so its photo cannot be changed.</p>}
-              {!isEnded && (
-                <form action={setStaffPhotoAction} className="flex flex-wrap items-end gap-3">
-                  <input type="hidden" name="employmentId" value={employmentId} />
-                  <PhotoUpload
-                    name="photo"
-                    purpose="staff_photo"
-                    label="Staff photo"
-                    capture="user"
-                    storeId={detail.employment.storeId}
-                    existing={media.photoFileId ? { fileId: media.photoFileId, kind: 'image' } : undefined}
-                  />
-                  <Button type="submit" variant="primary">
-                    {media.photoFileId ? 'Replace photo' : 'Save photo'}
-                  </Button>
-                </form>
-              )}
-              {!isEnded && media.photoFileId && (
-                <form action={removeStaffPhotoAction}>
-                  <input type="hidden" name="employmentId" value={employmentId} />
-                  <Button type="submit">Remove photo</Button>
-                </form>
-              )}
-            </div>
-            <div className="space-y-2 text-sm">
-              <h3 className="font-medium">Signature</h3>
               {!media.hasSignature && <p className="text-neutral-500 dark:text-neutral-400">No signature on file.</p>}
               {media.hasSignature && !media.signatureFileId && <p>Signature on file.</p>}
               {!isEnded ? (

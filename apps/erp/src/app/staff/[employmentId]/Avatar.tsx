@@ -1,10 +1,10 @@
 import { PhotoThumb } from '@/components/upload/PhotoThumb';
 
-/** The staff photo (opens full size), or the initials on a neutral circle. */
-export function Avatar({ name, photoFileId }: { name: string; photoFileId: string | null }) {
+/** The staff photo (opens full size), or the initials on a neutral circle. `inLink`: drawn inside a button, so no full-size view. */
+export function Avatar({ name, photoFileId, inLink = false }: { name: string; photoFileId: string | null; inLink?: boolean }) {
   if (photoFileId) {
     return (
-      <PhotoThumb purpose="staff_photo" label={name} existing={{ fileId: photoFileId, kind: 'image' }} size="fill" className="h-16 w-16" />
+      <PhotoThumb purpose="staff_photo" label={name} existing={{ fileId: photoFileId, kind: 'image' }} size="fill" className="h-16 w-16" inLink={inLink} />
     );
   }
   const initials = name

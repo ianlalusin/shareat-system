@@ -87,3 +87,42 @@ Each column stacks its own cards, so no holes. Drop `sectioned` from `<Page>`.
 - Render at 1440, 1280 and 390 on port 9028 (docs/SMOKETEST.md), with: an employee with a pending
   charge and no PIN; one with a PIN and photo; an ended one. No sideways scroll, no console errors,
   modals open and close.
+
+## Amendment A1 — edit in place from the header (Ian, 16 Nov 2026)
+
+Ian: "take out that name card and add an edit icon next to the name … pop up a modal to edit name.
+Same on position, it takes a lot of space. Photo can be edited by clicking the frame on top, no need
+for an extra photo on the card, so the card will just have signature."
+
+Same contract as above: no behaviour change. Same server actions, field names, hidden inputs, rules,
+`typedFor` refills and gates. Only the drawing moves. Never put a `FormModal` inside another `<form>`.
+
+1. **Name card goes.** A pencil icon button sits right after the `<h1>` name. Its accessible name is
+   "Edit name", it has a 44 px hit area, and it shows only when the Name card showed today (`!isEnded`).
+   It opens a `FormModal` titled "Edit name" (size md). The modal holds the same rename form:
+   `renamePersonAction`, `STAFF_RENAME_RULES`, hidden `employmentId`, the three fields with today's
+   defaults, and a Save button. The "saved in one box" sentence stays, shown only when
+   `nameParts.lastName === null`. Refill: when `typedFor(sp, STAFF_RENAME, …)` returns a typed refill,
+   the modal opens by itself (`defaultOpen`) and the fields show the typed values, with the same meaning
+   as EditableRecord's `typed` today. Reuse EditableRecord's refill helpers rather than re-deriving them.
+2. **Positions card goes.** The header meta line shows every assigned position, primary first, marked
+   " (primary)" when there is more than one. Then come store · type · "Started …" as now.
+   - A pencil button "Edit positions" sits at the end of the positions text. It opens a `FormModal`
+     "Edit positions" holding today's checkbox and primary-radio form (`setPositionsAction`, same
+     names), with the same `STAFF_POSITIONS` refill and `defaultOpen`.
+   - roleOnly: the meta line shows the role title as now. The pencil shows only when old positions
+     exist; its modal holds today's explanation and the "Remove staff positions" form.
+   - Ended: positions shown, no pencil. None assigned and not roleOnly: "No position yet" in muted ink,
+     plus the pencil.
+3. **Photo moves to the header frame.** While `!isEnded`, the avatar becomes a button: accessible name
+   "Change photo", a small camera badge on its corner, 44 px or more. It opens a `FormModal` "Staff
+   photo" holding today's two separate forms: the upload form (`setStaffPhotoAction`) and, when a photo
+   exists, the Remove photo form (`removeStaffPhotoAction`). Add one line: "Prints on the ID card."
+   When ended, the avatar stays as now (PhotoThumb opens the full photo); there is no edit.
+4. **The side card becomes "Signature"** with one line: "Prints on payslips and cash forms." The
+   signature content is unchanged. The ended "View photo" link and the ended note go away; the avatar
+   covers viewing.
+5. Checks: `tsc`. The unit suite, with the censuses re-measured by running them (action-link-sweep,
+   touch-target, t412, form/editable guards, PAGES ledger), never hand-edited. Integration tests that
+   render `/staff/[employmentId]`: fix only assertions that read the old drawing. Render at 1440,
+   1280 and 390.

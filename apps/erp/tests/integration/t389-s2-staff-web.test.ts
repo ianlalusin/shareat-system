@@ -16,7 +16,11 @@ import { expect, vi } from 'vitest';
  *    The too-long leg posts a hand-crafted 6,000-character primaryPositionId; the server refuses it the same way.
  */
 const h = vi.hoisted(() => ({ actor: null as null | { personId: string; orgId: string } }));
-const seen = vi.hoisted(() => ({ records: [] as Array<Record<string, unknown>> }));
+const seen = vi.hoisted(() => ({
+  records: [] as Array<Record<string, unknown>>,
+  refills: [] as Array<{ formKey?: string; typed?: { kind?: string; fields?: Record<string, unknown> } | null }>,
+  modals: [] as Array<{ title?: unknown; defaultOpen?: boolean }>,
+}));
 
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('next/navigation', async () => (await import('../helpers/flash-jar-core')).nextNavigationMock());
@@ -33,6 +37,30 @@ vi.mock('@/components/forms', async (orig) => {
     EditableRecord: (p: Record<string, unknown>) => {
       seen.records.push(p);
       return createElement(real.EditableRecord as never, p as never);
+    },
+  };
+});
+
+// T-590b: the positions form is in a FormModal with a RefillForm, so the legs read these two instead of EditableRecord props.
+vi.mock('../../src/app/staff/[employmentId]/RefillForm', async (orig) => {
+  const real = await orig<typeof import('../../src/app/staff/[employmentId]/RefillForm')>();
+  const { createElement } = await import('react');
+  return {
+    ...real,
+    RefillForm: (p: { formKey?: string; typed?: never }) => {
+      seen.refills.push(p);
+      return createElement(real.RefillForm as never, p as never);
+    },
+  };
+});
+vi.mock('@/components/ui', async (orig) => {
+  const real = await orig<typeof import('@/components/ui')>();
+  const { createElement } = await import('react');
+  return {
+    ...real,
+    FormModal: (p: { title?: unknown; defaultOpen?: boolean }) => {
+      seen.modals.push({ title: p.title, defaultOpen: p.defaultOpen });
+      return createElement(real.FormModal as never, p as never);
     },
   };
 });
@@ -66,6 +94,7 @@ async function staffCtx(hint: string): Promise<StaffCtx> {
 const positions: FormCase<StaffCtx> = {
   label: 'staff positions',
   form: 'staff.positions',
+  modal: { title: 'Edit positions' },
   setup: staffCtx,
   action: async () => (await import('../../src/app/staff/actions')).setPositionsAction,
   page: async () => (await import('../../src/app/staff/[employmentId]/page')).default as never,

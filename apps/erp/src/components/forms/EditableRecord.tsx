@@ -312,6 +312,9 @@ function applyTyped(form: HTMLFormElement, fields: Record<string, string | strin
 /** `useLayoutEffect` warns when a component renders on the server; the effect is browser-only, so use `useEffect` there. */
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
+/** For a form in a modal that refills like a record (the staff page's Edit name and Edit positions). Below the helpers so the source-slicing tests still cut them whole. */
+export { applyTyped, formChangedNames };
+
 export interface SummaryRow {
   label: string;
   value: string | null | undefined;
