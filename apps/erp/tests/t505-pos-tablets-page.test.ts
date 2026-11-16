@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -57,10 +59,10 @@ describe('P8 - the route is mapped, in the nav, and gated', () => {
     expect(capabilityForRoute('/admin/pos-tablets')).toBe('provision_clock_terminal');
   });
 
-  it('is in the Setup group, right after "Clock terminals", labelled "POS tablets"', () => {
-    const group = GROUPS.find((g) => g.links.some((l) => l.href === '/attendance/terminals'))!;
-    const i = group.links.findIndex((l) => l.href === '/attendance/terminals');
-    expect(group.links[i + 1]).toEqual({ href: '/admin/pos-tablets', label: 'POS tablets' });
+  // T-587 S3: the sidebar Setup group shrank to three links, so this screen is reached from the Settings hub (a literal row there; tests/t587-s1/s2/s3).
+  it('is not in the sidebar, and the Settings hub links it', () => {
+    expect(GROUPS.flatMap((g) => g.links).map((l) => l.href)).not.toContain('/admin/pos-tablets');
+    expect(readFileSync(join(__dirname, '../src/app/settings/page.tsx'), 'utf8')).toContain('href="/admin/pos-tablets"');
   });
 
   it('a person without the capability gets the refusal, not the page', async () => {

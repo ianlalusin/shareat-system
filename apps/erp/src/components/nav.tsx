@@ -182,6 +182,10 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
     label: 'Setup',
     icon: 'setup',
     links: [
+      // DEF-181 / DEF-192 / T-227: `/settings` is the door to every other business setting; `nav-route-reachability` resolves its children transitively through it.
+      // T-587 S3: Setup is three links on purpose. Position access defaults, Clock terminals, POS tablets, Kitchen stations, Menu hours,
+      // Failed clock punches and Payroll rates left this group and are reached from the Settings page (each has a literal row there).
+      { href: '/settings', label: 'Settings' },
       // ⭐ T-219 / DEF-167 — role assignment, store scope and capability grants were fully built
       // and tested with no screen at all, so a hired person could sign in (T-217) and then be
       // authorized for nothing.
@@ -193,39 +197,10 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // and is not repealed: hiding alone is worthless. It is now paired with a real read gate
       // (`requirePageAccess`), and BOTH read the one `ROUTE_CAPABILITY` map so they cannot drift.
       { href: '/admin/users', label: 'Users and roles' },
-      // T-290 — what a Cashier can do here, per store. Gated on `grant_capability` through
-      // `ROUTE_CAPABILITY`, the same map the filter above reads (bible row 198, decision 3).
-      { href: '/admin/access-defaults', label: 'Position access defaults' },
       // ⭐ T-222 — until this shipped nothing in the codebase created a store; the four dev stores
       // were inserted by hand. ⚠️ Linked here on purpose: DEF-181 was precisely a screen that
       // shipped linked from nowhere, and this is the task that cites it.
       { href: '/admin/stores', label: 'Stores' },
-      // ⭐ DEF-181 — this shipped with T-201 linked from nowhere, reachable only by typing the URL.
-      // Exactly the failure this file's own header comment describes, re-created three routes later.
-      //
-      // DEF-192 / T-227: `/settings` was dropped when attendance was its only child — a hub listing
-      // exactly one child is a screen that exists to satisfy a link. T-229 landed the second surface
-      // (`/settings/expense-categories`) and a real `app/settings/page.tsx`, so the hub now earns its
-      // place and links to both children; `nav-route-reachability` resolves `/settings/attendance`
-      // transitively through it, which is why the direct entry is no longer needed here.
-      { href: '/settings', label: 'Settings' },
-      // ⭐ DEF-133 — provisioning a clock terminal or enrolling a card/fingerprint had no admin UI
-      // until 2026-09-04; only hand-run SQL could. `provision_clock_terminal` is admin-only.
-      { href: '/attendance/terminals', label: 'Clock terminals' },
-      // T-505: register a POS tablet so it can ask a manager for a refund approval; clear its lock.
-      { href: '/admin/pos-tablets', label: 'POS tablets' },
-      // T-508 S2b: which kitchen station cooks each item; a store manager's screen (manage_store_settings).
-      { href: '/kitchen', label: 'Kitchen stations' },
-      // T-510 S3: the hours a menu price can follow (Lunch, Dinner); a store manager's screen (manage_store_settings).
-      { href: '/menu/hours', label: 'Menu hours' },
-      // ⭐ DEF-197 — the screen that exists so a dead letter is VISIBLE was itself invisible. This
-      // is landmine #14's whole structural fix (bible §12 row 14: v1's recovery path is a banner
-      // saying "tell a manager", and there is nothing for the manager to open), and it was in no
-      // nav group and linked from no page — reachable only by typing the URL, for five days.
-      // Found by T-227's own guard on its first run, which is what a guard is for.
-      { href: '/attendance/lane', label: 'Failed clock punches' },
-      // T-190: SSS / PhilHealth / Pag-IBIG / tax tables and minimum wages. Gated by `manage_payroll_rates` in ROUTE_CAPABILITY.
-      { href: '/payroll/rates', label: 'Payroll rates' },
     ],
   },
 ];
