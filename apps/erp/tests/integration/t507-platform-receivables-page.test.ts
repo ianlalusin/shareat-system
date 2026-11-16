@@ -4,6 +4,7 @@ import postgres from 'postgres';
 
 import type { Actor } from '@shareat/auth';
 import { plain, render, session } from './t435-fixture';
+import { formatBusinessDayLong as day } from '@shareat/core/datetime';
 import { ASOF, buildPlatformWorld, type PlatformWorld } from '../../../../packages/domain/tests/integration/_fixtures/t507-platform-ar';
 
 /**
@@ -145,8 +146,8 @@ describe('T-507 ruling 3: /sales-days?status=unverified is open + submitted, sto
   it('lists the three open days (03-26, 03-27, 03-28) and none of the verified ones', async () => {
     const w = await world();
     const html = plain(await daysFor(w.admin, 'unverified'));
-    for (const d of ['2027-03-26', '2027-03-27', '2027-03-28']) expect(html, `must list ${d}`).toContain(d);
-    for (const d of ['2027-03-25', '2027-03-20', '2027-03-10', '2027-02-20', '2026-12-15']) expect(html, `must NOT list verified ${d}`).not.toContain(d);
+    for (const d of ['2027-03-26', '2027-03-27', '2027-03-28']) expect(html, `must list ${d}`).toContain(day(d));
+    for (const d of ['2027-03-25', '2027-03-20', '2027-03-10', '2027-02-20', '2026-12-15']) expect(html, `must NOT list verified ${d}`).not.toContain(day(d));
   });
   it('also includes a SUBMITTED day, not just open ones', async () => {
     const w = await world();
@@ -154,14 +155,14 @@ describe('T-507 ruling 3: /sales-days?status=unverified is open + submitted, sto
     await sql`update sales_days set status = 'submitted' where id = ${d!.id}`;
     const html = plain(await daysFor(w.admin, 'unverified'));
     await sql`update sales_days set status = 'open' where id = ${d!.id}`;
-    expect(html).toContain('2027-03-28');
+    expect(html).toContain(day('2027-03-28'));
   });
   it('with a store filter, only that store: Lipa shows 03-28, not Batangas 03-27 / 03-26', async () => {
     const w = await world();
     const html = plain(await daysFor(w.admin, 'unverified', w.lipa));
-    expect(html).toContain('2027-03-28');
-    expect(html).not.toContain('2027-03-27');
-    expect(html).not.toContain('2027-03-26');
+    expect(html).toContain(day('2027-03-28'));
+    expect(html).not.toContain(day('2027-03-27'));
+    expect(html).not.toContain(day('2027-03-26'));
   });
 });
 
@@ -178,9 +179,9 @@ describe('DEF-809: /sales-days is gated by submit_sales_day and scoped to the vi
     const w = await world();
     for (const search of [{} as Record<string, string>, { store: w.lipa }]) {
       const html = await daysFor(w.mgrBat, search);
-      expect(html, 'must list a Batangas day').toContain('2027-02-20');
+      expect(html, 'must list a Batangas day').toContain(day('2027-02-20'));
       for (const d of ['2027-03-28', '2027-03-20', '2027-03-10', '2027-01-05', '2026-12-15']) {
-        expect(html, `must NOT list Lipa day ${d}`).not.toContain(d);
+        expect(html, `must NOT list Lipa day ${d}`).not.toContain(day(d));
       }
     }
   });
@@ -194,6 +195,6 @@ describe('DEF-809: /sales-days is gated by submit_sales_day and scoped to the vi
     expect(html).not.toMatch(/^THROWN/);
     expect(html).toContain('You do not have access to this screen');
     expect(html).toContain('submit a sales day or verify a sales day');
-    expect(html).not.toContain('2027-03-20');
+    expect(html).not.toContain(day('2027-03-20'));
   });
 });
