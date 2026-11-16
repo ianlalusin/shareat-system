@@ -17,6 +17,8 @@ if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: the database name
 const holder: { actor: { orgId: string; personId: string } | null } = { actor: null };
 const flashes: { path: string; flash: { ok?: string; error?: string } }[] = [];
 vi.mock('../../src/lib/session', () => ({ requireActor: vi.fn(async () => holder.actor!) }));
+// T-590: the section now holds a FormModal, which reads the address.
+vi.mock('next/navigation', async (orig) => ({ ...(await orig<Record<string, unknown>>()), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/flash', () => ({
   redirectWithFlash: async (path: string, _q: unknown, flash: { ok?: string; error?: string }) => {
     flashes.push({ path, flash });
