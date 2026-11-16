@@ -123,7 +123,7 @@ describe('wiring', () => {
     expect(readFileSync(join(root, '.gitattributes'), 'utf8')).toContain('packages/domain/tests/fixtures/settlement-intake/** -text');
     expect(readFileSync(join(root, '.gitattributes'), 'utf8')).toContain('*.sql text eol=lf');
     const dir = join(DOMAIN, 'tests', 'fixtures', 'settlement-intake');
-    expect(readdirSync(dir)).toHaveLength(33);
+    expect(readdirSync(dir)).toHaveLength(31);
     expect(existsSync(join(dir, 'README.md'))).toBe(true);
   });
 });

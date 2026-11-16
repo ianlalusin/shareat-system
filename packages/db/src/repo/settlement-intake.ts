@@ -51,6 +51,8 @@ export interface InsertUploadInput {
   ordersRead: number;
   loanRowsRead: number;
   otherRowsRead: number;
+  /** T-511 S8b: the items of the invoice's Appendix C as the reader returned them (`[]` for Grab and for an invoice without that sheet) */
+  priorItems?: { document: string; date: string | null; amount: string; remaining: string | null }[];
   uploadedBy: string;
 }
 
@@ -96,6 +98,8 @@ export interface InsertOtherLineInput {
   description: string | null;
   /** T-511 S6c: the staged VAT of a `period_charge` line; absent or null is stored NULL. */
   vat?: Money | null;
+  /** T-511 S8b: the Official Document Number of the Appendix B row; absent or null is stored NULL. */
+  officialDocument?: string | null;
 }
 
 async function uploadById(tx: Tx, orgId: string, id: string): Promise<UploadRow> {
@@ -219,8 +223,36 @@ export async function insertOtherLines(
 ): Promise<void> {
   if (lines.length === 0) return;
   await tx.insert(settlementOtherLines).values(
-    lines.map(({ vat, ...l }) => ({ ...l, vatAmount: vat ?? null, orgId, uploadId, dayLineId })),
+    lines.map(({ vat, officialDocument, ...l }) => ({ ...l, vatAmount: vat ?? null, officialDocument: officialDocument ?? null, orgId, uploadId, dayLineId })),
   );
+}
+
+/** T-511 S8b audit 4: the lines of one upload whose official document number is empty (staged before 0260), with what identifies each. Read only. */
+export async function otherLinesWithoutDocument(
+  tx: Tx,
+  orgId: string,
+  uploadId: string,
+): Promise<{ id: string; kind: string; bookedAs: string; amount: string; lineDate: string | null; description: string | null }[]> {
+  const rows = (await tx.execute(sql`
+    select id::text, kind, booked_as, amount::text, line_date::text, description
+      from settlement_other_lines
+     where org_id = ${orgId} and upload_id = ${uploadId} and official_document is null
+     order by id
+  `)) as unknown as { id: string; kind: string; booked_as: string; amount: string; line_date: string | null; description: string | null }[];
+  return rows.map((r) => ({ id: r.id, kind: r.kind, bookedAs: r.booked_as, amount: r.amount, lineDate: r.line_date, description: r.description }));
+}
+
+/**
+ * T-511 S8b audit 4: fills the official document number of a line that has none, and only that: the statement can match no other row (`official_document is null` is in the
+ * WHERE), and no other column is written. The app role's UPDATE on this one column (migration 0260) exists for this function alone. Returns whether a line changed.
+ */
+export async function fillOfficialDocument(tx: Tx, orgId: string, lineId: string, officialDocument: string): Promise<boolean> {
+  const rows = await tx
+    .update(settlementOtherLines)
+    .set({ officialDocument })
+    .where(and(eq(settlementOtherLines.orgId, orgId), eq(settlementOtherLines.id, lineId), isNull(settlementOtherLines.officialDocument)))
+    .returning({ id: settlementOtherLines.id });
+  return rows.length > 0;
 }
 
 /**
@@ -613,11 +645,47 @@ export interface InvoiceCarrierFacts {
   /** the latest sales date among the CURRENT day lines of the invoice (any review state); null when it has none */
   carrierDate: string | null;
   charges: { chargeId: string | null; totalAmount: string | null; nettedBySettlementId: string | null }[];
+  /**
+   * T-511 S8b. For each item the carrier day's source upload prints on Appendix C (one entry per printed row, in print order), what the books hold under that official document
+   * number in the same channel: its booked charges (with whether a live settlement netted each), and how many staged lines of it were never booked (a period charge, which a person
+   * can book; or another kind, which nothing books from a file). `[]` when the invoice has no carrier or its upload printed none. Facts of the FILE and the books only.
+   */
+  earlier: EarlierItemFacts[];
 }
 
-/** T-511 S7a. Read only, three reads however many invoices; an invoice with no line and no charge is present with `carrierDate` null. A charge counts as netted only through a settlement that is not voided. */
+export interface EarlierItemFacts {
+  document: string;
+  /** the signed amount as printed */
+  amount: string;
+  /** what remains of it, as printed; null when the file did not print it */
+  remaining: string | null;
+  /** charge lines of the channel staged before document numbers were kept (their number is empty); a missing document may be one of them */
+  legacyUndocumented: number;
+  charges: { chargeId: string; totalAmount: string; invoiceNumber: string | null; chargeDate: string | null; nettedBySettlementId: string | null }[];
+  stagedBookable: number;
+  stagedOther: number;
+}
+
+/** The printed items of an upload row as read from the jsonb column (a driver may hand it back as text). Anything not shaped like an item is dropped. */
+function priorItemsOf(raw: unknown): { document: string; amount: string; remaining: string | null }[] {
+  let v: unknown = raw;
+  if (typeof v === 'string') {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((i) => {
+    const o = i as { document?: unknown; amount?: unknown; remaining?: unknown } | null;
+    return o && typeof o.document === 'string' && typeof o.amount === 'string' ? [{ document: o.document, amount: o.amount, remaining: typeof o.remaining === 'string' ? o.remaining : null }] : [];
+  });
+}
+
+/** T-511 S7a (+ S8b). Read only, a fixed number of reads however many invoices; an invoice with no line and no charge is present with `carrierDate` null. A charge counts as netted only through a settlement that is not voided. */
 export async function invoiceCarrierFactsMany(tx: Tx, orgId: string, invoices: readonly { channelId: string; invoiceNumber: string }[]): Promise<Map<string, InvoiceCarrierFacts>> {
-  const out = new Map<string, InvoiceCarrierFacts>(invoices.map((i) => [invoiceKey(i.channelId, i.invoiceNumber), { carrierDate: null, charges: [] }]));
+  const out = new Map<string, InvoiceCarrierFacts>(invoices.map((i) => [invoiceKey(i.channelId, i.invoiceNumber), { carrierDate: null, charges: [], earlier: [] }]));
   if (invoices.length === 0) return out;
   const pairs = sql.join(invoices.map((i) => sql`(${i.channelId}::uuid, ${i.invoiceNumber})`), sql`, `);
   const latest = (await tx.execute(sql`
@@ -627,6 +695,19 @@ export async function invoiceCarrierFactsMany(tx: Tx, orgId: string, invoices: r
      group by channel_id, payout_reference
   `)) as unknown as { channel_id: string; payout_reference: string; d: string }[];
   for (const r of latest) out.get(invoiceKey(r.channel_id, r.payout_reference))!.carrierDate = r.d;
+  // S8b: the items the invoice prints on Appendix C come from the invoice's CURRENT upload (a re-issue supersedes the old file, and a day whose figures did not change keeps pointing at the
+  // old upload, so the day's own source upload can be stale). Only an invoice that has a carrier day needs them.
+  const uploads = (await tx.execute(sql`
+    select distinct on (u.channel_id, u.invoice_number) u.channel_id::text as channel_id, u.invoice_number, u.prior_items
+      from settlement_uploads u
+     where u.org_id = ${orgId} and u.file_kind = 'foodpanda_invoice' and u.superseded_by is null and (u.channel_id, u.invoice_number) in (${pairs})
+     order by u.channel_id, u.invoice_number, u.uploaded_at desc, u.id desc
+  `)) as unknown as { channel_id: string; invoice_number: string; prior_items: unknown }[];
+  const printed = new Map<string, { document: string; amount: string; remaining: string | null }[]>();
+  for (const r of uploads) {
+    const key = invoiceKey(r.channel_id, r.invoice_number);
+    if (out.get(key)!.carrierDate !== null) printed.set(key, priorItemsOf(r.prior_items));
+  }
   const booked = (await tx.execute(sql`
     select u.channel_id::text as channel_id, u.invoice_number, c.id::text as charge_id, c.total_amount::text as total_amount,
            (select k.settlement_id::text
@@ -649,11 +730,73 @@ export async function invoiceCarrierFactsMany(tx: Tx, orgId: string, invoices: r
        and not exists (select 1 from channel_period_charges c where c.org_id = ol.org_id and c.other_line_id = ol.id)
        and not exists (
          select 1 from channel_period_charges c2
-          where c2.org_id = ol.org_id and c2.store_id = u.store_id and c2.channel_id = u.channel_id and c2.charge_date = ol.line_date
-            and c2.net_amount = ol.amount and c2.description is not distinct from ol.description)
+           join settlement_other_lines o2 on o2.org_id = c2.org_id and o2.id = c2.other_line_id
+          where c2.org_id = ol.org_id and c2.store_id = u.store_id and c2.channel_id = u.channel_id and c2.upload_id <> ol.upload_id and c2.charge_date = ol.line_date
+            and c2.net_amount = ol.amount and c2.description is not distinct from ol.description
+            and not (ol.official_document is not null and o2.official_document is not null and ol.official_document <> o2.official_document))
      order by ol.id
   `)) as unknown as { channel_id: string; invoice_number: string }[];
   for (const r of staged) out.get(invoiceKey(r.channel_id, r.invoice_number))!.charges.push({ chargeId: null, totalAmount: null, nettedBySettlementId: null });
+
+  // ---- S8b: the earlier items the carrier's upload prints, looked up by official document number in the same channel
+  const wanted = [...printed.entries()].flatMap(([key, items]) => {
+    const channelId = key.slice(0, key.indexOf('|'));
+    return [...new Set(items.map((i) => i.document))].map((document) => ({ channelId, document }));
+  });
+  if (wanted.length === 0) return out;
+  const docPairs = sql.join(wanted.map((w) => sql`(${w.channelId}::uuid, ${w.document})`), sql`, `);
+  const earlierBooked = (await tx.execute(sql`
+    select c.channel_id::text as channel_id, ol.official_document as document, c.id::text as charge_id, c.total_amount::text as total_amount, u.invoice_number,
+           c.charge_date::text as charge_date,
+           (select k.settlement_id::text
+              from channel_settlement_charge_links k
+              join channel_settlements st on st.org_id = k.org_id and st.id = k.settlement_id
+             where k.org_id = c.org_id and k.charge_id = c.id and st.status <> 'voided'
+             limit 1) as netted_by
+      from channel_period_charges c
+      join settlement_other_lines ol on ol.org_id = c.org_id and ol.id = c.other_line_id
+      join settlement_uploads u on u.org_id = c.org_id and u.id = c.upload_id
+     where c.org_id = ${orgId} and (c.channel_id, ol.official_document) in (${docPairs})
+     order by c.id
+  `)) as unknown as { channel_id: string; document: string; charge_id: string; total_amount: string; invoice_number: string | null; charge_date: string | null; netted_by: string | null }[];
+  const earlierStaged = (await tx.execute(sql`
+    select u.channel_id::text as channel_id, ol.official_document as document, ol.kind
+      from settlement_other_lines ol
+      join settlement_uploads u on u.org_id = ol.org_id and u.id = ol.upload_id
+     where ol.org_id = ${orgId} and ol.day_line_id is null and ol.is_current and u.superseded_by is null and (u.channel_id, ol.official_document) in (${docPairs})
+       and not exists (select 1 from channel_period_charges c where c.org_id = ol.org_id and c.other_line_id = ol.id)
+       and not exists (
+         select 1 from channel_period_charges c2
+           join settlement_other_lines o2 on o2.org_id = c2.org_id and o2.id = c2.other_line_id
+          where c2.org_id = ol.org_id and c2.store_id = u.store_id and c2.channel_id = u.channel_id and c2.upload_id <> ol.upload_id and c2.charge_date = ol.line_date
+            and c2.net_amount = ol.amount and c2.description is not distinct from ol.description
+            and not (ol.official_document is not null and o2.official_document is not null and ol.official_document <> o2.official_document))
+  `)) as unknown as { channel_id: string; document: string; kind: string }[];
+  // charge lines staged before document numbers were kept: a document with nothing on file may simply be one of them
+  const channelIds = [...new Set(wanted.map((w) => w.channelId))];
+  const legacy = (await tx.execute(sql`
+    select u.channel_id::text as channel_id, count(*)::int as n
+      from settlement_other_lines ol
+      join settlement_uploads u on u.org_id = ol.org_id and u.id = ol.upload_id
+     where ol.org_id = ${orgId} and ol.day_line_id is null and ol.official_document is null and ol.kind in ('period_charge', 'pandago')
+       and u.channel_id in (${sql.join(channelIds.map((id) => sql`${id}::uuid`), sql`, `)})
+     group by u.channel_id
+  `)) as unknown as { channel_id: string; n: number }[];
+  for (const [key, items] of printed) {
+    const channelId = key.slice(0, key.indexOf('|'));
+    const legacyUndocumented = legacy.find((l) => l.channel_id === channelId)?.n ?? 0;
+    out.get(key)!.earlier = items.map((item) => ({
+      document: item.document,
+      amount: item.amount,
+      remaining: item.remaining,
+      legacyUndocumented,
+      charges: earlierBooked
+        .filter((b) => b.channel_id === channelId && b.document === item.document)
+        .map((b) => ({ chargeId: b.charge_id, totalAmount: b.total_amount, invoiceNumber: b.invoice_number, chargeDate: b.charge_date, nettedBySettlementId: b.netted_by })),
+      stagedBookable: earlierStaged.filter((l) => l.channel_id === channelId && l.document === item.document && l.kind === 'period_charge').length,
+      stagedOther: earlierStaged.filter((l) => l.channel_id === channelId && l.document === item.document && l.kind !== 'period_charge').length,
+    }));
+  }
   return out;
 }
 
@@ -760,6 +903,8 @@ export interface OtherLineWithUpload {
   vatAmount: string | null;
   lineDate: string | null;
   description: string | null;
+  /** T-511 S8b: the Official Document Number of the Appendix B row, when it printed one */
+  officialDocument: string | null;
   /** the line's upload was replaced by a newer one (ingest sets this for the same channel, kind and period) */
   uploadSupersededBy: string | null;
 }
@@ -780,6 +925,7 @@ export async function otherLineWithUpload(tx: Tx, orgId: string, id: string): Pr
       vatAmount: settlementOtherLines.vatAmount,
       lineDate: settlementOtherLines.lineDate,
       description: settlementOtherLines.description,
+      officialDocument: settlementOtherLines.officialDocument,
       uploadSupersededBy: settlementUploads.supersededBy,
     })
     .from(settlementOtherLines)
@@ -806,8 +952,8 @@ export interface PeriodChargeFact {
   uploadReplaced: boolean;
   /** who uploaded the file; the uploader rule reads it and it never leaves the server */
   uploadedBy: string;
-  /** the booked charge of THIS line, when there is one */
-  booked: { totalAmount: string } | null;
+  /** the booked charge of THIS line, when there is one; `entryDate` is where it was booked (T-511 S8b: it differs from the line date when the line's month was closed) */
+  booked: { totalAmount: string; entryDate: string } | null;
   /** another booked charge with the same store, channel, date, net amount and description (the copy a re-uploaded file stages again) */
   copy: { totalAmount: string; chargeDate: string } | null;
 }
@@ -828,21 +974,23 @@ export async function periodChargeFacts(
   const rows = (await tx.execute(sql`
     select ol.id::text as other_line_id, u.store_id::text as store_id, u.channel_id::text as channel_id, u.invoice_number, ol.line_date::text as line_date,
            ol.description, ol.amount::text as net, ol.vat_amount::text as vat, ol.is_current, (u.superseded_by is not null) as upload_replaced,
-           u.uploaded_by::text as uploaded_by, c.total_amount::text as booked_total, cp.total_amount::text as copy_total, cp.charge_date::text as copy_date
+           u.uploaded_by::text as uploaded_by, c.total_amount::text as booked_total, c.entry_date::text as booked_entry, cp.total_amount::text as copy_total, cp.charge_date::text as copy_date
       from settlement_other_lines ol
       join settlement_uploads u on u.org_id = ol.org_id and u.id = ol.upload_id
       left join channel_period_charges c on c.org_id = ol.org_id and c.other_line_id = ol.id
       left join lateral (
         select c2.total_amount, c2.charge_date from channel_period_charges c2
-         where c2.org_id = ol.org_id and c2.store_id = u.store_id and c2.channel_id = u.channel_id and c2.charge_date = ol.line_date
+          join settlement_other_lines o2 on o2.org_id = c2.org_id and o2.id = c2.other_line_id
+         where c2.org_id = ol.org_id and c2.store_id = u.store_id and c2.channel_id = u.channel_id and c2.upload_id <> ol.upload_id and c2.charge_date = ol.line_date
            and c2.net_amount = ol.amount and c2.description is not distinct from ol.description and c2.other_line_id <> ol.id
+           and not (ol.official_document is not null and o2.official_document is not null and ol.official_document <> o2.official_document)
          limit 1) cp on true
      where ${sql.join(where, sql` and `)}
      order by (c.id is null and ol.is_current and u.superseded_by is null and cp.total_amount is null) desc, ol.line_date desc nulls last, ol.id desc
      limit ${filter.limit ?? 200}
   `)) as unknown as {
     other_line_id: string; store_id: string; channel_id: string; invoice_number: string | null; line_date: string | null; description: string | null; net: string; vat: string | null;
-    is_current: boolean; upload_replaced: boolean; uploaded_by: string; booked_total: string | null; copy_total: string | null; copy_date: string | null;
+    is_current: boolean; upload_replaced: boolean; uploaded_by: string; booked_total: string | null; booked_entry: string | null; copy_total: string | null; copy_date: string | null;
   }[];
   return rows.map((r) => ({
     otherLineId: r.other_line_id,
@@ -856,7 +1004,7 @@ export async function periodChargeFacts(
     isCurrent: r.is_current,
     uploadReplaced: r.upload_replaced,
     uploadedBy: r.uploaded_by,
-    booked: r.booked_total === null ? null : { totalAmount: r.booked_total },
+    booked: r.booked_total === null || r.booked_entry === null ? null : { totalAmount: r.booked_total, entryDate: r.booked_entry },
     copy: r.copy_total === null || r.copy_date === null ? null : { totalAmount: r.copy_total, chargeDate: r.copy_date },
   }));
 }

@@ -6,8 +6,9 @@
  * (`settlement_other_lines.vat_amount`, the file's own rate, never a constant here):
  *
  *   total = net + VAT (whole centavos). total > 0: Dr 6400 (fee + VAT, one line, the memo says VAT is included, bible row 75) / Cr 1220 party the channel;
- *   total < 0 (a platform credit note): the same pair the other way round. Dated on the charge when its month is open, else on the first open date after it; a
- *   period is never reopened. Source type `channel_charge`, source_id = the charge row's id, key `channel_charge:{otherLine}:post`.
+ *   total < 0 (a platform credit note, or a reversal): the same pair the other way round. T-511 S8b (Ian, 15 Nov): dated on the charge when ITS month is open; when that month is
+ *   closed, TODAY (Manila) when today's month is open; when both are closed the charge is refused. A period is never reopened. The reason a charge was moved is kept on the entry,
+ *   on the audit row and in the returned `dateNote`. Source type `channel_charge`, source_id = the charge row's id, key `channel_charge:{otherLine}:post` (never the date).
  *
  * ONE charge per staged line (`channel_period_charges`, unique per other line). The staged line is never touched: "posted" lives in that table.
  * ⛔ The double-count rule: a LATER payout that nets this charge says so (`settleChargeIds` on `recordChannelSettlement`), so the receivable is credited once and the charge is
@@ -32,7 +33,13 @@ export interface PostPlatformChargeInput {
 
 export type PostPlatformChargeResult =
   | { readonly posted: false }
-  | { readonly posted: true; readonly chargeId: string; readonly journalEntryId: string };
+  | {
+      readonly posted: true;
+      readonly chargeId: string;
+      readonly journalEntryId: string;
+      /** T-511 S8b: why the entry is not dated on the charge ("Dated 5 Nov 2026 instead of 14 Oct 2026: October 2026 is closed."); null when it is */
+      readonly dateNote: string | null;
+    };
 
 function dayLabel(date: string): string {
   try {
@@ -40,6 +47,22 @@ function dayLabel(date: string): string {
   } catch {
     return date;
   }
+}
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
+/** `2026-10-14` -> `October 2026`. Anything that is not a date comes back as it was. (Written with Date methods only: this file does money and a scan keeps it free of float helpers.) */
+function monthLabel(date: string): string {
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00Z`) : null;
+  const name = d && !Number.isNaN(d.getTime()) ? MONTH_NAMES[d.getUTCMonth()] : undefined;
+  return d && name ? `${name} ${d.getUTCFullYear()}` : date;
+}
+
+/**
+ * T-511 S8b: the sentence that says a charge was booked on another date than its own because its month is closed. One copy: the posting writes it on the entry, the audit row and
+ * the success message, and the review screen rebuilds it from the two dates of a booked charge (`entryDate` differs from `chargeDate`).
+ */
+export function lateChargeNote(chargeDate: string, entryDate: string): string {
+  return `Dated ${dayLabel(entryDate)} instead of ${dayLabel(chargeDate)}: ${monthLabel(chargeDate)} is closed.`;
 }
 
 export async function postPlatformCharge(tx: Tx, actor: Actor, input: PostPlatformChargeInput): Promise<PostPlatformChargeResult> {
@@ -93,13 +116,27 @@ export async function postPlatformChargeOnClock(tx: Tx, actor: Actor, input: Pos
   }
   const chargeDate = line.lineDate;
   const copy = await R.bookedCopyOfCharge(tx, orgId, {
-    otherLineId: line.id, storeId: line.storeId, channelId: line.channelId, chargeDate, netAmount: String(money(line.amount)), description: line.description,
+    otherLineId: line.id, uploadId: line.uploadId, storeId: line.storeId, channelId: line.channelId, chargeDate, netAmount: String(money(line.amount)), description: line.description,
+    officialDocument: line.officialDocument,
   });
   // shortcut: two genuinely identical charges (same day, amount and description) cannot both be posted from a platform file; revisit if the platforms ever print them.
   if (copy) {
     throw refuse(
       `postPlatformCharge: staged line ${line.id} matches charge ${copy.id} already booked from line ${copy.otherLineId}`,
       `A charge of ₱${copy.totalAmount} dated ${dayLabel(copy.chargeDate)} with the same description is already booked, probably from an earlier copy of this file. If it really is a second, separate charge, ask the owner.`,
+    );
+  }
+
+  // S8b audit 6: the same document booked before from another file with other figures (a re-issue that changed) is not booked on top of it
+  if (
+    line.officialDocument !== null &&
+    (await R.bookedChargeOfDocumentWithOtherFigures(tx, orgId, {
+      otherLineId: line.id, uploadId: line.uploadId, channelId: line.channelId, officialDocument: line.officialDocument, chargeDate, netAmount: String(money(line.amount)), description: line.description,
+    }))
+  ) {
+    throw refuse(
+      `postPlatformCharge: staged line ${line.id} shares its document number with a booked charge of another file, with other figures`,
+      'Foodpanda printed this document before with different figures; ask for help before booking.',
     );
   }
 
@@ -120,7 +157,7 @@ export async function postPlatformChargeOnClock(tx: Tx, actor: Actor, input: Pos
     throw refuse(`postPlatformCharge: staged line ${line.id} totals zero`, 'This charge comes to nothing, so there is nothing to book.');
   }
 
-  // ---- dating: the charge date if its month is open, else the first open date after it; never a reopened period ------
+  // ---- dating (Ian, 15 Nov): the charge date if ITS month is open; else TODAY if today's month is open; else refused. The same period check the other modules use. ------
   const clock = today ?? (await manilaToday(tx));
   if (chargeDate.localeCompare(clock) > 0) {
     throw refuse(
@@ -128,21 +165,28 @@ export async function postPlatformChargeOnClock(tx: Tx, actor: Actor, input: Pos
       `This charge is dated in the future (${dayLabel(chargeDate)}), so it can't be booked yet. Book it on or after that date, or check the date on the statement.`,
     );
   }
-  const open = await fiscalPeriodsRepo.firstOpenDateOnOrAfter(tx, orgId, chargeDate, clock);
-  if (!open) {
-    throw refuse(
-      `postPlatformCharge: every fiscal period from ${chargeDate} up to ${clock} is closed or locked`,
-      `Every month from ${dayLabel(chargeDate)} up to today is closed, so the charge can't be dated. Ask an admin to open a month first.`,
-    );
+  const own = await fiscalPeriodsRepo.firstOpenDateOnOrAfter(tx, orgId, chargeDate, clock);
+  let entryDate = chargeDate;
+  let dateNote: string | null = null;
+  if (own === null || own.shutBy !== null) {
+    const current = await fiscalPeriodsRepo.firstOpenDateOnOrAfter(tx, orgId, clock, clock);
+    if (current === null || current.shutBy !== null) {
+      throw refuse(
+        `postPlatformCharge: the periods of ${chargeDate} and of today ${clock} are both closed or locked`,
+        `Every month from ${dayLabel(chargeDate)} up to today is closed, so the charge can't be dated. Ask an admin to open a month first.`,
+      );
+    }
+    entryDate = clock;
+    dateNote = lateChargeNote(chargeDate, clock);
   }
-  if (!(await journalRepo.findPeriodForDate(tx, orgId, open.date))) {
-    throw refuse(`postPlatformCharge: no fiscal period covers ${open.date} for org ${orgId}`, `There is no fiscal period for ${dayLabel(open.date)} yet.`);
+  if (!(await journalRepo.findPeriodForDate(tx, orgId, entryDate))) {
+    throw refuse(`postPlatformCharge: no fiscal period covers ${entryDate} for org ${orgId}`, `There is no fiscal period for ${dayLabel(entryDate)} yet.`);
   }
 
   // ---- post, then record ------------------------------------------------------------------------------------------
   const debit = compare(total, ZERO) > 0;
   const amount = String(debit ? total : negate(total));
-  const memo = `${channel.name} platform charge (VAT included) dated ${chargeDate}`;
+  const memo = `${channel.name} platform charge (VAT included) dated ${chargeDate}${dateNote ? `. ${dateNote}` : ''}`;
   const expenseLine = {
     accountCode: R.PLATFORM_FEE_CODE,
     storeId: line.storeId,
@@ -162,11 +206,11 @@ export async function postPlatformChargeOnClock(tx: Tx, actor: Actor, input: Pos
   const chargeId = crypto.randomUUID();
   const posted = await postEntry(tx, {
     orgId,
-    entryDate: open.date,
+    entryDate,
     sourceType: 'channel_charge',
     sourceId: chargeId,
     idempotencyKey: `channel_charge:${line.id}:post`,
-    memo: `${channel.name} platform charge of ${chargeDate}`,
+    memo: `${channel.name} platform charge of ${chargeDate}${dateNote ? `. ${dateNote}` : ''}`,
     postedBy: actor.personId,
     lines: debit ? [expenseLine, receivableLine] : [receivableLine, expenseLine],
   });
@@ -182,7 +226,7 @@ export async function postPlatformChargeOnClock(tx: Tx, actor: Actor, input: Pos
     netAmount: net,
     vatAmount: vat,
     totalAmount: total,
-    entryDate: open.date,
+    entryDate,
     journalEntryId: posted.entryId,
     description: line.description,
     postedBy: actor.personId,
@@ -195,8 +239,8 @@ export async function postPlatformChargeOnClock(tx: Tx, actor: Actor, input: Pos
     storeId: line.storeId,
     entityId: chargeId,
     before: null,
-    after: { net: String(net), vat: String(vat), total: String(total), chargeDate, entryDate: open.date, journalEntryId: posted.entryId },
+    after: { net: String(net), vat: String(vat), total: String(total), chargeDate, entryDate, dateNote, journalEntryId: posted.entryId },
     source: 'web',
   });
-  return { posted: true, chargeId, journalEntryId: posted.entryId };
+  return { posted: true, chargeId, journalEntryId: posted.entryId, dateNote };
 }
