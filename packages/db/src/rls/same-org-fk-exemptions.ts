@@ -141,4 +141,5 @@ export const JSONB_REFERENCES: readonly JsonbReference[] = [
   { column: 'pos_v1_day_feeds.payload', kind: 'snapshot', reason: 'raw v1 POS day payload' },
   { column: 'production_records.soft_warnings', kind: 'diagnostic', reason: 'warning list shown to the cook; not read back as a reference' },
   { column: 'scheduler_runs.failures', kind: 'diagnostic', reason: 'per-run failure list; not read back as a reference' },
+  { column: 'settlement_uploads.prior_items', kind: 'snapshot', reason: 'T-511 S8b: the earlier items printed on the invoice Appendix C, as [{document, date, amount, remaining}]: plain figures and Foodpanda document numbers, no id of ours; matched by document number inside one channel, never read back as a reference' },
 ];

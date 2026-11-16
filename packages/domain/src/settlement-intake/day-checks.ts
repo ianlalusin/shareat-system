@@ -17,6 +17,10 @@
  * of a Foodpanda invoice while one of its period charges is staged but not booked). The preview is run with the carrier's charges netted, so a negative deposit is judged on
  * what the approve would book.
  *
+ * T-511 S8b: the carrier also nets the charges of EARLIER invoices that its statement prints on Appendix C, matched on the official document number (`prior-items.ts`), and five more
+ * blockers exist: `prior_item_not_uploaded`, `prior_item_not_booked`, `prior_item_cannot_book` (an item of a kind nothing books from a file), `prior_item_partly_settled` (Foodpanda
+ * only partly settled an item) and `prior_items_mismatch` (a document's printed amount and its charges on file disagree, or it is printed twice). Rejecting the day is the way out of each.
+ *
  * Nothing is posted or written here.
  */
 import { authorize, type Actor } from '@shareat/auth';
@@ -25,6 +29,7 @@ import { isZero, money, ZERO, compare, type Money } from '@shareat/core/money';
 import { fiscalPeriodsRepo, settlementIntakeRepo, type SettlementDayLineRow, type Tx } from '@shareat/db';
 import { NEGATIVE_DEPOSIT_BLOCKER, previewChannelSettlement, settlementConfigBlockers } from '../channel-settlements';
 import { loadLoanCheckContext, loanCheckForDay, loanCheckViewerOf, primeLoanCheckCoverage, type LoanCheckContext, type LoanCheckForDay, type LoanCheckViewer } from './loan-check';
+import type { PriorProblem } from './prior-items';
 import { intakeRefusal } from './refusal';
 import { carrierChargesFor, invoiceOf, lineToSettlementInput, loanLegsForLine, type CarrierSource } from './settlement-input';
 import { plainDate } from './text';
@@ -46,6 +51,12 @@ export const DAY_BLOCKER_CODES = [
   'sales_day_not_posted',
   'period_charge_unbooked',
   'no_open_period',
+  // T-511 S8b: the earlier items Foodpanda settles in this payout (Appendix C) that the books cannot match
+  'prior_item_not_uploaded',
+  'prior_item_not_booked',
+  'prior_item_cannot_book',
+  'prior_item_partly_settled',
+  'prior_items_mismatch',
 ] as const;
 export type DayBlockerCode = (typeof DAY_BLOCKER_CODES)[number];
 
@@ -103,6 +114,8 @@ interface DayFacts {
   loanLegsBlocker: string | null;
   /** the carrier day of a Foodpanda invoice: how many period charges of the invoice are staged and not booked yet (0 for every other day) */
   unbookedCharges: number;
+  /** T-511 S8b: the carrier's earlier items (Appendix C) the books cannot match, each already in plain words (empty for every other day) */
+  priorProblems: readonly PriorProblem[];
   /** the refusals of the settlement preview that matter here (see `previewBlockers`) */
   settlementSentences: readonly string[];
   earlierOpenDays: number;
@@ -136,6 +149,7 @@ function blockersFromFacts(f: DayFacts): DayBlockersResult {
   for (const b of previewBlockers(f.settlementSentences)) add(b.code, b.sentence);
 
   if (f.unbookedCharges > 0) add('period_charge_unbooked', 'A charge on the same statement has not been booked yet. Book it first, because the platform took it out of this payout.');
+  for (const p of f.priorProblems) add(p.code, p.sentence);
   if (f.earlierOpenDays > 0) add('earlier_day_open', 'An earlier day of this channel has not been booked or rejected yet. Decide the earlier days first.');
   if (!line.isCurrent) add('line_not_current', 'A newer file has replaced this day. Open the newer line instead.');
 
@@ -211,6 +225,7 @@ export async function dayBlockers(
     loan,
     loanLegsBlocker: legs.blocker,
     unbookedCharges: carrier.unbooked,
+    priorProblems: carrier.problems,
     settlementSentences: preview.blockers,
     earlierOpenDays: await settlementIntakeRepo.countEarlierOpenDays(tx, orgId, line.channelId, line.salesDate),
     firstOpen: await fiscalPeriodsRepo.firstOpenDateOnOrAfter(tx, orgId, line.salesDate, today),
@@ -277,6 +292,7 @@ export async function dayBlockersForLines(
         loan,
         loanLegsBlocker: loanLegsForLine(line, loan?.result ?? null).blocker,
         unbookedCharges: carrier.unbooked,
+        priorProblems: carrier.problems,
         settlementSentences,
         earlierOpenDays: settlementIntakeRepo.countEarlierOpen(earlier.get(line.channelId)!, line.salesDate),
         firstOpen: fiscalPeriodsRepo.firstOpenFromSpans(spans, line.salesDate, today),

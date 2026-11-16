@@ -7,6 +7,7 @@
 import { useState, type FormEvent } from 'react';
 import { Banner, Button } from '@/components/ui';
 import { CsvFileInput } from '@/components/upload/CsvFileInput';
+import { settlementBatchProblem } from '@shareat/domain/files/limits';
 import { uploadSettlementFilesAction, type UploadReport } from './actions';
 
 /** Each file is up to 3 MB and a batch travels in one request, so a batch stays small. */
@@ -21,6 +22,11 @@ export function UploadForm() {
     const formData = new FormData(e.currentTarget);
     if (formData.getAll('files').length > MAX_FILES_PER_BATCH) {
       setReport({ ok: false, error: `Choose at most ${MAX_FILES_PER_BATCH} files at a time. Upload the rest in a second go.` });
+      return;
+    }
+    const tooBig = settlementBatchProblem(formData.getAll('files').flatMap((f) => (f instanceof File ? [f.size] : [])));
+    if (tooBig) {
+      setReport({ ok: false, error: tooBig });
       return;
     }
     setPending(true);
