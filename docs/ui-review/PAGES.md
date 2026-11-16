@@ -32,11 +32,11 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /channel-settlements/record | apps/erp/src/app/channel-settlements/record/page.tsx | 2026-11-15 | minor | G4 |  |
 | /channel-settlements/review | apps/erp/src/app/channel-settlements/review/page.tsx | 2026-11-15 | minor | G4 |  |
 | /channel-settlements/upload | apps/erp/src/app/channel-settlements/upload/page.tsx | 2026-11-15 | minor | G4 |  |
-| /clock | apps/erp/src/app/clock/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /commissary/catalogue | apps/erp/src/app/commissary/catalogue/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /commissary/discrepancies | apps/erp/src/app/commissary/discrepancies/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /commissary/orders | apps/erp/src/app/commissary/orders/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /commissary/orders/[id] | apps/erp/src/app/commissary/orders/[id]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c |
+| /clock | apps/erp/src/app/clock/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /commissary/catalogue | apps/erp/src/app/commissary/catalogue/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /commissary/discrepancies | apps/erp/src/app/commissary/discrepancies/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /commissary/orders | apps/erp/src/app/commissary/orders/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /commissary/orders/[id] | apps/erp/src/app/commissary/orders/[id]/page.tsx | 2026-11-15 | not captured | G2 | #287 |
 | /customers | apps/erp/src/app/customers/page.tsx | 2026-11-15 | fix | G4 |  |
 | /customers/[customerId] | apps/erp/src/app/customers/[customerId]/page.tsx | 2026-11-15 | minor | G4 |  |
 | /customers/price-lists | apps/erp/src/app/customers/price-lists/page.tsx | 2026-11-15 | minor | G4 |  |
@@ -63,26 +63,26 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /franchise/access-log | apps/erp/src/app/franchise/access-log/page.tsx | 2026-11-15 | minor | G4 |  |
 | /franchise/sales | apps/erp/src/app/franchise/sales/page.tsx | 2026-11-15 | OK | G4 |  |
 | /franchise/stock | apps/erp/src/app/franchise/stock/page.tsx | 2026-11-15 | OK | G4 |  |
-| /inventory | apps/erp/src/app/inventory/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /inventory/counts | apps/erp/src/app/inventory/counts/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /inventory/counts/[id] | apps/erp/src/app/inventory/counts/[id]/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /inventory/deliveries | apps/erp/src/app/inventory/deliveries/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /inventory/deliveries/[id] | apps/erp/src/app/inventory/deliveries/[id]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c |
-| /inventory/deliveries/inbound | apps/erp/src/app/inventory/deliveries/inbound/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /inventory/deliveries/inbound/[shipmentId] | apps/erp/src/app/inventory/deliveries/inbound/[shipmentId]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c |
-| /inventory/locations | apps/erp/src/app/inventory/locations/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /inventory/low-stock | apps/erp/src/app/inventory/low-stock/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /inventory/production | apps/erp/src/app/inventory/production/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /inventory/production/[id] | apps/erp/src/app/inventory/production/[id]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c |
+| /inventory | apps/erp/src/app/inventory/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /inventory/counts | apps/erp/src/app/inventory/counts/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /inventory/counts/[id] | apps/erp/src/app/inventory/counts/[id]/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /inventory/deliveries | apps/erp/src/app/inventory/deliveries/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /inventory/deliveries/[id] | apps/erp/src/app/inventory/deliveries/[id]/page.tsx | 2026-11-15 | not captured | G2 | #287 |
+| /inventory/deliveries/inbound | apps/erp/src/app/inventory/deliveries/inbound/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /inventory/deliveries/inbound/[shipmentId] | apps/erp/src/app/inventory/deliveries/inbound/[shipmentId]/page.tsx | 2026-11-15 | not captured | G2 | #287 |
+| /inventory/locations | apps/erp/src/app/inventory/locations/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /inventory/low-stock | apps/erp/src/app/inventory/low-stock/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /inventory/production | apps/erp/src/app/inventory/production/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /inventory/production/[id] | apps/erp/src/app/inventory/production/[id]/page.tsx | 2026-11-15 | not captured | G2 | #287 |
 | /inventory/production/recipes | apps/erp/src/app/inventory/production/recipes/page.tsx | 2026-11-15 | OK | G2 |  |
-| /inventory/production/recipes/[id] | apps/erp/src/app/inventory/production/recipes/[id]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c |
-| /inventory/production/recipes/new | apps/erp/src/app/inventory/production/recipes/new/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /inventory/returns | apps/erp/src/app/inventory/returns/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /inventory/transfers | apps/erp/src/app/inventory/transfers/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /inventory/usage | apps/erp/src/app/inventory/usage/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /inventory/usage/[id] | apps/erp/src/app/inventory/usage/[id]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c |
-| /items | apps/erp/src/app/items/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /items/[id] | apps/erp/src/app/items/[id]/page.tsx | 2026-11-15 | fix | G2 | #278, T-589 B3c, #279 |
+| /inventory/production/recipes/[id] | apps/erp/src/app/inventory/production/recipes/[id]/page.tsx | 2026-11-15 | not captured | G2 | #287 |
+| /inventory/production/recipes/new | apps/erp/src/app/inventory/production/recipes/new/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /inventory/returns | apps/erp/src/app/inventory/returns/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /inventory/transfers | apps/erp/src/app/inventory/transfers/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /inventory/usage | apps/erp/src/app/inventory/usage/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /inventory/usage/[id] | apps/erp/src/app/inventory/usage/[id]/page.tsx | 2026-11-15 | not captured | G2 | #287 |
+| /items | apps/erp/src/app/items/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /items/[id] | apps/erp/src/app/items/[id]/page.tsx | 2026-11-15 | fix | G2 | #278, #287, #279 |
 | /items/import | apps/erp/src/app/items/import/page.tsx | 2026-11-15 | minor | G2 |  |
 | /kitchen | apps/erp/src/app/kitchen/page.tsx | 2026-11-15 | minor | G2 |  |
 | /liabilities | apps/erp/src/app/liabilities/page.tsx | 2026-11-15 | minor | G4 |  |
@@ -90,12 +90,12 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /liabilities/unpaid | apps/erp/src/app/liabilities/unpaid/page.tsx | 2026-11-15 | minor | G4 |  |
 | /loans | apps/erp/src/app/loans/page.tsx | 2026-11-15 | minor | G4 |  |
 | /loans/[id] | apps/erp/src/app/loans/[id]/page.tsx | 2026-11-15 | minor | G4 |  |
-| /menu | apps/erp/src/app/menu/page.tsx | 2026-11-15 | fix | G2 | #278, T-589 B3c, #279 |
-| /menu/hours | apps/erp/src/app/menu/hours/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /menu/items/[id] | apps/erp/src/app/menu/items/[id]/page.tsx | 2026-11-15 | fix | G2 | #278, T-589 B3c, #279 |
-| /menu/prices | apps/erp/src/app/menu/prices/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /menu/requests | apps/erp/src/app/menu/requests/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /menu/usage-source | apps/erp/src/app/menu/usage-source/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
+| /menu | apps/erp/src/app/menu/page.tsx | 2026-11-15 | fix | G2 | #278, #287, #279 |
+| /menu/hours | apps/erp/src/app/menu/hours/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /menu/items/[id] | apps/erp/src/app/menu/items/[id]/page.tsx | 2026-11-15 | fix | G2 | #278, #287, #279 |
+| /menu/prices | apps/erp/src/app/menu/prices/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /menu/requests | apps/erp/src/app/menu/requests/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /menu/usage-source | apps/erp/src/app/menu/usage-source/page.tsx | 2026-11-15 | fix | G2 | #287 |
 | /money-accounts | apps/erp/src/app/money-accounts/page.tsx | 2026-11-15 | fix | G4 |  |
 | /money-transfers | apps/erp/src/app/money-transfers/page.tsx | 2026-11-15 | minor | G4 |  |
 | /owners | apps/erp/src/app/owners/page.tsx | 2026-11-15 | minor | G4 |  |
@@ -153,10 +153,10 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /staff/[employmentId]/credentials | apps/erp/src/app/staff/[employmentId]/credentials/page.tsx | 2026-11-15 | minor | G3 |  |
 | /staff/hire | apps/erp/src/app/staff/hire/page.tsx | 2026-11-15 | minor | G3 |  |
 | /statutory-discounts | apps/erp/src/app/statutory-discounts/page.tsx | 2026-11-15 | minor | G4 |  |
-| /till | apps/erp/src/app/till/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /trade/orders | apps/erp/src/app/trade/orders/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /trade/orders/[id] | apps/erp/src/app/trade/orders/[id]/page.tsx | 2026-11-15 | fix | G2 | #277, T-589 B3c |
-| /trade/orders/[id]/print | apps/erp/src/app/trade/orders/[id]/print/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c |
-| /trade/returns | apps/erp/src/app/trade/returns/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c |
-| /wastage | apps/erp/src/app/wastage/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c |
-| /wastage/[id] | apps/erp/src/app/wastage/[id]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c |
+| /till | apps/erp/src/app/till/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /trade/orders | apps/erp/src/app/trade/orders/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /trade/orders/[id] | apps/erp/src/app/trade/orders/[id]/page.tsx | 2026-11-15 | fix | G2 | #277, #287 |
+| /trade/orders/[id]/print | apps/erp/src/app/trade/orders/[id]/print/page.tsx | 2026-11-15 | not captured | G2 | #287 |
+| /trade/returns | apps/erp/src/app/trade/returns/page.tsx | 2026-11-15 | fix | G2 | #287 |
+| /wastage | apps/erp/src/app/wastage/page.tsx | 2026-11-15 | minor | G2 | #287 |
+| /wastage/[id] | apps/erp/src/app/wastage/[id]/page.tsx | 2026-11-15 | not captured | G2 | #287 |
