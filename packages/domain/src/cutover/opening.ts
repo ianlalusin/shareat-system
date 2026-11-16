@@ -122,8 +122,8 @@ export async function addOpeningFigure(
     if (!period) {
       throw refuse(
         `addOpeningFigure: no fiscal period covers ${input.entryDate}. Create the opening period ` +
-          'first — the conversion posts into it.',
-        `No fiscal period covers ${input.entryDate}. Create the opening period first — the conversion posts into it.`,
+          'first — the opening balances post into it.',
+        `No fiscal period covers ${input.entryDate}. Create the opening period first — the opening balances post into it.`,
       );
     }
 
@@ -298,14 +298,14 @@ export async function postOpeningBalances(
     if (!c3p) {
       throw refuse(
         'postOpeningBalances: step C3P (party balances agreed with v1) has not been attested.',
-        "Nobody has confirmed the customer, supplier, loan and advance balances against v1's lists (step C3P).",
+        "Nobody has confirmed the customer, supplier, loan and advance balances against the old system's lists.",
       );
     }
     if (c3p.fingerprint !== (await cutoverRepo.partyLinesFingerprint(trx, actor.orgId))) {
       const on = humanDate(toBusinessDate(c3p.completedAt));
       throw refuse(
         'postOpeningBalances: the party opening lines changed after C3P was attested.',
-        `The party balances changed since step C3P was confirmed on ${on}. Check them against v1's lists and confirm C3P again.`,
+        `The party balances changed since they were confirmed on ${on}. Check them against the old system's lists and confirm them again.`,
       );
     }
 

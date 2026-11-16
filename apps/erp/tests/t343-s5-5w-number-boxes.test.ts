@@ -23,10 +23,10 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..', '..');
 
-// 2026-10-09, T-384 sweep fallout (A6): cutover/count renders each row's box twice - an open ADD form and an EditableRecord
+// 2026-10-09, T-384 sweep fallout (A6): opening-balances/stock-count renders each row's box twice - an open ADD form and an EditableRecord
 // EDIT form - so its `name="quantity"` appears in exactly two <input>s. Every other site still appears exactly once.
 // For the two-site file the two tags are joined, so every negative assertion (no type=number/step/min) applies to both.
-const TWO_SITE_FILES = new Set(['apps/erp/src/app/cutover/count/page.tsx']);
+const TWO_SITE_FILES = new Set(['apps/erp/src/app/opening-balances/stock-count/page.tsx']);
 
 function inputTagFor(filePath: string, nameLiteral: string): string {
   const src = readControlSource(resolve(repoRoot, filePath), 'utf8');
@@ -88,8 +88,8 @@ describe('R-legs — source-text: each converted box has no type="number"/step/m
     expect(tag).toMatch(/inputMode=["']decimal["']/);
   });
 
-  it('cutover/count/page.tsx — quantity (decimal, still required)', () => {
-    const tag = inputTagFor('apps/erp/src/app/cutover/count/page.tsx', '"quantity"');
+  it('opening-balances/stock-count/page.tsx — quantity (decimal, still required)', () => {
+    const tag = inputTagFor('apps/erp/src/app/opening-balances/stock-count/page.tsx', '"quantity"');
     expect(tag).not.toMatch(/type=["']number["']/);
     expect(tag).not.toMatch(/\bstep=/);
     expect(tag).not.toMatch(/\bmin=/);

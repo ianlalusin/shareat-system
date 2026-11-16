@@ -41,10 +41,10 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /customers/[customerId] | apps/erp/src/app/customers/[customerId]/page.tsx | 2026-11-15 | minor | G4 | #288 |
 | /customers/price-lists | apps/erp/src/app/customers/price-lists/page.tsx | 2026-11-15 | minor | G4 | #288 |
 | /customers/price-lists/[id] | apps/erp/src/app/customers/price-lists/[id]/page.tsx | 2026-11-15 | minor | G4 | #288 |
-| /cutover | apps/erp/src/app/cutover/page.tsx | 2026-11-15 | fix | G4 | #288 |
-| /cutover/count | apps/erp/src/app/cutover/count/page.tsx | 2026-11-15 | fix | G4 |  |
-| /cutover/count/sheet | apps/erp/src/app/cutover/count/sheet/page.tsx | 2026-11-15 | minor | G4 |  |
-| /cutover/opening | apps/erp/src/app/cutover/opening/page.tsx | 2026-11-15 | fix | G4 | #288 |
+| /opening-balances | apps/erp/src/app/opening-balances/page.tsx | 2026-11-15 | fix | G4 | #288 |
+| /opening-balances/stock-count | apps/erp/src/app/opening-balances/stock-count/page.tsx | 2026-11-15 | fix | G4 |  |
+| /opening-balances/stock-count/sheet | apps/erp/src/app/opening-balances/stock-count/sheet/page.tsx | 2026-11-15 | minor | G4 |  |
+| /opening-balances/balance-sheet | apps/erp/src/app/opening-balances/balance-sheet/page.tsx | 2026-11-15 | fix | G4 | #288 |
 | /expenses | apps/erp/src/app/expenses/page.tsx | 2026-11-15 | fix | G4 | #288 |
 | /expenses/[id] | apps/erp/src/app/expenses/[id]/page.tsx | 2026-11-15 | fix | G4 | #278, #279 |
 | /expenses/new | apps/erp/src/app/expenses/new/page.tsx | 2026-11-15 | fix | G4 | #288 |

@@ -126,12 +126,6 @@
     "headerless": 0
   },
   {
-    "file": "apps/erp/src/app/cutover/count/sheet/page.tsx",
-    "tables": 2,
-    "sharedTables": 0,
-    "headerless": 0
-  },
-  {
     "file": "apps/erp/src/app/documents/page.tsx",
     "tables": 0,
     "sharedTables": 1,
@@ -345,6 +339,12 @@
     "file": "apps/erp/src/app/money-transfers/page.tsx",
     "tables": 1,
     "sharedTables": 1,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/opening-balances/stock-count/sheet/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
     "headerless": 0
   },
   {

@@ -6,9 +6,9 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
  * and the count sheet's honesty. Real actions (nothing mocked but the session, the redirect and the shell).
  *
  * CONTRACT PINNED HERE (the spec is silent; the builder matches):
- *  - /cutover/opening, /cutover/count, /cutover/count/sheet gate their READ on `run_cutover` (`requirePageAccess`, which maps the
+ *  - /opening-balances/balance-sheet, /opening-balances/stock-count, /opening-balances/stock-count/sheet gate their READ on `run_cutover` (`requirePageAccess`, which maps the
  *    route in lib/route-capability.ts): a person without it gets the refusal card (or a redirect), and nothing of the page's data.
- *  - the C3P attest form on /cutover/opening brings the person back to /cutover/opening, on success and on refusal, whatever
+ *  - the C3P attest form on /opening-balances/balance-sheet brings the person back to /opening-balances/balance-sheet, on success and on refusal, whatever
  *    mechanism the builder chooses (the test submits the form it finds on the page, hidden fields and all).
  *  - a merged line's total is summed exactly (decimal), e.g. 0.100 + 0.200 = "0.300".
  *  - valueOpeningAssetAction takes the life as plain digits only: '1e2', '0x10' and '12.5' are refused in words.
@@ -39,9 +39,9 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-type Route = 'opening' | 'count' | 'count/sheet';
-const pageOf = async (route: Route) => (await import(`../../src/app/cutover/${route}/page`)).default as (p: unknown) => Promise<unknown>;
-const actions = () => import('../../src/app/cutover/actions');
+type Route = 'balance-sheet' | 'stock-count' | 'stock-count/sheet';
+const pageOf = async (route: Route) => (await import(`../../src/app/opening-balances/${route}/page`)).default as (p: unknown) => Promise<unknown>;
+const actions = () => import('../../src/app/opening-balances/actions');
 
 type Who = { personId: string; orgId: string };
 /** Render; a redirect counts as a refusal (empty markup), anything else returns the markup and the element tree. */
@@ -77,7 +77,7 @@ type Setup = Awaited<ReturnType<typeof setup>>;
 
 describe('1 - the read gate: run_cutover', () => {
   it('the three routes are mapped to run_cutover', () => {
-    for (const r of ['/cutover/opening', '/cutover/count', '/cutover/count/sheet']) expect(capabilityForRoute(r), r).toBe('run_cutover');
+    for (const r of ['/opening-balances/balance-sheet', '/opening-balances/stock-count', '/opening-balances/stock-count/sheet']) expect(capabilityForRoute(r), r).toBe('run_cutover');
   });
 
   it('staff see none of the party names, peso figures or costs on any of the three pages; manager and admin do', async () => {
@@ -90,23 +90,23 @@ describe('1 - the read gate: run_cutover', () => {
     );
     await s.move(item.id, s.kit);
     const secrets = [sup.name, '1,500.00', '777.7777', item.name];
-    for (const route of ['opening', 'count', 'count/sheet'] as const) {
+    for (const route of ['balance-sheet', 'stock-count', 'stock-count/sheet'] as const) {
       const sp = { store: s.f.storeA };
       for (const [label, who] of [['admin', s.f.admin], ['manager', s.f.manager]] as const) {
         const ok = await show(route, who, sp);
-        expect(ok.redirected, `${label} sees /cutover/${route}`).toBe(false);
-        expect(ok.text, `${label} is not shown a refusal on /cutover/${route}`).not.toMatch(/do not have access/i);
+        expect(ok.redirected, `${label} sees /opening-balances/${route}`).toBe(false);
+        expect(ok.text, `${label} is not shown a refusal on /opening-balances/${route}`).not.toMatch(/do not have access/i);
       }
       const staff = await show(route, s.f.staff, sp);
-      if (!staff.redirected) expect(staff.text, `/cutover/${route}: staff get the refusal card`).toMatch(/do not have access|run_cutover/i);
-      for (const secret of secrets) expect(staff.html, `/cutover/${route}: staff must not receive "${secret}"`).not.toContain(secret);
+      if (!staff.redirected) expect(staff.text, `/opening-balances/${route}: staff get the refusal card`).toMatch(/do not have access|run_cutover/i);
+      for (const secret of secrets) expect(staff.html, `/opening-balances/${route}: staff must not receive "${secret}"`).not.toContain(secret);
     }
   });
 });
 
-describe('2 - the C3P attest form returns to /cutover/opening', () => {
+describe('2 - the C3P attest form returns to /opening-balances/balance-sheet', () => {
   async function submitC3P(s: Setup, who: Who) {
-    const page = await show('opening', s.f.admin, {});
+    const page = await show('balance-sheet', s.f.admin, {});
     const form = (await formsOf(page.el)).find((x) => x.hidden['stepCode'] === 'C3P');
     expect(form, 'the opening page has a C3P attest form').toBeDefined();
     const fd = new FormData();
@@ -117,20 +117,20 @@ describe('2 - the C3P attest form returns to /cutover/opening', () => {
     return captureRedirect(() => (form!.action as (f: FormData) => Promise<void>)(fd));
   }
 
-  it('success goes back to /cutover/opening', async () => {
+  it('success goes back to /opening-balances/balance-sheet', async () => {
     const s = await setup('attest-ok');
     const o = outcomeOf(await submitC3P(s, s.f.admin));
     expect(o.flash.error, 'attested').toBeUndefined();
-    expect(o.path).toBe('/cutover/opening');
+    expect(o.path).toBe('/opening-balances/balance-sheet');
   });
 
-  it('a refusal goes back to /cutover/opening and the flash shows there', async () => {
+  it('a refusal goes back to /opening-balances/balance-sheet and the flash shows there', async () => {
     const s = await setup('attest-refuse');
     const signal = await submitC3P(s, s.f.staff);
     const o = outcomeOf(signal);
     expect(o.flash.error, 'staff may not attest').toBeTruthy();
-    expect(o.path, 'the refusal lands on the screen the person was on').toBe('/cutover/opening');
-    const shown = await show('opening', s.f.admin, pageParamsOf(signal.url));
+    expect(o.path, 'the refusal lands on the screen the person was on').toBe('/opening-balances/balance-sheet');
+    const shown = await show('balance-sheet', s.f.admin, pageParamsOf(signal.url));
     expect(shown.text, 'the refusal is shown on that page').toContain(plain(o.flash.error!));
   });
 });
@@ -144,7 +144,7 @@ describe('3 - merged totals are exact', () => {
         domain.recordOpeningCount(tx, s.f.admin, { storeId: s.f.storeA, locationId: room, itemId: item.id, quantity: q } as never),
       );
     }
-    const { text } = await show('count', s.f.admin, { store: s.f.storeA });
+    const { text } = await show('stock-count', s.f.admin, { store: s.f.storeA });
     expect(text, 'the merged line is on the page').toContain(item.name);
     expect(text).not.toMatch(/0\.3000000/);
     expect(text).toMatch(/0\.300\b/);
@@ -175,7 +175,7 @@ describe('7 - the count sheet and the count page tell the truth', () => {
     const dead = await s.mkItem('Deaditem', 'inactive');
     await s.move(live.id, s.kit);
     await s.move(dead.id, s.kit);
-    const { text } = await show('count/sheet', s.f.admin, { store: s.f.storeA, room: s.kit });
+    const { text } = await show('stock-count/sheet', s.f.admin, { store: s.f.storeA, room: s.kit });
     expect(text).toContain(live.name);
     expect(text, 'an inactive item is not counted').not.toContain(dead.name);
   });
@@ -186,7 +186,7 @@ describe('7 - the count sheet and the count page tell the truth', () => {
     await asOrg(s.f.orgId, (tx) =>
       domain.recordOpeningCount(tx, s.f.admin, { storeId: s.f.storeA, locationId: s.frz, itemId: item.id, quantity: '2', unitCost: '50', costSource: 'typed' } as never),
     );
-    const { text } = await show('count', s.f.admin, { store: s.f.storeA, room: s.kit });
+    const { text } = await show('stock-count', s.f.admin, { store: s.f.storeA, room: s.kit });
     expect(text, 'the Kitchen view carries a figure that includes the Freezer: the label must say it is the store').toMatch(
       /(whole store|entire store|all rooms|store total|in the store|this store|at the store|store-wide)/i,
     );
@@ -194,8 +194,8 @@ describe('7 - the count sheet and the count page tell the truth', () => {
 });
 
 describe('5 - the loaders hold no SQL', () => {
-  it('apps/erp/src/app/cutover/lib.ts has no dsql / sql`` (SQL belongs in cutoverRepo)', () => {
-    const src = readFileSync(path.resolve(__dirname, '../../src/app/cutover/lib.ts'), 'utf8');
+  it('apps/erp/src/app/opening-balances/lib.ts has no dsql / sql`` (SQL belongs in cutoverRepo)', () => {
+    const src = readFileSync(path.resolve(__dirname, '../../src/app/opening-balances/lib.ts'), 'utf8');
     expect(src).not.toMatch(/\bdsql\b/);
     expect(src).not.toMatch(/\bsql`/);
   });

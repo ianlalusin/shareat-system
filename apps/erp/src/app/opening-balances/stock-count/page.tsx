@@ -12,7 +12,7 @@ import { CheckedForm, EditableRecord } from '@/components/forms';
 import { CUTOVER_COUNT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, FlashBanner, FormGrid, Field } from '@/components/ui';
 
-export const metadata = { title: 'Opening count — Shareat System' };
+export const metadata = { title: 'Opening stock count — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
@@ -27,7 +27,7 @@ export default async function CountPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor, refusal } = await requirePageAccess('/cutover/count');
+  const { actor, refusal } = await requirePageAccess('/opening-balances/stock-count');
   if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
 
@@ -35,7 +35,7 @@ export default async function CountPage({
   if (!storeId) {
     return (
       <Page density="table" className="">
-        <h1 className="text-2xl font-semibold">Opening count</h1>
+        <h1 className="text-2xl font-semibold">Opening stock count</h1>
         <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
           There are no stores to count yet.
         </p>
@@ -49,7 +49,7 @@ export default async function CountPage({
   if (!room) {
     return (
       <Page density="table" className="">
-        <h1 className="text-2xl font-semibold">Opening count</h1>
+        <h1 className="text-2xl font-semibold">Opening stock count</h1>
         <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">This store has no stock room to count in yet.</p>
       </Page>
     );
@@ -69,12 +69,12 @@ export default async function CountPage({
     <Page density="table">
       <div>
         <Link
-          href="/cutover"
+          href="/opening-balances"
           className={`${ACTION_LINK} text-neutral-500 dark:text-neutral-400`}
         >
-          ← Back to the conversion
+          ← Back to opening balances
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Opening count — {store.name}, {room.name}</h1>
+        <h1 className="mt-1 text-2xl font-semibold">Opening stock count — {store.name}, {room.name}</h1>
         <PageDescription>
           What is physically on the shelf on 31 December, and what it cost. This becomes the
           opening inventory figure, so a guess here is a wrong number in every month that follows.
@@ -90,7 +90,7 @@ export default async function CountPage({
           {stores.map((s) => (
             <Link
               key={s.id}
-              href={`/cutover/count?store=${s.id}`}
+              href={`/opening-balances/stock-count?store=${s.id}`}
               className={`rounded border px-3 py-2 text-sm ${
                 s.id === storeId
                   ? 'border-ink bg-ink text-surface'
@@ -109,7 +109,7 @@ export default async function CountPage({
           {rooms.map((r) => (
             <Link
               key={r.id}
-              href={`/cutover/count?store=${storeId}&room=${r.id}`}
+              href={`/opening-balances/stock-count?store=${storeId}&room=${r.id}`}
               aria-current={r.id === roomId ? 'page' : undefined}
               className={`rounded border px-3 py-2 text-sm ${
                 r.id === roomId
@@ -125,7 +125,7 @@ export default async function CountPage({
 
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
         Counted {countedN} of {rows.length} items in {room.name}.{' '}
-        <Link href={`/cutover/count/sheet?store=${storeId}&room=${roomId}`} className={ACTION_LINK}>
+        <Link href={`/opening-balances/stock-count/sheet?store=${storeId}&room=${roomId}`} className={ACTION_LINK}>
           Print the count sheet
         </Link>
       </p>

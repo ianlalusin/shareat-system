@@ -9,7 +9,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Button, FlashBanner, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
-export const metadata = { title: 'The conversion — Shareat System' };
+export const metadata = { title: 'Opening balances — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
@@ -22,7 +22,7 @@ export default async function CutoverPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/cutover');
+  const { actor } = await requireSession('/opening-balances');
 
   const stores = await listStores(actor.orgId);
   const [progress, gaps] = await Promise.all([
@@ -43,9 +43,9 @@ export default async function CutoverPage({
   return (
     <Page density="table">
       <div>
-        <h1 className="text-2xl font-semibold">The 31 December conversion</h1>
+        <h1 className="text-2xl font-semibold">Opening balances: 1 January 2027</h1>
         <PageDescription>
-          Closing the old books and opening these ones. It runs twice, once as a rehearsal in
+          Entering what the business holds, owns and owes, so these books can open. It runs twice, once as a rehearsal in
           November and once for real, and you can pick it up and put it down over several days.
         </PageDescription>
       </div>
@@ -57,7 +57,7 @@ export default async function CutoverPage({
 
         Most accounting software plugs a difference like this into a suspense account so the books
         can open anyway. That is real, and it is scale-driven — those vendors serve millions of
-        self-serve tenants who cannot get a human's attention. One company, one cutover, Ian
+        self-serve tenants who cannot get a human's attention. One company, one switch-over, Ian
         available: we halt instead.
 
         ⚠️ But the plug account buys one genuinely useful thing, and this is it: the difference is
@@ -137,7 +137,7 @@ export default async function CutoverPage({
                 {gaps.doubleCounted.length === 1 ? 'y has' : 'ies have'} the same money twice.
               </strong>
               <p className="mt-1 text-xs">
-                An opening balance was entered for them, and a document dated before the conversion
+                An opening balance was entered for them, and a document dated before the opening date
                 also exists. One of the two has to go, or the balance is double what is owed.
               </p>
             </Banner>
@@ -223,7 +223,7 @@ export default async function CutoverPage({
 
                   {(s.def.code === 'C3' || s.def.code === 'C5') && !s.blockedBy && (
                     <Link
-                      href="/cutover/opening"
+                      href="/opening-balances/balance-sheet"
                       className="mt-3 inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
                     >
                       {s.def.code === 'C3' ? 'Enter opening balances' : 'Review and post'}
@@ -232,7 +232,7 @@ export default async function CutoverPage({
 
                   {s.def.code === 'B3' && s.storeId && !s.done && (
                     <Link
-                      href={`/cutover/count?store=${s.storeId}`}
+                      href={`/opening-balances/stock-count?store=${s.storeId}`}
                       className="mt-3 inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
                     >
                       Enter the count

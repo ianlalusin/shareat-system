@@ -80,8 +80,8 @@ describe('R-legs — source-text: each of the 22 S5.5v boxes has no type="number
   it('money-transfers/RecordTransferForm.tsx — amountOut (decimal)', () => {
     assertConverted('apps/erp/src/app/money-transfers/RecordTransferForm.tsx', '"amountOut"', 'decimal');
   });
-  it('cutover/opening/page.tsx — amount (decimal)', () => {
-    assertConverted('apps/erp/src/app/cutover/opening/page.tsx', '"amount"', 'decimal');
+  it('opening-balances/balance-sheet/page.tsx — amount (decimal)', () => {
+    assertConverted('apps/erp/src/app/opening-balances/balance-sheet/page.tsx', '"amount"', 'decimal');
   });
   it('fixed-assets/new/page.tsx — usefulLifeMonths (numeric)', () => {
     assertConverted('apps/erp/src/app/fixed-assets/new/page.tsx', '"usefulLifeMonths"', 'numeric');

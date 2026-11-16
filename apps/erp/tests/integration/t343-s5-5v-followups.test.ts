@@ -849,7 +849,7 @@ describe('Comma leg — cutover addOpeningFigureAction amount="1,5" ("This amoun
     // the purge writes its C2 row; the purge truncates this database's operational tables, which no later test here reuses.
     await realPurge(sql, f.admin.personId);
     ACTOR_HOLDER.actor = f.admin;
-    const { addOpeningFigureAction } = await import('../../src/app/cutover/actions');
+    const { addOpeningFigureAction } = await import('../../src/app/opening-balances/actions');
     const fd = new FormData();
     fd.set('accountCode', '1220');
     fd.set('storeId', f.storeId);

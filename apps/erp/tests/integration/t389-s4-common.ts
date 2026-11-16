@@ -16,7 +16,7 @@ export { asOrg, actor, fixture, markup, plain, sql, uid, LONG, type BaseCtx, typ
  * draws STORED values only). It is S2's `createHarness` (t389-s2-common.ts) with four changes the S4 forms need, kept here
  * because S2's file is not this slice's to edit:
  *
- *  1. `ok` may be null: cutover/count saves with NO banner (it redirects with an empty flash), so the good leg asserts "no
+ *  1. `ok` may be null: opening-balances/stock-count saves with NO banner (it redirects with an empty flash), so the good leg asserts "no
  *     error, no ok, no typed slot".
  *  2. a good save may RETURN instead of redirecting (inventory/low-stock revalidates and returns); the good leg then
  *     asserts the return and an unchanged jar.

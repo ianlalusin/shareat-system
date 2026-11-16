@@ -73,7 +73,7 @@ const SWEPT = [
 const ACCOUNTANT_PAGES = [
   'components/reports/*Table.tsx',
   'app/reports/**',
-  'app/cutover/opening/**',
+  'app/opening-balances/balance-sheet/**',
   'app/settings/expense-categories/**', // batch 2 ruling (b): admin picker maps a category to a code
 ];
 

@@ -27,7 +27,7 @@ export const SWEPT_FILES: readonly string[] = [
   'app/customers/page.tsx',
   'app/customers/price-lists/[id]/page.tsx',
   'app/customers/price-lists/page.tsx',
-  'app/cutover/opening/page.tsx',
+  'app/opening-balances/balance-sheet/page.tsx',
   'app/inventory/counts/[id]/page.tsx',
   'app/inventory/counts/page.tsx',
   'app/inventory/deliveries/NewDeliveryForm.tsx',

@@ -107,7 +107,7 @@ const NO_ROW_TARGET: readonly string[] = [
   // Read-only detail lines with nowhere to go (16)
   'app/admin/prerequisite-refusals/page.tsx',
   'app/customers/price-lists/[id]/page.tsx',
-  'app/cutover/count/sheet/page.tsx',
+  'app/opening-balances/stock-count/sheet/page.tsx',
   'app/expenses/[id]/page.tsx',
   'app/findings/scorecard/page.tsx',
   'app/fixed-assets/[id]/page.tsx',

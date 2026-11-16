@@ -5,7 +5,7 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
 
-export const metadata = { title: 'Count sheet — Shareat System' };
+export const metadata = { title: 'Opening stock count sheet — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
@@ -30,7 +30,7 @@ const BLANK_ROWS = 10;
  */
 export default async function CountSheetPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor, refusal } = await requirePageAccess('/cutover/count/sheet');
+  const { actor, refusal } = await requirePageAccess('/opening-balances/stock-count/sheet');
   if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
   const store = stores.find((s) => s.id === sp.store) ?? stores[0];
@@ -60,7 +60,7 @@ export default async function CountSheetPage({ searchParams }: { searchParams: P
       `}</style>
 
       <div className="no-print">
-        <Link href={`/cutover/count?store=${store.id}`} className={`${ACTION_LINK} text-neutral-500 dark:text-neutral-400`}>
+        <Link href={`/opening-balances/stock-count?store=${store.id}`} className={`${ACTION_LINK} text-neutral-500 dark:text-neutral-400`}>
           ← Back to the count
         </Link>
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
