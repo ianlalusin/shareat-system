@@ -251,7 +251,7 @@ describe('S1 invoice lines - lines that do not add up keep what was typed (DEF-6
     const html = await render(f, id, pageParamsOf(r.signal.url));
     const form = linesFormHtml(html);
     expect(form, 'reopened').not.toContain('<fieldset disabled');
-    expect(form, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*>/); // T-448: Save is an icon button (words are aria-label + data-tip)
+    expect(form, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*(?:aria-label="Save"[^>]*>|>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>)/); // T-589 B4a: a primary Save carries its word; a secondary Save is still an icon named by aria-label
     expect(form, 'Cancel is showing').toMatch(/<button[^>]*aria-label="Cancel"[^>]*>/); // T-448: Cancel is an icon button
     expect(form, 'the stored line price is what is drawn').toMatch(/name="line1_unitPrice"[^>]*value="1000(\.0+)?"|value="1000(\.0+)?"[^>]*name="line1_unitPrice"/);
     expect(form, 'the typed price is never drawn by the server').not.toContain('1057.25');

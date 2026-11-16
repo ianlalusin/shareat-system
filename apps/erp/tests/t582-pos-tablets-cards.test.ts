@@ -110,8 +110,8 @@ describe('T-582 forms are behind modal buttons', () => {
   it('Register a tablet and Add a cash register are FormModal triggers; no form field is on the page outside a dialog', async () => {
     const html = await render();
     expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(2);
-    expect(html).toContain('aria-label="Register tablet" aria-haspopup="dialog"');
-    expect(html).toContain('aria-label="Add cash register" aria-haspopup="dialog"');
+    expect(html).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*>(?:<[^>]+>)*Register tablet<\/button>/); // T-589 B4a: a primary trigger shows its words
+    expect(html).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*>(?:<[^>]+>)*Add cash register<\/button>/); // T-589 B4a: a primary trigger shows its words
     expect(html).toContain('Register a tablet');
     expect(html).toContain('Add a cash register');
     const open = outsideDialogs(html);
