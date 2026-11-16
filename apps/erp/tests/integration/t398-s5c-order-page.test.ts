@@ -67,7 +67,7 @@ describe('S5c order page: the inter-entity label', () => {
     const { w, orderId, buyerName } = await seed(true);
     const text = plain(await render(orderPage, w.A, { params: { id: orderId } }));
     expect(text).toContain(`Inter-entity sale to ${buyerName}`);
-    expect(text).toContain(`Received by ${buyerName} on 2026-01-21`);
+    expect(text).toContain(`Received by ${buyerName} on January 21, 2026`);
   });
 
   it('an external order shows neither', async () => {
