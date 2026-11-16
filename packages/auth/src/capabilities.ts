@@ -275,6 +275,12 @@ export type Capability =
   /** T-512 (T-511 S5c). Admin only: change a business rule (settlement variance, loan tolerance, withholding and VAT rates) from a date. Org scope: a rule is the
    *  organisation's. Whoever is measured by a tolerance must not be the one who moves it. */
   | 'manage_business_rules'
+  /** T-584 (Ian, 15 Nov 2026). Admin only: write and retire the wording of HR documents (COE, memo, NTE, contract). Org scope: a template is the organisation's. */
+  | 'manage_document_templates'
+  /** T-584. Issue, revise and void an HR document for a store's staff. Store scope: a manager only for the stores in their scope. */
+  | 'issue_documents'
+  /** T-584. Read the issued-document register, a document, its history and its print. Store scope. Includes the signature images printed on that document (the signer's own PIN put them there). */
+  | 'view_documents'
   | 'manage_price_lists'
   // T-401 S2 - the ERP menu and catalog master. view_menu/manage_menu/set_menu_depletion are org; set_menu_price is store.
   | 'view_menu'
@@ -442,6 +448,9 @@ export const CAPABILITIES: readonly Capability[] = [
   'edit_platform_store_code',
   'edit_loan_repayment_amount',
   'manage_business_rules',
+  'manage_document_templates',
+  'issue_documents',
+  'view_documents',
   'manage_price_lists',
   'view_menu',
   'add_menu_item',
@@ -644,6 +653,9 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   edit_platform_store_code: 'store',
   edit_loan_repayment_amount: 'store',
   manage_business_rules: 'org',
+  manage_document_templates: 'org',
+  issue_documents: 'store',
+  view_documents: 'store',
   manage_price_lists: 'org',
   // T-401. The menu is org master data; a price is per store (position-grantable per store, T-318).
   view_menu: 'org',
@@ -869,6 +881,9 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   edit_platform_store_code: 'admin',
   edit_loan_repayment_amount: 'admin',
   manage_business_rules: 'admin',
+  manage_document_templates: 'staff', // T-584
+  issue_documents: 'staff', // T-584
+  view_documents: 'staff', // T-584
   manage_price_lists: 'admin',
   view_menu: 'sales',
   add_menu_item: 'sales',
@@ -1112,6 +1127,10 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   edit_loan_repayment_amount: { super_admin: true, admin: true, manager: false, staff: false },
   /** T-512. Admin only: a business rule moves how platform money is checked, so whoever is checked must not move it. */
   manage_business_rules: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-584 (Ian, 15 Nov 2026, R2): admins write templates; admins AND store managers issue and read documents, a manager only for their own stores (store scope).
+  manage_document_templates: { super_admin: true, admin: true, manager: false, staff: false },
+  issue_documents: { super_admin: true, admin: true, manager: true, staff: false },
+  view_documents: { super_admin: true, admin: true, manager: true, staff: false },
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },
   // T-401 (Ian, 2026-10-13). Items are centralised: only super admin ADDS an item or variant (and resolves requests).
   // Editing the rest of the menu stays admin. A manager prices their own store (store scope is what limits "own") and
@@ -1377,6 +1396,9 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   edit_platform_store_code: "change a sales channel's Grab or Foodpanda store code",
   edit_loan_repayment_amount: "change a loan's expected daily repayment",
   manage_business_rules: 'change business rules such as settlement tolerances and tax rates',
+  manage_document_templates: 'write and retire the wording of HR documents',
+  issue_documents: 'issue, revise and void HR documents for staff',
+  view_documents: 'read issued HR documents and print them',
   manage_price_lists: 'manage price lists',
   view_menu: 'view the menu and its prices',
   add_menu_item: 'add items and variants to the menu',

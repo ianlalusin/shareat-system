@@ -100,7 +100,7 @@ export async function clearLockAction(fd: FormData): Promise<void> {
   return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok });
 }
 
-/** T-546: add a till (number 1 to 99). The domain refuses a used number or a bad one in words. */
+/** T-546: add a till (T-582: shown to people as a "cash register"; number 1 to 99). The domain refuses a used number or a bad one in words. */
 export async function createTillAction(fd: FormData): Promise<void> {
   const actor = await requireActor(tillPage(fd));
   const storeId = str(fd, 'storeId');
@@ -112,7 +112,7 @@ export async function createTillAction(fd: FormData): Promise<void> {
     await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'pair_pos_tablet', { storeId }));
     assertFieldRules(POS_TILL_ADD_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) => createTerminal(tx, actor, { storeId, terminalNo }));
-    ok = `Added till ${terminalNo}. Choose its tablet and printer below.`;
+    ok = `Added cash register ${terminalNo}. Choose its tablet and printer below.`;
   } catch (err) {
     return await redirectWithFlash(tillPage(fd), { store: storeId }, { error: errorMessage(err) });
   }
@@ -128,7 +128,7 @@ export async function linkTillAction(fd: FormData): Promise<void> {
   let ok: string;
   try {
     await withOrgPrincipal(actor.orgId, (tx) => linkTerminal(tx, actor, { storeId, terminalId: str(fd, 'terminalId'), pairingId: pairingId === '' ? null : pairingId }));
-    ok = pairingId === '' ? 'The till has no tablet now.' : 'Tablet chosen for the till.';
+    ok = pairingId === '' ? 'The cash register has no tablet now.' : 'Tablet chosen for the cash register.';
   } catch (err) {
     return await redirectWithFlash(tillPage(fd), { store: storeId }, { error: errorMessage(err) });
   }

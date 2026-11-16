@@ -68,6 +68,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/attendance', label: 'Attendance' },
       // T-436 - ask for leave, decide it, record an absence. Open to everyone: a staff member requests their own.
       { href: '/attendance/leave', label: 'Leave' },
+      // T-584: certificates, memos, notices and contracts for staff. Gated by `view_documents` in ROUTE_CAPABILITY, so the link shows only to someone who can open it.
+      { href: '/documents', label: 'Documents' },
       { href: '/payroll', label: 'Payroll' },
       // T-193 S5: paying SSS / PhilHealth / Pag-IBIG / BIR. Gated by `remit_statutory` in ROUTE_CAPABILITY.
       { href: '/payroll/statutory-payments', label: 'Government payments' },
@@ -213,7 +215,7 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // T-505: register a POS tablet so it can ask a manager for a refund approval; clear its lock.
       { href: '/admin/pos-tablets', label: 'POS tablets' },
       // T-508 S2b: which kitchen station cooks each item; a store manager's screen (manage_store_settings).
-      { href: '/kitchen', label: 'Kitchen setup' },
+      { href: '/kitchen', label: 'Kitchen stations' },
       // T-510 S3: the hours a menu price can follow (Lunch, Dinner); a store manager's screen (manage_store_settings).
       { href: '/menu/hours', label: 'Menu hours' },
       // ⭐ DEF-197 — the screen that exists so a dead letter is VISIBLE was itself invisible. This
@@ -221,7 +223,7 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // saying "tell a manager", and there is nothing for the manager to open), and it was in no
       // nav group and linked from no page — reachable only by typing the URL, for five days.
       // Found by T-227's own guard on its first run, which is what a guard is for.
-      { href: '/attendance/lane', label: 'Clock lane' },
+      { href: '/attendance/lane', label: 'Failed clock punches' },
       // T-190: SSS / PhilHealth / Pag-IBIG / tax tables and minimum wages. Gated by `manage_payroll_rates` in ROUTE_CAPABILITY.
       { href: '/payroll/rates', label: 'Payroll rates' },
     ],
