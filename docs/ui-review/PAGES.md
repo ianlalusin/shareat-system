@@ -149,7 +149,7 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /setup | apps/erp/src/app/setup/page.tsx | 2026-11-15 | OK | G3 |  |
 | /sign-in | apps/erp/src/app/sign-in/page.tsx | 2026-11-15 | OK | G3 |  |
 | /staff | apps/erp/src/app/staff/page.tsx | 2026-11-15 | fix | G3 | #277 |
-| /staff/[employmentId] | apps/erp/src/app/staff/[employmentId]/page.tsx | 2026-11-15 | fix | G3 | #278, #279 |
+| /staff/[employmentId] | apps/erp/src/app/staff/[employmentId]/page.tsx | 2026-11-15 | fix | G3 | #278, #279, #285 |
 | /staff/[employmentId]/credentials | apps/erp/src/app/staff/[employmentId]/credentials/page.tsx | 2026-11-15 | minor | G3 |  |
 | /staff/hire | apps/erp/src/app/staff/hire/page.tsx | 2026-11-15 | minor | G3 |  |
 | /statutory-discounts | apps/erp/src/app/statutory-discounts/page.tsx | 2026-11-15 | minor | G4 |  |

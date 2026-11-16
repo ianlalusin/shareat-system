@@ -372,6 +372,8 @@ describe('(d) non-converted <select> sites are byte-for-byte unchanged', () => {
         const norm = (x: string) =>
           x
             .replace(/className=\{`\$\{INPUT\} mt-1 w-full`\}/g, 'className={INPUT}')
+            // T-590: the end-employment status shows "Resigned" / "Terminated" (capital letter); the option values are untouched.
+            .replace(/\{capital\(s\)\}/g, '{s}')
             .split('\n')
             .map((l) => l.trim())
             .join('\n');
