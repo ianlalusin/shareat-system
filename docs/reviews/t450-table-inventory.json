@@ -6,12 +6,6 @@
     "headerless": 0
   },
   {
-    "file": "apps/erp/src/app/admin/pos-tablets/TillsSection.tsx",
-    "tables": 0,
-    "sharedTables": 1,
-    "headerless": 0
-  },
-  {
     "file": "apps/erp/src/app/admin/prerequisite-refusals/page.tsx",
     "tables": 1,
     "sharedTables": 0,
@@ -138,6 +132,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/documents/page.tsx",
+    "tables": 0,
+    "sharedTables": 1,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/expenses/[id]/page.tsx",
     "tables": 2,
     "sharedTables": 0,
@@ -211,12 +211,6 @@
   },
   {
     "file": "apps/erp/src/app/inventory/deliveries/page.tsx",
-    "tables": 0,
-    "sharedTables": 1,
-    "headerless": 0
-  },
-  {
-    "file": "apps/erp/src/app/inventory/locations/page.tsx",
     "tables": 0,
     "sharedTables": 1,
     "headerless": 0

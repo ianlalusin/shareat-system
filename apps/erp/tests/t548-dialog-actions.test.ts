@@ -47,7 +47,7 @@ describe('DialogActions', () => {
     const band = el.querySelector('[data-dialog-actions]')!;
     expect(band.contains(live[0]!)).toBe(true);
     expect(band.firstElementChild).toBe(live[0]);
-    expect(live[0]!.textContent).toContain('Save is off until');
+    expect(live[0]!.textContent).toContain('To save, fix');
     expect(el.querySelector('form')!.lastElementChild).toBe(band);
   });
 
@@ -57,7 +57,7 @@ describe('DialogActions', () => {
     expect(live).toHaveLength(1);
     expect(el.querySelector('[data-dialog-actions]')).toBeNull();
     expect(el.querySelector('form')!.lastElementChild).toBe(live[0]);
-    expect(live[0]!.textContent).toContain('Save is off until');
+    expect(live[0]!.textContent).toContain('To save, fix');
   });
 
   it('removing the band hands the line back to the form (still exactly one)', async () => {

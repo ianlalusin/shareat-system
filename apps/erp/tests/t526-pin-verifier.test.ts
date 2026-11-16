@@ -33,7 +33,7 @@ describe('T-526 R4 - pin-verifier', () => {
     v = await deriveVerifier(PIN);
   }, 30_000);
 
-  it('the iteration constant is a security floor of at least 210,000 (the current OWASP figure)', () => {
+  it('the iteration constant is a security floor of at least 210,000 (below the OWASP 600,000 until after go-live, row 455)', () => {
     expect(POS_VERIFIER_ITERATIONS).toBeGreaterThanOrEqual(210_000);
     expect(v.iterations).toBe(POS_VERIFIER_ITERATIONS);
   });

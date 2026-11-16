@@ -5,8 +5,11 @@
  * Headers are matched by ONE normaliser and a canonical table, whole text against whole text (never `startsWith`: `foodpanda Commission`
  * prefixes three headers). The workbook comes in two layouts, 34 columns (has Surcharge Fee and Cancellation Fee) and 32 (has neither);
  * every column is found by its words, never by position. Rows with no Order Code (the `=SUBTOTAL` table row) are skipped. Money cells are
- * JS numbers and must be exact to two decimals; percent columns are text and are ignored. The Order Code, the Official Document Number and
+ * JS numbers and must be exact to two decimals; percent columns are text and are ignored. The Order Code, the Official Document Number of an ORDER and
  * every customer field are never read into the output. The PDF is not read.
+ *
+ * T-511 S8b: each Appendix B CHARGE carries its Official Document Number (`officialDocument`; a charge of an earlier invoice is matched to a later payout on it), and the
+ * optional sheet "Appendix C" ("Outstanding Amount From Previous Periods") is read into `priorItems`: the items Foodpanda settles in THIS payout, signed as printed.
  */
 import { ZERO, add, money, subtract, type Money } from '@shareat/core/money';
 import { READER_VERSION } from './version';
@@ -16,6 +19,9 @@ import { readSheetsInWorker } from './xlsx-worker-host';
 
 export const FOODPANDA_MAX_ORDER_ROWS = 5_000;
 export const FOODPANDA_MAX_CHARGE_ROWS = 200;
+export const FOODPANDA_MAX_PRIOR_ITEMS = 50;
+/** A document number is a short run of digits; anything longer is refused, never stored (it reaches a table, a jsonb and plain-words sentences). */
+const DOCUMENT_MAX = 40;
 
 /** Appendix A: the normalised header text (case is not compared) -> the field it carries. Both layouts share these words. */
 export const FOODPANDA_COLUMNS = {
@@ -72,6 +78,17 @@ export const FOODPANDA_CHARGE_COLUMNS = {
 } as const;
 type ChargeField = (typeof FOODPANDA_CHARGE_COLUMNS)[keyof typeof FOODPANDA_CHARGE_COLUMNS];
 
+/** Appendix C (S8b): the same idea, 5 columns. The document number is printed under the header "Invoice Number" and is the OFFICIAL document number of the earlier invoice. */
+export const FOODPANDA_PRIOR_COLUMNS = {
+  'Invoice Number': 'document',
+  'Invoice Date': 'date',
+  'Invoice Period': 'period',
+  'Invoice Amount': 'amount',
+  'Remaining Amount': 'remaining',
+} as const;
+type PriorField = (typeof FOODPANDA_PRIOR_COLUMNS)[keyof typeof FOODPANDA_PRIOR_COLUMNS];
+const REQUIRED_PRIOR_FIELDS: readonly PriorField[] = ['document', 'amount'];
+
 /** Present in both layouts and needed to read an order. The rest (document number, partner name, flags, rate columns) may be absent. */
 const REQUIRED_ORDER_FIELDS: readonly OrderField[] = [
   'invoiceNumber', 'invoiceDate', 'vendorCode', 'orderCode', 'orderDate', 'gross', 'container', 'mov', 'partnerDeliveryFee', 'vendorVoucher',
@@ -98,7 +115,12 @@ export function normalizeFoodpandaHeader(raw: string): string {
 }
 
 export type FoodpandaLayout = '34' | '32';
-export type FoodpandaChargeKind = 'cpc_ad' | 'platform_fee' | 'pandago' | 'other';
+/**
+ * `delivery_fee` (T-511 S8b item 9, Ian 15 Nov): an Appendix B row whose CATEGORY is "Delivery Service Fees" (a "PandaGO Order-..." row and the "Incorrect Invoice Amount Reversal" row
+ * alike). It is a real expense Foodpanda deducts from a payout, so it stages as a period charge and books like the platform fee. Every other PandaGO row (cash on delivery, withholding)
+ * stays `pandago`: shown, never booked.
+ */
+export type FoodpandaChargeKind = 'cpc_ad' | 'platform_fee' | 'delivery_fee' | 'pandago' | 'other';
 
 export interface FoodpandaOrder {
   /** YYYY-MM-DD, the date printed (no time of day, no zone) */
@@ -148,9 +170,11 @@ export interface FoodpandaOrder {
 }
 
 export interface FoodpandaCharge {
+  /** T-511 S8b: the Official Document Number printed on this Appendix B row (the key an earlier-invoice deduction is matched on); null when the row has none */
+  officialDocument: string | null;
   category: string;
   kind: FoodpandaChargeKind;
-  /** CPC: the ISO date inside the description. PandaGO: the month-first M.DD.YYYY date. Otherwise null. */
+  /** CPC: the ISO date inside the description. PandaGO (a delivery fee or another PandaGO row): the month-first M.DD.YYYY date. Otherwise null. */
   date: string | null;
   /** Platform Fee only: the description's text about which month the fee is for */
   feeMonthNote: string | null;
@@ -158,6 +182,17 @@ export interface FoodpandaCharge {
   vatRate: number;
   netTotal: Money;
   ewt: Money;
+}
+
+/** One line of Appendix C: an item from an earlier period that this payout settles. `amount` is the signed "Invoice Amount" as printed (-100.00 is a deduction from the payout). */
+export interface FoodpandaPriorItem {
+  /** the earlier document's official number */
+  document: string;
+  /** YYYY-MM-DD when the printed date could be read, else null (the date is for the screen only) */
+  date: string | null;
+  amount: Money;
+  /** what remains of the item, as printed; null when the cell is blank or the column absent. A value other than `amount` means Foodpanda only partly settled it (S8b audit 1). */
+  remaining: Money | null;
 }
 
 export interface FoodpandaInvoice {
@@ -170,6 +205,8 @@ export interface FoodpandaInvoice {
   layout: FoodpandaLayout | null;
   orders: FoodpandaOrder[];
   charges: FoodpandaCharge[];
+  /** Appendix C; `[]` when the workbook has no such sheet */
+  priorItems: FoodpandaPriorItem[];
   readerVersion: string;
 }
 
@@ -179,6 +216,7 @@ const lookup = <F extends string>(table: Readonly<Record<string, F>>): ReadonlyM
   new Map(Object.entries(table).map(([text, field]) => [text.toLowerCase(), field]));
 const ORDER_LOOKUP = lookup<OrderField>(FOODPANDA_COLUMNS);
 const CHARGE_LOOKUP = lookup<ChargeField>(FOODPANDA_CHARGE_COLUMNS);
+const PRIOR_LOOKUP = lookup<PriorField>(FOODPANDA_PRIOR_COLUMNS);
 
 const labelOf = <F extends string>(table: Readonly<Record<string, F>>, field: F): string => Object.keys(table).find((k) => table[k] === field) ?? field;
 
@@ -209,6 +247,19 @@ const cellAt = <F extends string>(row: unknown[], at: ReadonlyMap<F, number>, fi
 };
 
 const textOf = (v: unknown): string => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '');
+
+/** What a document number may be made of. Anything else (a zero-width space, a bidi override, an inner space, an accent) is refused: it would make two equal-looking numbers differ or reorder a sentence. */
+const DOCUMENT_SHAPE = /^[A-Za-z0-9._/-]{1,40}$/;
+
+/** A document number cell: null when blank, else its trimmed text; refused unless it is 1 to 40 letters, digits or . _ / - */
+function documentCell(v: unknown, where: string, column: string): string | null {
+  const text = textOf(v);
+  if (text === '') return null;
+  if (!DOCUMENT_SHAPE.test(text)) {
+    return badValue(where, column, `"${shown(text.replace(/[^A-Za-z0-9._/-]/g, '?').slice(0, 60))}" is not a document number (at most ${DOCUMENT_MAX} letters, digits or . _ / -).`);
+  }
+  return text;
+}
 
 const two = (n: number): string => String(n).padStart(2, '0');
 function isoIfReal(year: number, month: number, day: number): string | null {
@@ -377,7 +428,9 @@ interface ChargeSheet {
 }
 
 function kindOf(category: string, description: string): FoodpandaChargeKind {
-  if (/^pandago\b/i.test(description)) return 'pandago';
+  if (category.trim().toLowerCase() === 'delivery service fees') return 'delivery_fee';
+  // any other row whose CATEGORY names PandaGO (cash on delivery, withholding...) is shown only, whatever its description says (S8b audit 7)
+  if (/pandago/i.test(category) || /^pandago\b/i.test(description)) return 'pandago';
   if (category === 'Organic Placement (CPC)') return 'cpc_ad';
   if (category === 'Platform Fee') return 'platform_fee';
   return 'other';
@@ -388,7 +441,8 @@ function chargeDate(kind: FoodpandaChargeKind, description: string): string | nu
     const m = /(?<![0-9])([0-9]{4})-([0-9]{2})-([0-9]{2})(?![0-9])/.exec(description);
     return m ? isoIfReal(Number(m[1]), Number(m[2]), Number(m[3])) : null;
   }
-  if (kind === 'pandago') {
+  // a PandaGO row names its order date month-first; a delivery fee row that is not a PandaGO order (a reversal) has no date of its own
+  if (kind === 'pandago' || (kind === 'delivery_fee' && /^pandago\b/i.test(description))) {
     const m = /(?<![0-9])([0-9]{1,2})\.([0-9]{1,2})\.([0-9]{4})(?![0-9])/.exec(description);
     return m ? isoIfReal(Number(m[3]), Number(m[1]), Number(m[2])) : null;
   }
@@ -426,6 +480,7 @@ function readCharges(data: unknown[][]): ChargeSheet | null {
     const vat = /^\s*([0-9]+(?:\.[0-9]+)?)\s*%\s*$/.exec(textOf(cellAt(row, at, 'vatRate')));
     if (!vat) badValue(where, 'Subject to VAT rate', `"${shown(textOf(cellAt(row, at, 'vatRate')))}" is not a percentage such as 12%.`);
     charges.push({
+      officialDocument: documentCell(cellAt(row, at, 'officialDocument'), where, 'Official Document Number'),
       category,
       kind,
       date: chargeDate(kind, description),
@@ -438,10 +493,48 @@ function readCharges(data: unknown[][]): ChargeSheet | null {
   return charges.length === 0 ? null : { charges, invoiceNumber, invoiceDate, vendorCode };
 }
 
+/* ------------------------------------------------------------------ Appendix C (S8b) */
+
+/** The printed date of an Appendix C row: a Date cell, `DD.MM.YYYY` (what the file prints) or ISO text. Anything else is null, never a refusal: the date only decorates the screen. */
+function priorDate(v: unknown): string | null {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : `${v.getUTCFullYear()}-${two(v.getUTCMonth() + 1)}-${two(v.getUTCDate())}`;
+  const text = textOf(v);
+  const dotted = /^([0-9]{1,2})\.([0-9]{1,2})\.([0-9]{4})$/.exec(text);
+  if (dotted) return isoIfReal(Number(dotted[3]), Number(dotted[2]), Number(dotted[1]));
+  const iso = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(text);
+  return iso ? isoIfReal(Number(iso[1]), Number(iso[2]), Number(iso[3])) : null;
+}
+
+/** "Outstanding Amount From Previous Periods": blank rows are skipped; a row with an amount and no document (or the reverse) is a defect and refused. At most 50 items. */
+function readPriorItems(data: unknown[][]): FoodpandaPriorItem[] {
+  const header = data[0];
+  if (!header) return [];
+  const at = mapHeaders(header, PRIOR_LOOKUP, 'Appendix C');
+  requireFields(at, REQUIRED_PRIOR_FIELDS, FOODPANDA_PRIOR_COLUMNS, 'Appendix C');
+  const items: FoodpandaPriorItem[] = [];
+  for (let r = 1; r < data.length; r++) {
+    const row = data[r] ?? [];
+    const where = `Appendix C row ${r + 1}`;
+    const document = documentCell(cellAt(row, at, 'document'), where, 'Invoice Number');
+    if (document === null && !hasValue(cellAt(row, at, 'amount'))) continue;
+    if (document === null) badValue(where, 'Invoice Number', 'an amount is printed but the document number is empty.');
+    if (items.length >= FOODPANDA_MAX_PRIOR_ITEMS) {
+      throw intakeRefusal('FOODPANDA_TOO_MANY_ROWS', `Appendix C has more than ${FOODPANDA_MAX_PRIOR_ITEMS} items, so the file was refused.`);
+    }
+    items.push({
+      document: document as string,
+      date: priorDate(cellAt(row, at, 'date')),
+      amount: moneyCell(cellAt(row, at, 'amount'), where, 'Invoice Amount'),
+      remaining: hasValue(cellAt(row, at, 'remaining')) ? moneyCell(cellAt(row, at, 'remaining'), where, 'Remaining Amount') : null,
+    });
+  }
+  return items;
+}
+
 /* ------------------------------------------------------------------ the invoice */
 
 /**
- * Reads `Appendix A` (orders) and `Appendix B` (charges). Appendix B alone is valid: the PandaGO-only invoice has no orders.
+ * Reads `Appendix A` (orders), `Appendix B` (charges) and, when present, `Appendix C` (earlier items this payout settles, S8b). Appendix B alone is valid: the PandaGO-only invoice has no orders.
  *
  * Runs `normalizeXlsx` itself first (zip caps, no DOCTYPE or ENTITY, rels links inside the zip, then a re-pack with true sizes), so a caller
  * cannot forget it; calling it beforehand is harmless. The library then reads the two sheets inside a worker thread with a memory limit and a timer
@@ -455,6 +548,7 @@ export async function readFoodpandaInvoice(workbook: Buffer): Promise<FoodpandaI
   if (!sheets.a && !sheets.b) throw intakeRefusal('FOODPANDA_NO_SHEETS', 'The workbook has neither an "Appendix A" nor an "Appendix B" sheet.');
   const a = sheets.a ? readOrders(sheets.a) : null;
   const b = sheets.b ? readCharges(sheets.b) : null;
+  const priorItems = sheets.c ? readPriorItems(sheets.c) : [];
   const first = a ?? b;
   if (!first) throw intakeRefusal('FOODPANDA_NO_SHEETS', 'The workbook has no order rows and no charge rows.');
   if (a && b && (a.invoiceNumber !== b.invoiceNumber || a.vendorCode !== b.vendorCode)) {
@@ -468,6 +562,7 @@ export async function readFoodpandaInvoice(workbook: Buffer): Promise<FoodpandaI
     layout: a?.layout ?? null,
     orders: a?.orders ?? [],
     charges: b?.charges ?? [],
+    priorItems,
     readerVersion: READER_VERSION,
   };
 }

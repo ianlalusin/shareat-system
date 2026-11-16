@@ -382,17 +382,17 @@ describe('T-511 S4 stage - the weekly Platform Fee relocation (synthetic invoice
 });
 
 describe('T-511 S4 stage - the PandaGO-only invoice', () => {
-  it('stages zero days and its three lines as pandago / booked as none, signed as printed (1.68, 89.29, -476.00), dated 24 Sep [kills: PandaGO booked; lines dropped; a day invented]', async () => {
+  it('stages zero days and its three lines signed as printed (1.68, 89.29, -476.00), dated 24 Sep: the 89.29 Delivery Service Fees row is a period charge with its VAT (S8b item 9), the withholding and COD rows stay pandago / booked as none [kills: PandaGO cash booked; lines dropped; a day invented; the delivery fee left unbookable]', async () => {
     const inv = await readFpFixture('foodpanda-lipa-oct5a-appendix-b-only-pandago.zip');
     const staged = stageFoodpandaDays(inv, MATCHED);
     expect(staged.days).toEqual([]);
     expect(staged.periodLines.length).toBe(3);
     for (const l of staged.periodLines) {
-      expect(l.kind).toBe('pandago');
       expect(l.bookedAs).toBe('none');
       expect(l.lineDate).toBe('2026-09-24');
     }
-    expect(staged.periodLines.map((l) => l.amount).sort()).toEqual(['-476.00', '1.68', '89.29']);
+    expect(staged.periodLines.map((l) => [l.amount, l.kind]).sort()).toEqual([['-476.00', 'pandago'], ['1.68', 'pandago'], ['89.29', 'period_charge']]);
+    expect(staged.periodLines.find((l) => l.kind === 'period_charge')).toMatchObject({ vat: '10.71', description: 'Delivery Service Fees' });
   });
 });
 

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { franchiseWorld, addDays, D0, insertLogRow, totalLogCount, sql as ownerSql, type FranchiseWorld } from '../../../../packages/db/tests/integration/_fixtures/t398-s6-franchise';
+import { CAPABILITY_LABEL } from '@shareat/auth';
 import { M, pageError, plain, render } from './t435-fixture';
 
 /**
@@ -80,7 +81,8 @@ describe('L2 the gate', () => {
     const html = await render(logPage, mk());
     const t = plain(html);
     expect(t).toContain(M.refusedCard);
-    expect(t).toContain('view_franchise_access_log');
+    expect(t).toContain(`This screen is for people who can ${CAPABILITY_LABEL.view_franchise_access_log}.`);
+    expect(t).not.toContain('view_franchise_access_log');
     for (const n of [N.sales, N.stock, N.signin, N.approver]) expect(t).not.toContain(n);
   });
 });

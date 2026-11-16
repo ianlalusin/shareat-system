@@ -190,7 +190,10 @@ describe('DEF-809: /sales-days is gated by submit_sales_day and scoped to the vi
     await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${w.orgId}, 'staff')`;
     await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${w.lipa})`;
     const html = await daysFor({ personId: p!.id, orgId: w.orgId } as Actor);
-    expect(html).toMatch(/^THROWN/);
+    // T-589 B3a: /sales-days refuses with the access card instead of throwing.
+    expect(html).not.toMatch(/^THROWN/);
+    expect(html).toContain('You do not have access to this screen');
+    expect(html).toContain('submit a sales day or verify a sales day');
     expect(html).not.toContain('2027-03-20');
   });
 });

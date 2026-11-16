@@ -21,6 +21,9 @@ vi.mock('next/navigation', () => ({
 const STORE_A = { id: 'store-a', name: 'Alpha Branch', code: 'ALP' };
 const TX = { __tx: true };
 const reportScopeMock = vi.fn();
+// T-589 B3a: the page probes the financial word before `reportScope`; this suite is about the dashboard a holder sees.
+vi.mock('../src/lib/session', () => ({ requireSession: vi.fn(async () => ({ actor: { orgId: 'org-1', personId: 'p-1' } })) }));
+vi.mock('@/lib/page-access', () => ({ holdsAny: vi.fn(async () => true) }));
 vi.mock('../src/app/reports/lib', () => ({
   reportScope: (...args: unknown[]) => reportScopeMock(...args),
   runReport: async (_orgId: string, fn: (tx: unknown) => unknown) => fn(TX),

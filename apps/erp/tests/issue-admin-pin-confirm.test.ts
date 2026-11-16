@@ -109,7 +109,9 @@ describe('IssueAdminPinForm confirmation', () => {
     submit();
     expect(dialog().open).toBe(false);
     expect(delivered).toBe(0);
-    expect(host.textContent).toContain('A PIN must be exactly 6 digits.');
+    // T-589 B3a: the summary points at the field; the requirement is the field's own line (progress words).
+    expect(host.textContent).toContain('4 more digits needed');
+    expect(host.textContent).toContain('To save, fix the field marked above.');
   });
 
   it('no second question or send while an issue is in flight', () => {

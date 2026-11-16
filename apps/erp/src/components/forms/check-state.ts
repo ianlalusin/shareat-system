@@ -5,6 +5,7 @@
  *
  * ⛔ Nothing here repeats a typed value in a sentence (government numbers are personal data, Audit A5).
  */
+import { countOf } from '@shareat/core/sentence';
 import { checkField, ruleApplies, rulesOf, ruleHint, type FieldCheck, type FieldRule, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 
 export interface CheckedFormState {
@@ -79,7 +80,7 @@ export interface CheckCtx {
   active: boolean;
   /** Some rule fails: Save is truly `disabled`. */
   blocked: boolean;
-  /** "Save is off until: ..." or null when nothing fails. Save's only explanation, so it is shown wherever Save is disabled. */
+  /** "To save, fix the 2 fields marked above." or null when nothing fails. Save's only explanation, so it is shown wherever Save is disabled. */
   summary: string | null;
   /** Names of the failing rules, in rule order. */
   failing: string[];
@@ -121,7 +122,6 @@ export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState
   if (!state.active) return INACTIVE;
   const results = new Map<string, FieldCheck>();
   const failing: string[] = [];
-  const requirements: string[] = [];
   const applicable = new Map<string, boolean>();
   for (const rule of rulesOf(set)) {
     const applies = ruleApplies(rule, state.values);
@@ -130,17 +130,18 @@ export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState
     results.set(rule.name, c);
     if (!c.ok) {
       failing.push(rule.name);
-      requirements.push(c.requirement);
     }
   }
-  const rest = requirements.length - 2;
   const blockerSentences = Object.values(state.blockers ?? NONE);
-  // Field requirements first (as T-440), then every business-rule blocker: a blocker is never hidden behind "and N more".
-  const fieldPart = requirements.length === 0 ? '' : `${requirements.slice(0, 2).join(' ')}${rest > 0 ? ` and ${rest} more` : ''}`;
+  // Every failing field already shows its own line under it, so the summary only POINTS at them (no wall of requirements).
+  // A business-rule blocker has no field under it, so its sentence prints in full, after the pointer (never hidden behind a count).
+  const fieldPart = failing.length === 0 ? '' : `fix the ${failing.length === 1 ? 'field' : countOf(failing.length, 'field')} marked above.`;
   const summary =
     failing.length === 0 && blockerSentences.length === 0
       ? null
-      : `Save is off until: ${[fieldPart, ...blockerSentences].filter(Boolean).join(' ')}`;
+      : blockerSentences.length === 0
+        ? `To save, ${fieldPart}`
+        : `To save: ${[fieldPart, ...blockerSentences].filter(Boolean).join(' ')}`;
   return {
     active: true,
     blocked: failing.length > 0 || blockerSentences.length > 0,

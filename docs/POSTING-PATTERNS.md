@@ -77,45 +77,45 @@
   - `1257–1274` channelsettlement.netsperiodcharge — the payout already netted a booked period charge, so it is not expensed again
   - `1275–1298` channelsettlement.grabdayaftercorrection — approve a Grab day: the platform figure replaces the staff figure first (T-511 S7a)
   - `1299–1320` channelsettlement.foodpandaweekwithcharge — approve a Foodpanda week: the last day nets the period charge once (T-511 S7a)
-- `1321–1326` Platform period charge (channelcharge) — v2-only, T-511 S6c
-  - `1327–1343` channelcharge.periodfee — a platform charge with no sales day, fee and VAT as one expense
-- `1344–1348` Amortization (amortization) — 38 legs
-  - `1349–1359` amortization.monthly — Monthly amortisation of a prepaid item
-- `1360–1364` Production / conversion (productionconversion) — v2-only, T-176
-  - `1365–1383` production.conversion.slice — a slab becomes three sliced products, plus a yield loss
-  - `1384–1391` The convert kind posts NOTHING to the ledger
-- `1392–1397` Wastage (wastageexpense) — 16 legs
-  - `1398–1414` wastageexpense.spoilage — A real cost of sales, straight against inventory
-- `1415–1420` Order/channel wastage (orderwastage) — v2-only, T-178
-  - `1421–1427` wastage.order-absorbed — the store eats a ₱150 Foodpanda refund
-  - `1428–1442` wastage.order-charged — split 60/40 between two staff
-- `1443–1449` Remittance (remittance) — 10 legs
-  - `1450–1458` remittance.exact — The conditional leg genuinely absent
-  - `1459–1483` remittance.overage — 7350 swings positive
-  - `1484–1505` remittance.shortage — Charged to the responsible cashier, not P&L
-- `1506–1510` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
-  - `1511–1528` balanceadjustment.plug — Included so nobody ports it forward
-- `1529–1533` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
-  - `1534–1543` prepaidpurchase.cash — An asset, not an immediate expense
-  - `1544–1552` assetpurchase.cash — Fixed asset purchase, cash
-  - `1553–1563` assetpurchase.credit — Fixed asset purchase, on account
-- `1564–1568` Slicer/payroll payout (slicerpayment) — 4 legs
-  - `1569–1579` slicerpayment.park — Settling an already-parked liability
-- `1580–1585` Statutory remittance (liabilitypayment)
-  - `1586–1604` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
-- `1605–1615` Statutory payment (statutorypayment)
-  - `1616–1627` statutorypayment.same-store - One store pays its own SSS from its own safe
-  - `1628–1643` statutorypayment.cross-store - One store's SSS paid from another store's safe
-  - `1644–1660` statutorypayment.with-penalty - Late, with the agency's surcharge
-- `1661–1669` Owner equity movements (capitalcontribution / drawing)
-  - `1670–1678` equity.capitalcontribution — Cash in, equity grows
-  - `1679–1695` equity.drawing — Reduces equity, on the books at last
-- `1696–1702` Year close (yearclose) — v2-only, ADR-006
-  - `1703–1722` yearclose.annual — One entry, into 3300, dated the following January 1st
-- `1723–1730` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
-  - `1731–1753` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
-  - `1754–1773` openingbalance.reconcile — Reconciling 3900 to exactly zero
-- `1774–1795` Reversal — the correction path (T-106)
+- `1321–1327` Platform period charge (channelcharge) — v2-only, T-511 S6c
+  - `1328–1344` channelcharge.periodfee — a platform charge with no sales day, fee and VAT as one expense
+- `1345–1349` Amortization (amortization) — 38 legs
+  - `1350–1360` amortization.monthly — Monthly amortisation of a prepaid item
+- `1361–1365` Production / conversion (productionconversion) — v2-only, T-176
+  - `1366–1384` production.conversion.slice — a slab becomes three sliced products, plus a yield loss
+  - `1385–1392` The convert kind posts NOTHING to the ledger
+- `1393–1398` Wastage (wastageexpense) — 16 legs
+  - `1399–1415` wastageexpense.spoilage — A real cost of sales, straight against inventory
+- `1416–1421` Order/channel wastage (orderwastage) — v2-only, T-178
+  - `1422–1428` wastage.order-absorbed — the store eats a ₱150 Foodpanda refund
+  - `1429–1443` wastage.order-charged — split 60/40 between two staff
+- `1444–1450` Remittance (remittance) — 10 legs
+  - `1451–1459` remittance.exact — The conditional leg genuinely absent
+  - `1460–1484` remittance.overage — 7350 swings positive
+  - `1485–1506` remittance.shortage — Charged to the responsible cashier, not P&L
+- `1507–1511` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
+  - `1512–1529` balanceadjustment.plug — Included so nobody ports it forward
+- `1530–1534` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
+  - `1535–1544` prepaidpurchase.cash — An asset, not an immediate expense
+  - `1545–1553` assetpurchase.cash — Fixed asset purchase, cash
+  - `1554–1564` assetpurchase.credit — Fixed asset purchase, on account
+- `1565–1569` Slicer/payroll payout (slicerpayment) — 4 legs
+  - `1570–1580` slicerpayment.park — Settling an already-parked liability
+- `1581–1586` Statutory remittance (liabilitypayment)
+  - `1587–1605` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
+- `1606–1616` Statutory payment (statutorypayment)
+  - `1617–1628` statutorypayment.same-store - One store pays its own SSS from its own safe
+  - `1629–1644` statutorypayment.cross-store - One store's SSS paid from another store's safe
+  - `1645–1661` statutorypayment.with-penalty - Late, with the agency's surcharge
+- `1662–1670` Owner equity movements (capitalcontribution / drawing)
+  - `1671–1679` equity.capitalcontribution — Cash in, equity grows
+  - `1680–1696` equity.drawing — Reduces equity, on the books at last
+- `1697–1703` Year close (yearclose) — v2-only, ADR-006
+  - `1704–1723` yearclose.annual — One entry, into 3300, dated the following January 1st
+- `1724–1731` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
+  - `1732–1754` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
+  - `1755–1774` openingbalance.reconcile — Reconciling 3900 to exactly zero
+- `1775–1796` Reversal — the correction path (T-106)
 
 <!-- TOC:END -->
 
@@ -1322,7 +1322,8 @@ re-approve nets it again.
 
 A delivery platform's weekly fee (and any uncategorised Appendix B charge) belongs to no sales day, so no
 settlement books it. `postPlatformCharge` books it once from the staged line and its stored VAT, dated on
-the charge. Owner decision (BOSS, 7 Nov): new source type `channel_charge`.
+the charge when its month is open, else today (Ian, 15 Nov: a late charge or credit note never goes into a closed
+month). Owner decision (BOSS, 7 Nov): new source type `channel_charge`.
 
 ### `channel_charge.period_fee` — a platform charge with no sales day, fee and VAT as one expense
 

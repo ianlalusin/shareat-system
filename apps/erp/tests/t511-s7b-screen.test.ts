@@ -26,11 +26,11 @@ const base: ReviewDayDetail = {
   lineId: LINE, storeId: 's1', storeName: 'Lipa', platform: 'foodpanda', salesDate: '2026-10-14', reviewState: 'pending', decisionReason: null, changedSinceBooked: false,
   fileFigure: '10000.00', staffFigure: '10000.00', difference: '0.00', differenceLarge: false, orders: [], salesCorrection: null, loan: { check: null, lines: [] },
   charges: { commission: '2000.00', marketing: '0.00', platformFee: '0.00', vendorDiscount: '0.00', grossInfo: '10000.00' }, otherLines: [], vatOnFees: '0.00', vatOnFeesUnreadable: false,
-  feeMonthNote: null, blockers: [], willPostOn: null, postNote: null, canApprove: true, approveWhy: null, isCarrier: false, carrierNote: null, invoiceCharges: [], bookedOn: null, undoNote: null,
+  feeMonthNote: null, blockers: [], willPostOn: null, postNote: null, canApprove: true, approveWhy: null, isCarrier: false, carrierNote: null, earlierCharges: [], priorItems: [], invoiceCharges: [], bookedOn: null, undoNote: null,
 };
 const charge = (over: Partial<PeriodChargeView> = {}): PeriodChargeView => ({
   otherLineId: '00000000-0000-4000-8000-0000000000c1', invoiceNumber: '200777000001', chargeDate: '2026-10-14', description: 'Admin Adjustment Fee', net: '100.00', vat: '12.00', total: '112.00',
-  state: 'not_booked', why: null, canBook: true, ...over,
+  state: 'not_booked', why: null, canBook: true, dateNote: null, ...over,
 });
 
 async function render(detail: Partial<ReviewDayDetail>, ack: { sign: 'short' | 'over'; difference: string } | null = null, access = { canReject: true, canReopen: false, canOverrideLoans: false }): Promise<string> {

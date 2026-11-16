@@ -10,6 +10,7 @@ import {
   REVIEW_PAGE_SIZE,
   attentionWords,
   chargeStateWord,
+  earlierChargeWord,
   listLoanWord,
   listStateWord,
   loanLineDetails,
@@ -78,6 +79,28 @@ describe('the list is short, the detail keeps the sentence', () => {
       expect(shortBlocker(`${fragment} and more words.`, null)).toBe(words);
       expect(words.split(' ').length).toBeLessThanOrEqual(3);
     }
+  });
+
+  it('S8b: the four earlier-item blockers (Foodpanda settles an earlier invoice in this payout) have their short phrases, matching the sentences prior-items.ts really writes; the screen label for an earlier charge has no stored word [kills: a reworded sentence that quietly falls to "Needs a look"]', () => {
+    const src = readFileSync(resolve(__dirname, '..', '..', '..', 'packages', 'domain', 'src', 'settlement-intake', 'prior-items.ts'), 'utf8');
+    for (const [fragment, words] of [
+      ['no charge with that document number is on file', 'Earlier invoice missing'],
+      ['That charge is on file but not booked yet', 'Earlier charge not booked'],
+      ['of a kind this system does not book from a file', 'Earlier item not bookable'],
+      ['Foodpanda says this payout settles earlier items worth', 'Earlier items differ'],
+      ['Foodpanda only partly settled an earlier item', 'Earlier item part-settled'],
+      ['Foodpanda printed document', 'Earlier items differ'],
+    ] as const) {
+      expect(src, fragment).toContain(fragment);
+      const sentence = fragment === 'Foodpanda printed document' ? `${fragment} 2999999900000001 more than once on this statement.` : /^Foodpanda (says|only)/.test(fragment) ? `${fragment} 90.00 deducted.` : `Foodpanda settles an earlier item in this payout (document 2999999900000001, deducted 100.00), but ${fragment}.`;
+      expect(shortBlocker(sentence, null)).toBe(words);
+      expect(words.split(' ').length).toBeLessThanOrEqual(4);
+    }
+    expect(earlierChargeWord(false).label).toBe('Settled by this payout');
+    expect(earlierChargeWord(true).label).toBe('Already settled by another payout');
+    expect(earlierChargeWord(false, true).label).toBe('Not settled yet - see the reason above');
+    expect(earlierChargeWord(true, true).label, 'a charge another payout already settled stays what it is').toBe('Already settled by another payout');
+    for (const netted of [false, true]) for (const held of [false, true]) expect(earlierChargeWord(netted, held).label).not.toMatch(/_/);
   });
 
   it('the loan blocker is told by the loan check it came from, per status [kills: three loan sentences all reading "Needs a look"]', () => {
@@ -188,12 +211,12 @@ describe('the review screen says nothing internal', () => {
 
 describe('render 2 fixes (6 Nov 2026)', () => {
   const ctx = (blocked: boolean) =>
-    ({ active: true, blocked, summary: blocked ? 'Save is off until: A rejection needs a reason.' : null, failing: [], blockers: new Map(), warnings: new Map(), values: {}, setVerdict: () => {}, track: () => () => {}, result: () => undefined, touched: () => false, applies: () => true }) as never;
+    ({ active: true, blocked, summary: blocked ? 'To save: A rejection needs a reason.' : null, failing: [], blockers: new Map(), warnings: new Map(), values: {}, setVerdict: () => {}, track: () => () => {}, result: () => undefined, touched: () => false, applies: () => true }) as never;
   const inForm = (blocked: boolean, node: ReturnType<typeof h>) => renderToStaticMarkup(h(CheckContext.Provider, { value: ctx(blocked) }, node));
 
   it('the hint is not a p[role=status], the shared line is: the form hides the shared one only [kills: the hint hidden by its own rule]', () => {
     const hint = inForm(true, h(RejectReasonHint));
-    const shared = inForm(true, h(CheckSummary, { active: true, summary: 'Save is off until: A rejection needs a reason.' }));
+    const shared = inForm(true, h(CheckSummary, { active: true, summary: 'To save: A rejection needs a reason.' }));
     expect(shared).toMatch(/^<p\b[^>]*role="status"/);
     expect(hint).not.toMatch(/^<p\b/);
     expect(hint).toMatch(/^<div\b[^>]*role="status"/);

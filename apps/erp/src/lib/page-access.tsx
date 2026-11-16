@@ -21,7 +21,7 @@
 // ⛔ From the CHOKEPOINT, not from `@shareat/db` — T-261 §B6. That module is where the
 //    constraint-refusal counter lives; a direct import silently bypasses it.
 import { withOrgPrincipal } from '../app/expenses/lib';
-import { heldCapabilities, type Actor } from '@shareat/auth';
+import { CAPABILITY_LABEL, heldCapabilities, type Actor, type Capability } from '@shareat/auth';
 import { requireSession } from './session';
 import { capabilitiesForRoute } from './route-capability';
 
@@ -52,21 +52,31 @@ export async function requirePageAccess(route: string): Promise<PageAccess> {
   const held = await withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor));
   if (accepted.some((c) => held.has(c))) return { actor, refusal: null };
 
-  return { actor, refusal: <AccessRefused capability={accepted.join(' or ')} /> };
+  return { actor, refusal: <AccessRefused accepted={accepted} /> };
 }
 
-function AccessRefused({ capability }: { capability: string }) {
+/** True when `actor` holds ANY of `capabilities` (org-wide union, the same read the route gate makes). For a page that must degrade, not refuse. */
+export async function holdsAny(actor: Actor, capabilities: readonly Capability[]): Promise<boolean> {
+  const held = await withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor));
+  return capabilities.some((c) => held.has(c));
+}
+
+/** "a", "a or b", "a, b or c" - the plain-words list of what opens a screen. */
+function orList(items: readonly string[]): string {
+  return items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
+}
+
+function AccessRefused({ accepted }: { accepted: readonly Capability[] }) {
+  // T-589 B3a: plain words, never the raw key (kept in `data-capability` for tests and support only).
   return (
-    <div className="mx-auto max-w-xl p-8">
+    <div className="mx-auto max-w-xl p-8" data-capability={accepted.join(' ')}>
       <div className="rounded-lg border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
         <h1 className="text-base font-semibold">You do not have access to this screen</h1>
         <p className="mt-2">
-          It needs the <code className="font-mono text-xs">{capability}</code> capability, which
-          your role does not have.
+          This screen is for people who can {orList(accepted.map((c) => CAPABILITY_LABEL[c]))}. Ask an administrator to give you access under Users and roles.
         </p>
         <p className="mt-2 text-xs">
-          If you need it, an administrator can grant it to you by name under Users and roles. Your
-          sign-in is fine — this is about what the account is allowed to see, not who you are.
+          Your sign-in is fine. This is about what the account is allowed to see, not who you are.
         </p>
         {/* ⚠️ A real control, sized to the 24px touch floor — NOT a bare inline <a>, which
             `action-link-sweep` correctly measured at 20px inside this text. The same call as the

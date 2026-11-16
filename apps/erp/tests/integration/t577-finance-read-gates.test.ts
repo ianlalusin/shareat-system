@@ -287,6 +287,11 @@ describe('T-577 - single-record pages: a record outside the viewer\'s stores is 
     it(`${k.name}: C at the record's own store but holding none of its capabilities gets not-found (the refusal fires)`, async () => {
       const w = await world();
       const r = await records();
+      // T-589 B3a: /sales-days is on the route map now, so a person with none of its words gets the refusal card (decided before any record loads, so it still says nothing about the record).
+      if (k.name === 'sales-days/[id]') {
+        expectRefusalCard(await render(page[k.load], w.C, { params: { id: k.s1(r) } }), `C ${k.name} S1`);
+        return;
+      }
       expect(await pageError(() => render(page[k.load], w.C, { params: { id: k.s1(r) } })), `C ${k.name} S1`).toBe(NOT_FOUND);
     });
 
@@ -379,7 +384,8 @@ describe('T-577 r2 - sales-days/[id]/edit: not-found before any "can\'t edit" me
     const other = await pageError(() => render(edit, w.M1, { params: { id: r.dayS2 } }));
     expect(other).toBe(NOT_FOUND);
     expect(await pageError(() => render(edit, w.M1, { params: { id: FORGED } }))).toBe(other);
-    expect(await pageError(() => render(edit, w.C, { params: { id: r.dayS1 } }))).toBe(NOT_FOUND);
+    // T-589 B3a: /sales-days is on the route map now; a person with none of its words gets the refusal card, before the record loads.
+    expectRefusalCard(await render(edit, w.C, { params: { id: r.dayS1 } }), 'C sales-days/[id]/edit');
   });
 });
 

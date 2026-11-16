@@ -17,7 +17,7 @@ import { peso } from '@/lib/format';
 import type { LoanOption } from '../lib';
 import { approveDayAction, bookChargeAction, overrideLoanAllocationAction, rejectDayAction, reopenDayAction } from './actions';
 import { RejectReasonHint } from './RejectReasonHint';
-import { bookedAsWord, chargeStateWord, differenceWords, isNonZero, loanLineDetails, loanWord, noteText, ordersHint, otherKindWord, platformWord, shortDate, stateWord, type ReviewFilterValues } from './words';
+import { bookedAsWord, chargeStateWord, differenceWords, earlierChargeWord, isNonZero, printedItemWords, loanLineDetails, loanWord, noteText, ordersHint, otherKindWord, platformWord, shortDate, stateWord, type ReviewFilterValues } from './words';
 
 export interface DayDetailAccess {
   canReject: boolean;
@@ -118,6 +118,7 @@ export function ChargeList({ charges, filters, lineId }: { readonly charges: rea
               <Badge tone={st.tone} label={st.label} />
             </p>
             {c.why ? <p className="text-sm">{c.why}</p> : null}
+            {c.dateNote ? <p className="text-sm">{c.dateNote}</p> : null}
             {c.canBook ? (
               <form action={bookChargeAction} className="pt-1">
                 <input type="hidden" name="otherLineId" value={c.otherLineId} />
@@ -240,6 +241,31 @@ export function DayDetail({
         </div>
       ) : null}
       {detail.carrierNote ? <p className="text-sm">{detail.carrierNote}</p> : null}
+      {detail.earlierCharges.length > 0 || detail.priorItems.length > 0 ? (
+        <div className="space-y-2">
+          <h3 className="font-medium">From earlier invoices</h3>
+          <p className="text-sm">The statement lists earlier items as settled in this payout: {detail.priorItems.map((p) => `document ${p.document} (${printedItemWords(p.amount, peso(p.amount.replace(/^-/, '')))})`).join(', ')}. Each is matched to the charge booked when its own invoice was uploaded.</p>
+          <ul className="space-y-2">
+            {detail.earlierCharges.map((e, i) => {
+              const st = earlierChargeWord(e.netted, detail.blockers.length > 0);
+              return (
+                <li key={i} className="space-y-1 rounded-[20px] border border-surface-border px-3 py-2">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <span className="min-w-0 font-medium">
+                      {e.invoiceNumber ? `Invoice ${e.invoiceNumber}` : 'An earlier invoice'}, document {e.document}
+                      {e.chargeDate ? `, ${shortDate(e.chargeDate)}` : ''}
+                    </span>
+                    <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums">{peso(e.total)}</span>
+                  </div>
+                  <p>
+                    <Badge tone={st.tone} label={st.label} />
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
 
       {grab && detail.loan.check ? (
         <div className="space-y-2">

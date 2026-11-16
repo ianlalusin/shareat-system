@@ -486,7 +486,7 @@ describe('T-511 S5b listReviewDays - Grab and Foodpanda rows', () => {
     const out = await list(w, w.admin);
     expect(out.days).toEqual([]);
     expect(out.pandagoOnly.length).toBe(1);
-    expect(out.pandagoOnly[0]).toMatchObject({ storeId: w.storeA, storeName: 'Lipa', pandagoNetTotal: '-385.03', pandagoReceivable: '374.32', workbookDate: '2026-10-02' });
+    expect(out.pandagoOnly[0]).toMatchObject({ storeId: w.storeA, storeName: 'Lipa', pandagoNetTotal: '-474.32', pandagoReceivable: '474.32', workbookDate: '2026-10-02' });
     expect((await list(w, w.managerB)).pandagoOnly).toEqual([]);
   });
 });
