@@ -56,6 +56,8 @@ export const DESTRUCTIVE_TARGETS = {
   order_wastage: { table: 'order_wastages', store: sql`t.store_id` },
   // ---- Tier R: the NAME the person must retype, loaded here, never taken from the form ----
   store_position: { table: 'positions', store: null, name: sql`t.name` },
+  // T-584: an issued HR document. The number is what the person retypes to void it (the record's own name, loaded here, never taken from the form).
+  issued_document: { table: 'issued_documents', store: sql`t.store_id`, name: sql`t.number` },
   person_grant: { table: 'person_grants', store: null, name: sql`t.grant_name`, org: false },
   person_credential: {
     table: 'person_credentials',

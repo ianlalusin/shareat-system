@@ -232,6 +232,31 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Per-store configuration (T-564) — store key, match labels, file hints and the wastage-email opt-in. Same class as ' +
       'sales_channels: it is not pilot activity, and re-seeding it would change a store key that other records name.',
   },
+  document_templates: {
+    class: 'keep',
+    reason:
+      "HR document templates (T-584): the organisation's standard wording, entered by an admin. Configuration, not pilot activity; the 2027-01-01 purge must not erase it.",
+  },
+  document_template_versions: {
+    class: 'keep',
+    reason:
+      "Every saved version of a document template (T-584), append-only. Kept with its template; an issued document names the version it was written from.",
+  },
+  issued_documents: {
+    class: 'keep',
+    reason:
+      "Issued HR documents (T-584): certificates of employment, memos, notices to explain and contracts, each numbered DOC-YYYY-NNNN. These are real employment records handed to real people, not pilot data, so they survive the cutover purge and the number sequence continues.",
+  },
+  issued_document_versions: {
+    class: 'keep',
+    reason:
+      "Every version of every issued HR document (T-584, R7), append-only. Kept with the document: a signed earlier version is evidence and is never discarded.",
+  },
+  issued_document_signatures: {
+    class: 'keep',
+    reason:
+      "Who signed which version of which issued document, and when (T-584), append-only. Evidence that goes with the document it belongs to.",
+  },
   /** ⚠️ **This one is not obviously `purge`, and the reasoning is worth reading before changing
    *  it.** Every other operational table is purged because the 2027-01-01 opening entry replaces
    *  it. **This table is not replaced by anything** — the opening entry is a balance-sheet

@@ -132,6 +132,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/documents/page.tsx",
+    "tables": 0,
+    "sharedTables": 1,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/expenses/[id]/page.tsx",
     "tables": 2,
     "sharedTables": 0,

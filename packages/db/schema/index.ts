@@ -55,6 +55,7 @@ export * from './ar';
 export * from './trade';
 export * from './channel-settlements';
 export * from './store-channel-settlement';
+export * from './documents';
 export * from './findings';
 export * from './prerequisite-refusals';
 export * from './cutover';

@@ -68,6 +68,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/attendance', label: 'Attendance' },
       // T-436 - ask for leave, decide it, record an absence. Open to everyone: a staff member requests their own.
       { href: '/attendance/leave', label: 'Leave' },
+      // T-584: certificates, memos, notices and contracts for staff. Gated by `view_documents` in ROUTE_CAPABILITY, so the link shows only to someone who can open it.
+      { href: '/documents', label: 'Documents' },
       { href: '/payroll', label: 'Payroll' },
       // T-193 S5: paying SSS / PhilHealth / Pag-IBIG / BIR. Gated by `remit_statutory` in ROUTE_CAPABILITY.
       { href: '/payroll/statutory-payments', label: 'Government payments' },

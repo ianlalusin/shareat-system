@@ -1597,6 +1597,13 @@
       "when": 1808278307084,
       "tag": "0257_t564_store_channel_settlement_config",
       "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "7",
+      "when": 1808451107084,
+      "tag": "0259_t584_documents",
+      "breakpoints": true
     }
   ]
 }
