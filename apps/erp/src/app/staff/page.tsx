@@ -214,7 +214,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         <section className="space-y-3 rounded-[20px] border border-surface-border bg-surface p-4">
           <h2 className="font-semibold">Administrator PINs</h2>
           <p className="text-xs text-muted">
-            An administrator approves a void, a reversal, a delete or a cutover step with their own
+            An administrator approves a void, a reversal, a delete or an opening-balances step with their own
             6-digit PIN. One who signs in by email only has no PIN until one is issued here.
           </p>
           <ul className="divide-y divide-surface-border text-sm">

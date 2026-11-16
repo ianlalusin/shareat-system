@@ -31,7 +31,7 @@ import { Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, 
 import { CheckedForm } from '@/components/forms';
 import { CUTOVER_ASSET_RULES, CUTOVER_FIGURE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
-export const metadata = { title: 'Opening balances — Shareat System' };
+export const metadata = { title: 'Opening balance sheet — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
@@ -45,7 +45,7 @@ export default async function OpeningPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor, refusal } = await requirePageAccess('/cutover/opening');
+  const { actor, refusal } = await requirePageAccess('/opening-balances/balance-sheet');
   if (refusal) return refusal;
 
   const [stores, drafts, accounts, gaps, parties, shells, tie] = await Promise.all([
@@ -75,12 +75,12 @@ export default async function OpeningPage({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link
-            href="/cutover"
+            href="/opening-balances"
             className={`${ACTION_LINK} text-neutral-500 dark:text-neutral-400`}
           >
-            ← Back to the conversion
+            ← Back to opening balances
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold">Opening balances</h1>
+          <h1 className="mt-1 text-2xl font-semibold">Opening balance sheet</h1>
           <PageDescription>
             What the business owns and owes on the morning the new books open. Enter them over as
             many days as it takes — nothing is final until you post at the end.
@@ -207,7 +207,7 @@ export default async function OpeningPage({
             {gaps.doubleCounted.length === 1 ? 'y has' : 'ies have'} the same money twice.
           </strong>
           <p className="mt-1 text-xs">
-            An opening balance was entered for them, and a document dated before the conversion also
+            An opening balance was entered for them, and a document dated before the opening date also
             exists. One of the two has to go.
           </p>
         </Banner>
@@ -253,7 +253,7 @@ export default async function OpeningPage({
                   {a.name} <span className="text-xs font-normal text-neutral-500">{storeName(a.storeId)}</span>
                 </p>
                 <FormGrid>
-                  <Field label="Book value on the conversion date" rule={CUTOVER_ASSET_RULES.bookValue}>
+                  <Field label="Book value on the opening date" rule={CUTOVER_ASSET_RULES.bookValue}>
                     <input {...nativeAttrs(CUTOVER_ASSET_RULES.bookValue)} placeholder="0.00" className={INPUT} />
                   </Field>
                   <Field label="Remaining life (whole months)" rule={CUTOVER_ASSET_RULES.remainingLifeMonths}>
@@ -325,7 +325,7 @@ export default async function OpeningPage({
                 {st.def.code === 'C3P' && !st.done && (
                   <form action={attestStepAction} className="mt-2 space-y-2">
                     <input type="hidden" name="stepCode" value="C3P" />
-                    <input type="hidden" name="returnTo" value="/cutover/opening" />
+                    <input type="hidden" name="returnTo" value="/opening-balances/balance-sheet" />
                     <input type="hidden" name="storeId" value="" />
                     <input type="text" name="note" placeholder="Which old-system lists you compared (optional)" className={INPUT} />
                     <button type="submit" className={BUTTON}>

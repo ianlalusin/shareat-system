@@ -129,7 +129,7 @@ describe('T-342 guard — no app action/route passes a literal null/undefined fi
     // ⛔ The assertion is ZERO, not "these six": the builder fixes source, never a test. Until the
     // builder wraps each site in `withOrgPrincipal(actor.orgId, tx => domainFn(tx, actor, …))` per
     // the task's fix section, this fails and vitest's diff prints exactly the six current sites
-    // (cutover/actions.ts:39,58,77,96,113; fixed-assets/actions.ts:147) — no edit to this file
+    // (opening-balances/actions.ts:39,58,77,96,113; fixed-assets/actions.ts:147) — no edit to this file
     // makes it pass, only fixing the source does.
     const hits = scanForNullTx(srcRoot);
     expect(hits).toEqual([]);

@@ -135,9 +135,9 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // T-511 S5b: reading, rejecting and reopening the staged days. The list and detail are scoped per store inside the domain by the same word `rejectDay` checks (recording a channel settlement); the longer prefix wins over the open /channel-settlements.
   '/channel-settlements/review': 'record_ar_collection',
   // T-390 S5: the opening count (costs), the opening figures (party names, balances) and the count sheet. The domain's writes check
-  // the same word; this is the read layer. The prefix covers /cutover/count/sheet.
-  '/cutover/opening': 'run_cutover',
-  '/cutover/count': 'run_cutover',
+  // the same word; this is the read layer. The prefix covers /opening-balances/stock-count/sheet.
+  '/opening-balances/balance-sheet': 'run_cutover',
+  '/opening-balances/stock-count': 'run_cutover',
 
   // --- T-401 S4: the menu and catalog master. The prefix covers /menu/items/[id] and /menu/prices; the longer /menu/requests wins
   //     and needs the (store-scoped) request word instead, which a manager holds. The writes check their own words in the domain.

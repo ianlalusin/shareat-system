@@ -125,7 +125,7 @@ export async function cutoverProgress(
       const prerequisites = steps.filter((x) => x.def.code === gate.after);
       const unmet = prerequisites.filter((x) => !x.done);
       if (unmet.length > 0) {
-        s.blockedBy = `${s.def.code} waits on ${gate.after}. ${gate.because}`;
+        s.blockedBy = `Waiting for "${prerequisites[0]?.def.title ?? gate.after}". ${gate.because}`;
         s.done = false;
         break;
       }
@@ -157,7 +157,7 @@ async function evaluate(
   storeId: string | null,
 ): Promise<{ holds: boolean; detail: string | null }> {
   if (code === 'B3') {
-    if (!storeId) return { holds: false, detail: 'B3 is per store.' };
+    if (!storeId) return { holds: false, detail: 'This step is per store.' };
     const missing = await cutoverRepo.itemsWithoutCount(tx, orgId, storeId);
     return missing.length === 0
       ? { holds: true, detail: null }
@@ -173,7 +173,7 @@ async function evaluate(
     const residual = await cutoverRepo.openingEquityResidual(tx, orgId);
     // T-371 C4: re-minted and tested in centavos, never as a float — a malformed residual throws instead of reading as balanced.
     if (!isZero(money(residual))) {
-      return { holds: false, detail: `3900 carries ₱${residual}. ⛔ This halts — there is no plug account.` };
+      return { holds: false, detail: `The opening difference is ₱${residual}. This halts: there is no plug account.` };
     }
     // T-390 R9: "and every register ties" — the tie-out is a query, so a recorded C4 row can never make it pass.
     const tie = await openingTieOut(tx, orgId);

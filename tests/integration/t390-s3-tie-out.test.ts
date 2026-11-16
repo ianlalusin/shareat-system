@@ -369,7 +369,7 @@ describe('R16 - step C3P and the C3P -> C5 gate (kills M29)', () => {
     expect(def!.phase).toBe('C');
     expect(def!.kind).toBe('attested');
     expect(def!.perStore).toBe(false);
-    expect(def!.title).toMatch(/party balances agree with v1/i);
+    expect(def!.title).toMatch(/party balances agree with the old system/i);
     expect(domain.CUTOVER_GATES.some((g) => g.after === 'C3P' && g.before === 'C5')).toBe(true);
   });
 
@@ -384,7 +384,7 @@ describe('R16 - step C3P and the C3P -> C5 gate (kills M29)', () => {
     const before = await prog();
     expect(before.steps.find((s) => s.def.code === 'C4')!.done, 'fixture: C4 should hold on an empty, tied ledger').toBe(true);
     const c5 = before.steps.find((s) => s.def.code === 'C5')!;
-    expect(c5.blockedBy ?? '(not blocked)', 'C5 is not blocked while C3P is unattested').toMatch(/C3P/);
+    expect(c5.blockedBy ?? '(not blocked)', 'C5 is not blocked while C3P is unattested').toMatch(/Opening party balances agree/);
     await attestC3P(f);
     const after = await prog();
     expect(after.steps.find((s) => s.def.code === 'C3P')!.done).toBe(true);
@@ -514,7 +514,6 @@ describe('C5 refuses in words, from the same tie-out (I6, I7) and test 18 - doub
     await settle3900(f);
     const err = await errorOf(postC5(f));
     expect(err, 'C5 posted without C3P').toBeInstanceOf(RefusalError);
-    expect(reason(err)).toMatch(/C3P/);
     expect(reason(err)).toMatch(/customer, supplier, loan and advance balances/i);
     expect(await entryStates(f)).toEqual({ draft: 2 });
     await expectHolds(f); // the refusal above was about C3P alone: every register ties
@@ -632,7 +631,6 @@ describe('audit 1 - a STALE C3P: party balances changed after the attestation', 
     const err = await errorOf(post());
     expect(err, 'C5 posted on a C3P that predates a party figure').toBeInstanceOf(RefusalError);
     expect(reason(err)).toMatch(/changed/i);
-    expect(reason(err)).toMatch(/C3P/);
     expect(reason(err)).toMatch(/confirm/i);
     await attestC3P(f);
     const r = await post();

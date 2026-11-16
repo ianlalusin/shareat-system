@@ -59,6 +59,16 @@ const nextConfig = {
     // Type errors fail the build. Never set this to true.
     ignoreBuildErrors: false,
   },
+  // T-591: "cutover" became "Opening balances". Old links and bookmarks land on the new pages (308; Next keeps the query string).
+  // One explicit rule per path, no catch-all: the sub-page names changed (count -> stock-count, opening -> balance-sheet).
+  async redirects() {
+    return [
+      ['/cutover', '/opening-balances'],
+      ['/cutover/count', '/opening-balances/stock-count'],
+      ['/cutover/count/sheet', '/opening-balances/stock-count/sheet'],
+      ['/cutover/opening', '/opening-balances/balance-sheet'],
+    ].map(([source, destination]) => ({ source, destination, permanent: true }));
+  },
   // NOTE: the `eslint` key was removed in Next.js 16 and is silently ignored, so it is
   // not set here. Lint is currently NOT enforced anywhere — see docs/DEFECTS-REGISTER.md
   // DEF-027. Tracked as a gap rather than papered over with a key that does nothing.

@@ -137,7 +137,7 @@ describe('the wizard is a guide, not a checklist', () => {
   it('⭐ a blocked step says WHAT TO GO AND DO, rather than hiding', async () => {
     const f = await fixture('blocked');
     const b1 = await stepOf(f, 'B1');
-    expect(b1.blockedBy).toMatch(/B1 waits on A1/);
+    expect(b1.blockedBy).toMatch(/Waiting for "Clear the delivery-expensing backlog"/);
     expect(b1.blockedBy).toMatch(/values the newest stock at nothing/);
   });
 
@@ -325,7 +325,7 @@ describe('the residual halts, and is visible the whole time', () => {
     const c4 = p.steps.find((s) => s.def.code === 'C4')!;
     expect(c4.detail).toBeNull();
     expect(c4.done).toBe(false);
-    expect(c4.blockedBy).toMatch(/C4 waits on C3/);
+    expect(c4.blockedBy).toMatch(/Waiting for "Enter opening balances"/);
 
     // Once the opening entry step is recorded, the check is allowed to count.
     // C2 was recorded by the real purge (the fixture); C3 is the attestation.

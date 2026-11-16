@@ -1359,7 +1359,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   record_ap_payment: 'record a supplier payment',
   record_ar_collection: 'record a payment from a customer',
   write_off_receivable: 'write off a receivable',
-  run_cutover: 'run the changeover to the new books',
+  run_cutover: 'enter opening balances',
   manage_items: 'manage the organisation-wide item list',
   approve_item: 'approve a new item',
   approve_item_request: 'approve or reject a request for a new item',

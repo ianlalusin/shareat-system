@@ -24,7 +24,7 @@ export const S2_ACTIONS = [
   'app/payroll/actions.ts',
   'app/payroll/separations/actions.ts',
   'app/payroll/thirteenth-month/actions.ts',
-  'app/cutover/actions.ts',
+  'app/opening-balances/actions.ts',
   'app/findings/actions.ts',
 ];
 
@@ -41,9 +41,9 @@ export const S2_PAGES = [
   'app/payroll/page.tsx',
   'app/payroll/separations/page.tsx',
   'app/payroll/thirteenth-month/page.tsx',
-  'app/cutover/page.tsx',
-  'app/cutover/opening/page.tsx',
-  'app/cutover/count/page.tsx',
+  'app/opening-balances/page.tsx',
+  'app/opening-balances/balance-sheet/page.tsx',
+  'app/opening-balances/stock-count/page.tsx',
   'app/findings/page.tsx',
 ];
 

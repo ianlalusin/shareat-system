@@ -74,7 +74,7 @@ export function IssueAdminPinConfirm({
         <div className="space-y-3 text-sm">
           <p>
             An administrator PIN is {displayName}&rsquo;s personal approval code. They type it to
-            approve a void, a reversal, a delete or a cutover step.
+            approve a void, a reversal, a delete or an opening-balances step.
           </p>
           <p>
             A new PIN takes effect immediately. The old PIN stops working and any live sessions for

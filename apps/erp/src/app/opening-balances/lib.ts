@@ -52,7 +52,7 @@ export const PHASE_TITLE: Record<string, string> = {
 const KIND_LABEL: Record<string, string> = {
   verified: 'Checked automatically',
   attested: 'Stated by a person',
-  performed: 'Run by the wizard',
+  performed: 'Run by the system',
 };
 
 /**

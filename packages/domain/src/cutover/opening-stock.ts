@@ -245,7 +245,7 @@ export async function valueOpeningStock(
     if (!period) {
       throw refuse(
         `valueOpeningStock: no fiscal period covers ${CONVERSION}.`,
-        `No fiscal period covers ${CONVERSION}. Create the opening period first: the conversion posts into it.`,
+        `No fiscal period covers ${CONVERSION}. Create the opening period first: the opening balances post into it.`,
       );
     }
     const closed = await closedStockPeriodSentence(trx, actor.orgId, CONVERSION, 'opened');

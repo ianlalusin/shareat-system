@@ -48,8 +48,8 @@ const TARGET_FILES = [
   'app/admin/stores/[id]/page.tsx',
   'app/customers/[customerId]/page.tsx',
   'app/settings/expense-categories/page.tsx',
-  'app/cutover/count/page.tsx',
-  'app/cutover/opening/page.tsx',
+  'app/opening-balances/stock-count/page.tsx',
+  'app/opening-balances/balance-sheet/page.tsx',
   'app/staff/[employmentId]/credentials/page.tsx',
 ];
 

@@ -8,7 +8,7 @@ import { PURGE_AS_OF } from '../integration/t390-real-purge';
  * T-394 S1 invariant 7 / R7 / DEF-642 - the conversion date is written five times; they must agree.
  * `docs/tasks/394-purge-and-opening-rehearsal.md` s4 R7, s6 I7. Written TESTER-FIRST.
  *
- * The five copies: apps/erp/src/app/cutover/lib.ts CONVERSION_DATE, packages/domain/src/cutover/tie-out.ts CONVERSION_DATE,
+ * The five copies: apps/erp/src/app/opening-balances/lib.ts CONVERSION_DATE, packages/domain/src/cutover/tie-out.ts CONVERSION_DATE,
  * the private CONVERSION in packages/domain/src/cutover/opening-stock.ts, fiscal_periods.keepFrom in classification.ts,
  * PURGE_AS_OF in tests/integration/t390-real-purge.ts.
  *
@@ -37,12 +37,12 @@ function derivesFromConversionDate(src: string): boolean {
 
 describe('T-394 S1 I7 - the five conversion-date copies are one date', () => {
   const keepFrom = (CUTOVER_CLASSIFICATION.fiscal_periods as unknown as { keepFrom: string }).keepFrom;
-  const libDate = literalOf(read('apps/erp/src/app/cutover/lib.ts'), 'CONVERSION_DATE', true);
+  const libDate = literalOf(read('apps/erp/src/app/opening-balances/lib.ts'), 'CONVERSION_DATE', true);
   const openingSrc = read('packages/domain/src/cutover/opening-stock.ts');
 
   it("7.a the readable copies equal tie-out.ts's CONVERSION_DATE (change any one: red)", () => {
     expect(TIE_OUT_DATE).toMatch(ISO);
-    expect(libDate, 'apps/erp/src/app/cutover/lib.ts CONVERSION_DATE').toBe(TIE_OUT_DATE);
+    expect(libDate, 'apps/erp/src/app/opening-balances/lib.ts CONVERSION_DATE').toBe(TIE_OUT_DATE);
     expect(keepFrom, 'classification.ts fiscal_periods.keepFrom').toBe(TIE_OUT_DATE);
     expect(PURGE_AS_OF, 'tests/integration/t390-real-purge.ts PURGE_AS_OF').toBe(TIE_OUT_DATE);
   });

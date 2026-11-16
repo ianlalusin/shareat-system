@@ -184,7 +184,7 @@ describe('T-440 S5: a bad value is refused with the rule sentence and nothing is
   it('cutover addOpeningFigureAction: an amount of 0 is refused; no opening entry (mutant: assert removed / money min 0.01 dropped)', async () => {
     await refused(
       'journal_entries',
-      (f) => run('cutover/actions', 'addOpeningFigureAction', { accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '0', entryDate: '2026-01-01' }),
+      (f) => run('opening-balances/actions', 'addOpeningFigureAction', { accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '0', entryDate: '2026-01-01' }),
       sentence(CUTOVER_FIGURE_RULES.amount, '0'),
     );
   });
@@ -192,7 +192,7 @@ describe('T-440 S5: a bad value is refused with the rule sentence and nothing is
   it('cutover recordCountAction: a negative count is refused; no count line (mutant: assert removed from recordCountAction)', async () => {
     await refused(
       'stock_movements',
-      (f) => run('cutover/actions', 'recordCountAction', { storeId: f.storeId, itemId: FAKE_ID, quantity: '-1' }),
+      (f) => run('opening-balances/actions', 'recordCountAction', { storeId: f.storeId, itemId: FAKE_ID, quantity: '-1' }),
       sentence(CUTOVER_COUNT_RULES.quantity, '-1'),
     );
   });
