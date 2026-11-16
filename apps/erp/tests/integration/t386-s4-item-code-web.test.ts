@@ -208,10 +208,11 @@ describe('W1b - the override sits with the direct add, not with the request', ()
     async () => {
       const f = await fixture('w1b');
       const html = decode(await itemsHtmlAs(f.superAdmin));
-      const requestBtn = html.indexOf('>Request item<');
       const overrideAt = html.indexOf('Use a different code (super-admin)');
       const directAt = html.indexOf('Add directly (super-admin)');
       const lastRequestField = html.indexOf('These are independent choices');
+      // T-589 B4a: the page's "+ Request item" trigger now shows its words, so the band's submit is the first one after the request fields.
+      const requestBtn = html.indexOf('>Request item<', lastRequestField);
       expect(requestBtn, 'Request item button').toBeGreaterThan(-1);
       expect(directAt, 'Add directly button').toBeGreaterThan(-1);
       expect(overrideAt, 'override label').toBeGreaterThan(-1);
