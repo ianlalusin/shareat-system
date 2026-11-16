@@ -23,9 +23,14 @@ const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : us
 export interface CheckedFormProps extends Omit<ComponentPropsWithoutRef<'form'>, 'action' | 'onSubmit' | 'onInput' | 'onChange'> {
   readonly rules: FieldRuleSetLike;
   readonly action: (formData: FormData) => void | Promise<void>;
+  /**
+   * T-591 B: a form drawn INSIDE a table row has no room for the status line. With this on, the line stays in the DOM (a screen reader
+   * still hears it) but is visually hidden until a field the person has touched is failing. Off by default: every other form is unchanged.
+   */
+  readonly quietSummary?: boolean;
 }
 
-export function CheckedForm({ rules, action, children, ...formProps }: CheckedFormProps) {
+export function CheckedForm({ rules, action, quietSummary, children, ...formProps }: CheckedFormProps) {
   const [state, dispatch] = useReducer(checkedFormReducer, CHECKED_FORM_INITIAL);
   const formRef = useRef<HTMLFormElement>(null);
   const names = useMemo(() => new Set(ruleInputNames(rules)), [rules]);
@@ -82,7 +87,7 @@ export function CheckedForm({ rules, action, children, ...formProps }: CheckedFo
         }
       >
         {children}
-        {ctx.inBand ? null : <CheckSummary active={ctx.active} summary={ctx.summary} />}
+        {ctx.inBand ? null : <CheckSummary active={ctx.active} summary={ctx.summary} className={quietSummary && !ctx.failing.some((n) => ctx.touched(n)) ? 'sr-only' : undefined} />}
       </form>
     </CheckContext.Provider>
   );

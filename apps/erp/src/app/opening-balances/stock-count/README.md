@@ -2,7 +2,7 @@
 
 ## Overview
 
-Opening stock count at `/opening-balances/stock-count`. Conversion checklist, counted opening stock and opening balance-sheet figures.
+Opening stock count at `/opening-balances/stock-count`: one table per room (item, unit, quantity, cost, value), a "Not counted yet" filter (`show=uncounted`) and item search (`q`) in the address, a sticky progress line, and a read-only view once the opening entry is posted.
 
 Parent blueprint: [up one directory](../README.md).
 
@@ -21,7 +21,7 @@ Parent blueprint: [up one directory](../README.md).
 ## Side Effects
 
 - Submitted forms invoke `recordCountAction`; these adapters perform the authorized workflow and return feedback/navigation.
-- Loads screen/report data through `listStores`, `loadMergedLines`, `loadRoomCountSheet`, `loadRooms`.
+- Loads screen/report data through `listStores`, `loadMergedLines`, `loadOpeningPosted`, `loadRoomCountSheet`, `loadRooms`.
 
 ## Verification
 
