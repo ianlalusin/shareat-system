@@ -266,7 +266,8 @@ describe('capabilityForRoute — prefix matching', () => {
 
   it('an unmapped route is open to any signed-in person', () => {
     expect(capabilityForRoute('/till')).toBeNull();
-    expect(capabilityForRoute('/sales-days')).toBeNull();
+    // T-589 B3a: /sales-days is keyed now (the day list shows every day's totals); `/` stays the one open landing page.
+    expect(capabilityForRoute('/')).toBeNull();
   });
 });
 
