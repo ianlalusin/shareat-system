@@ -59,9 +59,8 @@ export default async function CashFlowPage({
       <div>
         <h1 className="text-2xl font-semibold">Cash Flow</h1>
         <PageDescription>
-          Indirect method — net income, adjusted for non-cash items and working-capital changes,
-          computed live from balance-sheet account deltas. Checked against the actual change in
-          cash and cash-equivalent balances on every load.
+          How cash moved: profit, adjusted for items that did not use cash and for changes in what
+          is owed. Checked against the actual change in cash balances.
         </PageDescription>
       </div>
 
@@ -74,7 +73,7 @@ export default async function CashFlowPage({
         fromDate={fromDate}
         toDate={toDate}
         includeYearClose={includeYearClose}
-        yearCloseHelp="Defaults to excluded — matches the income statement's own date-range default (ADR-006)."
+        yearCloseHelp="Excluded by default, the same as the Income Statement."
       />
 
       <div className="flex items-center justify-between gap-4">

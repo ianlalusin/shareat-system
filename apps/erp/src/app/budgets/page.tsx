@@ -1,4 +1,4 @@
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDateTime } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { REISSUE_INTERVALS } from '@shareat/db/schema';
 import { compare, money, toCentavos, ZERO } from '@shareat/core/money';
@@ -30,6 +30,13 @@ import { Banner, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Inp
 
 export const metadata = { title: 'Budgets — Shareat System' };
 export const dynamic = 'force-dynamic';
+
+const GROUP_LABEL: Record<string, string> = {
+  COGS: 'Cost of goods',
+  OPEX: 'Operating expenses',
+  CAPEX: 'Equipment and assets',
+  PERSONAL: 'Owner personal',
+};
 
 /**
  * T-215 — the expense envelope, per store, per category, per period.
@@ -76,12 +83,12 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
       <div>
         <h1 className="text-2xl font-semibold">Budgets</h1>
         <PageDescription>
-          What a store may spend per category, per period. <strong>A cap warns; it never
-          blocks</strong> — the figure shows on{' '}
+          What a store may spend per category, per period. <strong>A cap only warns; it never
+          blocks.</strong> The warning shows on{' '}
           <Link href="/expenses/new" className="underline underline-offset-2">
             new expense
           </Link>{' '}
-          while somebody is deciding, which is the only moment it can change anything.
+          while someone is deciding.
         </PageDescription>
       </div>
 
@@ -95,7 +102,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
 
       {stores.length === 0 ? (
         <Banner tone="warning">
-          This org has no store yet, so there is nothing to cap. Create one on{' '}
+          This organization has no store yet, so there is nothing to cap. Add one under{' '}
           <Link href="/admin/stores" className="text-sm underline">
             stores
           </Link>
@@ -135,13 +142,10 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
             </div>
           </section>
 
+          {budgets.length > 0 && (
           <section className="space-y-2">
             <h2 className="font-medium">Caps for {periodLabel(periodKey)}</h2>
-            {budgets.length === 0 ? (
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                Nothing is capped for this period. Set one below.
-              </p>
-            ) : (
+            {(
               <div className="space-y-2">
                 {budgets.map((b) => {
                   // T-371 C4/R4: the decisions are made on re-minted database values, never a float — `capped` on the
@@ -160,8 +164,8 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                         <span className="font-medium">
                           {b.categoryLabel}
                           <span className="ml-2 text-xs font-normal text-neutral-500 dark:text-neutral-400">
-                            {b.categoryGroup}
-                            {b.accountCode ? ` · ${accountLabel(b.accountCode)}` : ' · unmapped'}
+                            {GROUP_LABEL[b.categoryGroup] ?? b.categoryGroup}
+                            {b.accountCode ? ` · ${accountLabel(b.accountCode)}` : ' · no account set'}
                           </span>
                         </span>
                         <span className="tabular-nums">
@@ -184,15 +188,15 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
 
                       {b.overBudget && (
                         <p className="text-xs text-danger">
-                          Over by {peso((Number(b.consumed) - Number(b.amount)).toFixed(2))}. ⚠️ Nothing was
-                          refused — expenses still post.
+                          Over by {peso((Number(b.consumed) - Number(b.amount)).toFixed(2))}. Nothing was
+                          refused; expenses still post.
                         </p>
                       )}
                       {b.autoReissue && b.reissueInterval && (
                         <p className="text-xs text-neutral-500 dark:text-neutral-400">
                           ↻ {INTERVAL_LABEL[b.reissueInterval] ?? b.reissueInterval}
-                          {b.lastResetAt && ` · window began ${toBusinessDate(b.lastResetAt)}`}
-                          {b.reissuedFromId && ' · created by the reissue job'}
+                          {b.lastResetAt && ` · this round began ${formatBusinessDateTime(b.lastResetAt, { dateStyle: 'long' })}`}
+                          {b.reissuedFromId && ' · renewed automatically'}
                         </p>
                       )}
 
@@ -218,7 +222,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                             <ConfirmDestructive
                               tier="retype"
                               label="Remove cap"
-                              consequence="Removes this cap. The category then has NO cap, which is not the same as a cap of zero."
+                              consequence="Removes this cap. The category then has no limit, which is not the same as a cap of zero."
                               expectedName={b.categoryLabel}
                             />
                           </form>
@@ -230,13 +234,13 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
               </div>
             )}
           </section>
+          )}
 
           <section className="space-y-2">
             <h2 className="font-medium">No cap set</h2>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              ⚠️ <strong>No cap</strong> is not a cap of zero. A category listed here is unlimited;
-              a cap of <code>0.00</code> means <em>spend nothing in this category</em>, and both are
-              legitimate.
+              A category listed here has no limit. A cap of 0.00 means spend nothing in that
+              category.
             </p>
             {uncapped.length === 0 ? (
               <p className="text-sm text-neutral-500 dark:text-neutral-400">Every category has a cap.</p>
@@ -246,7 +250,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                   <details key={c.id} className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
                     <summary className="cursor-pointer text-sm">
                       {c.label}
-                      <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{c.group}</span>
+                      <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{GROUP_LABEL[c.group] ?? c.group}</span>
                     </summary>
                     <div className="mt-2">
                       <CapForm storeId={storeId} periodKey={periodKey} categoryId={c.id} />

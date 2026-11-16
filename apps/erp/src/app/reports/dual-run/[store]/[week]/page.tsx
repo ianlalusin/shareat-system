@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { dualRunWeekView, mayRecordDualRunDisposition } from '@shareat/domain';
 import { reportScope, runReport } from '../../../lib';
 import { recordDualRunDispositionAction } from '../../actions';
@@ -69,7 +70,7 @@ export default async function DualRunWeekPage({
     return (
       <Page density="wide">
         <h1 className="text-2xl font-semibold">
-          {store.name} · week of {week}
+          {store.name} · week of {formatBusinessDayLong(week)}
         </h1>
         <EmptyState message="No compare report for this store and week yet." />
         <Link href="/reports/dual-run" className="inline-flex min-h-11 items-center text-sm underline">
@@ -86,10 +87,10 @@ export default async function DualRunWeekPage({
     <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">
-          {view.store.name} · week of {view.report.weekStart}
+          {view.store.name} · week of {formatBusinessDayLong(view.report.weekStart)}
         </h1>
         <p className="mt-1 text-sm text-muted">
-          To {view.report.through}. {view.report.comparedDays} compared day{view.report.comparedDays === 1 ? '' : 's'}. Report made{' '}
+          To {formatBusinessDayLong(view.report.through)}. {view.report.comparedDays} compared day{view.report.comparedDays === 1 ? '' : 's'}. Report made{' '}
           {manilaDateTime(view.report.createdAt)}.
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -156,11 +157,11 @@ export default async function DualRunWeekPage({
               </div>
               <dl className="mt-2 grid grid-cols-3 gap-2 text-right tabular-nums">
                 <div>
-                  <dt className="text-xs text-muted">v1 (old)</dt>
+                  <dt className="text-xs text-muted">Old system</dt>
                   <dd>{peso(l.v1)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted">v2 (new)</dt>
+                  <dt className="text-xs text-muted">New system</dt>
                   <dd>{peso(l.v2)}</dd>
                 </div>
                 <div>
@@ -192,7 +193,7 @@ export default async function DualRunWeekPage({
                     {l.perDay.map((d) => (
                       <li key={d.date} className="flex flex-wrap justify-between gap-2 border-b border-surface-border py-1">
                         <span>
-                          {d.date} · {d.state}
+                          {formatBusinessDayLong(d.date)} · {d.state}
                         </span>
                         <span>
                           {peso(d.v1)} / {peso(d.v2)} / <span className="font-semibold">{peso(d.delta)}</span>

@@ -110,8 +110,8 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
         <FormModal trigger="+ Register tablet" title="Register a tablet" size="md">
           {terminals.length === 0 ? (
             <p data-no-terminal className="text-sm text-neutral-600 dark:text-neutral-400">
-              {store.name} has no tablet login yet. Create the store&apos;s tablet login in the Firebase console first, then run the
-              provision-terminal command with that login&apos;s uid. After that it appears here.
+              {store.name} has no tablet login yet. Ask the system administrator to set one up for this store. It will appear here
+              afterwards.
             </p>
           ) : (
             <CheckedForm rules={POS_TABLET_REGISTER_RULES} action={registerTabletAction} className="space-y-3 text-sm">
@@ -174,8 +174,8 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
         {!active && terminals.length === 0 ? (
           <div className={CARD}>
             <p data-no-terminal className="text-sm text-neutral-600 dark:text-neutral-400">
-              {store.name} has no tablet login yet. Create the store&apos;s tablet login in the Firebase console first, then run the
-              provision-terminal command with that login&apos;s uid. After that it appears here.
+              {store.name} has no tablet login yet. Ask the system administrator to set one up for this store. It will appear here
+              afterwards.
             </p>
           </div>
         ) : (

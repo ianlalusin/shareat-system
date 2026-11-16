@@ -1,4 +1,4 @@
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { refusalCounts } from './lib';
 import { Page } from '@/components/shell/Page';
@@ -25,13 +25,13 @@ export default async function PrerequisiteRefusalsPage() {
       density="table"
       title="Prerequisite walls"
       description={
-        'How often anyone has hit an order-of-operations wall, by reason. Run this for a month ' +
-        'and the count ranks which features need a tutorial first — nobody has to guess.'
+        'How often people were stopped because another step had to be done first, counted by reason. ' +
+        'After a month, the counts show which features need a tutorial first.'
       }
     >
       {rows.length === 0 ? (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          No refusals recorded yet at this organisation.
+          Nobody has been stopped this way yet.
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -50,7 +50,7 @@ export default async function PrerequisiteRefusalsPage() {
                   <td className="py-2 pr-4 font-mono text-xs">{r.reasonCode}</td>
                   <td className="py-2 pr-4">{r.domain}</td>
                   <td className="py-2 pr-4">{r.count}</td>
-                  <td className="py-2 pr-4">{toBusinessDate(r.lastOccurredAt)}</td>
+                  <td className="py-2 pr-4">{formatBusinessDateTime(r.lastOccurredAt, { dateStyle: 'long' })}</td>
                 </tr>
               ))}
             </tbody>

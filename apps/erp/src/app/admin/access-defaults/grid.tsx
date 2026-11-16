@@ -47,6 +47,8 @@ function ToggleButton({
   );
 }
 
+const SCOPE_TITLE: Record<string, string> = { store: 'Per store', org: 'Whole organization', platform: 'Platform' };
+
 function InheritedBadge() {
   return (
     <span
@@ -173,7 +175,7 @@ export function DesktopGrid({
           group.areas.length > 0 && (
             <details key={group.scope} open className="border-t border-surface-border bg-surface">
               <summary className="cursor-pointer px-3 py-1.5 text-xs text-ink">
-                <span className="font-medium uppercase tracking-wide">{group.scope}-scoped</span> ·{' '}
+                <span className="font-medium uppercase tracking-wide">{SCOPE_TITLE[group.scope] ?? group.scope}</span> ·{' '}
                 {group.areas.reduce((n, a) => n + a.capabilities.length, 0)} · {group.note}
               </summary>
               {group.areas.map((area) => (
@@ -291,7 +293,7 @@ export function MobileSections({
                 group.areas.length > 0 && (
                   <details key={group.scope} open className="rounded-lg border border-surface-border bg-surface">
                     <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink">
-                      {group.scope}-scoped
+                      {SCOPE_TITLE[group.scope] ?? group.scope}
                     </summary>
                     <p className="px-3 pb-2 text-xs text-ink/70">{group.note}</p>
                     <div className="space-y-2 border-t border-surface-border p-2">

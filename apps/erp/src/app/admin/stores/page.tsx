@@ -1,3 +1,4 @@
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
@@ -10,6 +11,8 @@ import { ADMIN_STORE_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rul
 
 export const metadata = { title: 'Stores — Shareat System' };
 export const dynamic = 'force-dynamic';
+
+const CADENCE_LABEL: Record<string, string> = { daily: 'Every day', every_2_days: 'Every 2 days', weekly: 'Every week', monthly: 'Every month' };
 
 /**
  * T-222 — opening and closing a branch.
@@ -40,19 +43,19 @@ export default async function StoresPage({
         <div>
           <h1 className="text-2xl font-semibold">Stores</h1>
           <PageDescription>
-            Opening a branch creates its default room and grants every admin access, in one
-            transaction — so a half-made store cannot exist. What is left is the business half.
+            Adding a store sets up its first stock room and gives every admin access to it. What is left
+            to fill in is the business side.
           </PageDescription>
         </div>
         {/* T-448: the create form lives in a dialog; the header button replaces the old "Open a branch" disclosure. */}
-        <FormModal trigger="+ Add store" title="Open a branch" size="lg" defaultOpen={Boolean(sp.error)}>
+        <FormModal trigger="+ Add store" title="Add a store" size="lg" defaultOpen={Boolean(sp.error)}>
         <CheckedForm
           rules={ADMIN_STORE_CREATE_RULES}
           action={createStoreAction}
           className="space-y-3 text-sm"
         >
           <>
-            <FormSection title="Branch identity">
+            <FormSection title="Store identity">
               <FormGrid layout="fields">
                 <div className="min-w-0 erp-field-code">
                   <Field rule={ADMIN_STORE_CREATE_RULES.code}
@@ -74,18 +77,18 @@ export default async function StoresPage({
                 <div className="min-w-0 erp-field-code">
                   <Field label={<span className="text-neutral-600 dark:text-neutral-400">Stock model</span>}>
                     <Select name="stockModel" className="mt-1 w-full">
-                      <option value="single_room">single_room</option>
-                      <option value="multi_room">multi_room</option>
+                      <option value="single_room">One stock room</option>
+                      <option value="multi_room">Several stock rooms</option>
                     </Select>
                   </Field>
                 </div>
                 <div className="min-w-0 erp-field-code">
                   <Field label={<span className="text-neutral-600 dark:text-neutral-400">Remittance cadence</span>}>
                     <Select name="remittanceCadence" className="mt-1 w-full">
-                      <option value="daily">daily</option>
-                      <option value="every_2_days">every_2_days</option>
-                      <option value="weekly">weekly</option>
-                      <option value="monthly">monthly</option>
+                      <option value="daily">Every day</option>
+                      <option value="every_2_days">Every 2 days</option>
+                      <option value="weekly">Every week</option>
+                      <option value="monthly">Every month</option>
                     </Select>
                   </Field>
                 </div>
@@ -121,7 +124,7 @@ export default async function StoresPage({
           </>
           <DialogActions>
             <Button type="submit" variant="primary">
-              Open branch
+              Add store
             </Button>
           </DialogActions>
         </CheckedForm>
@@ -159,7 +162,7 @@ export default async function StoresPage({
                 </td>
                 <td className="p-3">{s.name}</td>
                 <td className="p-3">
-                  {s.remittanceCadence}
+                  {CADENCE_LABEL[s.remittanceCadence] ?? s.remittanceCadence}
                   {s.unremittedCeiling ? ` · ceiling ${s.unremittedCeiling}` : ''}
                 </td>
                 <td className="p-3 text-right tabular-nums">{s.roomCount}</td>
@@ -172,9 +175,9 @@ export default async function StoresPage({
                   {s.openingDate === null ? (
                     <span className="text-neutral-500">Not yet open</span>
                   ) : s.preOpening ? (
-                    <span className="text-warning-ink">Opens {s.openingDate}</span>
+                    <span className="text-warning-ink">Opens {formatBusinessDayLong(s.openingDate)}</span>
                   ) : (
-                    <span className="text-success">Opened {s.openingDate}</span>
+                    <span className="text-success">Opened {formatBusinessDayLong(s.openingDate)}</span>
                   )}
                 </td>
               </LinkRow>

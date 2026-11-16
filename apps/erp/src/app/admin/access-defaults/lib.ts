@@ -52,9 +52,9 @@ export type { StoreOption };
 export const SCOPE_ORDER = ['store', 'org', 'platform'] as const;
 
 export const SCOPE_NOTE: Record<(typeof SCOPE_ORDER)[number], string> = {
-  store: 'Also needs the store in scope — holding the capability is never sufficient alone.',
-  org: 'Applies across the whole organisation. No store scope is consulted.',
-  platform: 'Crosses organisations. Super-admin territory.',
+  store: 'Works only at the stores the person is assigned to.',
+  org: 'Works across the whole organization, in every store.',
+  platform: 'Works across organizations. Super admin only.',
 };
 
 export interface GridCapability {

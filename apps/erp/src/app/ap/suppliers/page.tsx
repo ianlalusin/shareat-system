@@ -60,9 +60,8 @@ export default async function SuppliersPage({
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Suppliers</h1>
           <PageDescription>
-            The register, org-wide. One row per supplier — not one per store. v1 keyed suppliers
-            under each branch, so a fleet-wide vendor became <strong>up to twenty</strong> separate
-            records that each had to be edited, reconciled and paid.
+            Every supplier, across all stores. Each supplier appears once, so one change, one
+            reconciliation and one payment cover every store it supplies.
           </PageDescription>
         </div>
         <div className="flex items-center gap-3">
@@ -136,7 +135,7 @@ export default async function SuppliersPage({
                 <th className="py-2 pr-3 font-medium">Supplier</th>
                 <th className="py-2 pr-3 font-medium">TIN</th>
                 <th className="py-2 pr-3 font-medium">VAT</th>
-                <th className="py-2 pr-3 font-medium">OR</th>
+                <th className="py-2 pr-3 font-medium">Official receipt</th>
                 <th className="py-2 pr-3 font-medium">Terms</th>
                 <th className="py-2 pr-3 font-medium">Bank</th>
                 <th className="py-2 pr-3 text-right font-medium">Payable</th>

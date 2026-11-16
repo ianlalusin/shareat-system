@@ -1,5 +1,6 @@
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import Link from 'next/link';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '@/lib/page-access';
 import { recordInvoiceAction } from './actions';
 import { apStoreIds, listSuppliersWithPosition, listInvoicesWithStanding, standingPills, listStores, peso, today } from './lib';
@@ -55,8 +56,8 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Accounts payable</h1>
           <PageDescription>
-            No expense — cash or credit — can be recorded until its supplier invoice is verified
-            here. Verification <strong>is</strong> the approval.
+            An expense, paid in cash or on credit, can only be recorded once its supplier invoice is
+            verified here. Verifying <strong>is</strong> the approval.
           </PageDescription>
         </div>
         <div className="flex items-center gap-3">
@@ -159,7 +160,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
       <FlashBanner flash={sp} />
 
       <p className="text-sm">
-        <Link href="/ap/vat" className={ACTION_LINK}>Invoices by VAT type and OR (monthly list)</Link>
+        <Link href="/ap/vat" className={ACTION_LINK}>Monthly list by VAT type and official receipt</Link>
       </p>
 
       <section className="space-y-3">
@@ -202,13 +203,13 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                 return (
                   <LinkRow key={inv.id}>
                     <Td className="whitespace-nowrap tabular-nums">
-                      {inv.invoiceDate}
+                      {formatBusinessDayLong(inv.invoiceDate)}
                       <span className="md:hidden"> · {peso(inv.totalAmount)}</span>
                     </Td>
                     <Td className="min-w-0 break-words max-md:[&[data-card-slot][data-card-label]]:!whitespace-normal">
                       <RowLink
                         href={`/ap/invoices/${inv.id}`}
-                        aria-label={`Open invoice ${inv.invoiceNo ?? 'with no number'} of ${inv.invoiceDate}`}
+                        aria-label={`Open invoice ${inv.invoiceNo ?? 'with no number'} of ${formatBusinessDayLong(inv.invoiceDate)}`}
                       >
                         {supplierName.get(inv.supplierId) ?? inv.supplierId}
                       </RowLink>

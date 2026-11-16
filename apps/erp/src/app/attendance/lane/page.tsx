@@ -74,8 +74,8 @@ export default async function LanePage({
       <div>
         <h1 className="text-2xl font-semibold">Failed clock punches</h1>
         <PageDescription>
-          Whether the terminals are talking to us, and what did not make it through. Every event
-          here is recoverable — nothing is ever dropped.
+          Whether the clock terminals are sending their punches to us, and which punches did not go
+          through. Nothing is lost: every one can be recovered.
         </PageDescription>
       </div>
 
@@ -102,7 +102,7 @@ export default async function LanePage({
       {/* ── What is stuck ───────────────────────────────────────────────────────────── */}
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-          Stuck events{' '}
+          Stuck punches{' '}
           <span className="font-mono tabular-nums text-neutral-500">({quarantine.open.length})</span>
         </h2>
 
@@ -127,7 +127,7 @@ export default async function LanePage({
       {quarantine.unattributed.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-            Events that name no store{' '}
+            Punches that name no store{' '}
             <span className="font-mono tabular-nums text-neutral-500">
               ({quarantine.unattributed.length})
             </span>
@@ -136,7 +136,7 @@ export default async function LanePage({
               ingestor could not resolve one, which is *why* it is here. These are org-wide, and
               only somebody trusted with the terminals can see them. */}
           <p className="text-xs text-neutral-500 dark:text-neutral-500">
-            These came from a device we could not place, so they belong to no store. Org-wide.
+            These came from a device we could not place, so they belong to no store. They show for the whole organization.
           </p>
           {quarantine.unattributed.map((row) => (
             <StuckEvent key={row.id} row={row} storeId={storeId} now={now} />
@@ -202,15 +202,19 @@ export default async function LanePage({
 // ─── Health ───────────────────────────────────────────────────────────────────────────────
 
 function HealthPanel({ health, now }: { health: LaneHealthReport; now: Date }) {
+  // Green only when everything was measured and seen; missing readings are neutral, never a success claim.
+  const incomplete = health.inbox.status === 'unknown' || health.terminals.length === 0;
   const tone = health.needsAttention
     ? 'border-warning bg-warning-soft'
-    : 'border-success bg-success-soft';
+    : incomplete
+      ? 'border-surface-border bg-canvas'
+      : 'border-success bg-success-soft';
 
   return (
     <section className={`space-y-4 rounded-lg border p-4 sm:p-5 ${tone}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-sm font-medium">
-          {health.needsAttention ? 'The lane needs attention' : 'The lane is healthy'}
+          {health.needsAttention ? 'The lane needs attention' : incomplete ? 'No problems found, but some readings are missing' : 'The lane is healthy'}
         </span>
         <span className="text-xs text-neutral-600 dark:text-neutral-400">
           Read {ago(now, now)} · {when(now)}
@@ -220,7 +224,7 @@ function HealthPanel({ health, now }: { health: LaneHealthReport; now: Date }) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Lane A — out to the terminals. */}
         <Metric
-          label="Mirror out to terminals"
+          label="Sending to terminals"
           status={health.outbox.status}
           value={
             health.outbox.lagMinutes === null
@@ -238,7 +242,7 @@ function HealthPanel({ health, now }: { health: LaneHealthReport; now: Date }) {
 
         {/* Lane B — in from the terminals. */}
         <Metric
-          label="Punches in from terminals"
+          label="Receiving from terminals"
           status={health.inbox.status}
           value={
             health.inbox.status === 'unknown'
@@ -252,14 +256,14 @@ function HealthPanel({ health, now }: { health: LaneHealthReport; now: Date }) {
              document the relay has not reached, so until the relay reports, this says so. */
           detail={
             health.inbox.status === 'unknown'
-              ? 'No relay has reported yet. This is not the same as "nothing is waiting".'
+              ? 'Nothing has been reported yet, so we cannot tell whether punches are waiting.'
               : `Reported ${when(health.inbox.reportedAt)}.`
           }
           threshold={`Warns past ${LANE_HEALTH.inboxUnprocessedWarnMinutes} min`}
         />
 
         <Metric
-          label="Stuck events"
+          label="Stuck punches"
           status={health.quarantineOpen > 0 ? 'warn' : 'ok'}
           value={String(health.quarantineOpen)}
           detail={
@@ -282,7 +286,7 @@ function HealthPanel({ health, now }: { health: LaneHealthReport; now: Date }) {
         <h3 className="text-xs font-medium text-neutral-700 dark:text-neutral-300">Terminals</h3>
         {health.terminals.length === 0 ? (
           <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-            No terminals are provisioned at this store, so nobody can clock in on one.
+            No terminals are set up at this store, so nobody can clock in on one.
           </p>
         ) : (
           <ul className="mt-1 space-y-1">
@@ -299,7 +303,7 @@ function HealthPanel({ health, now }: { health: LaneHealthReport; now: Date }) {
                   {t.status === 'silent' && `Silent for ${t.silentHours} hours`}
                   {t.status === 'ok' && `Last punch ${ago(t.lastSeenAt, now)}`}
                   {t.status === 'no_punches_yet' && 'Paired, no punches yet'}
-                  {t.status === 'never_paired' && 'Provisioned but never signed in'}
+                  {t.status === 'never_paired' && 'Set up, but never signed in'}
                 </span>
                 {t.lastSeenAt && (
                   <span className="text-neutral-500 dark:text-neutral-500">
@@ -311,8 +315,8 @@ function HealthPanel({ health, now }: { health: LaneHealthReport; now: Date }) {
           </ul>
         )}
         <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">
-          A terminal is called silent past {LANE_HEALTH.terminalSilentWarnHours} hours — longer than
-          a day on purpose, so a store that shut an hour early is not reported as down.
+          A terminal counts as silent after {LANE_HEALTH.terminalSilentWarnHours} hours without a punch.
+          That is longer than a day on purpose, so a store that closed early is not reported as down.
         </p>
       </div>
     </section>

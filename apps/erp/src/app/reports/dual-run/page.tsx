@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { dualRunOverview } from '@shareat/domain';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { reportScope, runReport } from '../lib';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { Page } from '@/components/shell/Page';
@@ -55,7 +56,7 @@ export default async function DualRunOverviewPage({ searchParams }: { searchPara
         </Button>
         {scope.coversWholeOrg ? (
           <Link href="/reports/dual-run/pack" className="inline-flex min-h-11 items-center text-sm underline font-medium">
-            Go / no-go pack
+            Go-live check
           </Link>
         ) : null}
       </form>
@@ -71,10 +72,10 @@ export default async function DualRunOverviewPage({ searchParams }: { searchPara
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <Link href={`/reports/dual-run/${encodeURIComponent(r.storeCode)}/${r.weekStart}`} className="inline-flex min-h-11 items-center text-sm font-semibold underline">
-                      {r.storeName} · week of {r.weekStart}
+                      {r.storeName} · week of {formatBusinessDayLong(r.weekStart)}
                     </Link>
                     <p className="text-xs text-muted">
-                      to {r.through} · {r.comparedDays} compared day{r.comparedDays === 1 ? '' : 's'}
+                      to {formatBusinessDayLong(r.through)} · {r.comparedDays} compared day{r.comparedDays === 1 ? '' : 's'}
                       {r.versionCount > 1 ? ` · ${r.versionCount} versions` : ''}
                     </p>
                   </div>
