@@ -171,8 +171,9 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
   const ready = employeeId.trim() !== '' && pin !== '';
   const hasSales = reading.receiptCount > 0;
   return (
-    <div className="space-y-8 pb-8">
-      <section aria-labelledby="till-reading" className="max-w-md space-y-3">
+    <div className="grid gap-4 pb-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="rounded-2xl border border-surface-border bg-surface p-5 space-y-6">
+      <section aria-labelledby="till-reading" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="till-reading" className="text-xl font-semibold text-ink">
             Reading so far
@@ -201,7 +202,7 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
         ) : null}
       </section>
 
-      <section aria-label="Close the day" className="max-w-md space-y-2">
+      <section aria-label="Close the day" className="space-y-2">
         <button type="button" data-erp-size="free" className={PRIMARY} disabled={!online || busy} aria-disabled={!online || busy} onClick={() => openSheet('z')}>
           Close day (Z)
         </button>
@@ -212,11 +213,12 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
         </a>
       </section>
 
-      <section aria-labelledby="till-history" className="max-w-md space-y-3">
+      </div>
+      <section aria-labelledby="till-history" className="rounded-2xl border border-surface-border bg-surface p-5 space-y-3">
         <h2 id="till-history" className="text-xl font-semibold text-ink">
           Recent closes
         </h2>
-        {history.length === 0 ? <p className="text-base text-muted">No day has been closed yet.</p> : null}
+        {history.length === 0 ? <p className="text-base text-ink">No day has been closed yet. Each Z you close appears here, with Reprint.</p> : null}
         <ul className="divide-y divide-surface-border">
           {history.map((row) => {
             const status = sent[row.id] ? 'sent' : row.v1Status;
