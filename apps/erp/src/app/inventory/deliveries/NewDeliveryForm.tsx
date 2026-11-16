@@ -158,7 +158,7 @@ export function NewDeliveryForm({
 
       <FormSection title="Receipt evidence">
         <Field width="long" label="Photo of the paper" span="full" className={FLABEL}>
-          {/* ⭐ T-296 — compressed to under 1 MB before submit; a PDF passes through untouched. */}
+          {/* T-296: compressed to under 1 MB before submit; a PDF passes through untouched. */}
           <PhotoUpload
             name="proofPhoto"
             purpose="receipt_photo"
@@ -169,8 +169,7 @@ export function NewDeliveryForm({
         </Field>
       </FormSection>
       <p className="text-xs text-neutral-500 dark:text-neutral-500">
-        ⭐ Required — a real anti-fraud control, not a nicety. Upload the actual photo of the
-        delivery receipt or invoice; a link or a typed reference is not evidence.
+        Required. Upload a photo of the delivery receipt or invoice. A link or a typed reference is not enough.
       </p>
 
       <FormSection title="Items received" className="erp-delivery-lines space-y-2">

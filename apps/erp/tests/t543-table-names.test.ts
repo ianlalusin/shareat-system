@@ -46,7 +46,7 @@ const NAMED: ReadonlyArray<{ readonly file: string; readonly label: string }> = 
   { file: 'cash-requests/page.tsx', label: 'Cash requests' },
   { file: 'customers/page.tsx', label: 'Customers' },
   { file: 'customers/[customerId]/page.tsx', label: 'Charges' },
-  { file: 'commissary/catalogue/page.tsx', label: 'Linked branches' },
+  { file: 'commissary/catalogue/page.tsx', label: 'Linked stores' },
   { file: 'wastage/page.tsx', label: 'Open wastage' },
   { file: 'commissary/orders/page.tsx', label: 'Branch orders' },
 ];

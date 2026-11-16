@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { asc, eq } from 'drizzle-orm';
 import { orderWastageDispositionLabel, orderWastageRepo, schema } from '@shareat/db';
 import { listPostedSettlementsForStore, matchWastagesToSettlement, type SettleableOrderWastage } from '@shareat/domain';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { peso } from '../../../lib/format';
 import { requireSession } from '../../../lib/session';
 import { canReadAtStore } from '@/lib/can-read-at-store';
@@ -96,7 +96,7 @@ export default async function WastageDetailPage({
           {row.channel} — {peso(row.amount)}
         </h1>
         <PageDescription className="mt-1">
-          {row.typeMode === 'instant' ? 'Instant' : 'Tracked'} · opened {toBusinessDate(row.openedAt)}
+          {row.typeMode === 'instant' ? 'Instant' : 'Tracked'} · opened {formatBusinessDayLong(toBusinessDate(row.openedAt))}
           {row.orderRef ? ` · order ${row.orderRef}` : ''}
         </PageDescription>
         <p className="mt-1 text-sm">&ldquo;{row.reason}&rdquo;</p>
@@ -108,7 +108,7 @@ export default async function WastageDetailPage({
         <h2 className="font-medium">Status</h2>
         <p className="mt-1">
           {row.status === 'resolved'
-            ? `Resolved as ${row.disposition ? orderWastageDispositionLabel(row.disposition) : ''}${row.autoCharged ? ' — by the 15-day backstop' : ''}.`
+            ? `Resolved as ${row.disposition ? orderWastageDispositionLabel(row.disposition) : ''}${row.autoCharged ? ' — automatically, after 15 days' : ''}.`
             : row.status === 'disputed'
               ? 'Disputed — the 15-day clock is unaffected (it runs from opened_at, uniformly).'
               : 'Open, awaiting a disposition.'}
@@ -124,7 +124,7 @@ export default async function WastageDetailPage({
       {match && (
         <Banner tone="warning">
         <section className="text-sm">
-          <h2 className="font-medium">⭐ Possible settlement match</h2>
+          <h2 className="font-medium">Possible settlement match</h2>
           <p className="mt-1">{match.rationale}</p>
           <form action={confirmSettlementMatchAction} className="mt-3">
             <input type="hidden" name="id" value={row.id} />
@@ -185,7 +185,7 @@ export default async function WastageDetailPage({
 
       {row.status === 'resolved' && row.autoCharged && (
         <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="font-medium">Reverse the backstop&apos;s decision</h2>
+          <h2 className="font-medium">Reverse the automatic charge</h2>
           {canReverse ? (
             <CheckedForm rules={WASTAGE_REVERSE_RULES} action={reverseAutoChargeAction} className="mt-3 space-y-2 text-sm">
               <input type="hidden" name="id" value={row.id} />
@@ -200,7 +200,7 @@ export default async function WastageDetailPage({
               />
             </CheckedForm>
           ) : (
-            <p className="mt-1 text-sm text-neutral-500">More than 30 days since the backstop resolved this — no longer reversible here.</p>
+            <p className="mt-1 text-sm text-neutral-500">It was charged automatically more than 30 days ago, so it can no longer be reversed here.</p>
           )}
         </section>
       )}

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { saveProductionDraftAction } from './actions';
 import { listStores, productionScreenData } from './lib';
@@ -23,7 +23,7 @@ interface SearchParams {
   ok?: string;
 }
 
-const KIND_LABEL: Record<string, string> = { slice: 'Slice (slab -> pieces)', cook: 'Cook (recipe batch)', convert: 'Convert (re-cut, no GL impact)' };
+const KIND_LABEL: Record<string, string> = { slice: 'Slice (slab to pieces)', cook: 'Cook (recipe batch)', convert: 'Convert (re-cut)' };
 
 const LINE_ROWS = 5;
 
@@ -70,8 +70,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
         <div>
           <h1 className="text-2xl font-semibold">Production</h1>
           <PageDescription className="mt-1">
-            A slicing run or a prep batch posts as ONE stock transaction — inputs out, outputs in,
-            cost carried across. A floor worker records the run; a manager posts it.
+            A slicing run or prep batch takes the inputs out of stock and puts the outputs in. A floor worker records it; a manager posts it.
           </PageDescription>
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -214,7 +213,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
                   <LinkRow key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
                       <RowLink href={`/inventory/production/${r.id}`}>
-                        {r.producedOn}
+                        {formatBusinessDayLong(r.producedOn)}
                       </RowLink>
                     </td>
                     <td className="px-3 py-2">{KIND_LABEL[r.kind] ?? r.kind}</td>

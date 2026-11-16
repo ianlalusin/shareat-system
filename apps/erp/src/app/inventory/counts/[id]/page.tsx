@@ -10,6 +10,7 @@ import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_COUNT_LINE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
 import { COUNT_LINE } from '../typed-forms';
 
@@ -25,7 +26,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function when(d: Date | null): string {
-  return d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '—';
+  return d ? formatBusinessDateTime(new Date(d), { dateStyle: 'long', timeStyle: 'short' }) : '—';
 }
 
 /** One row of the count sheet — its own `<form>`, per T-172's `LineCard` pattern: the phone-portrait
@@ -133,12 +134,12 @@ export default async function CountSessionPage({
           {detail.storeName} — {detail.locations.map((l) => l.name).join(', ')}
         </h1>
         <PageDescription className="mt-1">
-          Counted on {detail.countedOn} · <strong>{STATUS_LABEL[detail.status] ?? detail.status}</strong>
+          Counted on {formatBusinessDayLong(detail.countedOn)} · <strong>{STATUS_LABEL[detail.status] ?? detail.status}</strong>
           {detail.note && <> · {detail.note}</>}
         </PageDescription>
         {editable && (
           <p className="mt-1 text-xs text-warning-ink">
-            ⛔ Frozen — {detail.locations.map((l) => l.name).join(', ')} refuse every other stock post until
+            Frozen. No other stock changes can be made in {detail.locations.map((l) => l.name).join(', ')} until
             this count is committed or cancelled.
           </p>
         )}
@@ -150,7 +151,7 @@ export default async function CountSessionPage({
         <h2 className="font-medium">
           Count sheet
           <span className="ml-2 text-xs font-normal text-neutral-500 dark:text-neutral-400">
-            The ledger&rsquo;s expected quantity is shown beside the input — an informed count, same as v1.
+            The expected quantity is shown beside each box, so you count with it in view.
           </span>
         </h2>
         {rows.length === 0 ? (
@@ -161,9 +162,9 @@ export default async function CountSessionPage({
               <tr className="border-b border-neutral-300 text-left dark:border-neutral-700">
                 <th className="py-2 pr-4 font-medium">Item</th>
                 <th className="py-2 pr-4 font-medium">Room</th>
-                <th className="py-2 pr-4 font-medium">Ledger (now)</th>
+                <th className="py-2 pr-4 font-medium">Expected now</th>
                 <th className="py-2 pr-4 font-medium">Counted</th>
-                <th className="py-2 pr-4 font-medium">Expected (at commit)</th>
+                <th className="py-2 pr-4 font-medium">Expected at commit</th>
                 <th className="py-2 pr-4 font-medium">Variance</th>
                 <th className="py-2 font-medium">Movement</th>
               </tr>
@@ -187,8 +188,8 @@ export default async function CountSessionPage({
         <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">This is here but wasn&rsquo;t expected</h2>
           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-            Found something the ledger has no record of in this room? Add it — it will still show its
-            true count against a ledger balance of zero, and post as counted LONG at commit.
+            Found something the books have no record of in this room? Add it. It is recorded as extra stock
+            when the count is committed.
           </p>
           <div className="mt-3">
           <FormModal trigger="+ Add item not on sheet" title="Add an item that is not on the sheet" size="md">
@@ -251,7 +252,7 @@ export default async function CountSessionPage({
           )}
           {canCommit && (
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
-              Manager only. The variance posts to <strong>stock count differences</strong> at FIFO cost and the room unfreezes.
+              Manager only. The variance posts to <strong>stock count differences</strong> and the room unfreezes.
             </span>
           )}
           {canCancel && (

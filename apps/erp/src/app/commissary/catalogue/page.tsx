@@ -12,7 +12,7 @@ import {
 } from './lib';
 import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
-import { Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
@@ -52,7 +52,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
         <p className="mt-4 text-sm text-neutral-600">
           {stores.length === 0
             ? 'This organisation has no stores yet.'
-            : 'No store is set up as a commissary yet. Link a branch to a commissary to get started.'}
+            : 'No store is set up as a commissary yet. Link a store to a commissary to get started.'}
         </p>
       </Page>
     );
@@ -74,10 +74,8 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
       <div>
         <h1 className="text-2xl font-semibold">Commissary catalogue</h1>
         <PageDescription className="mt-1">
-          What a commissary offers, which branches may buy from it, and which of a branch&rsquo;s own
-          items each commissary line becomes. <strong>A line with no map cannot be submitted, and
-          a real internal receipt with no map throws</strong> — this screen is what makes both
-          possible.
+          What a commissary offers, which stores may buy from it, and which of a store&rsquo;s own items each
+          commissary line becomes. <strong>A line with no map cannot be ordered or received.</strong>
         </PageDescription>
       </div>
 
@@ -99,15 +97,15 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
       {/* ---- Links ---------------------------------------------------------------------- */}
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-medium">Branches linked to this commissary</h2>
-          <FormModal trigger="+ Link branch" title="Link a branch to this commissary" size="md">
+          <h2 className="font-medium">Stores linked to this commissary</h2>
+          <FormModal trigger="+ Link store" title="Link a store to this commissary" size="md">
 <CheckedForm
           rules={COMMISSARY_LINK_RULES}
           action={upsertLinkAction}
           className="flex flex-wrap items-end gap-3"
         >
           <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Branch</span>} className="text-sm" rule={COMMISSARY_LINK_RULES.branchStoreId}>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Store</span>} className="text-sm" rule={COMMISSARY_LINK_RULES.branchStoreId}>
             <Select {...nativeAttrs(COMMISSARY_LINK_RULES.branchStoreId)} defaultValue="">
               <option value="" disabled>
                 Select a store
@@ -135,17 +133,16 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           </FormModal>
         </div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          A branch may only order from a commissary it is linked to. Linking also creates the
-          internal customer record a trade order needs to name the branch.
+          A store may only order from a commissary it is linked to. Linking also sets the store up as an internal customer for its orders.
         </p>
         {links.length === 0 ? (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">No branch is linked yet.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">No store is linked yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table aria-label="Linked branches" className="w-full min-w-[480px] border-collapse text-sm">
+            <table aria-label="Linked stores" className="w-full min-w-[480px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Branch</th>
+                  <th className="px-3 py-2 font-medium">Store</th>
                   <th className="px-3 py-2 font-medium">Status</th>
                   <th className="px-3 py-2 font-medium">Item map</th>
                 </tr>
@@ -156,7 +153,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                     <td className="px-3 py-2">
                       {l.branchName} <span className="ml-1 font-mono text-xs text-neutral-500">{l.branchCode}</span>
                     </td>
-                    <td className="px-3 py-2">{l.status}</td>
+                    <td className="px-3 py-2">{statusLabel(l.status)}</td>
                     <td className="px-3 py-2">
                       <RowLink href={`/commissary/catalogue?commissary=${commissaryStoreId}&branch=${l.branchStoreId}`}>
                         Map items →
@@ -208,7 +205,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
         </div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Only an active, purchasable item can be offered. The manual cost is the last-resort
-          price — used only when the item has no branch-price rule and no purchase history.
+          price, used only when the item has no store-price rule and no purchase history.
         </p>
         {offerings.length === 0 ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">No offerings yet.</p>
@@ -234,7 +231,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {o.manualCost ? peso(o.manualCost) : '—'}
                     </td>
-                    <td className="px-3 py-2">{o.status}</td>
+                    <td className="px-3 py-2">{statusLabel(o.status)}</td>
                     <td className="px-3 py-2 text-right">
                       <form action={upsertOfferingAction}>
                         <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
@@ -261,7 +258,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-medium">Item map</h2>
           {branchStoreId && mapSection ? (
-          <FormModal trigger="+ Map item" title="Map a commissary item to a branch item" size="md">
+          <FormModal trigger="+ Map item" title="Map a commissary item to a store item" size="md">
 <CheckedForm
               rules={COMMISSARY_MAP_RULES}
               action={upsertMapAction}
@@ -282,7 +279,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                   ))}
                 </Select>
               </Field>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Branch item</span>} className="min-w-0 text-sm" rule={COMMISSARY_MAP_RULES.branchItemId}>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Store item</span>} className="min-w-0 text-sm" rule={COMMISSARY_MAP_RULES.branchItemId}>
                 <Select {...nativeAttrs(COMMISSARY_MAP_RULES.branchItemId)} defaultValue="" className="w-full">
                   <option value="" disabled>
                     Select an item
@@ -296,7 +293,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
               </Field>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="isLedgerOnly" />
-                Ledger only (no branch stock moves)
+                Books only (no stock moves at the store)
               </label>
               <label className="min-w-0 text-sm">
                 <span className="block text-neutral-600 dark:text-neutral-400">Expense category (optional)</span>
@@ -329,17 +326,16 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           ) : null}
         </div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Which of the branch&rsquo;s own items a commissary line becomes. The two must share a base
-          unit — nothing here guesses a conversion.
+          Which of the store&rsquo;s own items a commissary line becomes. The two must use the same unit; nothing is converted for you.
         </p>
 
         <FilterRow>
           <input type="hidden" name="commissary" value={commissaryStoreId} />
           <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Branch</span>
+            <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
             <Select name="branch" defaultValue={branchStoreId ?? ''}>
               <option value="" disabled>
-                Pick a linked branch
+                Pick a linked store
               </option>
               {links.map((l) => (
                 <option key={l.branchStoreId} value={l.branchStoreId}>
@@ -351,7 +347,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
         </FilterRow>
 
         {!branchStoreId || !mapSection ? (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">Pick a branch above to map its items.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">Pick a store above to map its items.</p>
         ) : (
           <>
             {mapSection.map.length === 0 ? (
@@ -364,7 +360,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                   <thead>
                     <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                       <th className="px-3 py-2 font-medium">Commissary item</th>
-                      <th className="px-3 py-2 font-medium">Branch item</th>
+                      <th className="px-3 py-2 font-medium">Store item</th>
                       <th className="px-3 py-2 font-medium">Ledger only</th>
                       <th className="px-3 py-2 font-medium">Expense category</th>
                       <th className="px-3 py-2"></th>

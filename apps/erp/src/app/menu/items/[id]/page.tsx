@@ -40,10 +40,10 @@ interface SearchParams {
   ok?: string;
 }
 
-const TYPE_LABEL: Record<string, string> = { a_la_carte: 'A la carte', package: 'Package', refill: 'Refill' };
+const TYPE_LABEL: Record<string, string> = { a_la_carte: 'À la carte', package: 'Package', refill: 'Refill' };
 const MODE_LABEL: Record<string, string> = { direct: 'Uses a stock item', recipe: 'Uses a recipe', no_stock: 'Uses no stock' };
 const CHANNEL_LABEL: Record<string, string> = { store: 'Store', online: 'Online' };
-const STATE_LABEL: Record<OfferHistoryRow['state'], string> = { in_force: 'In force', scheduled: 'Scheduled', replaced: 'Replaced' };
+const STATE_LABEL: Record<OfferHistoryRow['state'], string> = { in_force: 'Current', scheduled: 'Scheduled', replaced: 'Replaced' };
 
 /** A percent figure without its trailing zeros: 7.5000 reads 7.5. */
 const plainPercent = (v: string): string => (v.includes('.') ? v.replace(/0+$/, '').replace(/\.$/, '') : v);
@@ -174,11 +174,11 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                   <tbody>
                     {rules.map((r) => (
                       <tr key={r.id}>
-                        <Td>{formatBusinessDateTime(r.effectiveFrom)}</Td>
+                        <Td>{formatBusinessDateTime(r.effectiveFrom, { dateStyle: 'long', timeStyle: 'short' })}</Td>
                         <Td>{MODE_LABEL[r.mode] ?? r.mode}</Td>
                         <Td>{r.mode === 'direct' ? (r.stockItemName ?? '') : r.mode === 'recipe' ? (r.recipeName ?? '') : ''}</Td>
                         <Td className="text-right tabular-nums">{r.quantityPerSale ?? ''}</Td>
-                        <Td>{r.inForce ? <Badge tone="success" label="In force" /> : r.effectiveFrom > data.now ? <Badge tone="info" label="Scheduled" /> : <Badge tone="closed" label="Replaced" />}</Td>
+                        <Td>{r.inForce ? <Badge tone="success" label="Current" /> : r.effectiveFrom > data.now ? <Badge tone="info" label="Scheduled" /> : <Badge tone="closed" label="Replaced" />}</Td>
                       </tr>
                     ))}
                   </tbody>
@@ -305,7 +305,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                   <Td>{storeName(r.storeId)}</Td>
                   <Td>{variantName(r.variantId)}</Td>
                   <Td>{CHANNEL_LABEL[r.channel] ?? r.channel}</Td>
-                  <Td>{formatBusinessDateTime(r.effectiveFrom)}</Td>
+                  <Td>{formatBusinessDateTime(r.effectiveFrom, { dateStyle: 'long', timeStyle: 'short' })}</Td>
                   <Td>{priceText(r)}</Td>
                   <Td>{r.state === 'in_force' ? <Badge tone="success" label={STATE_LABEL[r.state]} /> : r.state === 'scheduled' ? <Badge tone="info" label={STATE_LABEL[r.state]} /> : <Badge tone="closed" label={STATE_LABEL[r.state]} />}</Td>
                 </tr>

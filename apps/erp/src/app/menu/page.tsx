@@ -23,7 +23,7 @@ interface SearchParams {
   store?: string;
 }
 
-const TYPE_LABEL: Record<string, string> = { a_la_carte: 'A la carte', package: 'Package', refill: 'Refill' };
+const TYPE_LABEL: Record<string, string> = { a_la_carte: 'À la carte', package: 'Package', refill: 'Refill' };
 
 export default async function MenuPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -105,7 +105,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
                   </Field>
                   <Field label="Type" width="name">
                     <Select name="itemType" defaultValue="a_la_carte">
-                      <option value="a_la_carte">A la carte</option>
+                      <option value="a_la_carte">À la carte</option>
                       <option value="package">Package</option>
                       <option value="refill">Refill</option>
                     </Select>
@@ -151,7 +151,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
           <span className="block text-muted">Type</span>
           <Select name="type" defaultValue={sp.type ?? ''}>
             <option value="">All types</option>
-            <option value="a_la_carte">A la carte</option>
+            <option value="a_la_carte">À la carte</option>
             <option value="package">Package</option>
             <option value="refill">Refill</option>
           </Select>
@@ -172,7 +172,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
           </Select>
         </label>
         <label className="text-sm">
-          <span className="block text-muted">Store (for not offered)</span>
+          <span className="block text-muted">Store (for “Not offered at the store”)</span>
           <Select name="store" defaultValue={storeId ?? ''}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>

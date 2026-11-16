@@ -10,10 +10,11 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { RETURN_RECORD_RULES, RETURN_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 
 export const metadata = { title: 'Customer returns — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -121,14 +122,13 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
     <Page density="table" className="">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Customer returns</h1>
-        <Link href="/inventory" className="text-sm underline underline-offset-4">
-          ← Stock on hand
+        <Link href="/trade/orders" className="text-sm underline underline-offset-4">
+          ← Trade orders
         </Link>
       </div>
       <PageDescription className="mt-1">
-        The goods come back, and the customer holds a credit — or takes cash. ⭐ An internal
-        (branch → commissary) return is not a credit at all — T-173 backwards, derived, never a
-        choice.
+        The goods come back, and the customer holds a credit or takes cash. A return from one of our own stores
+        to the commissary is never a credit.
       </PageDescription>
 
       <FlashBanner flash={sp} />
@@ -157,8 +157,7 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
             ))}
           </ul>
           <p className="mt-2 text-xs text-neutral-500">
-            Applied against a specific trade order below — pick the order to spend it on when
-            recording the next one, or use the "Apply credit" action on that order directly.
+            To spend it, pick the order when you record the next one, or use "Apply credit" on that order.
           </p>
         </section>
       )}
@@ -242,10 +241,10 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
           <tbody>
             {recent.map((r) => (
               <tr key={r.id} className="border-b border-neutral-200 dark:border-neutral-800">
-                <td className="py-2 pr-4">{r.returnedOn}</td>
+                <td className="py-2 pr-4">{formatBusinessDayLong(r.returnedOn)}</td>
                 <td className="py-2 pr-4">{customerName.get(r.customerId) ?? r.customerId}</td>
-                <td className="py-2 pr-4">{r.treatment}</td>
-                <td className="py-2 pr-4">{r.settlement}</td>
+                <td className="py-2 pr-4">{statusLabel(r.treatment)}</td>
+                <td className="py-2 pr-4">{statusLabel(r.settlement)}</td>
                 <td className="py-2 pr-4">
                   <Badge status={r.status} />
                 </td>

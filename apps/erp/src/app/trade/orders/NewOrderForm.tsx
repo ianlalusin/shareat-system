@@ -23,9 +23,9 @@ interface LineDraft {
 }
 
 const TREATMENT_HINT: Record<string, string> = {
-  internal: 'One of our own stores — an internal transfer. No revenue, no receivable; stock moves at cost and the branch price is the default rate.',
-  external: 'An outside buyer — a real sale. Dispatch raises the receivable and books wholesale revenue; the price list is the default rate.',
-  inter_entity: 'Inter-entity sale to another company. Dispatch bills them and ships the stock; they confirm what they received on their side.',
+  internal: 'One of our own stores: an internal transfer. No sale is recorded; stock moves at cost and the store price is the default rate.',
+  external: 'An outside buyer: a real sale. Dispatching bills them and records the sale; the price list is the default rate.',
+  inter_entity: 'Inter-entity sale to another company. Dispatching bills them and ships the stock; they confirm what they received on their side.',
 };
 
 export function NewOrderForm({
@@ -213,8 +213,8 @@ export function NewOrderForm({
           );
         })}
         <p className="text-xs text-neutral-500 dark:text-neutral-500">
-          ⚠️ Whatever rate is used is <strong>captured</strong> onto the line — a later price-list
-          edit never reaches back. An amber rate box means nothing can price that line by default.
+          The rate you use is <strong>saved</strong> on the line, so a later price-list change does not alter it. An amber rate box
+          means nothing can price that line by default.
         </p>
       </FormSection>
 
