@@ -289,13 +289,18 @@ describe('the actions (thin adapters over the domain)', () => {
 });
 
 // =====================================================================================================================
-describe('/inventory/production links to the recipes screen', () => {
-  it('shows a "Recipes" link to /inventory/production/recipes', async () => {
+describe('/inventory/production links to the recipes screen (T-583 S2: a Cookbook settings button on the Cook tab for post_production holders; a cook with record_stock_movement gets a read-only Recipes link)', () => {
+  it('shows a "Cookbook settings" button to a manager on the Cook tab, none to staff, and refuses staff the recipes page itself', async () => {
     const w = await world('link');
     const [t] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${w.c.orgId}, 'STK', 'Stk') returning id`;
     await sql`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${w.c.orgId}, ${w.c.storeA}, 'KIT', 'Kitchen', ${t!.id}, 'operating', true, ${w.c.admin.personId})`;
-    const html = await render(PRODUCTION, w.c.manager, { search: { store: w.c.storeA } });
+    const html = await render(PRODUCTION, w.c.manager, { search: { store: w.c.storeA, kind: 'cook' } });
     expect(html).toContain(`href="${BASE}"`);
-    expect(plainL(html)).toContain('Recipes');
+    expect(plainL(html)).toContain('Cookbook settings');
+    const staffHtml = await render(PRODUCTION, w.c.staff, { search: { store: w.c.storeA, kind: 'cook' } });
+    expect(plainL(staffHtml)).not.toContain('Cookbook settings');
+    expect(staffHtml).not.toContain(`href="${BASE}"`);
+    expect(plainL(await render(LIST, w.c.staff, {}))).toContain('record_stock_movement');
+    expect(plainL(await render(LIST, w.c.manager, {}))).toContain('Stew');
   });
 });

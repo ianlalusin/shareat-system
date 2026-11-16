@@ -1,5 +1,6 @@
 import { requirePageAccess, StoreNotAvailable } from '../../lib/page-access';
 import { compare, money, ZERO } from '@shareat/core/money';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { postPayRunAction, setPayRateAction, voidPayRunAction } from './actions';
 import {
   cashAccountsFor,
@@ -389,10 +390,10 @@ export default async function PayrollPage({
               <tr key={r.id}>
                 <Td>{r.personName}</Td>
                 <Td className="font-mono tabular-nums">
-                  {r.rate ? `${peso(Number(r.rate.amount))} / ${r.rate.basis}` : '—'}
+                  {r.rate ? `${peso(Number(r.rate.amount))} / ${r.rate.basis}` : <span className="font-sans text-muted italic">Not set</span>}
                   {r.rate && (
                     <span className="ml-2 font-sans text-xs text-muted">
-                      from {r.rate.effectiveFrom}
+                      from {formatBusinessDayLong(r.rate.effectiveFrom)}
                     </span>
                   )}
                 </Td>

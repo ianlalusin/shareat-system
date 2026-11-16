@@ -134,6 +134,14 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-564 (T-515 re-applied): a store's settlement wiring saved, and a channel's bank hints edited (dotted: new). Payloads are keys, labels and hints, no personal data.
   def('store_settlement.wiring_saved', 'settings', 'normal', 'store', 'store_channel_settlement_configs', 'T-564'),
   def('sales_channel.bank_hints_edited', 'settings', 'normal', 'store', 'sales_channels', 'T-564'),
+  // T-584: HR documents (dotted: new). Payloads carry ids, a number, a kind and a reason, never the document text or a PIN. A document with no store (an org-wide memo) is scope 'either'.
+  def('document_template.version_saved', 'settings', 'normal', 'org', 'document_templates', 'T-584'),
+  def('document_template.retired', 'settings', 'normal', 'org', 'document_templates', 'T-584'),
+  def('document.issued', 'staff', 'normal', 'either', 'issued_documents', 'T-584'),
+  def('document.revised', 'staff', 'high', 'either', 'issued_documents', 'T-584'),
+  def('document.signed', 'security', 'high', 'either', 'issued_documents', 'T-584'),
+  def('document.sign_refused', 'security', 'high', 'either', 'issued_documents', 'T-584', { viewers: 'admin' }),
+  def('document.voided', 'staff', 'high', 'either', 'issued_documents', 'T-584'),
   // T-519 S1: a signed staff deduction agreement recorded or cancelled (dotted: new). Payloads carry amounts and ids, never the employee's explanation.
   def('staff_deduction_agreement.recorded', 'money', 'high', 'store', 'staff_deduction_agreements', 'T-519'),
   def('staff_deduction_agreement.cancelled', 'money', 'high', 'store', 'staff_deduction_agreements', 'T-519'),
@@ -223,6 +231,11 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('pos.terminal_created', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
   def('pos.terminal_linked', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
   def('pos.terminal_printer_set', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
+  // T-533 S2: the one-time store setup load (and later T-535's screen) added a stand (entity = the pos_stands row) or set a discount preset (entity = the pos_discount_presets row; created or its value changed).
+  def('pos.stand_added', 'settings', 'normal', 'store', 'pos_stands', 'T-533'),
+  def('pos.discount_preset_set', 'settings', 'normal', 'store', 'pos_discount_presets', 'T-533'),
+  // T-533 S1: a store's POS mode set or moved (off, test, live from a date, or the roll-back); entity = the pos_stores row. `high`: it decides whether real sales days come from the new POS.
+  def('pos.store_mode_set', 'settings', 'high', 'store', 'pos_stores', 'T-533'),
   // T-531: the day close (the Z; entity = the pos_day_closes row, or the run id for the backlog), the ERP sales day it derives, and the December bridge to v1 (entity = the store).
   // Server-only: the tablet never sends them. A Z is money, so the 10-year class; a failed bridge is `high` (a day v1 does not have yet).
   def('pos.day_closed', 'money', 'high', 'store', 'pos_day_closes', 'T-531'),

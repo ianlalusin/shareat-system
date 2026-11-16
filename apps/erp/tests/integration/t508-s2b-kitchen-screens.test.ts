@@ -109,6 +109,9 @@ const routes = async (storeId: string) =>
 /** The people who may NOT write: staff, and a manager scoped to another store. Each must end in an error banner and no write. */
 const refused = (f: Fx) => [['staff', f.staff], ['manager of another store', f.managerB]] as const;
 
+// The add-station form's label: rendered only to someone who may manage the store's kitchen (KitchenSections).
+const NEW_STATION_FORM = 'New station name';
+
 describe('T-508 S2b - station actions', () => {
   it('admin and the store manager add a station', async () => {
     const f = await fixture('create');
@@ -258,17 +261,19 @@ describe('T-508 S2b - the /kitchen page by role', () => {
 
   it('a manager goes straight to their only store; a store they do not hold is refused', async () => {
     const f = await fixture('render-scope');
-    expect(await render(f.managerA)).toContain('Kitchen stations');
+    expect(await render(f.managerA)).toContain(NEW_STATION_FORM);
     expect(await render(f.managerB, f.storeA)).toContain('This store is not available to you.');
     expect(await render(f.managerA, f.storeB)).toContain('This store is not available to you.');
-    expect(await render(f.admin, f.storeB)).toContain('Kitchen stations');
+    expect(await render(f.admin, f.storeB)).toContain(NEW_STATION_FORM);
   });
 
   it('staff and a manager of another store see no kitchen controls', async () => {
     const f = await fixture('render-no');
     for (const who of [f.staff, f.managerB]) {
       const html = await render(who, f.storeA);
-      expect(html).not.toContain('Kitchen stations');
+      // T-587: the page heading is "Kitchen stations" for everyone (it sits above the warning), so the heading text proves nothing.
+      // The goal is NO CONTROLS: the add-station form is a control only a manager sees, and the manager case above asserts it IS there.
+      expect(html).not.toContain(NEW_STATION_FORM);
       expect(html).not.toContain('Kitchen routing');
       expect(html).not.toContain('Not on the POS yet');
     }

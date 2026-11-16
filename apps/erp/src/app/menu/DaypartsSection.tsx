@@ -31,7 +31,7 @@ function DaypartFields({ d }: { d?: DaypartView }) {
         </div>
       </fieldset>
       <p className="text-xs text-neutral-500">
-        Use the store&apos;s clock. For hours that run past midnight, end earlier than you start: 17:00 to 08:00 means the window ends at 08:00 the next morning.
+        For hours that run past midnight, end earlier than you start.
       </p>
     </div>
   );
@@ -49,8 +49,7 @@ export function DaypartsSection({ storeId, dayparts, canManage, from }: { storeI
     <section id="dayparts" className={CARD}>
       <h2 className="text-sm font-medium">Menu hours</h2>
       <p className="text-xs text-neutral-500">
-        Hours a price can follow, like Lunch from 08:00 to 17:00. A price tied to Lunch is only on sale in those hours; the cashier sees when it opens next.
-        A super admin chooses which prices follow which hours, under Menu prices.
+        Hours a price can follow. A price tied to hours is only on sale in them, and the cashier sees when it opens next.
       </p>
       {active.length === 0 ? (
         <p className={`text-sm ${MUTED}`}>No hours yet. Every price here applies all day.</p>
@@ -85,6 +84,7 @@ export function DaypartsSection({ storeId, dayparts, canManage, from }: { storeI
                     <ConfirmDestructive
                       tier="retype"
                       label="Retire hours"
+                      quiet
                       consequence="These hours stop being used and cannot be edited again. Nothing is deleted. It is refused while a price still follows them."
                       expectedName={d.name}
                     />

@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { ASSET_CATEGORIES } from '@shareat/db';
 import { formatMoney, money, subtract } from '@shareat/core/money';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { buildSchedule } from '@shareat/domain';
 import { requirePageAccess } from '../../../lib/page-access';
 import { disposeAssetAction, setAssetInServiceAction, updateTermsAction } from '../actions';
@@ -194,6 +194,10 @@ export default async function AssetDetailPage({
             <EditableRecord
               action={setAssetInServiceAction}
               label={`${asset.name} in-service date`}
+              summary={[
+                { label: 'Choice', value: asset.inServiceSource === 'store_opening' ? 'When the store opens' : asset.inServiceSource === 'set' ? 'A specific date' : asset.inServiceSource === 'acquired' ? 'On the acquisition date' : null },
+                { label: 'Specific date', value: asset.inServiceSource === 'set' && asset.inServiceOn ? formatBusinessDayLong(asset.inServiceOn) : null },
+              ]}
               hidden={{ assetId: asset.id, filterStore: sp.store ?? '' }}
               typed={typedFor(sp, ASSET_IN_SERVICE_EDIT, asset.id, actor.personId)}
               rules={ASSET_IN_SERVICE_RULES}
@@ -241,6 +245,14 @@ export default async function AssetDetailPage({
             <EditableRecord
               action={updateTermsAction}
               label={asset.name}
+              summary={[
+                { label: 'Name', value: asset.name },
+                { label: 'Category', value: CATEGORY_LABEL[asset.category] ?? asset.category },
+                { label: 'Useful life', value: `${asset.usefulLifeMonths} months` },
+                { label: 'Interval', value: INTERVAL_LABEL[asset.interval] ?? asset.interval },
+                { label: 'Salvage value', value: formatMoney(money(asset.salvageValue ?? '0')) },
+                { label: 'Notes', value: asset.notes },
+              ]}
               hidden={{ assetId: asset.id, filterStore: sp.store ?? '' }}
               typed={typedFor(sp, ASSET_TERMS_EDIT, asset.id, actor.personId)}
               rules={ASSET_TERMS_RULES}

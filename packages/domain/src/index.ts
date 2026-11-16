@@ -123,6 +123,8 @@ export * from './pos/store-link';
 // T-424 S5 - register a POS v2 tablet as an ERP terminal person (the manager-approval bucket owner).
 export * from './pos/terminal-link';
 export * from './pos/tenders';
+export * from './pos/preflight';
+export * from './pos/store-mode';
 export { packageCapExcess } from './pos/v1-derive';
 export { normalizePosV1Alias, resolvePosV1Methods, type ResolvedMethods, type ResolverTender } from './pos/v1-methods';
 // T-178 — order/channel wastage disposition.
@@ -149,6 +151,7 @@ export * from './organizations';
 // (admin-only), this one is `manage_store_settings` (manager ✅).
 export * from './sales-channels';
 export * from './store-channel-settlement';
+export * from './documents';
 export * from './kitchen';
 export * from './dual-run';
 // T-392 S5 - the disposition writer is exported HERE and never from dual-run/index.ts (the CLI has no classify subcommand, R10).

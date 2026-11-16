@@ -124,10 +124,10 @@ describe('R2 createTerminal', () => {
     expect((await create(f, f.admin, 4)).terminalId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it('a number the store already uses is refused: "Till N already exists at this store." Nothing is written, nothing audited', async () => {
+  it('a number the store already uses is refused: "Cash register N already exists at this store." Nothing is written, nothing audited', async () => {
     const f = await fixture();
     const before = await tillCount(f);
-    await expectRefusal(create(f, f.manager, 1), 'Till 1 already exists at this store.');
+    await expectRefusal(create(f, f.manager, 1), 'Cash register 1 already exists at this store.');
     expect(await tillCount(f)).toBe(before);
     expect(await auditRows(f, 'pos.terminal_created')).toHaveLength(0);
   });
@@ -207,10 +207,10 @@ describe('R2 linkTerminal', () => {
     expect(await auditRows(f, 'pos.terminal_linked')).toHaveLength(0);
   });
 
-  it('a pairing already acting as another till is refused: "That tablet already acts as till N."', async () => {
+  it('a pairing already acting as another till is refused: "That tablet already acts as cash register N."', async () => {
     const f = await fixture();
     const t2 = (await create(f, f.manager, 2)).terminalId;
-    await expectRefusal(link(f, f.manager, t2, f.pairingId), 'That tablet already acts as till 1.');
+    await expectRefusal(link(f, f.manager, t2, f.pairingId), 'That tablet already acts as cash register 1.');
     expect((await tillRow(t2)).pairing_id).toBeNull();
     expect(await auditRows(f, 'pos.terminal_linked')).toHaveLength(0);
   });
@@ -340,7 +340,7 @@ describe('R3 the snapshot carries the till\'s printer settings', () => {
 
   it('store has receiptPaperMm and receiptCopies (58 and 1 by default)', async () => {
     const f = await fixture();
-    expect((await snapshot(f)).body.store).toEqual({ storeId: f.storeId, name: f.storeName, mode: 'test', terminalNo: 1, vatRegistered: true, receiptPaperMm: 58, receiptCopies: 1 });
+    expect((await snapshot(f)).body.store).toEqual({ storeId: f.storeId, name: f.storeName, mode: 'test', terminalNo: 1, vatRegistered: true, receiptPaperMm: 58, receiptCopies: 1, identity: expect.objectContaining({ addressLines: [], tin: null }) });
   });
 
   it('changing the printer changes the settings AND the ETag; changing it back restores the ETag', async () => {

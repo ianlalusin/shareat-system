@@ -105,6 +105,8 @@ const NAV_SHAPES = {
   pull: UUID,
   supplier: UUID,
   employmentId: UUID,
+  // T-584: the template an issue form was started from, so a refused Issue returns to the same draft.
+  template: UUID,
   branch: UUID,
   commissary: UUID,
   changedChannel: UUID,

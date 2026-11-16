@@ -29,6 +29,8 @@ export {
   MAX_EVENTS_PER_BATCH,
 } from './inbox';
 export type { PosEventIn, PosEventResult, PosPairing } from './inbox';
+export { receiptIdentityOf } from './receipt-identity';
+export type { ReceiptIdentity } from './receipt-identity';
 export { buildPosSnapshot, loadPosSnapshot, readPosState, NO_TILL_NUMBER } from './snapshot';
 // `listTerminals` is already the clock terminals' (attendance) in this barrel, so only the list is aliased.
 export { listTerminals as listPosTerminals, createTerminal, linkTerminal, setTerminalPrinter } from './terminals';
@@ -53,3 +55,5 @@ export { buildV1BridgePayload, V1_BRIDGE_LAST_DATE, v1BridgeDateAllowed } from '
 export type { V1BridgeClose, V1BridgeTender, V1BridgePayload } from './v1-bridge-payload';
 export { exportPosData, POS_EXPORT_MAX_DAYS } from './data-export';
 export type { PosDataExport } from './data-export';
+export { upsertPosStand, upsertPosDiscountPreset, checkPreset } from './store-setup';
+export type { StandOutcome, PresetOutcome, PresetInput, CheckedPreset } from './store-setup';

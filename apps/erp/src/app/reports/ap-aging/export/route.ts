@@ -11,6 +11,8 @@ export async function GET(request: Request) {
   const asOfDate = url.searchParams.get('asOf') ?? '';
 
   const scope = await reportScope('/reports/ap-aging', 'view_financial_reports', store);
+
+  if ('refusal' in scope) return new Response('Forbidden', { status: 403 });
   const orgId = scope.actor.orgId;
 
   const { report, supplierNames } = await runReport(orgId, async (tx) => {

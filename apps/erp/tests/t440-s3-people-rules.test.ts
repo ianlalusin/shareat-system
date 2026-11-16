@@ -147,6 +147,13 @@ const ROWS: Record<string, Row> = {
     bad: [['12', 'The TIN branch code must be 3 to 5 digits.'], ['123456', 'The TIN branch code must be 3 to 5 digits.'], ['abc', 'The TIN branch code must be 3 to 5 digits.']],
   },
   'admin.setStoreOpeningDate.openingDate': { ok: DATE, bad: [['soon', REAL('The opening date')]] },
+  'admin.setStorePosMode.mode': { ok: 'test', bad: [['  ', 'Choose a mode: off, test or live.']], blank: 'Choose a mode: off, test or live.' },
+  'admin.setStorePosMode.liveFrom': { ok: DATE, bad: [['soon', REAL('The live-from date')]] },
+  'admin.setStorePosMode.reason': {
+    ok: 'Lipa soak',
+    bad: [['  ', 'Give a reason of 1 to 200 characters.'], ['x'.repeat(201), 'Give a reason of 1 to 200 characters.']],
+    blank: 'Give a reason of 1 to 200 characters.',
+  },
   'admin.assignRole.role': { ok: 'manager', bad: [['  ', 'Pick a role.']], blank: 'Pick a role.' },
   'admin.revokeGrant.reason': {
     ok: 'No longer needed',

@@ -94,7 +94,14 @@ export default async function OrganizationSettingsPage({
         </Banner>
       )}
 
-      <EditableRecord action={setOrganizationIdentityAction} label="Organisation" hidden={{}} typed={typedFor(sp, ORGANIZATION_IDENTITY, '', actor.personId)} rules={SETTINGS_ORGANIZATION_RULES}>
+      <EditableRecord action={setOrganizationIdentityAction} label="Organisation"
+        summary={[
+          { label: 'Everyday name', value: identity.name },
+          { label: 'Registered name', value: identity.legalName },
+          { label: 'TIN', value: identity.tin },
+          { label: 'Tax type', value: identity.taxType === 'vat' ? 'VAT-registered' : identity.taxType === 'non_vat' ? 'Non-VAT' : null },
+        ]}
+        hidden={{}} typed={typedFor(sp, ORGANIZATION_IDENTITY, '', actor.personId)} rules={SETTINGS_ORGANIZATION_RULES}>
         <FormGrid className="text-sm">
           <Field
             span="full"

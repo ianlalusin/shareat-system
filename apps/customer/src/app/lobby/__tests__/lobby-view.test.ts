@@ -9,7 +9,6 @@ import {
   validateCheckIn,
   createCheckInAttempt,
   positionText,
-  waitingText,
   storeScreenView,
   waitView,
 } from '@/app/lobby/lobby-view';
@@ -173,11 +172,9 @@ describe('position and waiting text', () => {
     // kills: "0 parties ahead of you" shown to the diner at the front of the line
     expect(positionText(0)).toBe('You are next');
   });
-  it('store line: "N parties waiting", singular "1 party waiting", zero', () => {
-    // kills: no singular branch
-    expect(waitingText(5)).toBe('5 parties waiting');
-    expect(waitingText(1)).toBe('1 party waiting');
-    expect(waitingText(0)).toBe('0 parties waiting');
+  it('T-581: the diner own wait screen keeps "2 parties ahead of you" and "You are next"', () => {
+    expect(positionText(2)).toBe('2 parties ahead of you');
+    expect(positionText(0)).toBe('You are next');
   });
 });
 
@@ -242,13 +239,13 @@ describe('wait view: waiting, called, hand-off, closed', () => {
 });
 
 describe('store screen: a paused / disabled / stale store shows the counter sentence and NO form', () => {
-  const open = { storeCode: 'LIPA', storeName: 'Shareat Lipa', partiesWaiting: 5, accepting: true };
+  const open = { storeCode: 'LIPA', storeName: 'Shareat Lipa', accepting: true };
 
-  it('open store: name, "5 parties waiting", the form link, the menu, no counter notice', () => {
+  it('open store: name, the form link, the menu, no counter notice, and NO waiting text (T-581: the public never sees how busy a store is)', () => {
     // kills: form link hidden on the happy path
     const v = storeScreenView({ ok: true, value: open });
     expect(v.title).toBe('Shareat Lipa');
-    expect(v.waitingText).toBe('5 parties waiting');
+    expect(v).not.toHaveProperty('waitingText');
     expect(v.showForm).toBe(true);
     expect(v.checkInHref).toBe('/lobby/check-in?s=LIPA');
     expect(v.showMenu).toBe(true);

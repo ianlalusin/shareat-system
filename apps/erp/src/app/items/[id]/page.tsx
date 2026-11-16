@@ -24,7 +24,7 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { ITEM_ALIAS, ITEM_CATEGORY, ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
-import { EditableRecord } from '@/components/forms';
+import { EditableRecord, RecordSummary } from '@/components/forms';
 import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select, SplitWorkspace } from '@/components/ui';
 
 export const metadata = { title: 'Item — Shareat System' };
@@ -94,6 +94,14 @@ export default async function ItemDetailPage({
   const retireFlash = sp.error && RETIRE_OUTCOMES.includes(sp.error) ? sp.error : null;
   const peak = movement.reduce((m, r) => Math.max(m, Number(r.maxPrice)), 0);
 
+  // T-589 B2: what the Name and code, Expense category and Variations cards hold, shown while they are locked.
+  const nameCodeSummary = [{ label: 'Name', value: item.name }, { label: 'Code', value: item.code }];
+  const categorySummary = [
+    { label: 'Bought under', value: categoryChoices.find((c) => c.id === item.expenseCategoryId)?.label ?? (item.expenseCategoryId ? 'A retired category' : null) },
+    { label: 'Sub-category', value: subcategoryChoices.find((s) => s.id === item.expenseSubcategoryId)?.name ?? (item.expenseSubcategoryId ? 'A retired sub-category' : null) },
+  ];
+  const variationSummary = [{ label: 'Variation of', value: parentItem ? `${parentItem.name} (${parentItem.code})` : '(none, a top-level item)' }];
+
   const FLAGS = [
     { key: 'isPurchasable', label: 'Bought from suppliers', org: item.isPurchasable },
     { key: 'sellableRetail', label: 'Sold à la carte', org: item.sellableRetail },
@@ -129,7 +137,7 @@ export default async function ItemDetailPage({
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Name and code</h2>
         {mayApproveItem ? (
-          <EditableRecord action={renameItemAction} rules={ITEMS_RENAME_RULES} label={item.name} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_RENAME, item.id, actor.personId)}>
+          <EditableRecord action={renameItemAction} rules={ITEMS_RENAME_RULES} label={item.name} summary={nameCodeSummary} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_RENAME, item.id, actor.personId)}>
             <FormGrid>
               <Field rule={ITEMS_RENAME_RULES.name} width="name" label="Name">
                 <Input {...nativeAttrs(ITEMS_RENAME_RULES.name)} id="rename-name"  type="text"  defaultValue={item.name} className="w-full" />
@@ -154,9 +162,12 @@ export default async function ItemDetailPage({
             </p>
           </EditableRecord>
         ) : (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Only a super-admin can rename, retire or restore an item.
-          </p>
+          <>
+            <RecordSummary rows={nameCodeSummary} />
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              Only a super-admin can rename, retire or restore an item.
+            </p>
+          </>
         )}
       </section>
 
@@ -164,7 +175,7 @@ export default async function ItemDetailPage({
       <section id="category" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Expense category</h2>
         {mayKeepCatalogue ? (
-          <EditableRecord action={setItemExpenseCategoryAction} label={`${item.name} expense category`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_CATEGORY, item.id, actor.personId)}>
+          <EditableRecord action={setItemExpenseCategoryAction} label={`${item.name} expense category`} summary={categorySummary} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_CATEGORY, item.id, actor.personId)}>
             <FormGrid>
               <Field width="long" label="Bought under">
                 <Select name="expenseCategoryId" defaultValue={item.expenseCategoryId ?? ''} className="w-full">
@@ -253,7 +264,7 @@ export default async function ItemDetailPage({
               This item has variations, so it cannot itself be a variation. Detach them first to change that.
             </p>
           ) : (
-            <EditableRecord action={setItemVariantOfAction} label={`${item.name} variation`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_VARIANT, item.id, actor.personId)}>
+            <EditableRecord action={setItemVariantOfAction} label={`${item.name} variation`} summary={variationSummary} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_VARIANT, item.id, actor.personId)}>
               <FormGrid>
                 <Field width="long" label="Variation of">
                   <Select name="parentId" defaultValue={item.variantOfItemId ?? ''} className="w-full">

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '../../../../lib/page-access';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, FlashBanner, LinkRow, RowLink } from '@/components/ui';
@@ -23,7 +23,8 @@ const FILTERS = [
 
 export default async function RecipesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(RECIPES_PATH);
+  const { actor, refusal } = await requirePageAccess(RECIPES_PATH);
+  if (refusal) return refusal;
   const status = sp.status === 'retired' || sp.status === 'all' ? sp.status : 'active';
   const [rows, canManage] = await Promise.all([recipeList(actor.orgId, status), canManageRecipes(actor.orgId, actor)]);
 

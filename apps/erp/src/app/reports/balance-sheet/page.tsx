@@ -33,6 +33,7 @@ export default async function BalanceSheetPage({
   // super_admin only) — a balance sheet is the trial balance's own audience and
   // sensitivity, not a store-operational report like the income statement (T-209a spec).
   const scope = await reportScope('/reports/balance-sheet', 'view_trial_balance', sp.store);
+  if ('refusal' in scope) return scope.refusal;
   const orgId = scope.actor.orgId;
   const storeRows = scope.stores;
   const storeId = scope.storeId;

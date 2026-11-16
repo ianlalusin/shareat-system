@@ -310,8 +310,8 @@ describe('P2: peso formatting, the reference label, Split, Remove, the receipt',
   });
 
   describe('after Finish (T-528d): the panel hands the saved sale to Orders at once; Orders owns the receipt screen', () => {
-    const pay = async () => {
-      await render();
+    const pay = async (over: Partial<PaymentPanelProps> = {}) => {
+      await render(lines(), over);
       await fillSenior();
       await click(tender('Cash'));
       await keys('2100');
@@ -343,6 +343,19 @@ describe('P2: peso formatting, the reference label, Split, Remove, the receipt',
       expect(d.enqueue).toHaveBeenCalledTimes(1);
       expect(d.print).toHaveBeenCalledTimes(1);
       expect(onPaid).toHaveBeenCalledTimes(1);
+    });
+
+    it('T-585: the printed receipt carries the issuer identity (legal name, address, TIN with branch)', async () => {
+      await pay({ identity: { businessName: 'Acme Grill Foods Inc.', addressLines: ['12 Sample St'], tin: '123-456-789-00002' } } as Partial<PaymentPanelProps>);
+      const out = (d.print.mock.calls[0]![0] as string[]).map((l) => l.trim());
+      expect(out.slice(0, 3)).toEqual(['ACME GRILL FOODS INC.', '12 Sample St', 'TIN: 123-456-789-00002 VAT']);
+    });
+
+    it('T-585: no identity given (old cached snapshot) prints the store name and no TIN line', async () => {
+      await pay();
+      const out = (d.print.mock.calls[0]![0] as string[]).map((l) => l.trim());
+      expect(out[0]).toBe('SHAREAT LIPA');
+      expect(out.join(' ')).not.toMatch(/TIN/);
     });
 
     it('a print that failed travels in the hand-back as the notice', async () => {
