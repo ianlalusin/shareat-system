@@ -26,7 +26,7 @@ export function DeductionAgreementsSection({ view, employmentId, storeId }: { vi
           </HelpTip>
         </h2>
         {view.canAct && view.waiting.length > 0 && (
-          <FormModal trigger="Record agreement" title="Record signed agreement" size="lg">
+          <FormModal trigger="Record agreement" triggerIcon={null} title="Record signed agreement" size="lg">
             <CheckedForm rules={PAYROLL_DEDUCTION_AGREEMENT_RULES} action={recordDeductionAgreementAction} className="space-y-3">
               <input type="hidden" name="employmentId" value={employmentId} />
               <FormGrid layout="fields">

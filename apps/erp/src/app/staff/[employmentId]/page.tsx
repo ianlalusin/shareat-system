@@ -239,7 +239,9 @@ export default async function EmploymentDetailPage({
                 )}
               </div>
             ) : (
-              <EditableRecord action={setPositionsAction} label="positions" hidden={{ employmentId }} typed={typedFor(sp, STAFF_POSITIONS, employmentId, actor.personId)}>
+              <EditableRecord action={setPositionsAction} label="positions"
+                summary={[{ label: 'Positions', value: detail.positions.length === 0 ? null : detail.positions.map((p) => (p.isPrimary ? `${p.name} (primary)` : p.name)).join(', ') }]}
+                hidden={{ employmentId }} typed={typedFor(sp, STAFF_POSITIONS, employmentId, actor.personId)}>
                 <div className="space-y-2">
                 {positions.map((p) => (
                   <div key={p.id} className="flex items-center gap-3 text-sm">
@@ -317,7 +319,11 @@ export default async function EmploymentDetailPage({
                       Issued {formatBusinessDateTime(livePin.issuedAt, { dateStyle: 'long' })}
                     </span>
                   ) : (
-                    <span className="block text-warning-ink">Not issued — this person cannot sign in</span>
+                    isEnded ? (
+                      <span className="block text-muted">Not needed — this employment has ended</span>
+                    ) : (
+                      <span className="block text-warning-ink">Not issued — this person cannot sign in</span>
+                    )
                   )}
                 </span>
               </li>
