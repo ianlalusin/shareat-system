@@ -59,6 +59,6 @@ describe('F3: items/[id] rename section is built on EditableRecord + FormGrid', 
     );
     expect(html).not.toContain('<fieldset disabled');
     // T-448: Save is an icon button named by its aria-label.
-    expect(html).toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*><svg/);
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*><svg[^>]*>.*?<\/svg>Save<\/button>/); // T-589 B4a: icon + the word
   });
 });

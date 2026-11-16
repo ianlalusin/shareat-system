@@ -36,10 +36,9 @@ describe('T-448 responsive dashboards and record details', () => {
     expect(html.indexOf('Loan')).toBeLessThan(html.indexOf('9,999,999.99'));
     expect(html).not.toMatch(/truncate|aria-hidden/);
   });
-  it('keeps every metric in server output and exposes named keyboard scrolling', () => {
+  it('keeps every metric in server output in a named region', () => {
     const html = renderToStaticMarkup(h(MetricStrip, { label: 'Financial position', children: [h('a', { href: '/reports/ar-aging', key: 1 }, 'AR 9,999,999.99'), h('a', { href: '/reports/ap-aging', key: 2 }, 'AP 0.01')] }));
     expect(html).toContain('aria-label="Financial position"');
-    expect(html).toContain('tabindex="0"');
     expect(html).toContain('AR 9,999,999.99');
     expect(html).toContain('AP 0.01');
     expect(html).not.toMatch(/aria-hidden|truncate/);
@@ -57,10 +56,13 @@ describe('T-448 responsive dashboards and record details', () => {
       if (!/<DetailLayout|<SplitWorkspace/.test(src)) expect(src, p).toContain('sectioned');
     }
   });
-  it('uses mobile metric snapping and keeps financial text unclipped', () => {
+  // T-589 B4a. MUTANT: restore `display: flex; overflow-x: auto` on .erp-metric-strip -> tiles clip at the phone edge again.
+  it('wraps metric tiles into a grid on a phone and keeps financial text unclipped', () => {
     const css = readFileSync(join(root, 'app/globals.css'), 'utf8');
-    expect(css).toMatch(/\.erp-metric-strip[\s\S]*?scroll-snap-type:\s*x proximity/);
-    expect(css).toMatch(/\.erp-metric-strip[\s\S]*?overflow-x:\s*auto/);
+    const base = /^\.erp-metric-strip \{([^}]*)\}/m.exec(css)?.[1] ?? '';
+    expect(base).toMatch(/display:\s*grid/);
+    expect(base).not.toMatch(/overflow-x:\s*auto|scroll-snap/);
+    expect(css).toMatch(/@media \(min-width: 480px\) \{\s*\.erp-metric-strip \{ grid-template-columns: repeat\(2/);
     expect(css).toMatch(/\.erp-detail-layout[\s\S]*?min-width:\s*0/);
     expect(css).toMatch(/@media \(min-width: 768px\) and \(max-width: 1023px\)[\s\S]*?min-height:\s*44px/);
   });

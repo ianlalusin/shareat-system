@@ -48,10 +48,35 @@ function cellGrid(rows: HTMLTableRowElement[]): HTMLTableCellElement[][] {
   return grid;
 }
 const distinct = (labels: string[]) => [...new Set(labels.filter(Boolean))];
+/** T-589 B4a: what a person reads in a cell. An empty cell or a bare dash says nothing, so it is never a card's key figure. */
+const spoken = (cell: Element) => (cell.textContent ?? '').replace(/\s+/g, ' ').trim();
+const saysSomething = (cell: Element) => !/^[—–-]?$/.test(spoken(cell));
+const hasContent = (cell: Element) => spoken(cell) !== '' || cell.querySelector('img,svg,' + CONTROL) !== null;
+/** A cell whose words are an amount: "₱1,250.00", "-12.50", "40,000.00". */
+const moneyLike = (cell: Element) => /^[-−]?\s*[₱$€]\s?[-−]?\d[\d,]*(\.\d+)?$|^[-−]?\d[\d,]*\.\d{2}$/.test(spoken(cell));
+/** A footer or "Total" row is a summary of the table, not one more record, so it must not become a card with an avatar. */
+const isTotalRow = (row: HTMLTableRowElement, cells: HTMLTableCellElement[]) =>
+  row.parentElement?.tagName === 'TFOOT' || /^(grand total|sub-?total|totals?)$/i.test(spoken(cells.find(hasContent) ?? row));
+function clearCardMarks(row: HTMLTableRowElement) {
+  for (const name of ['data-card-avatar', 'data-card-has-image', 'data-card-has-keys', 'data-card-has-extra', 'data-card-expanded']) row.removeAttribute(name);
+  Array.from(row.cells).filter(cell => cell.hasAttribute('data-card-toggle-cell')).forEach(cell => cell.remove());
+}
 
 function summarizeRow(table: HTMLTableElement, row: HTMLTableRowElement) {
   const cells = cellsOf(row);
   if (!cells.length) return;
+  // T-589 B4a: a row with nothing in it (the blank lines of a count sheet) is not a card, and a totals row is not a record.
+  const nothing = !cells.some(hasContent);
+  if (nothing || isTotalRow(row, cells)) {
+    clearCardMarks(row);
+    attribute(row, 'data-card-kind', nothing ? 'blank' : 'total');
+    const lead = nothing ? undefined : cells.find(hasContent); // "3 assets" / "All stores": the row's own words, so no column name before them
+    for (const cell of cells) {
+      attribute(cell, 'data-card-slot', nothing || !hasContent(cell) ? 'empty' : cell === lead ? 'total-lead' : 'total');
+      cell.removeAttribute('data-card-key-order');
+    }
+    return;
+  }
   const named = (name: string | null) => name ? cells.find(cell => cell.dataset.cardLabel?.toLowerCase() === name.toLowerCase()) : undefined;
   const label = (cell: HTMLTableCellElement) => cell.dataset.cardLabel ?? '';
   const editable = (cell: HTMLTableCellElement) => Array.from(cell.querySelectorAll(EDITOR)).some(meaningful);
@@ -63,8 +88,12 @@ function summarizeRow(table: HTMLTableElement, row: HTMLTableRowElement) {
   if (!title) return;
   const remaining = available.filter(cell => cell !== title);
   const configuredKeys = table.getAttribute('data-card-keys');
-  const ranked = [ /balance|amount due|grand total|net total/i, /amount|total|debit|credit/i, /status/i, /quantity|on.hand|stock/i, /price|rate|cost|priced per/i ];
-  const automaticKeys = [...new Set(ranked.flatMap(pattern => remaining.filter(cell => !editable(cell) && pattern.test(label(cell)))))];
+  // T-589 B4a: what a person scans a list for is what is owed and where it stands, so those lead; a column with nothing to say never does.
+  const ranked = [ /balance|amount due|grand total|net total|payable|owes|owed|still out|outstanding|unpaid|\bdue\b/i, /amount|total|debit|credit|released|spent|paid|\bnet\b|sales|revenue/i, /status|state|stage/i, /quantity|on.hand|stock/i, /price|rate|cost|priced per/i ];
+  const keyable = (cell: HTMLTableCellElement) => !editable(cell) && saysSomething(cell);
+  const automaticKeys = [...new Set(ranked.flatMap(pattern => remaining.filter(cell => keyable(cell) && pattern.test(label(cell)))))];
+  // No column is named like a figure: the row's last amount (a total sits last) is still the one worth seeing.
+  if (!automaticKeys.length) { const amount = remaining.filter(cell => keyable(cell) && moneyLike(cell)).pop(); if (amount) automaticKeys.push(amount); }
   const keys = configuredKeys !== null ? configuredKeys.split('|').flatMap(name => {
     const found = named(name.trim()); return found && found !== title && !editable(found) ? [found] : [];
   }).slice(0, 2) : automaticKeys.slice(0, 2);
@@ -77,9 +106,10 @@ function summarizeRow(table: HTMLTableElement, row: HTMLTableRowElement) {
   else row.removeAttribute('data-card-has-keys');
   const text = headerText(title);
   // T-568: first two words, punctuation stripped — "T343S6C Test Item (slab)" was rendering "T(".
-  const words = text.split(/\s+/).map(word => word.replace(/^[^A-Za-z0-9]+/, '')).filter(Boolean);
+  // T-589 B4a: initials of WORDS only. A figure ("1400", "3900") is not a name, so it draws no avatar at all (the card closes up around it).
+  const words = text.split(/\s+/).map(word => word.replace(/^[^\p{L}]+/u, '')).filter(Boolean);
   const initials = words.slice(0, 2).map(word => [...word][0] ?? '').join('').toUpperCase();
-  attribute(row, 'data-card-avatar', initials || '·');
+  if (initials) attribute(row, 'data-card-avatar', initials); else row.removeAttribute('data-card-avatar');
   const image = imageCell?.querySelector('img') ?? title.querySelector('img');
   if (image) { attribute(row, 'data-card-has-image', ''); attribute(image, 'data-card-image', ''); }
   else row.removeAttribute('data-card-has-image');
