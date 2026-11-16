@@ -49,7 +49,8 @@ describe('T-448 responsive dashboards and record details', () => {
     const details = pages(join(root, 'app')).filter((p) => /\[[^/\\]+\][\\/]page\.tsx$/.test(p) && !p.includes(`${join('reports', 'dual-run')}`));
     // T-398 S5: 26 -> 27, new detail page app/inventory/deliveries/inbound/[shipmentId]/page.tsx
     // T-193 S5: 27 -> 28, new detail page app/payroll/statutory-payments/[id]/page.tsx
-    expect(details.length).toBe(28);
+    // T-584: 28 -> 29, new detail page app/documents/[id]/page.tsx
+    expect(details.length).toBe(29);
     for (const p of details) {
       const src = readFileSync(p, 'utf8');
       expect(src, p).toContain('view="detail"');

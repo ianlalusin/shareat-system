@@ -133,6 +133,7 @@ export * as expensesRepo from './repo/expenses';
 export * as salesDaysRepo from './repo/sales-days';
 export * as storeChannelSettlementRepo from './repo/store-channel-settlement';
 export type { StoreChannelSettlementConfigRow } from './repo/store-channel-settlement';
+export * as documentsRepo from './repo/documents';
 export * as fixedAssetsRepo from './repo/fixed-assets';
 export * as kitchenRepo from './repo/kitchen';
 export * as posV2Repo from './repo/pos-v2';

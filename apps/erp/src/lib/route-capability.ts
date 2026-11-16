@@ -48,6 +48,12 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/pos/kitchen': 'serve_pos_ticket',
   '/pos/refills': 'request_pos_refill',
 
+  // T-587 S2: the two clock pages had no key, so every signed-in person (a cashier) saw them in the sidebar. Both loaders already authorize
+  // `manage_attendance` at the store (`listTerminals`, `laneHealth`, `listQuarantine`), so that is the word; the writes keep their own words
+  // (`provision_clock_terminal` to provision or revoke, discarding a failed punch). Managers keep access, cashiers lose link, hub row and page.
+  '/attendance/terminals': 'manage_attendance',
+  '/attendance/lane': 'manage_attendance',
+
   // --- Who may act, and where. The keys to the building. -------------------------------------
   '/admin/users': 'manage_users',
   '/admin/stores': 'manage_stores',
@@ -71,6 +77,10 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // T-401 S6: the usage tolerance band is org policy, admin-only like the menu depletion rules (`set_menu_depletion`); the setters check the same word.
   '/settings/usage-tolerance': 'set_menu_depletion',
   '/settings/business-rules': 'manage_business_rules',
+  // T-584 (Ian, 15 Nov 2026): HR documents. The register, a document and its print need view_documents; issuing needs issue_documents; the templates are the admin's. The longer prefix wins over /documents. Every domain function checks the same word at the document's store.
+  '/documents': 'view_documents',
+  '/documents/new': 'issue_documents',
+  '/documents/templates': 'manage_document_templates',
   // T-464: pairing a store's POS tablet is the store manager's (or an admin's) act; `pairPosTablet` / `unpairPosTablet` check the same word at the store. Longer prefix wins over `/settings`.
   '/settings/pos-tablet': 'pair_pos_tablet',
 

@@ -61,9 +61,9 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 112 capabilities; every
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day` joins CAPABILITY_AREA.
     // ⭐ T-511 S2a (2026-11-03): 120 -> 123 (+ upload_settlement_files in sales, edit_platform_store_code and edit_loan_repayment_amount in admin). RED until built.
     // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (manage_business_rules in admin).
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 128 keys').toBe(128);
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(127);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(129);
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 131 keys').toBe(131);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(130);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(132);
     // T-524: 125 -> 128 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
   });
 });
@@ -125,7 +125,7 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     'approve_buyer', 'set_credit_limit', 'override_credit_limit', 'record_ar_collection',
     'write_off_receivable', 'create_wholesale_order', 'dispatch_wholesale_order',
   ],
-  staff: ['enrol_staff', 'manage_attendance', 'set_pay_rate', 'run_payroll', 'provision_clock_terminal',
+  staff: ['manage_document_templates', 'issue_documents', 'view_documents', 'enrol_staff', 'manage_attendance', 'set_pay_rate', 'run_payroll', 'provision_clock_terminal',
     // ⭐ T-434: `view_staff_signature` (area staff, 112 -> 113).
     'view_staff_signature',
     // ⭐ T-436: `view_leave_document` (area staff, 113 -> 114).
@@ -176,7 +176,7 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities, area sales.
     // T-193 S3: `remit_statutory` joins staff. Merge of main + T-193: re-measured.
     // ⭐ T-511 S2a (2026-11-03): 120 -> 123. T-510 S2: 123 -> 124. T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (manage_business_rules in admin).
-    expect(total).toBe(128);
+    expect(total).toBe(131); // T-584: 128 -> 131 (+3 document capabilities, area staff)
     // T-524: 125 -> 128 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
     // ⭐ 108 -> 109 (T-403): `manage_recipes` joins production.
   });

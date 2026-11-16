@@ -45,6 +45,11 @@ Status: OK, minor, fix, not captured, not reviewed. "Fixed in PR" is filled by e
 | /cutover/count | apps/erp/src/app/cutover/count/page.tsx | 2026-11-15 | fix | G4 |  |
 | /cutover/count/sheet | apps/erp/src/app/cutover/count/sheet/page.tsx | 2026-11-15 | minor | G4 |  |
 | /cutover/opening | apps/erp/src/app/cutover/opening/page.tsx | 2026-11-15 | fix | G4 |  |
+| /documents | apps/erp/src/app/documents/page.tsx |  | not reviewed | T-584 |  |
+| /documents/[id] | apps/erp/src/app/documents/[id]/page.tsx |  | not reviewed | T-584 |  |
+| /documents/[id]/print | apps/erp/src/app/documents/[id]/print/page.tsx |  | not reviewed | T-584 |  |
+| /documents/new | apps/erp/src/app/documents/new/page.tsx |  | not reviewed | T-584 |  |
+| /documents/templates | apps/erp/src/app/documents/templates/page.tsx |  | not reviewed | T-584 |  |
 | /expenses | apps/erp/src/app/expenses/page.tsx | 2026-11-15 | fix | G4 |  |
 | /expenses/[id] | apps/erp/src/app/expenses/[id]/page.tsx | 2026-11-15 | fix | G4 | #279 |
 | /expenses/new | apps/erp/src/app/expenses/new/page.tsx | 2026-11-15 | fix | G4 |  |

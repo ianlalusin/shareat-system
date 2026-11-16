@@ -19,7 +19,7 @@
  *     UNORDERED pair of store ids), 392001 (dual-run store-week, keyed on org:store:week), 436001 (a
  *     person's leave: caps, SIL balance, one-leave-day-per-date, keyed on the person id), 511001
  *     (settlement upload, keyed on the channel id), 511002 (a booked period charge being netted by a payout, keyed on the charge id), 574001 (one delivery line's returnable quantity, keyed on the line id), 574002 (customer returns on a charge-less trade order, keyed on the order id), 531001 (a store's POS day close / backlog close, keyed on the store id).
- *     575001 (one senior/PWD card at one store, keyed on org:store:normalised card number).
+ *     575001 (one senior/PWD card at one store, keyed on org:store:normalised card number), 584001 (issued-document numbering, keyed on org:year).
  *   - Migration 0211: namespace 443001 (item family structure, keyed on org id).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
@@ -179,4 +179,13 @@ export async function lockSeniorCard(tx: Tx, orgId: string, storeId: string, idN
   await tx.execute(
     sql`select pg_advisory_xact_lock(${SENIOR_CARD_LOCK_NAMESPACE}::int4, hashtext(${orgId}::text || ':' || ${storeId}::text || ':' || lower(btrim(${idNumber}::text))))`,
   );
+}
+
+/** Namespace (first int4) for the per-organisation, per-year issued-document numbering lock. T-584. */
+const DOCUMENT_NUMBER_LOCK_NAMESPACE = 584001;
+
+/** Serialises the allocation of the next `DOC-YYYY-NNNN` for one organisation and year, so two concurrent issues never read the same highest number. The unique
+ *  (org_id, number) index is the backstop. Keyed on org:year. */
+export async function lockDocumentNumbering(tx: Tx, orgId: string, year: number): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(${DOCUMENT_NUMBER_LOCK_NAMESPACE}::int4, hashtext(${orgId}::text || ':' || ${String(year)}::text))`);
 }
