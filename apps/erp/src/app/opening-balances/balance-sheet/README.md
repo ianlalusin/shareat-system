@@ -1,14 +1,14 @@
-# opening
+# balance-sheet
 
 ## Overview
 
-Opening balances at `/cutover/opening`. Conversion checklist, counted opening stock and opening balance-sheet figures.
+Opening balance sheet at `/opening-balances/balance-sheet`. Conversion checklist, counted opening stock and opening balance-sheet figures.
 
 Parent blueprint: [up one directory](../README.md).
 
 ## Interface
 
-- Page route `/cutover/opening`; dynamic route segments are supplied through App Router params.
+- Page route `/opening-balances/balance-sheet`; dynamic route segments are supplied through App Router params.
 - [page.tsx](./page.tsx) — `OpeningPage`.
 
 ## Invariants

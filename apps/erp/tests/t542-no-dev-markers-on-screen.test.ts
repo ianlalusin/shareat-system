@@ -34,7 +34,7 @@ const CHANGED: readonly string[] = [
   'customers/[customerId]/AutoAllocateCollectionForm.tsx',
   'customers/[customerId]/page.tsx',
   'customers/page.tsx',
-  'cutover/opening/page.tsx',
+  'opening-balances/balance-sheet/page.tsx',
   'findings/page.tsx',
   'findings/scorecard/page.tsx',
 ];

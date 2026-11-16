@@ -1,19 +1,19 @@
-# cutover
+# opening-balances
 
 ## Overview
 
-The conversion at `/cutover`. Conversion checklist, counted opening stock and opening balance-sheet figures.
+Opening balances at `/opening-balances`. Conversion checklist, counted opening stock and opening balance-sheet figures.
 
 Parent blueprint: [up one directory](../README.md).
 
 ## Interface
 
-- Page route `/cutover`; dynamic route segments are supplied through App Router params.
+- Page route `/opening-balances`; dynamic route segments are supplied through App Router params.
 - [lib.ts](./lib.ts) — `CONVERSION_DATE`, `loadProgress`, `loadGaps`, `countedValueFor`, `PHASE_TITLE`, `kindLabel`, `loadOpeningDrafts`, `PostableAccount`, `loadPostableAccounts`, `RoomOption`, `loadRooms`, `RoomCountRow`, `loadRoomCountSheet`, `MergedLine`, `loadMergedLines`, `SheetItem`, `loadSheetItems`, `PartyOption`, `loadPartyOptions`, `loadPendingShells`, `loadTieOut`, `peso`, `listStores`, `withOrgPrincipal`, `StoreOption`.
 - [actions.ts](./actions.ts) — `attestStepAction`, `recordCountAction`, `addOpeningFigureAction`, `removeOpeningFigureAction`, `postOpeningBalancesAction`, `valueOpeningStockAction`, `valueOpeningAssetAction`.
 - [page.tsx](./page.tsx) — `CutoverPage`.
-- [count](./count/README.md) — Opening count at `/cutover/count`. Conversion checklist, counted opening stock and opening balance-sheet figures.
-- [opening](./opening/README.md) — Opening balances at `/cutover/opening`. Conversion checklist, counted opening stock and opening balance-sheet figures.
+- [stock-count](./stock-count/README.md) — Opening stock count at `/opening-balances/stock-count`. Conversion checklist, counted opening stock and opening balance-sheet figures.
+- [balance-sheet](./balance-sheet/README.md) — Opening balance sheet at `/opening-balances/balance-sheet`. Conversion checklist, counted opening stock and opening balance-sheet figures.
 
 ## Invariants
 

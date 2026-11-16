@@ -225,9 +225,9 @@ describe('F3 - nav shapes (R1, REV-4): a bad value is dropped, and the log names
   });
 
   it('T-390 S5: the `room` nav key keeps a uuid and drops anything else', async () => {
-    const { u } = await post('/cutover/count', { store: UUID, room: UUID });
+    const { u } = await post('/opening-balances/stock-count', { store: UUID, room: UUID });
     expect(u.searchParams.get('room')).toBe(UUID);
-    const bad = await post('/cutover/count', { store: UUID, room: 'x ' + UUID });
+    const bad = await post('/opening-balances/stock-count', { store: UUID, room: 'x ' + UUID });
     expect(bad.u.searchParams.has('room')).toBe(false);
   });
 

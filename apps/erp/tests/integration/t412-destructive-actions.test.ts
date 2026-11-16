@@ -264,7 +264,7 @@ describe('I10 Tier P: postOpeningBalancesAction (org-level: the record has no st
     const state = async () => String((await sql<{ n: number }[]>`select count(*)::int as n from journal_entries where org_id = ${f.orgId} and status = 'posted'`)[0]!.n);
     return { f, adminPin, managerPin, state };
   }
-  const MOD = '../../src/app/cutover/actions';
+  const MOD = '../../src/app/opening-balances/actions';
 
   it('no PIN, a forged flag, and a manager’s PIN each refuse and post nothing; the administrator’s PIN posts and is audited once', async () => {
     const { f, adminPin, managerPin, state } = await ready();

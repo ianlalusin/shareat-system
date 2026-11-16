@@ -2,13 +2,13 @@
 
 ## Overview
 
-Count sheet at `/cutover/count/sheet`. Conversion checklist, counted opening stock and opening balance-sheet figures.
+Opening stock count sheet at `/opening-balances/stock-count/sheet`. Conversion checklist, counted opening stock and opening balance-sheet figures.
 
 Parent blueprint: [up one directory](../README.md).
 
 ## Interface
 
-- Page route `/cutover/count/sheet`; dynamic route segments are supplied through App Router params.
+- Page route `/opening-balances/stock-count/sheet`; dynamic route segments are supplied through App Router params.
 - [page.tsx](./page.tsx) — `CountSheetPage`.
 
 ## Invariants

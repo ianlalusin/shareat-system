@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 /**
- * T-390 S5 (TESTER) - /cutover/opening (value the count, value assets, party picker, tie-out panel) and /cutover/count/sheet (the
+ * T-390 S5 (TESTER) - /opening-balances/balance-sheet (value the count, value assets, party picker, tie-out panel) and /opening-balances/stock-count/sheet (the
  * printable count sheet). Spec: docs/tasks/390-opening-stock-and-subledger-tieout.md s5.4, s10 smoke 1 and 6.
  *
  * HOW THE WIRING IS PROVEN: the cutover `actions` module is replaced by named spies, and the page's React element tree is walked
@@ -12,11 +12,11 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
  * CONTRACT PINNED HERE (the spec is silent; the builder matches):
  *  - actions: `valueOpeningStockAction` (hidden storeId), `valueOpeningAssetAction` (hidden assetId; inputs bookValue,
  *    remainingLifeMonths, salvageValue), `addOpeningFigureAction` (+ inputs partyType, partyId), `attestStepAction` (hidden stepCode).
- *  - /cutover/opening: one "Value the count" form per store; one asset form per pending_valuation shell (and none for an active
+ *  - /opening-balances/balance-sheet: one "Value the count" form per store; one asset form per pending_valuation shell (and none for an active
  *    asset); the party picker lists the org's suppliers by name; the Tie-out panel prints every tie line's sentence, every notChecked
  *    row (account, amount, reason), the steps C3P / C4 / C5 with their titles and, when set, the blockedBy / detail text; C3P has an
  *    attest form until it is attested.
- *  - /cutover/count/sheet?store=<id>[&room=<id>]: one section per active room, or only `room`. A room lists items with a movement in
+ *  - /opening-balances/stock-count/sheet?store=<id>[&room=<id>]: one section per active room, or only `room`. A room lists items with a movement in
  *    that room in the last 90 days. NO expected quantity anywhere.
  */
 const h = vi.hoisted(() => ({ actor: null as null | { personId: string; orgId: string } }));
@@ -40,7 +40,7 @@ vi.mock('../../src/lib/session', () => ({
   requireSession: vi.fn(async () => ({ actor: h.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01') })),
 }));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
-vi.mock('../../src/app/cutover/actions', () => spies);
+vi.mock('../../src/app/opening-balances/actions', () => spies);
 
 import { cutoverProgress, CUTOVER_STEPS } from '@shareat/domain';
 import { asOrg, attestC3P, figure, fixture, mkAsset, mkShell, mkSupplier, settle3900, sql, tieOut, uid, type Fixture } from '../../../../tests/integration/t390-s3-common';
@@ -53,8 +53,8 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-const openingPage = async () => (await import('../../src/app/cutover/opening/page')).default as (p: unknown) => Promise<unknown>;
-const sheetPage = async () => (await import('../../src/app/cutover/count/sheet/page')).default as (p: unknown) => Promise<unknown>;
+const openingPage = async () => (await import('../../src/app/opening-balances/balance-sheet/page')).default as (p: unknown) => Promise<unknown>;
+const sheetPage = async () => (await import('../../src/app/opening-balances/stock-count/sheet/page')).default as (p: unknown) => Promise<unknown>;
 
 // ---- element-tree walk ------------------------------------------------------------------------------------------------
 
@@ -117,9 +117,9 @@ async function renderOpening(f: Fixture) {
 }
 const textOf = (html: string) => plain(html);
 
-// ---- /cutover/opening ----------------------------------------------------------------------------------------------------
+// ---- /opening-balances/balance-sheet ----------------------------------------------------------------------------------------------------
 
-describe('T-390 S5 /cutover/opening - Value the count', () => {
+describe('T-390 S5 /opening-balances/balance-sheet - Value the count', () => {
   it('one "Value the count" form per store, wired to valueOpeningStockAction with the store id', async () => {
     const f = await fixture('op-vs');
     const { forms } = await renderOpening(f);
@@ -134,7 +134,7 @@ describe('T-390 S5 /cutover/opening - Value the count', () => {
   });
 });
 
-describe('T-390 S5 /cutover/opening - Assets to value', () => {
+describe('T-390 S5 /opening-balances/balance-sheet - Assets to value', () => {
   it('every pending_valuation shell gets a form wired to valueOpeningAssetAction (assetId, bookValue, remainingLifeMonths, salvageValue); an active asset gets none', async () => {
     const f = await fixture('op-va');
     const shell = await mkShell(f, f.storeA);
@@ -157,7 +157,7 @@ describe('T-390 S5 /cutover/opening - Assets to value', () => {
   });
 });
 
-describe('T-390 S5 /cutover/opening - the party picker (R12)', () => {
+describe('T-390 S5 /opening-balances/balance-sheet - the party picker (R12)', () => {
   it('Add a figure has partyType and partyId inputs and the picker lists the suppliers by name', async () => {
     const f = await fixture('op-party');
     const sup = await mkSupplier(f, 'Meat King');
@@ -170,7 +170,7 @@ describe('T-390 S5 /cutover/opening - the party picker (R12)', () => {
   });
 });
 
-describe('T-390 S5 /cutover/opening - the Tie-out panel', () => {
+describe('T-390 S5 /opening-balances/balance-sheet - the Tie-out panel', () => {
   it('prints every red tie sentence (T2: the 1510 figure is typed short) and drops it once the figure is right', async () => {
     const f = await fixture('op-tie');
     await mkAsset(f, f.storeA, '312400.00');
@@ -232,7 +232,7 @@ describe('T-390 S5 /cutover/opening - the Tie-out panel', () => {
   });
 });
 
-// ---- /cutover/count/sheet -------------------------------------------------------------------------------------------------
+// ---- /opening-balances/stock-count/sheet -------------------------------------------------------------------------------------------------
 
 async function sheetFixture(hint: string) {
   const f = await fixture(hint);
@@ -266,7 +266,7 @@ async function renderSheet(s: Awaited<ReturnType<typeof sheetFixture>>, params: 
 }
 const nameOf = async (id: string) => (await sql<{ name: string }[]>`select name from items where id = ${id}`)[0]!.name;
 
-describe('T-390 S5 /cutover/count/sheet - the printable count sheet', () => {
+describe('T-390 S5 /opening-balances/stock-count/sheet - the printable count sheet', () => {
   it('a single room lists the items that moved there in the last 90 days, and not the dormant, the unmoved, or another room\'s', async () => {
     const s = await sheetFixture('sheet-room');
     const frz = (await renderSheet(s, { room: s.frz })).text;

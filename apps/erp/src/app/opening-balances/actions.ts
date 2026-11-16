@@ -22,7 +22,7 @@ import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
-import { CUTOVER_COUNT } from './count/typed-forms';
+import { CUTOVER_COUNT } from './stock-count/typed-forms';
 import { recordingRefusalsFor, withOrgPrincipal } from '../expenses/lib';
 import { verifyAdminApproval } from '@shareat/auth';
 import { authorizeOrgLevel, recordApproval } from '@/lib/destructive';
@@ -36,9 +36,9 @@ export async function attestStepAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const stepCode = str(formData, 'stepCode');
   const storeId = str(formData, 'storeId');
-  // The page that holds the form says where to come back to; only a /cutover screen is honoured.
+  // The page that holds the form says where to come back to; only a /opening-balances screen is honoured.
   const back = str(formData, 'returnTo');
-  const home = /^\/cutover(\/[a-z-]+)*$/.test(back) ? back : '/cutover';
+  const home = /^\/opening-balances(\/[a-z-]+)*$/.test(back) ? back : '/opening-balances';
   try {
     await recordingRefusalsFor(actor.orgId, () =>
       withOrgPrincipal(actor.orgId, (tx: Tx) =>
@@ -80,9 +80,9 @@ export async function recordCountAction(formData: FormData): Promise<void> {
       ),
     );
   } catch (err) {
-    return await redirectWithFlash('/cutover/count', nav, { error: errorMessage(err), typed: keepTyping(formData, CUTOVER_COUNT, `${itemId}:${locationId}`, { actorId: actor.personId }) });
+    return await redirectWithFlash('/opening-balances/stock-count', nav, { error: errorMessage(err), typed: keepTyping(formData, CUTOVER_COUNT, `${itemId}:${locationId}`, { actorId: actor.personId }) });
   }
-  return await redirectWithFlash('/cutover/count', nav);
+  return await redirectWithFlash('/opening-balances/stock-count', nav);
 }
 
 export async function addOpeningFigureAction(formData: FormData): Promise<void> {
@@ -104,9 +104,9 @@ export async function addOpeningFigureAction(formData: FormData): Promise<void> 
       ),
     );
   } catch (err) {
-    return await redirectWithFlash('/cutover/opening', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/opening-balances/balance-sheet', {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash('/cutover/opening', {});
+  return await redirectWithFlash('/opening-balances/balance-sheet', {});
 }
 
 export async function removeOpeningFigureAction(formData: FormData): Promise<void> {
@@ -123,9 +123,9 @@ export async function removeOpeningFigureAction(formData: FormData): Promise<voi
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/cutover/opening', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/opening-balances/balance-sheet', {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash('/cutover/opening', {});
+  return await redirectWithFlash('/opening-balances/balance-sheet', {});
 }
 
 /**
@@ -147,9 +147,9 @@ export async function postOpeningBalancesAction(formData: FormData): Promise<voi
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/cutover/opening', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/opening-balances/balance-sheet', {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash('/cutover/opening', {}, { posted: '1' });
+  return await redirectWithFlash('/opening-balances/balance-sheet', {}, { posted: '1' });
 }
 
 /** T-390 R5: write (or rewrite) the store's generated 1310/1320/1330 draft from the count. A refusal reaches the flash in words. */
@@ -161,9 +161,9 @@ export async function valueOpeningStockAction(formData: FormData): Promise<void>
       withOrgPrincipal(actor.orgId, (tx: Tx) => valueOpeningStock(tx, actor, { storeId })),
     );
   } catch (err) {
-    return await redirectWithFlash('/cutover/opening', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/opening-balances/balance-sheet', {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash('/cutover/opening', {});
+  return await redirectWithFlash('/opening-balances/balance-sheet', {});
 }
 
 /** T-390 R10: value one pending shell at book value. The life arrives as TEXT and goes to the domain as a Number, never parseInt (a fraction must be refused, not truncated). */
@@ -183,7 +183,7 @@ export async function valueOpeningAssetAction(formData: FormData): Promise<void>
       ),
     );
   } catch (err) {
-    return await redirectWithFlash('/cutover/opening', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/opening-balances/balance-sheet', {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash('/cutover/opening', {});
+  return await redirectWithFlash('/opening-balances/balance-sheet', {});
 }

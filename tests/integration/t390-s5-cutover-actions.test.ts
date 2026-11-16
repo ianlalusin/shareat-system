@@ -10,7 +10,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
  *    `lib/flash.ts` NAV_SHAPES, a file the spec's builder list does not name: see the report).
  *  - addOpeningFigureAction reads `partyType` and `partyId` (R12) and hands both to addOpeningFigure.
  *  - NEW `valueOpeningStockAction(formData{storeId})` and `valueOpeningAssetAction(formData{assetId, bookValue, remainingLifeMonths,
- *    salvageValue})`, both redirecting to /cutover/opening; `remainingLifeMonths` arrives as TEXT and the action makes it a number
+ *    salvageValue})`, both redirecting to /opening-balances/balance-sheet; `remainingLifeMonths` arrives as TEXT and the action makes it a number
  *    (a fraction must reach the domain as a fraction so the domain refuses it in words, not be truncated by parseInt).
  *  - every refusal is `redirectWithFlash(path, nav, { error: <the domain's userMessage> })`.
  */
@@ -35,12 +35,12 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-const actionsModule = () => import('../../apps/erp/src/app/cutover/actions');
+const actionsModule = () => import('../../apps/erp/src/app/opening-balances/actions');
 
 async function run(name: string, fields: Record<string, string>, who: { personId: string; orgId: string }) {
   const mod = (await actionsModule()) as Record<string, unknown>;
   const act = mod[name];
-  if (typeof act !== 'function') throw new Error(`MISSING EXPORT: apps/erp/src/app/cutover/actions.ts does not export ${name} (T-390 S5 has not been built).`);
+  if (typeof act !== 'function') throw new Error(`MISSING EXPORT: apps/erp/src/app/opening-balances/actions.ts does not export ${name} (T-390 S5 has not been built).`);
   resetJar();
   h.actor = who;
   const fd = new FormData();
@@ -113,7 +113,7 @@ describe('recordCountAction passes the ROOM through (DEF-630 starts here: the ac
     const s = await setup('rc-refuse');
     const o = await run('recordCountAction', { storeId: s.f.storeA, locationId: s.frz, itemId: s.item, quantity: '-1' }, s.f.admin);
     expectRuleSentence(o.flash.error, CUTOVER_COUNT_RULES.quantity, '-1'); // T-440: the rule's sentence
-    expect(o.path).toBe('/cutover/count');
+    expect(o.path).toBe('/opening-balances/stock-count');
     expect(o.nav.get('store')).toBe(s.f.storeA);
     expect(o.nav.get('room'), 'the room rides the redirect so the page reopens the same room').toBe(s.frz);
     expect(await rows(s)).toHaveLength(0);
@@ -163,14 +163,14 @@ describe('addOpeningFigureAction passes the PARTY through (R12, M26)', () => {
 });
 
 describe('valueOpeningStockAction calls valueOpeningStock; a refusal reaches the flash in words', () => {
-  it('a costed count is valued: the store gets one 1310 draft and the redirect goes back to /cutover/opening', async () => {
+  it('a costed count is valued: the store gets one 1310 draft and the redirect goes back to /opening-balances/balance-sheet', async () => {
     const s = await setup('vs-ok');
     await asOrg(s.f.orgId, (tx) =>
       domain.recordOpeningCount(tx, s.f.admin, { storeId: s.f.storeA, locationId: s.kit, itemId: s.item, quantity: '10', unitCost: '12.5', costSource: 'typed' } as never),
     );
     const o = await run('valueOpeningStockAction', { storeId: s.f.storeA }, s.f.admin);
     expect(o.flash.error, 'valued').toBeUndefined();
-    expect(o.path).toBe('/cutover/opening');
+    expect(o.path).toBe('/opening-balances/balance-sheet');
     const [e] = await sql<{ amount: string }[]>`
       select sum(jl.debit)::text amount from journal_lines jl
       join journal_entries je on je.id = jl.entry_id join accounts a on a.id = jl.account_id
@@ -194,7 +194,7 @@ describe('valueOpeningStockAction calls valueOpeningStock; a refusal reaches the
     const s = await setup('vs-staff');
     const o = await run('valueOpeningStockAction', { storeId: s.f.storeA }, s.f.staff);
     expect(o.flash.error, 'a sentence').toBeTruthy();
-    expect(o.path).toBe('/cutover/opening');
+    expect(o.path).toBe('/opening-balances/balance-sheet');
   });
 });
 
@@ -211,7 +211,7 @@ describe('valueOpeningAssetAction calls valueOpeningAsset; a refusal reaches the
     const shell = await mkShell(s.f, s.f.storeA);
     const o = await run('valueOpeningAssetAction', fields(shell.id), s.f.admin);
     expect(o.flash.error, 'valued').toBeUndefined();
-    expect(o.path).toBe('/cutover/opening');
+    expect(o.path).toBe('/opening-balances/balance-sheet');
     const r = await assetRow(shell.id);
     expect(r.status).toBe('active');
     expect(Number(r.cost)).toBe(7500);

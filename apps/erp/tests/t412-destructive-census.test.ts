@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
  * docs/tasks/412-confirm-destructive-tiers.md "Census" + "Tests / Census" + invariants V6, V9.
  *
  * THE LITERAL MAP below is the spec's census (counted at 76ba502): 60 `variant="danger"` buttons in 47 files, plus the
- * three that are not danger today (cutover/opening "Post the opening balances", payroll/separations "Post separation",
+ * three that are not danger today (opening-balances/balance-sheet "Post the opening balances", payroll/separations "Post separation",
  * inventory/locations "Deactivate") = 63 controls:  P 35 (admin PIN) / R 14 (retype) / W 10 (unguarded workflow) /
  * X 4 (client-only line removers, exempt).
  *
@@ -67,8 +67,8 @@ const rows: Row[] = [
   { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Void charge', danger: true, visible: 'Void charge', action: 'voidChargeAction', actionFile: 'app/customers/actions.ts', mutation: 'voidCharge' },
   // DEF-654: the collection 'void' was a plain <button className={ACTION_LINK}> (not danger), so the census missed it. Tier P.
   { file: 'app/customers/[customerId]/page.tsx', tier: 'P', label: 'Void collection', danger: false, visible: 'Void collection', action: 'voidCollectionAction', actionFile: 'app/customers/actions.ts', mutation: 'voidCollection' },
-  { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Remove opening figure', danger: true, visible: 'Remove opening figure', action: 'removeOpeningFigureAction', actionFile: 'app/cutover/actions.ts', mutation: 'removeOpeningFigure' },
-  { file: 'app/cutover/opening/page.tsx', tier: 'P', label: 'Post the opening balances', danger: false, visible: 'Post the opening balances', action: 'postOpeningBalancesAction', actionFile: 'app/cutover/actions.ts', mutation: 'postOpeningBalances' },
+  { file: 'app/opening-balances/balance-sheet/page.tsx', tier: 'P', label: 'Remove opening figure', danger: true, visible: 'Remove opening figure', action: 'removeOpeningFigureAction', actionFile: 'app/opening-balances/actions.ts', mutation: 'removeOpeningFigure' },
+  { file: 'app/opening-balances/balance-sheet/page.tsx', tier: 'P', label: 'Post the opening balances', danger: false, visible: 'Post the opening balances', action: 'postOpeningBalancesAction', actionFile: 'app/opening-balances/actions.ts', mutation: 'postOpeningBalances' },
   { file: 'app/expenses/[id]/page.tsx', tier: 'W', label: 'Delete draft', danger: true, action: 'deleteDraftAction', actionFile: 'app/expenses/actions.ts' }, // T-418: a draft delete is a Tier W step (Ian row 348)
   { file: 'app/expenses/[id]/page.tsx', tier: 'P', label: 'Void expense', danger: true, visible: 'Void expense', action: 'voidExpenseAction', actionFile: 'app/expenses/actions.ts', mutation: 'voidExpense' },
   { file: 'app/expenses/recurring/page.tsx', tier: 'W', label: 'Delete template', danger: true, action: 'deleteTemplateAction', actionFile: 'app/expenses/recurring/actions.ts' }, // T-418: a draft delete is a Tier W step (Ian row 348)
@@ -481,7 +481,7 @@ describe('T-418: the three draft deletes are Tier W with no approval step; the c
   it('Remove opening figure is still Tier P (Ian 16 Oct, answer 1)', () => {
     const r = rows.find((x) => x.label === 'Remove opening figure');
     expect(r?.tier).toBe('P');
-    expect(functionBody(read('app/cutover/actions.ts'), 'removeOpeningFigureAction')!).toMatch(/verifyAdminApproval\(/);
+    expect(functionBody(read('app/opening-balances/actions.ts'), 'removeOpeningFigureAction')!).toMatch(/verifyAdminApproval\(/);
   });
 });
 
