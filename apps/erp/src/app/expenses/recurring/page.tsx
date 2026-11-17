@@ -83,7 +83,7 @@ export default async function RecurringExpensesPage({
   return (
     <Page density="table">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[16rem]">
           <Link href="/expenses" className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
             ← Expenses
           </Link>
