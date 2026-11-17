@@ -323,7 +323,7 @@ async function renderUsersListPage(): Promise<string> {
 // U1-U5 — render legs
 // =================================================================================================
 
-describe('U1 — held/revoked/picker capabilities show the label; the raw key lives only in its muted secondary element', () => {
+describe('U1 — held/revoked/picker capabilities show the label; the raw key appears only in value=/name= attributes, never in visible text', () => {
   it('staff target', async () => {
     userDetailMock.mockResolvedValueOnce(staffDetail());
     const html = await renderUserAccessPage(STAFF_PERSON_ID);
@@ -367,24 +367,14 @@ describe('U1 — held/revoked/picker capabilities show the label; the raw key li
       );
     }
 
-    // Audit follow-up, 2026-09-27: the old check swept `visibleText` for snake_case tokens and
-    // asked whether each one was a MEMBER of `mutedSecondaryTexts(html)` — set membership, blind
-    // to how many times or WHERE a key occurred. A key rendered as primary `font-mono` text right
-    // beside its own legitimate muted copy (the exact pre-S6b shape) still passed, because the
-    // same string is also a muted text somewhere on the page. Fixed to answer the real question
-    // directly: strip every muted-secondary element out of the HTML first, then sweep what is
-    // LEFT for snake_case tokens — anything still there is outside a muted element, by
-    // construction, and the raw key lives ONLY inside one iff this is empty.
-    const withoutMutedElements = html.replace(/<(\w+)\s+class="([^"]*)">([^<]*)<\/\1>/g, (match, _tag, classAttr) => {
-      const classes = (classAttr as string).split(/\s+/);
-      return MUTED_TOKENS.every((t) => classes.includes(t)) ? '' : match;
-    });
-    const strayKeys = [...stripTags(withoutMutedElements).matchAll(SNAKE_CASE_RE)].map((m) => m[0]);
-    expect(strayKeys, `raw key(s) found outside any muted secondary element: ${strayKeys.join(', ')}`).toEqual([]);
+    // T-589 B5 (BOSS ruling): the raw key is not shown at all. It may appear ONLY in value=/name= attributes
+    // (what the forms post), never in visible text. Strip every attribute value out of the markup, then sweep what
+    // is LEFT for snake_case tokens: the key is hidden from the reader iff this is empty.
+    const visibleOnly = stripTags(html.replace(/<[^>]*>/g, (tag) => tag.replace(/\s[\w:-]+="[^"]*"/g, '')));
+    const strayKeys = [...visibleOnly.matchAll(SNAKE_CASE_RE)].map((m) => m[0]);
+    expect(strayKeys, `raw key(s) shown in visible text: ${strayKeys.join(', ')}`).toEqual([]);
 
-    // Per-section count: the held-grants list, the picker, and the revoked list are three
-    // disjoint regions of the page (in render order), so a key's muted occurrences are counted
-    // separately in each rather than pooled across the whole page.
+    // Per-section: the picker offers one checkbox per capability (value= carries the key), the held list none.
     const pickerHeadingIdx = html.indexOf('Grant capabilities this role does not have');
     const revokedHeadingIdx = html.indexOf('revoked grant');
     expect(pickerHeadingIdx, 'expected the picker heading').toBeGreaterThanOrEqual(0);
@@ -392,45 +382,38 @@ describe('U1 — held/revoked/picker capabilities show the label; the raw key li
     const heldSection = html.slice(0, pickerHeadingIdx);
     const pickerSection = html.slice(pickerHeadingIdx, revokedHeadingIdx);
     const revokedSection = html.slice(revokedHeadingIdx);
-    const mutedCountIn = (section: string, key: string) =>
-      mutedSecondaryTexts(section).filter((t) => t === key).length;
+    const boxesIn = (section: string, key: string) =>
+      (section.match(new RegExp(`<input[^>]*type="checkbox"[^>]*value="${key}"`, 'g')) ?? []).length;
+    // What is counted: the <li> rows of a section whose own text STARTS with the capability's label. A grant row opens with its
+    // label, and exactly one row exists per grant, so this is one per held (or revoked) grant; the label may also sit inside
+    // that row's confirm dialog or hold form, which is why plain label occurrences are not counted.
+    const rowsIn = (section: string, key: string) => liBlocks(section).filter((li) => stripTags(li).startsWith(capabilityTitle(key))).length;
 
-    for (const activeKey of ['record_sale']) {
-      expect(mutedCountIn(heldSection, activeKey), `${activeKey}: held section`).toBe(1);
-      expect(mutedCountIn(pickerSection, activeKey), `${activeKey}: picker (must not offer an org-wide-held capability)`).toBe(0);
-      expect(mutedCountIn(revokedSection, activeKey), `${activeKey}: revoked section`).toBe(0);
-    }
-    // void_sales_day: revoked AND still picker-offerable — one muted element in each of those two
-    // sections, none in the held-grants section.
-    expect(mutedCountIn(heldSection, 'void_sales_day'), 'void_sales_day: held section').toBe(0);
-    expect(mutedCountIn(pickerSection, 'void_sales_day'), 'void_sales_day: picker').toBe(1);
-    expect(mutedCountIn(revokedSection, 'void_sales_day'), 'void_sales_day: revoked section').toBe(1);
-    // submit_sales_day (S2b item 3): held (a store-scoped position row) AND still picker-offerable
-    // — one muted element in each of those two sections, none in the revoked list.
-    expect(mutedCountIn(heldSection, 'submit_sales_day'), 'submit_sales_day: held section').toBe(1);
-    expect(mutedCountIn(pickerSection, 'submit_sales_day'), 'submit_sales_day: picker').toBe(1);
-    expect(mutedCountIn(revokedSection, 'submit_sales_day'), 'submit_sales_day: revoked section').toBe(0);
-    // Every OTHER offerable capability — never held, never revoked — one muted element, picker
-    // only. Every one of the ~97 rows, not a single sample.
+    // record_sale: held org-wide, so it is NOT offered in the picker; its label shows once in the held list.
+    expect(boxesIn(pickerSection, 'record_sale'), 'record_sale: picker (must not offer an org-wide-held capability)').toBe(0);
+    expect(rowsIn(heldSection, 'record_sale'), 'record_sale: held section').toBe(1);
+    expect(rowsIn(revokedSection, 'record_sale'), 'record_sale: revoked section').toBe(0);
+    // void_sales_day: revoked AND still picker-offerable: its label shows in the revoked list and as a picker box.
+    expect(rowsIn(heldSection, 'void_sales_day'), 'void_sales_day: held section').toBe(0);
+    expect(boxesIn(pickerSection, 'void_sales_day'), 'void_sales_day: picker').toBe(1);
+    expect(rowsIn(revokedSection, 'void_sales_day'), 'void_sales_day: revoked section').toBe(1);
+    // submit_sales_day: held (store-scoped position row) AND still picker-offerable.
+    expect(rowsIn(heldSection, 'submit_sales_day'), 'submit_sales_day: held section').toBe(1);
+    expect(boxesIn(pickerSection, 'submit_sales_day'), 'submit_sales_day: picker').toBe(1);
+    expect(rowsIn(revokedSection, 'submit_sales_day'), 'submit_sales_day: revoked section').toBe(0);
+    // Every OTHER offerable capability: one picker checkbox (the key lives in its value=), nowhere else.
     for (const c of pureOfferable) {
-      expect(mutedCountIn(heldSection, c), `${c}: held section`).toBe(0);
-      expect(mutedCountIn(pickerSection, c), `${c}: picker`).toBe(1);
-      expect(mutedCountIn(revokedSection, c), `${c}: revoked section`).toBe(0);
+      expect(boxesIn(pickerSection, c), `${c}: picker`).toBe(1);
+      expect(boxesIn(heldSection, c) + boxesIn(revokedSection, c), `${c}: checkbox outside the picker`).toBe(0);
+      expect(rowsIn(heldSection, c), `${c}: held section`).toBe(0);
+      expect(rowsIn(revokedSection, c), `${c}: revoked section`).toBe(0);
     }
 
-    // "directly after its label" — within the SAME <li> row, the label precedes the muted key.
-    // (record_sale/submit_sales_day/void_sales_day only: each has exactly one <li> row carrying
-    // it. The picker's own items live in <label> elements, not <li>, and are covered by the
-    // per-section counts above.)
+    // Within the SAME <li> row the label shows and the key does not.
     for (const [rawKey, label] of rawKeysToLabels) {
-      const row = liBlocks(html).find((li) => mutedSecondaryTexts(li).includes(rawKey));
-      expect(row, `no <li> row found carrying "${rawKey}" as a muted secondary element`).toBeTruthy();
-      const rowText = stripTags(row!);
-      const labelIdx = rowText.indexOf(label);
-      const keyIdx = rowText.indexOf(rawKey);
-      expect(labelIdx, `label "${label}" not found in its own row`).toBeGreaterThanOrEqual(0);
-      expect(keyIdx, `raw key "${rawKey}" not found in its own row`).toBeGreaterThanOrEqual(0);
-      expect(labelIdx, `label must come before its raw key within the same row`).toBeLessThan(keyIdx);
+      const row = liBlocks(html).find((li) => stripTags(li).includes(label));
+      expect(row, `no <li> row found carrying the label "${label}"`).toBeTruthy();
+      expect(stripTags(row!)).not.toContain(rawKey);
     }
   });
 });

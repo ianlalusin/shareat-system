@@ -28,9 +28,11 @@ export interface CheckedFormProps extends Omit<ComponentPropsWithoutRef<'form'>,
    * still hears it) but is visually hidden until a field the person has touched is failing. Off by default: every other form is unchanged.
    */
   readonly quietSummary?: boolean;
+  /** T-589 B5: the page prints each business-rule sentence beside its controls, so the status line only points at them. Off by default. */
+  readonly pointerSummary?: boolean;
 }
 
-export function CheckedForm({ rules, action, quietSummary, children, ...formProps }: CheckedFormProps) {
+export function CheckedForm({ rules, action, quietSummary, pointerSummary, children, ...formProps }: CheckedFormProps) {
   const [state, dispatch] = useReducer(checkedFormReducer, CHECKED_FORM_INITIAL);
   const formRef = useRef<HTMLFormElement>(null);
   const names = useMemo(() => new Set(ruleInputNames(rules)), [rules]);
@@ -43,8 +45,8 @@ export function CheckedForm({ rules, action, quietSummary, children, ...formProp
     return () => setBands((n) => n - 1);
   }, []);
   const ctx = useMemo(
-    () => ({ ...checkContextValue(rules, state), setVerdict: host.setVerdict, track: host.track, inBand: bands > 0, registerBand }),
-    [rules, state, host.setVerdict, host.track, bands, registerBand],
+    () => ({ ...checkContextValue(rules, state, pointerSummary === true), setVerdict: host.setVerdict, track: host.track, inBand: bands > 0, registerBand }),
+    [rules, state, pointerSummary, host.setVerdict, host.track, bands, registerBand],
   );
 
   const reread = useCallback(() => {

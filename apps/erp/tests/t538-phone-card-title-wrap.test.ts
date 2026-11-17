@@ -62,8 +62,9 @@ describe('T-538 — phone card title wraps (T-589 B4a: and is never cut)', () =>
     // Wrapping is the whole point, and it must out-rank the card's own cell reset (which sets
     // `white-space: normal` without `!important`).
     expect(title['white-space']).toEqual({ value: 'normal', important: true });
-    // A long unbroken name still has to be breakable, or it overflows instead of being cut.
-    expect(title['overflow-wrap']).toEqual({ value: 'anywhere', important: false });
+    // A long unbroken name still has to be breakable; ordinary words wrap at word breaks (T-589 B5), not letter by letter.
+    expect(title['overflow-wrap']).toEqual({ value: 'break-word', important: false });
+    expect(title['word-break']).toEqual({ value: 'normal', important: false });
     // Nothing is clipped: the grid row grows with the title.
     expect(title['overflow']).toEqual({ value: 'visible', important: false });
 

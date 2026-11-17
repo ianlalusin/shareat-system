@@ -87,6 +87,9 @@ const partyWord = (t: string | null) => (t ? (PARTY_WORD[t] ?? t) : 'party');
 export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
   const storeNames = await cutoverRepo.storeNamesOf(tx, orgId);
   const lines = await cutoverRepo.openingLines(tx, orgId);
+  const accountNames = await cutoverRepo.accountNamesOf(tx, orgId);
+  /** `1400 · Prepaid expenses`: a code alone means nothing to the person reading the sentence. */
+  const acct = (code: string) => (accountNames.has(code) ? `${code} · ${accountNames.get(code)}` : code);
   const store = (id: string | null) => (id === null ? 'no store' : (storeNames.get(id) ?? 'an unknown store'));
   const storeIds = [...storeNames.keys()].sort((a, b) => store(a).localeCompare(store(b)) || a.localeCompare(b));
 
@@ -120,7 +123,7 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
       const led = netDebit(code, s);
       if (reg !== led) {
         add('Stock', s, code, reg, led,
-          `Stock at ${store(s)} comes to ${pesos(reg)} on ${code} but the opening figure is ${pesos(led)}, ${pesos(reg - led)} apart. Press Value the count again.`);
+          `Stock at ${store(s)} comes to ${pesos(reg)} on ${acct(code)} but the opening figure is ${pesos(led)}, ${pesos(reg - led)} apart. Press Value the count again.`);
       }
     }
     if (plan && plan.unpriced.length > 0) {
@@ -139,7 +142,7 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
     const led = netDebit('1510', s);
     if (reg !== led) {
       add('Fixed assets', s, '1510', reg, led,
-        `Fixed assets at ${store(s)} come to ${pesos(reg)} but the 1510 opening figure is ${pesos(led)}, ${pesos(reg - led)} apart.`);
+        `Fixed assets at ${store(s)} come to ${pesos(reg)} but the opening figure on ${acct('1510')} is ${pesos(led)}, ${pesos(reg - led)} apart.`);
     }
   }
   for (const shell of await cutoverRepo.pendingAssetShells(tx, orgId)) {
@@ -149,7 +152,7 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
   for (const s of storeKeys) {
     if (lines.some((l) => l.accountCode === '1590' && l.storeId === s)) {
       sentenceOnly('Fixed assets', s, '1590',
-        `A 1590 (accumulated depreciation) opening figure at ${store(s)} is not allowed: assets open at net book value, so accumulated depreciation opens at zero.`);
+        `An opening figure on ${acct('1590')} at ${store(s)} is not allowed: assets open at net book value, so accumulated depreciation opens at zero.`);
     }
   }
 
@@ -160,7 +163,7 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
     const led = netDebit('1400', s);
     if (reg !== led) {
       add('Prepaids', s, '1400', reg, led,
-        `Prepaids at ${store(s)} come to ${pesos(reg)} but the 1400 opening figure is ${pesos(led)}, ${pesos(reg - led)} apart.`);
+        `Prepaids at ${store(s)} come to ${pesos(reg)} but the opening figure on ${acct('1400')} is ${pesos(led)}, ${pesos(reg - led)} apart.`);
     }
   }
 
@@ -175,7 +178,7 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
   for (const l of l2400) {
     if (l.partyType === 'loan' && l.partyName !== null && l.partyStoreId === l.storeId) continue;
     sentenceOnly('Loans', l.storeId, '2400',
-      `A 2400 opening figure at ${store(l.storeId)} names a loan that is not in the loan register for ${store(l.storeId)}.`);
+      `An opening figure on ${acct('2400')} at ${store(l.storeId)} names a loan that is not in the loan register for ${store(l.storeId)}.`);
   }
 
   // ---- T5 · advances to employees, 1230 -------------------------------------------------------------------------------------
@@ -183,26 +186,26 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
     if (l.partyType === 'employee' && l.partyName !== null && l.employedAtStore === true) continue;
     sentenceOnly('Advances to employees', l.storeId, '1230',
       l.partyType === 'employee' && l.partyName !== null
-        ? `A 1230 (advance to employee) opening figure at ${store(l.storeId)} names ${l.partyName}, who has never been employed at ${store(l.storeId)}.`
-        : `A 1230 (advance to employee) opening figure at ${store(l.storeId)} names someone who is not a person on file.`);
+        ? `An opening figure on ${acct('1230')} at ${store(l.storeId)} names ${l.partyName}, who has never been employed at ${store(l.storeId)}.`
+        : `An opening figure on ${acct('1230')} at ${store(l.storeId)} names someone who is not a person on file.`);
   }
 
   // ---- T6 · receivables 1210 and payables 2110, per party -------------------------------------------------------------------
-  const expectedParty: Record<string, { type: string; label: string }> = {
-    '1210': { type: 'customer', label: 'receivable' },
-    '2110': { type: 'supplier', label: 'payable' },
+  const expectedParty: Record<string, { type: string }> = {
+    '1210': { type: 'customer' },
+    '2110': { type: 'supplier' },
   };
   for (const l of lines.filter((x) => x.accountCode in expectedParty)) {
     const want = expectedParty[l.accountCode]!;
     if (l.partyType === want.type && l.partyName !== null) continue;
     let sentence: string;
     if (l.partyType === want.type) {
-      sentence = `The ${l.accountCode} (${want.label}) opening figure at ${store(l.storeId)} names a ${want.type} that is not on file.`;
+      sentence = `The opening figure on ${acct(l.accountCode)} at ${store(l.storeId)} names a ${want.type} that is not on file.`;
     } else if (l.partyType === null) {
-      sentence = `The ${l.accountCode} (${want.label}) opening figure at ${store(l.storeId)} names no ${want.type}.`;
+      sentence = `The opening figure on ${acct(l.accountCode)} at ${store(l.storeId)} names no ${want.type}.`;
     } else {
       const who = l.partyName !== null ? l.partyName : `a ${partyWord(l.partyType)} that is not on file`;
-      sentence = `The ${l.accountCode} (${want.label}) opening figure at ${store(l.storeId)} names ${who}, who is a ${partyWord(l.partyType)}, not a ${want.type}.`;
+      sentence = `The opening figure on ${acct(l.accountCode)} at ${store(l.storeId)} names ${who}, who is a ${partyWord(l.partyType)}, not a ${want.type}.`;
     }
     sentenceOnly('Receivables and payables', l.storeId, l.accountCode, sentence);
   }
@@ -221,15 +224,15 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
     ) continue;
     sentenceOnly('Money accounts', l.storeId, l.accountCode,
       l.partyType === 'money_account' && l.partyName !== null
-        ? `The ${l.accountCode} opening figure at ${store(l.storeId)} names the money account ${l.partyName}, which is not an active money account of ${store(l.storeId)} on ${l.accountCode}.`
-        : `The ${l.accountCode} opening figure at ${store(l.storeId)} names ${l.partyName ?? `a ${partyWord(l.partyType)} that is not on file`}, which is not a money account.`);
+        ? `The opening figure on ${acct(l.accountCode)} at ${store(l.storeId)} names the money account ${l.partyName}, which is not an active money account of ${store(l.storeId)} on that account.`
+        : `The opening figure on ${acct(l.accountCode)} at ${store(l.storeId)} names ${l.partyName ?? `a ${partyWord(l.partyType)} that is not on file`}, which is not a money account.`);
   }
 
   // ---- T8 · every opening figure is dated the conversion date ---------------------------------------------------------------
   for (const l of lines) {
     if (l.accountCode === EQUITY || l.entryDate === CONVERSION_DATE) continue;
     sentenceOnly('Dates', l.storeId, l.accountCode,
-      `The opening figure for ${l.accountCode} (${l.partyName ?? store(l.storeId)}) is dated ${l.entryDate}. Every opening figure is dated ${CONVERSION_DATE}.`);
+      `The opening figure for ${acct(l.accountCode)} (${l.partyName ?? store(l.storeId)}) is dated ${l.entryDate}. Every opening figure is dated ${CONVERSION_DATE}.`);
   }
 
   // ---- T9 · inter-store, per pair: 1250 at A for B = 2150 at B for A ---------------------------------------------------------
@@ -238,7 +241,7 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
   for (const l of lines.filter((x) => x.accountCode === '1250' || x.accountCode === '2150')) {
     if (l.partyType !== 'store' || l.partyId === null || l.storeId === null) {
       sentenceOnly('Inter-store balances', l.storeId, l.accountCode,
-        `The ${l.accountCode} opening figure at ${store(l.storeId)} does not name the other store.`);
+        `The opening figure on ${acct(l.accountCode)} at ${store(l.storeId)} does not name the other store.`);
       continue;
     }
     if (l.accountCode === '1250') {
@@ -265,7 +268,7 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
     const carried = netDebit(EQUITY, s);
     if (carried === 0n) continue;
     add('Opening equity', s, EQUITY, 0n, carried,
-      `3900 at ${store(s)} carries ${pesos(carried)}. Each store's opening must clear on its own.`);
+      `${acct(EQUITY)} at ${store(s)} carries ${pesos(carried)}. Each store's opening must clear on its own.`);
   }
 
   // ---- R15 · accounts with no register --------------------------------------------------------------------------------------
