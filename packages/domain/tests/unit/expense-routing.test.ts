@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { money } from '@shareat/core/money';
 import { routeExpense, EXPENSE_FUNDING_ACCOUNTS, type RoutingPayment } from '../../src/expenses/routing';
+import { approvalVerdict } from '../../src/expenses/approve';
 
 /**
  * docs/tasks/122-expenses.md — the posting invariants (1-10), proven pure/DB-free first.
@@ -79,7 +80,7 @@ describe('routeExpense', () => {
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.reason).toMatch(/staffId/);
+    expect(result.reason).toMatch(/no staff member is chosen/);
   });
 
   it('a credit (AP) payment carries the supplier party, mirroring convert.ts', () => {
@@ -108,7 +109,7 @@ describe('routeExpense', () => {
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.reason).toMatch(/supplierId/);
+    expect(result.reason).toMatch(/no supplier is chosen/);
   });
 
   it('invariant 7 — an unmapped category BLOCKS, naming the category, never falls back to 6900', () => {
@@ -230,7 +231,7 @@ describe('routeExpense', () => {
     expect(result.lines.find((l) => l.side === 'credit')!.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.CASH_OFFICE);
   });
 
-  it('⛔ cash with NO account is refused — every peso leaves somewhere nameable', () => {
+  it('⛔ cash with NO account is refused — the funding source must be named', () => {
     const result = routeExpense({
       totalAmount: money('200.00'),
       supplierId: null,
@@ -240,7 +241,7 @@ describe('routeExpense', () => {
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.reason).toContain('names no money account');
+    expect(result.reason).toContain('does not say where the money came from');
   });
 
   it('rejects when sum(payments) != totalAmount', () => {
@@ -322,7 +323,7 @@ describe('routeExpense — the staff-float party (T-266)', () => {
     // The refusal has to name the float and say why — never reach the database and come back
     // as `account 1120 requires a party on every line, but none was given`.
     expect(result.reason).toContain('staff float');
-    expect(result.reason).toContain('liquidated');
+    expect(result.reason).toContain('closed out');
   });
 
   it('the cashier drawer (1110) still carries NO party — the trigger refuses one there', () => {
@@ -374,5 +375,55 @@ describe('routeExpense — the staff-float party (T-266)', () => {
     // ⚠️ Two lines on the SAME account and the same GL code, told apart only by the party. This is
     // the case that makes 1120 a control account rather than a place.
     expect(credits.map((l) => l.partyId)).toEqual([undefined, 'cr-ana-447', 'cr-ben-448']);
+  });
+});
+
+describe('T-589 B8 F1 — refusal sentences are plain words a manager can act on', () => {
+  const refusals = (): string[] =>
+    (
+      [
+        [{ method: 'cash', amount: money('100.00') }],
+        [{ method: 'online', amount: money('100.00'), moneyAccountId: 'w', moneyAccountGlCode: '1120' }],
+        [{ method: 'credit', amount: money('100.00') }],
+        [{ method: 'reimbursable', amount: money('100.00') }],
+        [{ method: 'bogus', amount: money('100.00') }],
+      ] as unknown as RoutingPayment[][]
+    ).map((payments) => {
+      const r = routeExpense({ totalAmount: money('100.00'), supplierId: null, categoryName: 'Rent', categoryAccountCode: '6200', payments });
+      if (r.ok) throw new Error('expected a refusal');
+      return r.reason;
+    });
+
+  it('names no field, account number or jargon', () => {
+    for (const reason of refusals()) {
+      expect(reason).toMatch(/^Payment 1/);
+      expect(reason).not.toMatch(/nameable|#|supplierId|staffId|control account|\b\d{4}\b/);
+    }
+  });
+});
+
+describe('T-589 B8 - the composed approval refusal never doubles its full stop', () => {
+  // MUTANT: change approve.ts to `${routed.reason}.` (no strip) -> "...it was paid from.." and this goes RED.
+  it('every routing refusal, once wrapped by approvalVerdict, has no ".."', () => {
+    const cases: Array<Record<string, unknown>> = [
+      { method: 'cash', amount: '100.00' },
+      { method: 'credit', amount: '100.00' },
+      { method: 'reimbursable', amount: '100.00' },
+      { method: 'bogus', amount: '100.00' },
+    ];
+    for (const payment of cases) {
+      const facts = {
+        canApprove: true,
+        expense: { id: 'e1', status: 'draft', storeId: 's1', totalAmount: '100.00', supplierId: null, supplierInvoiceId: null, categoryId: 'c1' },
+        detail: {
+          capacity: null, category: { category: 'Rent', accountCode: '6200' }, payments: [payment],
+          requests: [], wallets: [], drawers: [], owner: null, period: null,
+        },
+      };
+      const verdict = approvalVerdict(facts as never, { skipInvoice: true });
+      expect(verdict?.sentence, JSON.stringify(payment)).toMatch(/^This expense can't be posted yet: Payment 1/);
+      expect(verdict!.sentence).not.toContain('..');
+      expect(verdict!.sentence.endsWith('.')).toBe(true);
+    }
   });
 });

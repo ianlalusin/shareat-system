@@ -20,7 +20,7 @@ import { decimal, type Decimal } from '@shareat/core/money';
 import { gone, refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { MANUAL_COST_PATTERN } from '../shared/manual-cost-pattern';
-import { COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES } from '../field-rules/commissary';
+import { COMMISSARY_FIRST_LINK_RULES, COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES } from '../field-rules/commissary';
 
 export type LinkStatus = (typeof LINK_STATUSES)[number];
 
@@ -116,6 +116,7 @@ export async function upsertCommissaryLink(
   const run = async (trx: Tx): Promise<UpsertCommissaryLinkResult> => {
     await authorize(trx, actor, 'manage_commissary_offerings', { storeId: input.commissaryStoreId });
     assertFieldRules(COMMISSARY_LINK_RULES, { branchStoreId: input.branchStoreId });
+    assertFieldRules(COMMISSARY_FIRST_LINK_RULES, { commissaryStoreId: input.commissaryStoreId, branchStoreId: input.branchStoreId }); // the empty-state form names both
 
     // ⛔ The database's own check (`commissary_links_not_self_check`) refuses this too; refusing it
     // here as well means the message explains WHY rather than naming a constraint.

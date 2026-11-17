@@ -95,7 +95,7 @@ describe('D4 — a blank amount with no source still yields exactly two issues',
       expect(sourceIssue, 'expected the moneyAccountId issue').toBeTruthy();
       expect(amountIssue!.message).toBe('Enter an amount.');
       expect(sourceIssue!.message).toBe(
-        'Choose where the money came from — every peso has to leave somewhere nameable.',
+        'Choose where the money came from.',
       );
     },
   );

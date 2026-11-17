@@ -83,7 +83,7 @@ describe('R2 — guard: loaded data (initialLines) is judged at first paint, not
         initialLines: [{ method: 'cash', amount: '1,5', moneyAccountId: null }],
       });
       expect(html).toContain('"1,5" is not a valid amount. Use at most two decimal places.');
-      expect(html).toContain('Choose where the money came from — every peso has to leave somewhere nameable.');
+      expect(html).toContain('Choose where the money came from.');
     },
   );
 });

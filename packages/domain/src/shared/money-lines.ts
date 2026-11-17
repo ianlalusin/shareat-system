@@ -367,7 +367,7 @@ export function validateMoneyLines(input: ValidateMoneyLinesInput): MoneyLineIss
         issues.push({
           line: i,
           field: 'moneyAccountId',
-          message: 'Choose where the money came from — every peso has to leave somewhere nameable.',
+          message: 'Choose where the money came from.',
         });
       } else if (source.kind === 'account' && source.custodian === 'staff' && !line.cashRequestId) {
         // ⛔ T-266 §4 — the same refusal `routeExpense` makes, surfaced before the user submits

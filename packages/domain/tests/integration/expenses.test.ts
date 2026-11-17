@@ -477,7 +477,7 @@ describe('invariant 3 — reimbursable credits 2130 with the staff party; withou
 
     await expect(
       asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
-    ).rejects.toThrow(/staffId/);
+    ).rejects.toThrow(/no staff member is chosen/);
 
     // Nothing posted — the expense is unchanged, still a draft, no journal entry.
     const row = await expenseRow(f.orgId, created.id);

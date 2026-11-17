@@ -182,7 +182,7 @@ function fundingLine(
       }
       if (!payment.moneyAccountId || !payment.moneyAccountGlCode) {
         return {
-          error: `payment #${index}: a ${payment.method} payment names no money account — every peso has to leave somewhere nameable`,
+          error: `Payment ${index} is ${payment.method} but does not say where the money came from. Choose the cash drawer or account it was paid from.`,
         };
       }
       const line: RoutingLine = {
@@ -222,8 +222,8 @@ function fundingLine(
         if (!payment.cashRequestId) {
           return {
             error:
-              `payment #${index}: this is paid from a staff float, which belongs to a specific ` +
-              'person — name the cash request it draws down, or the float can never be liquidated',
+              `Payment ${index} is paid from a staff float, which belongs to one person. ` +
+              'Choose the cash request it draws from, or the float can never be closed out.',
           };
         }
         // ⭐ The party is the REQUEST, not the money account — mirroring `releaseCashRequest`
@@ -241,7 +241,7 @@ function fundingLine(
       // (mirrors convert.ts's identical rule for the same account).
       if (!supplierId) {
         return {
-          error: `payment #${index}: a credit (AP) payment has no supplierId — 2110 is a control account and requires a party`,
+          error: `Payment ${index} is on credit but no supplier is chosen. Choose the supplier you still owe.`,
         };
       }
       return {
@@ -259,7 +259,7 @@ function fundingLine(
       // convert.ts does for the identical case.
       if (!payment.staffId) {
         return {
-          error: `payment #${index}: a reimbursable payment has no staffId — 2130 is a control account and requires a party`,
+          error: `Payment ${index} is to be paid back to a staff member, but no staff member is chosen. Choose who paid and needs reimbursing.`,
         };
       }
       return {
@@ -275,7 +275,7 @@ function fundingLine(
       // DEF-054 / invariant 10 — a retired or unknown method (a legacy DB row) blocks at approval, the
       // second layer behind `assertLivePaymentMethod`. Same sentence, one function.
       return {
-        error: `payment #${index}: ${retiredPaymentMethodSentence(payment.method) ?? 'That payment method is not recognised.'}`,
+        error: `Payment ${index}: ${retiredPaymentMethodSentence(payment.method) ?? 'That payment method is not recognised.'}`,
       };
   }
 }

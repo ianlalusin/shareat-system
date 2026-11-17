@@ -407,7 +407,8 @@ export function approvalVerdict(facts: ApprovalFacts, options: ApprovalVerdictOp
     // Invariants 7, 8, 9, 10 all surface here, by name, never a bare exception. The expense itself is UNCHANGED.
     return {
       raw: `approveExpense: expense ${expenseId} cannot post — ${routed.reason}`,
-      sentence: `This expense can't be posted yet: ${routed.reason}.`,
+      // A routing sentence already ends in a full stop; strip it so the wrapper's own never doubles it.
+      sentence: `This expense can't be posted yet: ${routed.reason.replace(/\.+$/, '')}.`,
     };
   }
 
