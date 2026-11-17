@@ -48,7 +48,7 @@ R3. **No platform dropdown.**
 - Daily card: nothing.
 - Add-channel form unchanged (managers create channels; the platform stays admin-only, set on the card after).
 
-R4. **Settlement wiring — DECISION FOR IAN (via BOSS).** Recommended **A**.
+R4. **Settlement wiring — RULED A by Ian 17 Nov 2026 (via BOSS): wiring panel and bank names removed from the page; DB data kept.** (Domain and repo functions also kept; no migration.)
 - **A (recommended): take the wiring off the page.** Remove the panel (store key, outlet names, file-name starts,
   wastage email) and the per-channel bank-names form. Delete `settlementWiringWarnings` and its preview field (it is
   wrong). Keep the table and columns as they are (no data dropped, no migration for this); a later task brings back
@@ -65,18 +65,20 @@ anatomy: name + pills, money line (payout wallet / till), store code line, actio
 ## Migration 0261 (number to be confirmed by BOSS before claiming)
 
 Hand-authored per ADR-012 §5. `SET LOCAL lock_timeout = '5s'`.
-1. Pre-check: `DO $$ ... RAISE EXCEPTION` naming the count and store codes of (a) coded daily channels, (b) stores with
-   two active channels on one platform. **Never moves or picks a code silently.** If the production count is zero for
-   both, the pre-check only guards drift between now and deploy.
+1. Pre-check: `DO $$ ... RAISE EXCEPTION` naming the count and each offending row as `<store code> / "<channel name>"` of (a) coded daily channels, (b) stores with
+   two active channels on one platform. **Never moves or picks a code silently.** It ends: "Move the code on screen first: ... then deploy again. Nothing was changed."
 2. `ALTER TABLE sales_channels ADD CONSTRAINT sales_channels_platform_only_settle_later_check CHECK (platform IS NULL OR NOT is_remitted_daily) NOT VALID;` then `VALIDATE CONSTRAINT` (short lock).
 3. `CREATE UNIQUE INDEX sales_channels_store_platform_active_key ON sales_channels (org_id, store_id, platform) WHERE platform IS NOT NULL AND is_active;` (table is tiny; plain create is fine inside the migration transaction).
 4. Journal entry idx after main's latest, `when` = previous + 86400000. No new table, so no classification/registry entry.
 5. Constraint-message lookup: add both names to the plain-sentence map (`constraint-messages`).
 
-## Production count (Ian approved ONE read-only count) — NOT YET RUN
+## Production count (Ian approved ONE read-only count) - RESULT
 
-My SSH to `159.223.46.224` was refused by the session's permission guard; I did not work around it. Needs Ian to run it
-or allow it. Run as the database owner (RLS is forced for the app role), read-only, prints no secrets and no codes:
+Run by BOSS on Ian's say-so, 17 Nov 2026, as doadmin via SYSTEM_DATABASE_URL, read-only, rolled back (Ian did not run it). Totals: 2 stores, 3 channels. a. codes on daily channels: LIPA 1. b. more than one channel on one platform: 0. c. settle-later channels with no platform: LIPA 2. d. settlement configs 0 (labels/hints 0, email on 0); channels with bank hints 1.
+
+Consequence: 0261 refuses on production until Ian moves LIPA's code on the current screen (BOSS ruling 17 Nov: keep the refusal, never move it in SQL). MERGER holds the PR until Ian confirms the move.
+
+The query that was run (as the database owner, since RLS is forced for the app role; prints no secrets and no codes):
 
 ```sql
 BEGIN READ ONLY;

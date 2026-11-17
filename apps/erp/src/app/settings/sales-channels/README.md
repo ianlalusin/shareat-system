@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sales channels at `/settings/sales-channels`: one full-width band per active channel (name, where the money goes, store code, Edit and Retire). A store code appears only on settle-later channels; a daily channel has none. The settlement wiring and bank-names forms sit in one closed "Statement matching (not used yet)" section at the bottom, kept self-contained so it can be deleted.
+Sales channels at `/settings/sales-channels`: one full-width band per active channel (name, where the money goes, store code, Edit and Retire). A store code appears only on settle-later channels; a daily channel has none. The settlement wiring and bank-names forms were removed from the page (T-592 R4, Ian 17 Nov 2026); their database data and domain functions are kept.
 
 Parent blueprint: [up one directory](../README.md).
 

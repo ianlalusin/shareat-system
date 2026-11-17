@@ -41,6 +41,7 @@ import { APP_ROLE, closeDb, transaction, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createLoan } from '@shareat/domain';
 import { captureRedirect, outcomeOf, resetJar } from '../helpers/flash-jar';
+import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -73,6 +74,7 @@ async function fixture(hint: string) {
   const code = uid(`t511a-${hint}`);
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
+  await seedChartOfAccounts(sql, orgId); // T-592: a settle-later channel needs its receivable account (1220)
   const mkStore = async (name: string) => {
     const [s] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('st')}, ${name}) returning id`;
     return s!.id;
@@ -83,7 +85,7 @@ async function fixture(hint: string) {
   const manager = await person(orgId, 'manager', 'Manager', [storeA, storeB]);
   const mkChannel = async (storeId: string, name: string) => {
     const [c] = await sql<{ id: string }[]>`
-      insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${storeId}, ${name}, true) returning id`;
+      insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code) values (${orgId}, ${storeId}, ${name}, false, '1220') returning id`; // T-592: only a settle-later channel may carry a store code
     return c!.id;
   };
   const chA = await mkChannel(storeA, 'Foodpanda');
@@ -229,7 +231,7 @@ describe('T-511 S2b - setPlatformCodeAction (settings/sales-channels)', () => {
 
 describe('T-511 S2b - the shared update form still ignores platform fields', () => {
   const base = (f: Fx, extra: Record<string, string> = {}) =>
-    form({ storeId: f.storeA, channelId: f.chA, name: 'Renamed channel', isRemittedDaily: 'true', receivableAccountCode: '', wastageTypeMode: 'tracked', ...extra });
+    form({ storeId: f.storeA, channelId: f.chA, name: 'Renamed channel', isRemittedDaily: 'false', receivableAccountCode: '1220', wastageTypeMode: 'tracked', ...extra });
 
   it('a manager posting the shared form WITH platform and code fields: the rename saves, the platform columns stay null', async () => {
     const f = await fixture('shared-mgr');

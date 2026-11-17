@@ -2,22 +2,20 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { listStores } from '../../expenses/lib';
 import {
   createSalesChannelAction,
-  saveStoreSettlementAction,
-  setBankHintsAction,
   setPlatformCodeAction,
   setSalesChannelActiveAction,
   updateSalesChannelAction,
 } from './actions';
-import { canEditPlatformCode, channelsForStore, moneyAccountNames, receivableOptions, settlementConfigForStore, type SalesChannelAdminRow } from './lib';
+import { canEditPlatformCode, channelsForStore, moneyAccountNames, receivableOptions, type SalesChannelAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { NAV_LINK } from '@/components/action-link';
 import { CheckedForm, EditableRecord } from '@/components/forms';
-import { SETTINGS_BANK_HINTS_RULES, SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES, SETTINGS_STORE_SETTLEMENT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, Button, Checkbox, ConfirmDestructive, EmptyState, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Banner, Button, ConfirmDestructive, EmptyState, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { BANK_HINTS_EDIT, SALES_CHANNEL_EDIT, STORE_SETTLEMENT_EDIT } from './typed-forms';
+import { SALES_CHANNEL_EDIT } from './typed-forms';
 import { accountLabel } from '@/lib/account-label';
 
 export const metadata = { title: 'Sales channels (walk-in, Grab, Foodpanda) — Shareat System' };
@@ -85,8 +83,8 @@ const PLATFORM_NAME = { foodpanda: 'Foodpanda', grab: 'Grab' } as const;
  * ⭐ **T-592: a list of records, and ONE store code, only where it belongs.** Each active channel is
  * a full-width band (name, where the money goes, store code, actions). A daily channel has no store
  * code at all (the database refuses one); a settle-later channel asks for it directly, with no
- * platform dropdown. The settlement wiring and bank-names forms moved into `StatementMatching` at
- * the bottom: nothing reads them yet, and Ian has not ruled whether they stay (task doc R4).
+ * platform dropdown. The settlement wiring and bank-names forms are gone from this page (T-592 R4,
+ * ruled by Ian 17 Nov 2026); their database data and domain functions stay.
  */
 export default async function SalesChannelsSettingsPage({
   searchParams,
@@ -108,13 +106,12 @@ export default async function SalesChannelsSettingsPage({
     );
   }
 
-  const [channels, accounts, walletNames, canSetPlatformCode, settlement] = await Promise.all([
+  const [channels, accounts, walletNames, canSetPlatformCode] = await Promise.all([
     channelsForStore(actor, storeId),
     receivableOptions(actor),
     moneyAccountNames(actor),
     // T-511 S2b: admin only, at THIS store. Presentation: the domain function is the gate.
     canEditPlatformCode(actor, storeId),
-    settlementConfigForStore(actor, storeId),
   ]);
 
   const active = channels.filter((c) => c.isActive);
@@ -205,8 +202,6 @@ export default async function SalesChannelsSettingsPage({
             </ul>
           </section>
         )}
-
-        <StatementMatching storeId={storeId} config={settlement} channels={active.filter((c) => !c.isRemittedDaily)} sp={sp} actorId={actor.personId} />
 
         <p className="text-xs text-neutral-600 dark:text-neutral-400">
           Where a platform&apos;s payout lands is set on{' '}
@@ -399,102 +394,6 @@ function StoreCodeForm({ channel, storeId, inline }: { channel: SalesChannelAdmi
         )}
       </CheckedForm>
     </div>
-  );
-}
-
-/**
- * ⛔ STATEMENT MATCHING — not used by anything yet, and Ian has not ruled whether it stays (T-592 task doc R4).
- * Self-contained so it can be deleted cleanly: this function, `SettlementWiring`, `BankHintsForm`, their imports, the three
- * actions in actions.ts and their typed forms. Nothing here is read when a payout file is matched: that uses the store code.
- */
-function StatementMatching({ storeId, config, channels, sp, actorId }: { storeId: string; config: Awaited<ReturnType<typeof settlementConfigForStore>>; channels: SalesChannelAdminRow[]; sp: Typed; actorId: string }) {
-  return (
-    <details className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <summary className="flex min-h-11 cursor-pointer items-center font-medium">Statement matching (not used yet)</summary>
-      <div className="mt-3 space-y-6">
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Saved for a later feature. Payout files are matched to a channel by its store code above, not by anything here.
-        </p>
-        <SettlementWiring storeId={storeId} config={config} sp={sp} actorId={actorId} />
-        {channels.map((c) => (
-          <div key={c.id} className="space-y-2">
-            <h3 className="text-sm font-medium">{c.name}</h3>
-            <BankHintsForm channel={c} storeId={storeId} sp={sp} actorId={actorId} />
-          </div>
-        ))}
-      </div>
-    </details>
-  );
-}
-
-/**
- * T-564: the store's settlement wiring. Stored for the day a payout statement is matched to a store by name or file; nothing matches
- * on it yet, and the panel says so. The key is fixed once saved (the box is read-only then and the domain refuses a change).
- */
-function SettlementWiring({ storeId, config, sp, actorId }: { storeId: string; config: Awaited<ReturnType<typeof settlementConfigForStore>>; sp: Typed; actorId: string }) {
-  return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-medium">Settlement wiring</h3>
-        <Pill>{config ? 'Saved' : 'Not set up'}</Pill>
-      </div>
-      <EditableRecord action={saveStoreSettlementAction} label="settlement wiring"
-        summary={[
-          { label: 'Store key', value: config?.storeKey },
-          { label: 'Outlet names on statements', value: config?.matchLabels.join(', ') },
-          { label: 'Start of file names', value: config?.fileHints.join(', ') },
-          { label: 'Read wastage emails', value: config?.wastageEmailIngestEnabled ? 'Yes' : 'No' },
-        ]}
-        hidden={{ storeId }} typed={typedFor(sp, STORE_SETTLEMENT_EDIT, storeId, actorId)} rules={SETTINGS_STORE_SETTLEMENT_RULES}>
-        <FormGrid>
-          <Field
-            label={<span className="text-neutral-600 dark:text-neutral-400">Store key</span>}
-            hint={config ? 'Lowercase letters, numbers and dashes. Fixed once saved.' : 'Lowercase letters, numbers and dashes, for example lipa. Fixed once saved, so choose it carefully.'}
-            rule={SETTINGS_STORE_SETTLEMENT_RULES.storeKey}
-          >
-            <Input
-              {...nativeAttrs(SETTINGS_STORE_SETTLEMENT_RULES.storeKey)}
-              defaultValue={config?.storeKey ?? ''}
-              readOnly={Boolean(config)}
-              placeholder="lipa"
-              className="mt-1 w-full read-only:bg-canvas read-only:text-muted"
-            />
-          </Field>
-        </FormGrid>
-        <Field label={<span className="text-neutral-600 dark:text-neutral-400">Outlet names on statements, separated by commas</span>} hint="At most 20, each at most 60 characters." rule={SETTINGS_STORE_SETTLEMENT_RULES.matchLabels}>
-          <Input {...nativeAttrs(SETTINGS_STORE_SETTLEMENT_RULES.matchLabels)} defaultValue={config?.matchLabels.join(', ') ?? ''} placeholder="shareat lipa, lipa" className="mt-1 w-full" />
-        </Field>
-        <Field label={<span className="text-neutral-600 dark:text-neutral-400">Start of the file names, separated by commas</span>} hint="At most 20, each at most 60 characters." rule={SETTINGS_STORE_SETTLEMENT_RULES.fileHints}>
-          <Input {...nativeAttrs(SETTINGS_STORE_SETTLEMENT_RULES.fileHints)} defaultValue={config?.fileHints.join(', ') ?? ''} placeholder="lip, lipa" className="mt-1 w-full" />
-        </Field>
-        <Checkbox
-          name="wastageEmailIngestEnabled"
-          value="true"
-          defaultChecked={config?.wastageEmailIngestEnabled ?? false}
-          label={
-            <span>
-              <span className="font-medium">Read wastage emails for this store</span>
-              <span className="block text-xs text-muted">Off until ticked. Nothing reads wastage emails yet.</span>
-            </span>
-          }
-        />
-      </EditableRecord>
-    </section>
-  );
-}
-
-/** T-564: a channel's bank hints, in their own small form. Saved for the payout parser; nothing reads them yet. */
-function BankHintsForm({ channel, storeId, sp, actorId }: { channel: SalesChannelAdminRow; storeId: string; sp: Typed; actorId: string }) {
-  return (
-    <EditableRecord action={setBankHintsAction} label={`${channel.name} bank names`} summary={[{ label: 'Bank names on payouts', value: channel.bankHints.join(', ') }]} hidden={{ storeId, channelId: channel.id }} typed={typedFor(sp, BANK_HINTS_EDIT, channel.id, actorId)} rules={SETTINGS_BANK_HINTS_RULES}>
-      <Field
-        label={<span className="text-neutral-600 dark:text-neutral-400">Bank names on this channel&apos;s payouts, separated by commas</span>}
-        hint="At most 20, each at most 60 characters. Not used yet."
-        rule={SETTINGS_BANK_HINTS_RULES.bankHints}
-      >
-        <Input {...nativeAttrs(SETTINGS_BANK_HINTS_RULES.bankHints)} defaultValue={channel.bankHints.join(', ')} placeholder="maribank, bdo" className="mt-1 w-full" />
-      </Field>
-    </EditableRecord>
   );
 }
 

@@ -17,14 +17,13 @@ vi.mock('../src/lib/page-access', () => ({ requirePageAccess: async () => ({ act
 vi.mock('../src/app/expenses/lib', () => ({ listStores: async () => [{ id: 'store-1', name: 'Lipa', code: 'LIP' }] }));
 vi.mock('../src/app/settings/sales-channels/actions', () => {
   const noop = async () => {};
-  return { createSalesChannelAction: noop, saveStoreSettlementAction: noop, setBankHintsAction: noop, setPlatformCodeAction: noop, setSalesChannelActiveAction: noop, updateSalesChannelAction: noop };
+  return { createSalesChannelAction: noop, setPlatformCodeAction: noop, setSalesChannelActiveAction: noop, updateSalesChannelAction: noop };
 });
 vi.mock('../src/app/settings/sales-channels/lib', () => ({
   channelsForStore: async () => h.channels,
   receivableOptions: async () => [{ code: '1220', name: 'Platform receivables' }],
   moneyAccountNames: async () => new Map<string, string>(),
   canEditPlatformCode: async () => h.canSet,
-  settlementConfigForStore: async () => null,
 }));
 
 type Page = (props: never) => Promise<unknown>;
@@ -88,16 +87,11 @@ describe('T-592 /settings/sales-channels - the store code is drawn only where it
     expect(withName(html, 'platform')).toBe(false);
   });
 
-  it('the wiring and bank-names forms sit in one collapsed "Statement matching (not used yet)" section, and daily channels get no bank-names form', async () => {
-    const html = await render([daily, foodpanda]);
-    const at = html.indexOf('<details');
-    expect(at).toBeGreaterThan(-1);
-    expect(html.slice(at)).toContain('Statement matching (not used yet)');
-    const inside = html.slice(at, html.indexOf('</details>', at));
-    expect(inside).toContain('Settlement wiring');
-    expect(inside).toContain('Foodpanda Lipa bank names');
-    expect(inside).not.toContain('Walk-in Lipa bank names');
-    expect(html.slice(0, at)).not.toContain('Settlement wiring');
-    expect(html.slice(0, at)).not.toContain('bank names');
+  it('the page has no settlement wiring or bank-names inputs and no statement-matching section (T-592 R4)', async () => {
+    const html = await render([daily, foodpanda, grabNoPlatform]);
+    for (const n of ['storeKey', 'matchLabels', 'fileHints', 'bankHints', 'wastageEmailIngestEnabled']) expect(withName(html, n), n).toBe(false);
+    expect(html).not.toContain('<details');
+    expect(html).not.toContain('Statement matching');
+    expect(html).not.toContain('Settlement wiring');
   });
 });

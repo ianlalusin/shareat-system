@@ -6,7 +6,7 @@
 -- which is how "three codes in three places" could happen. The domain now refuses both with a sentence; this migration makes the database the authority.
 --
 -- WHAT IT ADDS.
---   * a pre-check (DO block): refuses the migration, naming counts and store codes, if any channel already has a platform AND is remitted daily, or any store already
+--   * a pre-check (DO block): refuses the migration, naming counts and each offending row as <store code> / "<channel name>", if any channel already has a platform AND is remitted daily, or any store already
 --     has two active channels on one platform. It NEVER moves, clears or chooses a code: a person decides which code is right.
 --   * sales_channels_platform_only_settle_later_check: CHECK (platform IS NULL OR NOT is_remitted_daily), added NOT VALID then VALIDATEd.
 --   * sales_channels_store_platform_active_key: UNIQUE (org_id, store_id, platform) WHERE platform IS NOT NULL AND is_active. A retired channel may keep its code and
@@ -22,24 +22,21 @@ SET LOCAL lock_timeout = '5s';
 DO $$
 DECLARE
 	coded_daily integer;
-	coded_daily_stores text;
+	coded_daily_rows text;
 	doubled integer;
-	doubled_stores text;
+	doubled_rows text;
 BEGIN
-	SELECT count(*), string_agg(DISTINCT s.code, ', ' ORDER BY s.code) INTO coded_daily, coded_daily_stores
+	SELECT count(*), string_agg(format('%s / "%s"', s.code, c.name), ', ' ORDER BY s.code, c.name) INTO coded_daily, coded_daily_rows
 	  FROM sales_channels c JOIN stores s ON s.org_id = c.org_id AND s.id = c.store_id
 	 WHERE c.platform IS NOT NULL AND c.is_remitted_daily;
-	SELECT count(*), string_agg(DISTINCT d.code, ', ' ORDER BY d.code) INTO doubled, doubled_stores
-	  FROM (
-		SELECT s.code
-		  FROM sales_channels c JOIN stores s ON s.org_id = c.org_id AND s.id = c.store_id
-		 WHERE c.platform IS NOT NULL AND c.is_active
-		 GROUP BY c.org_id, c.store_id, c.platform, s.code
-		HAVING count(*) > 1
-	  ) d;
+	SELECT count(DISTINCT (c.org_id, c.store_id, c.platform)), string_agg(format('%s / "%s"', s.code, c.name), ', ' ORDER BY s.code, c.name) INTO doubled, doubled_rows
+	  FROM sales_channels c JOIN stores s ON s.org_id = c.org_id AND s.id = c.store_id
+	 WHERE c.platform IS NOT NULL AND c.is_active
+	   AND (SELECT count(*) FROM sales_channels o WHERE o.org_id = c.org_id AND o.store_id = c.store_id AND o.platform = c.platform AND o.is_active) > 1;
 	IF coded_daily > 0 OR doubled > 0 THEN
-		RAISE EXCEPTION '0261 refused: % channel(s) have a platform store code but are remitted daily (stores: %); % store/platform pair(s) have two active channels (stores: %). Fix each by hand (clear the code, or retire one channel), then run the migration again. Nothing was changed.',
-			coded_daily, coalesce(coded_daily_stores, 'none'), doubled, coalesce(doubled_stores, 'none')
+		-- BOSS ruling 17 Nov 2026: never move a code in SQL (it is ambiguous which settle-later card a code belongs on); a person moves it on screen.
+		RAISE EXCEPTION '0261 refused: % channel(s) have a platform store code but are remitted daily (%); % store/platform pair(s) have two active channels (%). Move the code on screen first: on Settings > Sales channels, clear it on the daily channel and enter it on the right Foodpanda or Grab channel, then deploy again. Nothing was changed.',
+			coded_daily, coalesce(coded_daily_rows, 'none'), doubled, coalesce(doubled_rows, 'none')
 			USING ERRCODE = 'check_violation';
 	END IF;
 END

@@ -564,7 +564,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1690 -> 1689, T-586: settings crumbs and descriptions moved into <Page>; re-measured by runCensus().
     // 1689 -> 1692, T-589 B8: the commissary/catalogue empty state carries its own "+ Link store" modal (trigger + 2 selects); re-measured by runCensus() after merging main.
     // 1692 -> 1692, T-592 (17 Nov 2026): the sales-channels page keeps 19 census controls (crumb and description links, store select, band Edit/Retire, store-code box and Save, statement-matching forms); measured by runCensus() before and after.
-    expect(results.length).toBe(1692);
+    // 1692 -> 1686, T-592 R4 (17 Nov 2026): the Statement matching section left /settings/sales-channels (Settlement wiring EditableRecord, one bank-names EditableRecord per settle-later channel, their fields and the email checkbox): -6 census controls on the fixture-free source count; measured by runCensus() before (1692) and after (1686).
+    expect(results.length).toBe(1686);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

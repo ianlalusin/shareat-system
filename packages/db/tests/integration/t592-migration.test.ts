@@ -78,10 +78,10 @@ async function world() {
 }
 type World = Awaited<ReturnType<typeof world>>;
 const ch = (tx: Tx, w: World, storeId: string, o: { daily?: boolean; platform?: 'grab' | 'foodpanda' | null; code?: string | null; active?: boolean }) =>
-  tx<{ id: string }[]>`
+  tx<{ id: string; name: string }[]>`
     insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code, platform, platform_store_code, is_active)
     values (${w.orgId}, ${storeId}, ${uid('Ch')}, ${o.daily ?? false}, ${o.daily ? null : '1220'}, ${o.platform ?? null}, ${o.code ?? null}, ${o.active ?? true})
-    returning id`;
+    returning id, name`;
 
 describe('T-592 migration 0261 - files and journal', () => {
   it('M1: the migration file exists and the journal entry follows 0260 by one day', () => {
@@ -180,37 +180,43 @@ describe('T-592 migration 0261 - the pre-check', () => {
     await tx.unsafe(`drop index ${INDEX_NAME}`);
   };
 
-  it('M4: a coded daily channel makes the pre-check raise, naming the count and the store code', async () => {
+  it('M4: a coded daily channel makes the pre-check raise, naming the count, the store code and the channel name', async () => {
     const w = await world();
+    let dailyRow: { id: string; name: string } | undefined;
     const e = await refused(
       async (tx) => {
         await unguard(tx);
-        await ch(tx, w, w.a.id, { daily: true, platform: 'foodpanda', code: 'ab12cd' });
+        [dailyRow] = await ch(tx, w, w.a.id, { daily: true, platform: 'foodpanda', code: 'ab12cd' });
         await tx.unsafe(preCheck());
       },
       '23514',
       'pre-check on a coded daily channel',
     );
     expect(e.message).toContain('0261 refused');
-    expect(e.message).toContain(w.a.code);
+    expect(e.message).toContain(`${w.a.code} / "${dailyRow!.name}"`);
+    expect(e.message).toMatch(/Move the code on screen first: on Settings > Sales channels, clear it on the daily channel and enter it on the right Foodpanda or Grab channel, then deploy again\. Nothing was changed\.$/);
     expect(e.message).toMatch(/1 channel\(s\) have a platform store code but are remitted daily/);
     expect(e.message).toMatch(/Nothing was changed/);
   });
 
-  it('M4: two active channels on one platform make the pre-check raise, naming the store code', async () => {
+  it('M4: two active channels on one platform make the pre-check raise, naming the store code and both channel names', async () => {
     const w = await world();
+    const names: string[] = [];
     const e = await refused(
       async (tx) => {
         await unguard(tx);
-        await ch(tx, w, w.b.id, { platform: 'grab', code: '11111111-1111-4111-8111-111111111111' });
-        await ch(tx, w, w.b.id, { platform: 'grab', code: '22222222-2222-4222-8222-222222222222' });
+        for (const code of ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222']) {
+          const [r] = await ch(tx, w, w.b.id, { platform: 'grab', code });
+          names.push(r!.name);
+        }
         await tx.unsafe(preCheck());
       },
       '23514',
       'pre-check on two active channels',
     );
     expect(e.message).toMatch(/1 store\/platform pair\(s\) have two active channels/);
-    expect(e.message).toContain(w.b.code);
+    for (const n of names) expect(e.message).toContain(`${w.b.code} / "${n}"`);
+    expect(e.message).toMatch(/Nothing was changed\.$/);
   });
 
   it('M4: on a clean table the whole file replays: pre-check passes and both guards come back', async () => {

@@ -8,15 +8,3 @@ export const SALES_CHANNEL_EDIT = defineTypedForm({
   form: 'salesChannel.edit',
   fields: ['name', 'isRemittedDaily', 'receivableAccountCode', 'wastageTypeMode'],
 });
-
-/** T-564: the store's settlement wiring. The record is the store id. */
-export const STORE_SETTLEMENT_EDIT = defineTypedForm({
-  form: 'storeSettlement.edit',
-  fields: ['storeKey', 'matchLabels', 'fileHints', 'wastageEmailIngestEnabled'],
-});
-
-/** T-564: a channel's bank names. The record is the channel id. */
-export const BANK_HINTS_EDIT = defineTypedForm({
-  form: 'salesChannel.bankHints',
-  fields: ['bankHints'],
-});
