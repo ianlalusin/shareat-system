@@ -11,7 +11,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { EditableRecord } from '@/components/forms';
-import { Badge, Button, Checkbox, EmptyState, Field, FlashBanner, FormGrid, Input, Select, Textarea } from '@/components/ui';
+import { Badge, Button, Checkbox, EmptyState, Field, FlashBanner, FormGrid, FormModal, Input, Select, Textarea } from '@/components/ui';
 
 export const metadata = { title: 'Document templates — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,19 +40,30 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
 
   return (
     <Page density="table" className="space-y-8">
-      <div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/documents" className={ACTION_LINK}>
-            Documents
-          </a>{' '}
-          / Templates
-        </p>
-        <h1 className="text-2xl font-semibold">Document templates</h1>
-        <PageDescription>
-          The standard wording for a certificate of employment, memo, notice to explain or contract. Fields in double braces, like {'{{employee.full_name}}'}, are
-          filled in when a document is issued.
-        </PageDescription>
-        <p className="mt-1 text-sm text-muted">Each save is a new version. Documents already issued keep the wording they were written from.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            <a href="/documents" className={ACTION_LINK}>
+              Documents
+            </a>{' '}
+            / Templates
+          </p>
+          <h1 className="text-2xl font-semibold">Document templates</h1>
+          <PageDescription>
+            The standard wording for a certificate of employment, memo, notice to explain or contract. Fields in double braces, like {'{{employee.full_name}}'}, are
+            filled in when a document is issued.
+          </PageDescription>
+          <p className="mt-1 text-sm text-muted">Each save is a new version. Documents already issued keep the wording they were written from.</p>
+        </div>
+        {/* T-589 B7: writing a new template is a header action; a refused save reopens it with the typing (defaultOpen). */}
+        <FormModal trigger="+ New template" title="New template" size="lg" defaultOpen={newTyped?.kind === 'typed'}>
+          <form action={saveTemplateAction} className="space-y-4 text-sm">
+            <TemplateFields typed={newTyped} />
+            <Button type="submit" variant="primary">
+              Save
+            </Button>
+          </form>
+        </FormModal>
       </div>
 
       <FlashBanner flash={sp} />
@@ -72,18 +83,8 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
         </p>
       </details>
 
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="text-lg font-semibold">New template</h2>
-        <form action={saveTemplateAction} className="space-y-4 text-sm">
-          <TemplateFields typed={newTyped} />
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
-        </form>
-      </section>
-
       {active.length === 0 ? (
-        <EmptyState illustration="magnifier" title="No templates yet" body="Write the first one above. Nothing is pre-filled: the wording is yours." />
+        <EmptyState illustration="magnifier" title="No templates yet" body="Press New template to write the first one. Nothing is pre-filled: the wording is yours." />
       ) : (
         <section className="space-y-4">
           <h2 className="text-lg font-semibold">Templates</h2>

@@ -157,7 +157,7 @@ export default async function WastageMonitorSettingsPage({
         typed={typedFor(sp, WASTAGE_MONITOR_EDIT, storeId, actor.personId)}
       >
         <FormGrid className="text-sm">
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>
+          <Field span="full" label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>
             <MonitorSelect defaultValue={monitor?.personId ?? ''} people={people} />
           </Field>
         </FormGrid>
@@ -167,7 +167,7 @@ export default async function WastageMonitorSettingsPage({
           <input type="hidden" name="storeId" value={storeId} />
           <input type="hidden" name="personLabel" value="" />
           <FormGrid className="text-sm">
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>
+          <Field span="full" label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>
             <MonitorSelect defaultValue="" people={people} />
           </Field>
         </FormGrid>
