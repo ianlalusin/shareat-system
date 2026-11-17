@@ -14,6 +14,8 @@ import { sql as dsql } from 'drizzle-orm';
  * Spec: docs/tasks/511-settlement-upload-s2-spec.md "The two admin edits (2b)" item 3.
  *
  * Contract pinned here (the builder matches it):
+ *   T-592 REPLACED the next block: /settings/sales-channels now has a store-code form ONLY on an active SETTLE-LATER channel (a daily channel has none),
+ *       labelled "Foodpanda store code" / "Grab store ID" with a hidden platform, or two radio rows plus the box when no platform is set. The text below is the T-511 original.
  *   /settings/sales-channels   each ACTIVE channel card carries a SEPARATE form titled "Platform and store code":
  *       hidden storeId + channelId, a select named `platform` (options '' / grab / foodpanda, the stored one selected) and an input
  *       named `code` (the stored code as its value), a submit button. Drawn only for holders of edit_platform_store_code AT THAT
@@ -86,14 +88,15 @@ async function fixture(hint: string) {
   const admin = await person(orgId, 'admin', 'Admin', [storeA, storeB]);
   const adminA = await person(orgId, 'admin', 'Admin A only', [storeA]);
   const manager = await person(orgId, 'manager', 'Manager', [storeA, storeB]);
-  const mkChannel = async (storeId: string, name: string, platform: string | null, c: string | null) => {
+  // T-592: a store code lives only on a settle-later channel (the database refuses one on a daily channel), so settle-later rows carry the receivable account.
+  const mkChannel = async (storeId: string, name: string, platform: string | null, c: string | null, daily = false) => {
     const [r] = await sql<{ id: string }[]>`
-      insert into sales_channels (org_id, store_id, name, is_remitted_daily, platform, platform_store_code)
-      values (${orgId}, ${storeId}, ${name}, true, ${platform}, ${c}) returning id`;
+      insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code, platform, platform_store_code)
+      values (${orgId}, ${storeId}, ${name}, ${daily}, ${daily ? null : '1220'}, ${platform}, ${c}) returning id`;
     return r!.id;
   };
   const chFp = await mkChannel(storeA, 'Foodpanda Lipa', 'foodpanda', CODE);
-  const chWalk = await mkChannel(storeA, 'Walk-in Lipa', null, null);
+  const chWalk = await mkChannel(storeA, 'Walk-in Lipa', null, null, true);
   const chB = await mkChannel(storeB, 'Grab Malvar', null, null);
   const mkLoan = async (storeId: string, name: string) => {
     const l = await asOrg(orgId, (tx) =>
@@ -121,19 +124,6 @@ const textInputValue = (seg: string, name: string): string | null => {
   const m = new RegExp(`<input[^>]*\\sname="${name}"[^>]*>`).exec(seg)?.[0];
   return m ? (/\svalue="([^"]*)"/.exec(m)?.[1] ?? '') : null;
 };
-function selectedOption(seg: string, name: string): string | null {
-  const m = new RegExp(`<select\\b[^>]*\\sname="${name}"[^>]*>([\\s\\S]*?)</select>`).exec(seg);
-  if (!m) return null;
-  const opts = m[1]!.match(/<option\b[^>]*>/g) ?? [];
-  const pick = opts.find((o) => /\sselected(=|\s|>)/.test(o)) ?? opts[0];
-  return pick ? (/\svalue="([^"]*)"/.exec(pick)?.[1] ?? '') : null;
-}
-const optionValues = (seg: string, name: string): string[] => {
-  const m = new RegExp(`<select\\b[^>]*\\sname="${name}"[^>]*>([\\s\\S]*?)</select>`).exec(seg);
-  return (m?.[1]!.match(/<option\b[^>]*>/g) ?? []).map((o) => /\svalue="([^"]*)"/.exec(o)?.[1] ?? '');
-};
-const platformForms = (html: string) => forms(html).filter((s) => withName(s, 'platform'));
-
 type Page = (props: never) => Promise<unknown>;
 let ChannelsPage: Page;
 let LoanPage: Page;
@@ -157,38 +147,52 @@ async function renderLoansList(who: Actor) {
   return renderToStaticMarkup((await LoansListPage({ searchParams: Promise.resolve({}) } as never)) as never);
 }
 
-describe('T-511 S2b - /settings/sales-channels: the "Platform and store code" form, by role and by store', () => {
-  it('an admin sees one separate form per active channel, titled "Platform and store code", pre-filled with the stored platform and code', async () => {
+const storeCodeForms = (html: string) => forms(html).filter((s) => withName(s, 'code'));
+
+describe('T-511 S2b / T-592 - /settings/sales-channels: the store-code form, by role, by store and by channel kind', () => {
+  it('an admin gets ONE store-code form, on the settle-later Foodpanda channel only: labelled "Foodpanda store code", prefilled, a hidden platform, no select', async () => {
     const f = await fixture('ch-admin');
     const html = await renderChannels(f.admin, f.storeA);
     expect(html, 'the page renders the channels at all').toContain('Foodpanda Lipa');
-    expect((html.match(/Platform and store code/g) ?? []).length, 'one titled form per active channel (two in store A)').toBeGreaterThanOrEqual(2);
+    expect(html).toContain('Foodpanda store code');
+    expect(html, 'the old title and the platform dropdown are gone').not.toContain('Platform and store code');
+    expect(new RegExp(`<select[^>]*\\sname="platform"`).test(html)).toBe(false);
 
-    const pf = platformForms(html);
-    expect(pf, 'one platform form per active channel').toHaveLength(2);
-    const fp = pf.find((s) => hiddenValue(s, 'channelId') === f.chFp)!;
-    const walk = pf.find((s) => hiddenValue(s, 'channelId') === f.chWalk)!;
-    expect(fp, 'the Foodpanda channel has its form').toBeTruthy();
-    expect(walk, 'the Walk-in channel has its form').toBeTruthy();
-
+    const cf = storeCodeForms(html);
+    expect(cf, 'one form: the daily Walk-in channel has none').toHaveLength(1);
+    const fp = cf[0]!;
+    expect(hiddenValue(fp, 'channelId')).toBe(f.chFp);
     expect(hiddenValue(fp, 'storeId'), 'the same store stays open after a save').toBe(f.storeA);
-    expect(optionValues(fp, 'platform')).toEqual(['', 'grab', 'foodpanda']);
-    expect(selectedOption(fp, 'platform'), 'the stored platform is selected').toBe('foodpanda');
+    expect(hiddenValue(fp, 'platform'), 'the platform rides as a hidden box').toBe('foodpanda');
     expect(textInputValue(fp, 'code'), 'the stored code fills the box').toBe(CODE);
+    expect(fp).toContain('Foodpanda store code');
     expect(fp).toMatch(/<button\b[^>]*type="submit"/);
-
-    expect(selectedOption(walk, 'platform'), 'a channel with no platform shows "none"').toBe('');
-    expect(textInputValue(walk, 'code')).toBe('');
+    expect(cf.some((s) => hiddenValue(s, 'channelId') === f.chWalk), 'a daily channel has no code input').toBe(false);
   });
 
-  it('the platform form is SEPARATE: none of the shared edit form\'s controls are in it, and the shared form has no platform or code control', async () => {
+  it('a settle-later channel with no platform shows two radio rows (Foodpanda, Grab) and the code box in one form, no select and no "None"', async () => {
+    const f = await fixture('ch-pending');
+    const html = await renderChannels(f.admin, f.storeB);
+    expect(html).toContain('Grab Malvar');
+    const cf = storeCodeForms(html);
+    expect(cf).toHaveLength(1);
+    const form = cf[0]!;
+    expect(hiddenValue(form, 'channelId')).toBe(f.chB);
+    const radios = form.match(/<input[^>]*type="radio"[^>]*name="platform"[^>]*>|<input[^>]*name="platform"[^>]*type="radio"[^>]*>/g) ?? [];
+    expect(radios.map((r) => /\svalue="([^"]*)"/.exec(r)?.[1]).sort()).toEqual(['foodpanda', 'grab']);
+    expect(textInputValue(form, 'code')).toBe('');
+    expect(form).not.toContain('<select');
+    expect(form, 'no hidden platform while it is unchosen').not.toContain('<input type="hidden" name="platform"');
+  });
+
+  it('the store-code form is SEPARATE: none of the shared edit form controls are in it, and the shared form has no platform or code control', async () => {
     const f = await fixture('ch-sep');
     const html = await renderChannels(f.admin, f.storeA);
     const all = forms(html);
-    const pf = platformForms(html);
-    expect(pf.length).toBeGreaterThan(0);
-    for (const s of pf) {
-      expect(withName(s, 'wastageTypeMode'), 'no shared-form control inside the platform form').toBe(false);
+    const cf = storeCodeForms(html);
+    expect(cf.length).toBeGreaterThan(0);
+    for (const s of cf) {
+      expect(withName(s, 'wastageTypeMode'), 'no shared-form control inside the store-code form').toBe(false);
       expect(withName(s, 'isRemittedDaily')).toBe(false);
       expect(withName(s, 'receivableAccountCode')).toBe(false);
     }
@@ -201,23 +205,23 @@ describe('T-511 S2b - /settings/sales-channels: the "Platform and store code" fo
     }
   });
 
-  it('a manager (who holds manage_store_settings and sees the page) gets NO platform form and no platform or code control', async () => {
+  it('a manager (who holds manage_store_settings and sees the page) sees the saved code but gets NO store-code form and no platform or code control', async () => {
     const f = await fixture('ch-mgr');
     const html = await renderChannels(f.manager, f.storeA);
     expect(html, 'the manager still sees the channels').toContain('Foodpanda Lipa');
-    expect(html).not.toContain('Platform and store code');
+    expect(html, 'the saved code is shown read-only').toContain(`Store code: ${CODE}`);
     expect(withName(html, 'platform')).toBe(false);
     expect(withName(html, 'code')).toBe(false);
   });
 
-  it('per-store: an admin who holds the capability at store A only sees the form on store A and NOT on store B\'s channels', async () => {
+  it('per-store: an admin who holds the capability at store A only gets the form on store A and NOT on the store B channel', async () => {
     const f = await fixture('ch-scope');
     const atA = await renderChannels(f.adminA, f.storeA);
-    expect(platformForms(atA).length, 'store A: forms drawn').toBe(2);
+    expect(storeCodeForms(atA).length, 'store A: the one settle-later channel has its form').toBe(1);
     const atB = await renderChannels(f.adminA, f.storeB);
     expect(atB, 'store B renders its channel').toContain('Grab Malvar');
-    expect(atB).not.toContain('Platform and store code');
-    expect(platformForms(atB)).toHaveLength(0);
+    expect(storeCodeForms(atB)).toHaveLength(0);
+    expect(withName(atB, 'platform')).toBe(false);
   });
 });
 

@@ -184,28 +184,28 @@ export async function setSalesChannelActiveAction(fd: FormData): Promise<void> {
 }
 
 /**
- * T-511 S2b: the separate admin-only "Platform and store code" form. It is not the shared edit form (a manager posts that one),
- * and nothing here reads platform or code from it. A blank platform and a blank code clear the pair; the domain function
- * judges every box after its own gate, so a forged platform value is refused there, not here.
+ * T-511 S2b / T-592: the separate admin-only store-code form. It is not the shared edit form (a manager posts that one),
+ * and nothing here reads platform or code from it. The form sends the platform as a hidden box (known) or a radio pair
+ * (not chosen yet); a blank code with a known platform clears the pair. The domain function judges every box after its
+ * own gate, so a forged platform value, or a code on a daily channel, is refused there, not here.
  */
 export async function setPlatformCodeAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/settings/sales-channels');
   const storeId = str(fd, 'storeId');
+  const platform = (str(fd, 'platform') || null) as 'grab' | 'foodpanda' | null;
+  const code = str(fd, 'code') || null;
   let wrote = false;
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      setSalesChannelPlatformCode(tx, actor, {
-        channelId: str(fd, 'channelId'),
-        platform: (str(fd, 'platform') || null) as 'grab' | 'foodpanda' | null,
-        code: str(fd, 'code') || null,
-      }),
+      setSalesChannelPlatformCode(tx, actor, { channelId: str(fd, 'channelId'), platform, code }),
     );
     wrote = result.wrote;
   } catch (err) {
     return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath('/settings/sales-channels');
+  const saved = platform === 'grab' ? 'Grab store ID saved.' : 'Foodpanda store code saved.';
   return await redirectWithFlash('/settings/sales-channels', { store: storeId }, {
-    ok: wrote ? 'Platform and store code saved.' : 'Nothing changed: that is already the saved platform and code.',
+    ok: wrote ? (code ? saved : 'Store code removed.') : 'Nothing changed: that is already the saved store code.',
   });
 }

@@ -11,10 +11,10 @@ import {
 import { canEditPlatformCode, channelsForStore, moneyAccountNames, receivableOptions, settlementConfigForStore, type SalesChannelAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { NAV_LINK } from '@/components/action-link';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_BANK_HINTS_RULES, SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES, SETTINGS_STORE_SETTLEMENT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Banner, Button, Checkbox, ConfirmDestructive, EmptyState, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { BANK_HINTS_EDIT, SALES_CHANNEL_EDIT, STORE_SETTLEMENT_EDIT } from './typed-forms';
@@ -28,6 +28,34 @@ interface SearchParams {
   ok?: string;
   error?: string;
 }
+
+type Typed = Parameters<typeof typedFor>[0];
+
+const CRUMB = (
+  <>
+    <a href="/settings" className={NAV_LINK}>
+      Settings
+    </a>{' '}
+    / Sales channels (walk-in, Grab, Foodpanda)
+  </>
+);
+
+const DESCRIPTION = (
+  <>
+    How this store sells: walk-in, and each delivery platform. A channel decides{' '}
+    <strong>whether its money reaches the till on the day</strong> or is owed to us until the
+    platform pays out, and <strong>whether a wasted order gets reviewed</strong> or is decided on
+    the spot. Every channel belongs to a store; add stores under{' '}
+    <a href="/admin/stores" className="underline">
+      Stores
+    </a>
+    .
+  </>
+);
+
+/** What a delivery platform calls the code on its statements, in the words the person sees. */
+const CODE_LABEL = { foodpanda: 'Foodpanda store code', grab: 'Grab store ID' } as const;
+const PLATFORM_NAME = { foodpanda: 'Foodpanda', grab: 'Grab' } as const;
 
 /**
  * `/settings/sales-channels`. T-230 — **DEF-207's remedy**, and bible §13 row 180's surface.
@@ -53,6 +81,12 @@ interface SearchParams {
  * shipped a hard delete beside its own `isActive` flag — *"This will permanently remove the sales
  * channel… This cannot be undone"* — which is the implementation this corrects while keeping the
  * capability (§1.2's four verbs).
+ *
+ * ⭐ **T-592: a list of records, and ONE store code, only where it belongs.** Each active channel is
+ * a full-width band (name, where the money goes, store code, actions). A daily channel has no store
+ * code at all (the database refuses one); a settle-later channel asks for it directly, with no
+ * platform dropdown. The settlement wiring and bank-names forms moved into `StatementMatching` at
+ * the bottom: nothing reads them yet, and Ian has not ruled whether they stay (task doc R4).
  */
 export default async function SalesChannelsSettingsPage({
   searchParams,
@@ -68,16 +102,8 @@ export default async function SalesChannelsSettingsPage({
 
   if (!storeId) {
     return (
-      <Page density="table" className="space-y-4">
-        <Crumb />
-        <h1 className="text-2xl font-semibold">Sales channels (walk-in, Grab, Foodpanda)</h1>
-        <PageDescription>
-          This organisation has no stores yet. Create one under{' '}
-          <a href="/admin/stores" className="underline">
-            Stores
-          </a>{' '}
-          first. Every channel belongs to a store.
-        </PageDescription>
+      <Page density="table" className="space-y-4" crumb={CRUMB} title="Sales channels (walk-in, Grab, Foodpanda)" description={DESCRIPTION}>
+        <EmptyState illustration="magnifier" title="No stores yet" body="Create a store under Stores first. Every channel belongs to a store." />
       </Page>
     );
   }
@@ -95,18 +121,7 @@ export default async function SalesChannelsSettingsPage({
   const retired = channels.filter((c) => !c.isActive);
 
   return (
-    <Page density="table">
-      <div>
-        <Crumb />
-        <h1 className="text-2xl font-semibold">Sales channels (walk-in, Grab, Foodpanda)</h1>
-        <PageDescription>
-          How this store sells: walk-in, and each delivery platform. A channel decides{' '}
-          <strong>whether its money reaches the till on the day</strong> or is owed to us until the
-          platform pays out, and <strong>whether a wasted order gets reviewed</strong> or is
-          decided on the spot.
-        </PageDescription>
-      </div>
-
+    <Page density="table" crumb={CRUMB} title="Sales channels (walk-in, Grab, Foodpanda)" description={DESCRIPTION}>
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
@@ -130,90 +145,86 @@ export default async function SalesChannelsSettingsPage({
         </Banner>
       )}
 
-      <SettlementWiring storeId={storeId} config={settlement} sp={sp} actorId={actor.personId} />
-
-      {active.map((c) => (
-        <ChannelCard key={c.id} channel={c} storeId={storeId} accounts={accounts} walletNames={walletNames} sp={sp} actorId={actor.personId} canSetPlatformCode={canSetPlatformCode} />
-      ))}
-
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Add a channel</h2>
-        <CheckedForm rules={SETTINGS_SALES_CHANNEL_RULES} action={createSalesChannelAction} className="space-y-4 text-sm">
-          <input type="hidden" name="storeId" value={storeId} />
-          <ChannelFields
-            accounts={accounts}
-            nameField={
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel name</span>} rule={SETTINGS_SALES_CHANNEL_RULES.name}>
-                <Input
-                  {...nativeAttrs(SETTINGS_SALES_CHANNEL_RULES.name)}
-                  defaultValue=""
-                  placeholder="Walk-in, Foodpanda, GrabFood…"
-                  className="mt-1 w-full"
-                />
-              </Field>
-            }
-          />
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
-        </CheckedForm>
-      </section>
-
-      {retired.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="font-medium">Retired</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Not offered on new sales days. Still shown on everything already recorded. A channel is
-            retired, never deleted.
-          </p>
-          {retired.map((c) => (
-            <div
-              key={c.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
-            >
-              <div>
-                <span className="font-medium">{c.name}</span>{' '}
-                <span className="text-neutral-500 dark:text-neutral-400">
-                  · {c.isRemittedDaily ? 'reached the till' : `settled to ${accountLabel(c.receivableAccountCode)}`}
-                </span>
-              </div>
-              <form action={setSalesChannelActiveAction}>
-                <input type="hidden" name="storeId" value={storeId} />
-                <input type="hidden" name="channelId" value={c.id} />
-                <input type="hidden" name="name" value={c.name} />
-                <input type="hidden" name="isActive" value="true" />
-                <Button type="submit" variant="secondary">
-                  Reactivate
-                </Button>
-              </form>
-            </div>
+      <div className="space-y-8">
+        <div className="space-y-4">
+          {active.map((c) => (
+            <ChannelBand key={c.id} channel={c} storeId={storeId} accounts={accounts} walletNames={walletNames} sp={sp} actorId={actor.personId} canSetPlatformCode={canSetPlatformCode} />
           ))}
-        </section>
-      )}
+        </div>
 
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Where a platform&apos;s payout lands is set on{' '}
-        <a href="/channel-settlements" className="underline">
-          Channel settlements
-        </a>
-        , next to the settlement it is used for. Withholding tax is booked as an expense on every channel.
-      </p>
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Add a channel</h2>
+          <CheckedForm rules={SETTINGS_SALES_CHANNEL_RULES} action={createSalesChannelAction} className="space-y-4 text-sm">
+            <input type="hidden" name="storeId" value={storeId} />
+            <ChannelFields
+              accounts={accounts}
+              nameField={
+                <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel name</span>} rule={SETTINGS_SALES_CHANNEL_RULES.name}>
+                  <Input
+                    {...nativeAttrs(SETTINGS_SALES_CHANNEL_RULES.name)}
+                    defaultValue=""
+                    placeholder="Walk-in, Foodpanda, GrabFood…"
+                    className="mt-1 w-full"
+                  />
+                </Field>
+              }
+            />
+            <Button type="submit" variant="primary">
+              Save
+            </Button>
+          </CheckedForm>
+        </section>
+
+        {retired.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="font-medium">Retired</h2>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              Not offered on new sales days. Still shown on everything already recorded. A channel is
+              retired, never deleted.
+            </p>
+            <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
+              {retired.map((c) => (
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 text-sm">
+                  <div className="min-w-0">
+                    <span className="font-medium">{c.name}</span>{' '}
+                    <span className="text-neutral-600 dark:text-neutral-400">
+                      · {c.isRemittedDaily ? 'reached the till' : `settled to ${accountLabel(c.receivableAccountCode)}`}
+                    </span>
+                  </div>
+                  <form action={setSalesChannelActiveAction}>
+                    <input type="hidden" name="storeId" value={storeId} />
+                    <input type="hidden" name="channelId" value={c.id} />
+                    <input type="hidden" name="name" value={c.name} />
+                    <input type="hidden" name="isActive" value="true" />
+                    <Button type="submit" variant="secondary">
+                      Reactivate
+                    </Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <StatementMatching storeId={storeId} config={settlement} channels={active.filter((c) => !c.isRemittedDaily)} sp={sp} actorId={actor.personId} />
+
+        <p className="text-xs text-neutral-600 dark:text-neutral-400">
+          Where a platform&apos;s payout lands is set on{' '}
+          <a href="/channel-settlements" className="underline">
+            Channel settlements
+          </a>
+          , next to the settlement it is used for. Withholding tax is booked as an expense on every channel.
+        </p>
+      </div>
     </Page>
   );
 }
 
-function Crumb() {
-  return (
-    <p className="text-xs text-neutral-500 dark:text-neutral-400">
-      <a href="/settings" className="underline">
-        Settings
-      </a>{' '}
-      / Sales channels (walk-in, Grab, Foodpanda)
-    </p>
-  );
-}
-
-function ChannelCard({
+/**
+ * One active channel as a full-width band. At `lg` the summary is a row of four zones (name and pills, where the money goes,
+ * store code, actions); on a phone they stack. A daily channel keeps an empty third zone so the columns line up down the list.
+ */
+function ChannelBand({
   channel,
   storeId,
   accounts,
@@ -226,88 +237,193 @@ function ChannelCard({
   storeId: string;
   accounts: { code: string; name: string }[];
   walletNames: Map<string, string>;
-  sp: Parameters<typeof typedFor>[0];
+  sp: Typed;
   actorId: string;
   canSetPlatformCode: boolean;
 }) {
   const wallet = channel.destinationMoneyAccountId ? walletNames.get(channel.destinationMoneyAccountId) : null;
   const receivable = accounts.find((a) => a.code === channel.receivableAccountCode);
+  const settlesLater = !channel.isRemittedDaily;
   return (
-    <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="font-medium">{channel.name}</h2>
-        <Pill tone={channel.isRemittedDaily ? 'neutral' : 'amber'}>
-          {channel.isRemittedDaily ? 'Reaches the till' : 'Settles later'}
-        </Pill>
-        <Pill tone={channel.wastageTypeMode === 'tracked' ? 'neutral' : 'amber'}>
-          {channel.wastageTypeMode === 'tracked' ? 'Wastage reviewed' : 'Wastage decided on the spot'}
-        </Pill>
+    <section aria-label={channel.name} className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.2fr)_14rem] lg:gap-6">
+        <div className="min-w-0 space-y-2">
+          <h2 className="break-words font-medium">{channel.name}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill>{channel.isRemittedDaily ? 'Reaches the till' : 'Settles later'}</Pill>
+            <Pill>{channel.wastageTypeMode === 'tracked' ? 'Wastage reviewed' : 'Wastage decided on the spot'}</Pill>
+          </div>
+        </div>
+
+        <div className="min-w-0 space-y-1 text-sm">
+          <ZoneLabel>Where the money goes</ZoneLabel>
+          {settlesLater ? (
+            <>
+              <p>Owed by the platform until it pays out. Receivable account: <strong>{receivable ? `${receivable.code} · ${receivable.name}` : (channel.receivableAccountCode ?? 'not set')}</strong>.</p>
+              <p className="text-neutral-600 dark:text-neutral-400">
+                Payout wallet:{' '}
+                {wallet ? (
+                  <strong>{wallet}</strong>
+                ) : (
+                  <>
+                    <strong className="text-warning-ink">not set</strong>. A settlement cannot be recorded until it is
+                  </>
+                )}
+                .{' '}
+                <a href="/channel-settlements" className="underline">
+                  Set it on Channel settlements
+                </a>
+                .
+              </p>
+            </>
+          ) : (
+            <p>Reaches the till on the day, like cash and cards.</p>
+          )}
+        </div>
+
+        {settlesLater && canSetPlatformCode && channel.platform ? (
+          <StoreCodeForm channel={channel} storeId={storeId} inline />
+        ) : settlesLater ? (
+          <StoreCodeSummary channel={channel} canSetPlatformCode={canSetPlatformCode} />
+        ) : (
+          <div aria-hidden="true" className="hidden lg:block" />
+        )}
+
+        <div className="flex min-w-0 flex-wrap items-start gap-2 lg:justify-end">
+          <EditableRecord
+            action={updateSalesChannelAction}
+            label={channel.name}
+            editText="Edit channel"
+            hidden={{ storeId, channelId: channel.id }}
+            typed={typedFor(sp, SALES_CHANNEL_EDIT, channel.id, actorId)}
+            rules={SETTINGS_SALES_CHANNEL_RULES}
+          >
+            <ChannelFields
+              accounts={accounts}
+              channel={channel}
+              nameField={
+                <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel name</span>} rule={SETTINGS_SALES_CHANNEL_RULES.name}>
+                  <Input
+                    {...nativeAttrs(SETTINGS_SALES_CHANNEL_RULES.name)}
+                    defaultValue={channel.name}
+                    placeholder="Walk-in, Foodpanda, GrabFood…"
+                    className="mt-1 w-full"
+                  />
+                </Field>
+              }
+            />
+          </EditableRecord>
+
+          <form action={setSalesChannelActiveAction} className="min-w-0 max-w-full">
+            <input type="hidden" name="storeId" value={storeId} />
+            <input type="hidden" name="channelId" value={channel.id} />
+            <input type="hidden" name="name" value={channel.name} />
+            <input type="hidden" name="isActive" value="false" />
+            <ConfirmDestructive
+              tier="confirm"
+              quiet
+              label="Retire this channel"
+              consequence="It stays on everything already recorded, and anything still open against it can still be resolved. You can bring it back later."
+            />
+          </form>
+        </div>
       </div>
 
-      {!channel.isRemittedDaily && (
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Payout wallet:{' '}
-          {wallet ? (
-            <strong>{wallet}</strong>
-          ) : (
-            <>
-              <strong>not set</strong>. A settlement cannot be recorded until it is
-            </>
-          )}
-          .{' '}
-          <a href="/channel-settlements" className="underline">
-            Set it on Channel settlements
-          </a>
-          . Withholding tax: <strong>expense</strong>.
+      {settlesLater && canSetPlatformCode && !channel.platform && <StoreCodeForm channel={channel} storeId={storeId} />}
+    </section>
+  );
+}
+
+/** What is saved: the code, or a plain line saying what is missing and what that costs. Everyone sees this; only an admin gets the form. */
+function StoreCodeSummary({ channel, canSetPlatformCode }: { channel: SalesChannelAdminRow; canSetPlatformCode: boolean }) {
+  const platform = channel.platform;
+  return (
+    <div className="min-w-0 space-y-1 text-sm">
+      <ZoneLabel>{platform ? CODE_LABEL[platform] : 'Store code'}</ZoneLabel>
+      {channel.platformStoreCode ? (
+        <p className="break-all font-medium">Store code: {channel.platformStoreCode}</p>
+      ) : (
+        <p className="text-warning-ink">
+          Not set — payout files cannot be matched to this channel until it is.
+          {!canSetPlatformCode && ' An admin sets it.'}
         </p>
       )}
+    </div>
+  );
+}
 
-      <EditableRecord
-        action={updateSalesChannelAction}
-        label={channel.name}
-        summary={[
-          { label: 'Channel name', value: channel.name },
-          { label: 'Where the money goes', value: channel.isRemittedDaily ? 'Reaches the till' : 'Settles later' },
-          { label: 'Receivable account', value: receivable ? `${receivable.code} · ${receivable.name}` : channel.receivableAccountCode },
-          { label: 'Wasted or refunded orders', value: channel.wastageTypeMode === 'tracked' ? 'Review it' : 'Decide on the spot' },
-        ]}
-        hidden={{ storeId, channelId: channel.id }}
-        typed={typedFor(sp, SALES_CHANNEL_EDIT, channel.id, actorId)}
-        rules={SETTINGS_SALES_CHANNEL_RULES}
-      >
-        <ChannelFields
-          accounts={accounts}
-          channel={channel}
-          nameField={
-            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel name</span>} rule={SETTINGS_SALES_CHANNEL_RULES.name}>
-              <Input
-                {...nativeAttrs(SETTINGS_SALES_CHANNEL_RULES.name)}
-                defaultValue={channel.name}
-                placeholder="Walk-in, Foodpanda, GrabFood…"
-                className="mt-1 w-full"
-              />
-            </Field>
-          }
-        />
-      </EditableRecord>
-
-      {canSetPlatformCode && <PlatformCodeForm channel={channel} storeId={storeId} />}
-
-      <BankHintsForm channel={channel} storeId={storeId} sp={sp} actorId={actorId} />
-
-      <form action={setSalesChannelActiveAction}>
+/**
+ * T-511 S2b / T-592: the admin-only store-code form, its own form so the shared edit form (which a manager posts) carries no
+ * platform field. With the platform known it is one box and a hidden platform; with none it is two radio rows and the box
+ * (a radio pair, not a dropdown: two visible choices and no hidden "None"). A blank box with the platform known clears both.
+ * Renders inline in the band's third zone when the platform is known, and below the band only when it is not (the radio case).
+ */
+function StoreCodeForm({ channel, storeId, inline }: { channel: SalesChannelAdminRow; storeId: string; inline?: boolean }) {
+  const platform = channel.platform;
+  return (
+    <div className={inline ? 'min-w-0' : 'mt-4 border-t border-neutral-200 pt-4 dark:border-neutral-800'}>
+      <CheckedForm rules={SETTINGS_PLATFORM_CODE_RULES} action={setPlatformCodeAction} className="space-y-3 text-sm">
         <input type="hidden" name="storeId" value={storeId} />
         <input type="hidden" name="channelId" value={channel.id} />
-        <input type="hidden" name="name" value={channel.name} />
-        <input type="hidden" name="isActive" value="false" />
-        <ConfirmDestructive
-          tier="confirm"
-          quiet
-          label="Retire this channel"
-          consequence="It stays on everything already recorded, and anything still open against it can still be resolved. You can bring it back later."
-        />
-      </form>
-    </section>
+        {platform ? (
+          <input type="hidden" name="platform" value={platform} />
+        ) : (
+          <fieldset className="space-y-2">
+            <legend className="font-medium">Which platform is this channel?</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Radio field="platform" value="foodpanda" required defaultChecked={false} title="Foodpanda" detail="Its statements show a code of 3 to 12 letters or digits." />
+              <Radio field="platform" value="grab" required defaultChecked={false} title="Grab" detail="Its statements show a long store ID." />
+            </div>
+          </fieldset>
+        )}
+        <div className="flex flex-wrap items-end gap-3">
+          <Field
+            label={platform ? CODE_LABEL[platform] : 'Store code from the platform’s statements'}
+            rule={SETTINGS_PLATFORM_CODE_RULES.code}
+            className={inline ? 'min-w-0 w-full flex-1' : 'w-full sm:w-72'}
+          >
+            <Input
+              {...nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.code)}
+              required={!platform}
+              defaultValue={channel.platformStoreCode ?? ''}
+              placeholder={platform ? `The ${PLATFORM_NAME[platform]} code on its statements` : 'The code printed on the statements'}
+              className="w-full"
+            />
+          </Field>
+          <Button type="submit" variant="primary">
+            Save
+          </Button>
+        </div>
+        {platform && (
+          <p className="text-xs text-neutral-600 dark:text-neutral-400">Leave the box empty and press Save to remove the code. Admin only.</p>
+        )}
+      </CheckedForm>
+    </div>
+  );
+}
+
+/**
+ * ⛔ STATEMENT MATCHING — not used by anything yet, and Ian has not ruled whether it stays (T-592 task doc R4).
+ * Self-contained so it can be deleted cleanly: this function, `SettlementWiring`, `BankHintsForm`, their imports, the three
+ * actions in actions.ts and their typed forms. Nothing here is read when a payout file is matched: that uses the store code.
+ */
+function StatementMatching({ storeId, config, channels, sp, actorId }: { storeId: string; config: Awaited<ReturnType<typeof settlementConfigForStore>>; channels: SalesChannelAdminRow[]; sp: Typed; actorId: string }) {
+  return (
+    <details className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <summary className="flex min-h-11 cursor-pointer items-center font-medium">Statement matching (not used yet)</summary>
+      <div className="mt-3 space-y-6">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          Saved for a later feature. Payout files are matched to a channel by its store code above, not by anything here.
+        </p>
+        <SettlementWiring storeId={storeId} config={config} sp={sp} actorId={actorId} />
+        {channels.map((c) => (
+          <div key={c.id} className="space-y-2">
+            <h3 className="text-sm font-medium">{c.name}</h3>
+            <BankHintsForm channel={c} storeId={storeId} sp={sp} actorId={actorId} />
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -315,17 +431,13 @@ function ChannelCard({
  * T-564: the store's settlement wiring. Stored for the day a payout statement is matched to a store by name or file; nothing matches
  * on it yet, and the panel says so. The key is fixed once saved (the box is read-only then and the domain refuses a change).
  */
-function SettlementWiring({ storeId, config, sp, actorId }: { storeId: string; config: Awaited<ReturnType<typeof settlementConfigForStore>>; sp: Parameters<typeof typedFor>[0]; actorId: string }) {
+function SettlementWiring({ storeId, config, sp, actorId }: { storeId: string; config: Awaited<ReturnType<typeof settlementConfigForStore>>; sp: Typed; actorId: string }) {
   return (
-    <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <section className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="font-medium">Settlement wiring</h2>
-        <Pill tone={config ? 'neutral' : 'amber'}>{config ? 'Saved' : 'Not set up'}</Pill>
+        <h3 className="text-sm font-medium">Settlement wiring</h3>
+        <Pill>{config ? 'Saved' : 'Not set up'}</Pill>
       </div>
-      <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        The short name and labels used to match a Foodpanda or Grab payout statement to this store. They are{' '}
-        <strong>not used for matching yet</strong>. The platform and its store code are set on each channel below.
-      </p>
       <EditableRecord action={saveStoreSettlementAction} label="settlement wiring"
         summary={[
           { label: 'Store key', value: config?.storeKey },
@@ -372,7 +484,7 @@ function SettlementWiring({ storeId, config, sp, actorId }: { storeId: string; c
 }
 
 /** T-564: a channel's bank hints, in their own small form. Saved for the payout parser; nothing reads them yet. */
-function BankHintsForm({ channel, storeId, sp, actorId }: { channel: SalesChannelAdminRow; storeId: string; sp: Parameters<typeof typedFor>[0]; actorId: string }) {
+function BankHintsForm({ channel, storeId, sp, actorId }: { channel: SalesChannelAdminRow; storeId: string; sp: Typed; actorId: string }) {
   return (
     <EditableRecord action={setBankHintsAction} label={`${channel.name} bank names`} summary={[{ label: 'Bank names on payouts', value: channel.bankHints.join(', ') }]} hidden={{ storeId, channelId: channel.id }} typed={typedFor(sp, BANK_HINTS_EDIT, channel.id, actorId)} rules={SETTINGS_BANK_HINTS_RULES}>
       <Field
@@ -383,45 +495,6 @@ function BankHintsForm({ channel, storeId, sp, actorId }: { channel: SalesChanne
         <Input {...nativeAttrs(SETTINGS_BANK_HINTS_RULES.bankHints)} defaultValue={channel.bankHints.join(', ')} placeholder="maribank, bdo" className="mt-1 w-full" />
       </Field>
     </EditableRecord>
-  );
-}
-
-/**
- * T-511 S2b: its own form, admin only, so the shared edit form (which a manager posts) carries no platform field at all.
- * The platform and the code a delivery platform prints on its statements decide which channel an uploaded file books to.
- */
-function PlatformCodeForm({ channel, storeId }: { channel: SalesChannelAdminRow; storeId: string }) {
-  return (
-    <section className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-      <h3 className="text-sm font-medium">Platform and store code</h3>
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Only for a delivery platform channel. Leave both empty for a walk-in channel. Admin only.
-      </p>
-      <CheckedForm rules={SETTINGS_PLATFORM_CODE_RULES} action={setPlatformCodeAction} className="space-y-3 text-sm">
-        <input type="hidden" name="storeId" value={storeId} />
-        <input type="hidden" name="channelId" value={channel.id} />
-        <FormGrid>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Platform</span>} rule={SETTINGS_PLATFORM_CODE_RULES.platform}>
-            <Select {...nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.platform)} defaultValue={channel.platform ?? ''} className="mt-1 w-full">
-              <option value="">None</option>
-              <option value="grab">Grab</option>
-              <option value="foodpanda">Foodpanda</option>
-            </Select>
-          </Field>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Store code</span>} rule={SETTINGS_PLATFORM_CODE_RULES.code}>
-            <Input
-              {...nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.code)}
-              defaultValue={channel.platformStoreCode ?? ''}
-              placeholder="The store code printed on the platform's statements"
-              className="mt-1 w-full"
-            />
-          </Field>
-        </FormGrid>
-        <Button type="submit" variant="secondary">
-          Save
-        </Button>
-      </CheckedForm>
-    </section>
   );
 }
 
@@ -474,7 +547,7 @@ function ChannelFields({
         <Field
           label={
             <span className="text-neutral-600 dark:text-neutral-400">
-              Receivable account <span className="text-neutral-500 dark:text-neutral-400">(required when it settles later)</span>
+              Receivable account <span className="text-neutral-600 dark:text-neutral-400">(required when it settles later)</span>
             </span>
           }
         >
@@ -554,16 +627,17 @@ function Radio({
       />
       <span>
         <span className="block font-medium">{title}</span>
-        <span className="block text-xs text-neutral-500 dark:text-neutral-400">{detail}</span>
+        <span className="block text-xs text-neutral-600 dark:text-neutral-400">{detail}</span>
       </span>
     </label>
   );
 }
 
-function Pill({ tone, children }: { tone: 'neutral' | 'amber'; children: React.ReactNode }) {
-  const cls =
-    tone === 'amber'
-      ? 'bg-warning-soft text-warning-ink'
-      : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300';
-  return <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{children}</span>;
+/** One tone for every pill: the words carry the meaning, so nothing here reads as a warning that is not one. */
+function Pill({ children }: { children: React.ReactNode }) {
+  return <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{children}</span>;
+}
+
+function ZoneLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{children}</p>;
 }

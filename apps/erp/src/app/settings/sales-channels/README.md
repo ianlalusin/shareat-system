@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sales channels at `/settings/sales-channels`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
+Sales channels at `/settings/sales-channels`: one full-width band per active channel (name, where the money goes, store code, Edit and Retire). A store code appears only on settle-later channels; a daily channel has none. The settlement wiring and bank-names forms sit in one closed "Statement matching (not used yet)" section at the bottom, kept self-contained so it can be deleted.
 
 Parent blueprint: [up one directory](../README.md).
 
@@ -10,7 +10,7 @@ Parent blueprint: [up one directory](../README.md).
 
 - Page route `/settings/sales-channels`; dynamic route segments are supplied through App Router params.
 - [lib.ts](./lib.ts) — `SalesChannelAdminRow`, `channelsForStore`, `receivableOptions`, `moneyAccountNames`, `withOrgPrincipal`.
-- [actions.ts](./actions.ts) — `createSalesChannelAction`, `updateSalesChannelAction`, `setSalesChannelActiveAction`.
+- [actions.ts](./actions.ts) — `createSalesChannelAction`, `updateSalesChannelAction`, `setSalesChannelActiveAction`, `setPlatformCodeAction` (the store-code form; platform arrives as a hidden box or a radio pair).
 - [page.tsx](./page.tsx) — `SalesChannelsSettingsPage`.
 - [typed-forms.ts](./typed-forms.ts) — `SALES_CHANNEL_EDIT`.
 

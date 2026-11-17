@@ -143,7 +143,7 @@ describe('T-271 — mechanism proof: a DEF-279 trigger name can now be mapped', 
     // T-443: 47 -> 50, the variation guard, self-check, and open-request unique index.
     // T-193: 50 -> 53, the three statutory payment backstops: statutory_payments_posted_reference_unique, statutory_payments_history_guard, statutory_payment_lines_parent_open.
     // T-502: 53 -> 72 (item-catalog keys; this count had gone stale), then section 13 (A6): 72 -> 74, the two service-not-a-variation CHECK keys. Re-measured.
-    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(75); // T-502 S4: +items_org_name_key
+    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(77); // T-502 S4: +items_org_name_key; T-592: +2 (sales_channels_platform_only_settle_later_check, sales_channels_store_platform_active_key)
 
     // And the allowlist reads the same after restore as before the mutation ever happened.
     expect(isUnfitForAStranger(err, TEST_SENTENCE)).toBe(true);

@@ -343,6 +343,31 @@ describe('T-271 — sales_channels', () => {
     expect(row.message).toBe(CONSTRAINT_MESSAGES.sales_channels_org_id_store_id_name_unique);
   });
 
+  it('sales_channels_platform_only_settle_later_check (T-592)', async () => {
+    const err = await provoke(
+      () => sql`
+        insert into sales_channels (org_id, store_id, name, is_remitted_daily, platform, platform_store_code)
+        values (${orgId}, ${storeId}, ${uid('Channel')}, true, 'foodpanda', 'T592AAA')`,
+    );
+    const row = record('sales_channels_platform_only_settle_later_check', err);
+    expect(row.constraintName).toBe('sales_channels_platform_only_settle_later_check');
+    expect(row.message).toBe(CONSTRAINT_MESSAGES.sales_channels_platform_only_settle_later_check);
+  });
+
+  it('sales_channels_store_platform_active_key (T-592)', async () => {
+    await sql`
+      insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code, platform, platform_store_code)
+      values (${orgId}, ${storeId}, ${uid('Channel')}, false, '1220', 'grab', '11111111-1111-4111-8111-111111111111')`;
+    const err = await provoke(
+      () => sql`
+        insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code, platform, platform_store_code)
+        values (${orgId}, ${storeId}, ${uid('Channel')}, false, '1220', 'grab', '22222222-2222-4222-8222-222222222222')`,
+    );
+    const row = record('sales_channels_store_platform_active_key', err);
+    expect(row.constraintName).toBe('sales_channels_store_platform_active_key');
+    expect(row.message).toBe(CONSTRAINT_MESSAGES.sales_channels_store_platform_active_key);
+  });
+
   // T-369 S7 audit C — with the voided-date rule, two concurrent MANAGER re-entries of one voided date both pass the
   // existence check and the loser meets the unique index. That must read as a sentence, not as a raw 23505. The key is
   // mapped in CONSTRAINT_MESSAGES the same way as the sibling unique indexes above (NOTE: it widens the /setup allowlist
@@ -869,5 +894,5 @@ it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   // T-193: 50 -> 53, three real statutory payment errors above.
   // T-502: 53 -> 72, fourteen real item-catalog errors plus five sub-category errors above (re-measured).
   // T-502 section 13 (A6): 72 -> 74, the two service-not-a-variation CHECK keys (re-measured).
-  expect(rows.length).toBe(75); // T-502 S4: +items_org_name_key
+  expect(rows.length).toBe(77); // T-502 S4: +items_org_name_key; T-592: +2 (the two sales_channels store-code keys)
 });

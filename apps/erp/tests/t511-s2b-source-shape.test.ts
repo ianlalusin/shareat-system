@@ -94,18 +94,20 @@ describe('T-511 S2b - settings/sales-channels/page.tsx: the Platform and store c
   const text = read('app/settings/sales-channels/page.tsx');
   const pageAndLib = `${text}\n${read('app/settings/sales-channels/lib.ts')}`;
 
-  it('has a section titled "Platform and store code" that is a CheckedForm over SETTINGS_PLATFORM_CODE_RULES posting to setPlatformCodeAction', () => {
-    expect(text).toContain('Platform and store code');
+  it('has a store-code form that is a CheckedForm over SETTINGS_PLATFORM_CODE_RULES posting to setPlatformCodeAction, labelled in the platform words (T-592)', () => {
+    expect(text).toContain('Foodpanda store code');
+    expect(text).toContain('Grab store ID');
     expect(text).toMatch(/<CheckedForm\b[^>]*\brules=\{SETTINGS_PLATFORM_CODE_RULES\}/);
     expect(text).toMatch(/\baction=\{setPlatformCodeAction\}/);
     expect(text).toMatch(/import\s*\{[^}]*SETTINGS_PLATFORM_CODE_RULES[^}]*\}\s*from\s*'@shareat\/domain\/field-rules'/);
   });
 
-  it('its two controls spread nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.platform / .code) inside a Field with the rule (live-check guard G3)', () => {
-    expect(text).toContain('nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.platform)');
+  it('its code box spreads nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.code) inside a Field with the rule (live-check guard G3); the platform is a hidden box or a radio pair, never a select (T-592 R3)', () => {
     expect(text).toContain('nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.code)');
-    expect(text).toMatch(/rule=\{SETTINGS_PLATFORM_CODE_RULES\.platform\}/);
     expect(text).toMatch(/rule=\{SETTINGS_PLATFORM_CODE_RULES\.code\}/);
+    expect(text).toMatch(/<input type="hidden" name="platform"/);
+    expect(text).toMatch(/<Radio field="platform"/);
+    expect(text).not.toMatch(/<Select[^>]*name="platform"|nativeAttrs\(SETTINGS_PLATFORM_CODE_RULES\.platform\)/);
   });
 
   it('is hidden by can(): imports can from @shareat/auth and asks edit_platform_store_code with the channel\'s store', () => {

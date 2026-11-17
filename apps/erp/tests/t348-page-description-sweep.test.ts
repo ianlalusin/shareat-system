@@ -183,7 +183,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 129 -> 132, T-584: Documents, Issue a document, Document templates; measured by walking app/.
     // 132 -> 131, T-589 B6: /expenses now uses PageHeader, whose own <PageDescription> lives in Page.tsx; re-measured.
     // 131 -> 122, T-586: seven settings pages (organization, expense-categories, pos-link, pos-tablet, usage-tolerance, wastage-monitor x2 branches, attendance x2 branches) moved onto <Page crumb title description>, which renders the prose through PageHeader, so nine call sites left app/; measured by walking app/.
-    expect(count).toBe(122);
+    // 122 -> 120, T-592: /settings/sales-channels moved onto <Page crumb title description> (and its no-stores branch onto EmptyState), so its two call sites left app/; measured by walking app/.
+    expect(count).toBe(120);
   });
 });
 
@@ -200,8 +201,7 @@ describe('T-348 S2 — the 9 linked descriptions keep their link target (SW5)', 
     'money-accounts/page.tsx': '/money-transfers',
     'money-transfers/page.tsx': '/money-accounts',
     'payroll/separations/page.tsx': '/payroll',
-    // T-586: settings/attendance and settings/organization now pass their description to <Page description={...}> (PageHeader renders it), so no <PageDescription> block remains in the page; their /payroll and /admin/stores links are covered by SW5b below.
-    'settings/sales-channels/page.tsx': '/admin/stores',
+    // T-586: settings/attendance and settings/organization now pass their description to <Page description={...}> (PageHeader renders it), so no <PageDescription> block remains in the page; their /payroll and /admin/stores links are covered by SW5b below. T-592: settings/sales-channels did the same (its /admin/stores link is in SW5b too).
   };
 
   it('SW5: each of the 9 pre-sweep hrefs is still present, now inside a <PageDescription> block', () => {
@@ -216,9 +216,9 @@ describe('T-348 S2 — the 9 linked descriptions keep their link target (SW5)', 
   });
 });
 
-describe('T-586 — SW5b: the two migrated linked descriptions keep their link target', () => {
-  it('SW5b: attendance and organization still link from the description prop of <Page>', () => {
-    for (const [rel, href] of [['settings/attendance/page.tsx', '/payroll'], ['settings/organization/page.tsx', '/admin/stores']] as const) {
+describe('T-586 — SW5b: the three migrated linked descriptions keep their link target', () => {
+  it('SW5b: attendance, organization and sales-channels still link from the description prop of <Page>', () => {
+    for (const [rel, href] of [['settings/attendance/page.tsx', '/payroll'], ['settings/organization/page.tsx', '/admin/stores'], ['settings/sales-channels/page.tsx', '/admin/stores']] as const) {
       const content = readFileSync(resolve(appRoot, rel), 'utf8');
       // The description JSX sits between its `description={` / `DESCRIPTION = (` opener and the next top-level prop or function.
       const at = content.includes('const DESCRIPTION = (') ? content.indexOf('const DESCRIPTION = (') : content.indexOf('description={');

@@ -67,7 +67,7 @@ async function person(orgId: string, role: string, name: string, stores: string[
 
 async function channel(orgId: string, storeId: string, name: string) {
   const [c] = await sql<{ id: string }[]>`
-    insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${storeId}, ${name}, true) returning id`;
+    insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code) values (${orgId}, ${storeId}, ${name}, false, '1220') returning id`; // T-592: only a settle-later channel may carry a store code
   return c!.id;
 }
 
@@ -462,7 +462,9 @@ describe('T-511 S2b - a code identifies ONE channel per platform in an org (case
   it('an admin scoped to store A only still gets the NAMED sentence when the holder is in store A', async () => {
     const f = await fixture('dupown');
     await set(f, f.admin, f.chA1, 'foodpanda', 'own123');
-    await expectRefusal(set(f, f.adminA, f.chA2, 'foodpanda', 'own123'), 'That code is already used by Store A Grab.');
+    // T-592 R2: an ACTIVE same-platform holder at the same store is now refused by the one-per-store rule first, so the holder is retired here.
+    await sql`update sales_channels set is_active = false where id = ${f.chA1}`;
+    await expectRefusal(set(f, f.adminA, f.chA2, 'foodpanda', 'own123'), 'That code is already used by Store A Grab (retired).');
   });
 
   it('another org may reuse the same code on the same platform (the scope is the org)', async () => {

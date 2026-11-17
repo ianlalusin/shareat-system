@@ -152,6 +152,12 @@ export const salesChannels = pgTable(
     // the builder cannot express, hand-added in migration 0228; do NOT restore a `uniqueIndex(...)` line here (same reason as below).
     check('sales_channels_platform_check', sql`${t.platform} is null or ${t.platform} in ('grab', 'foodpanda')`),
     check('sales_channels_platform_code_pair_check', sql`(${t.platform} is null) = (${t.platformStoreCode} is null)`),
+    // T-592 R1 (migration 0261): a store code belongs only on a settle-later channel (a daily one reaches the till; no statement names it).
+    check('sales_channels_platform_only_settle_later_check', sql`${t.platform} is null or not ${t.isRemittedDaily}`),
+    // T-592 R2 (migration 0261): at most one ACTIVE channel per platform per store. A retired channel keeps its code and platform.
+    uniqueIndex('sales_channels_store_platform_active_key')
+      .on(t.orgId, t.storeId, t.platform)
+      .where(sql`${t.platform} is not null and ${t.isActive}`),
     check('sales_channels_platform_code_not_blank_check', sql`${t.platformStoreCode} is null or length(trim(${t.platformStoreCode})) > 0`),
     // NOTE: uniqueness is `(org_id, store_id, lower(trim(name)))` — case- and whitespace-
     // INSENSITIVE, bible §4.4 rule 3, DEF-205. That is an expression index Drizzle's builder

@@ -1,9 +1,10 @@
 /**
  * Store channel-settlement wiring — T-564 (T-515 re-applied on main).
  *
- * ⚠️ **STORED, NOT YET READ BY INTAKE.** The store key, match labels, file hints and email-ingest opt-in are kept so the payout
+ * ⚠️ **STORED, NOT READ BY ANYTHING.** The store key, match labels, file hints and email-ingest opt-in are kept so the payout
  * parser and the wastage email ingest can read them later; nothing resolves a store from them today, and this module has no
- * resolver on purpose. The only reader is `settlementWiringWarnings`, which makes the settlement preview say what is missing.
+ * resolver on purpose. T-592 deleted `settlementWiringWarnings`, the only reader (it was wrong: statement matching reads the
+ * channel's store code, `sales_channels.platform_store_code`, never the store key). The preview still returns `storeKey`.
  *
  * The platform and the statement store code are NOT here: they are `sales_channels.platform` / `platform_store_code`
  * (T-511 S2a), which main already owns and audits.
@@ -39,24 +40,6 @@ export async function getStoreChannelSettlementConfig(
   storeId: string,
 ): Promise<StoreChannelSettlementConfig | null> {
   return storeChannelSettlementRepo.getConfigByStore(tx, actor.orgId, storeId);
-}
-
-/**
- * What is missing from a store's wiring, in plain words. A pure read: it never blocks a post, it only tells the person why a
- * payout statement could not later be matched to this store. No row means no store key.
- */
-export function settlementWiringWarnings(config: StoreChannelSettlementConfig | null): string[] {
-  if (!config) {
-    return [
-      'This store has no store key yet. Add one under Settings, then Sales channels, in the Settlement wiring panel; without it a payout statement cannot be matched to this store.',
-    ];
-  }
-  if (config.matchLabels.length === 0 && config.fileHints.length === 0) {
-    return [
-      'This store has a key but no outlet-name labels and no file hints, so there is nothing to match a payout statement to this store by. Add them under Settings, then Sales channels.',
-    ];
-  }
-  return [];
 }
 
 export interface SaveStoreChannelSettlementInput {

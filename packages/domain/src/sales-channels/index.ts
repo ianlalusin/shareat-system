@@ -211,6 +211,13 @@ export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSale
   const channel = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
   if (!channel) throw new Error('updateSalesChannel: that sales channel does not exist in this organisation.');
   await authorize(tx, actor, CAPABILITY, { storeId: channel.storeId });
+  // T-592 R1: a store code belongs only on a settle-later channel. The CHECK `sales_channels_platform_only_settle_later_check` is the authority.
+  if (input.isRemittedDaily && channel.platform) {
+    throw refuse(
+      'updateSalesChannel: a channel with a platform store code cannot be remitted daily.',
+      `"${channel.name}" has a ${PLATFORM_NAME[channel.platform]} store code. Ask an admin to clear it first.`,
+    );
+  }
   if (!input.isRemittedDaily) await refuseIfLinkedToPos(tx, actor.orgId, input.channelId);
 
   const name = cleanName(input.name);
@@ -240,13 +247,17 @@ const PLATFORM_NAME = { grab: 'Grab', foodpanda: 'Foodpanda' } as const;
  * ⚠️ Only to recognise the unique index refusing the code (a race the pre-read cannot see). The error may arrive wrapped,
  * so the cause chain is walked, as `pos/store-link.ts` does for its own index.
  */
-function isPlatformCodeTaken(err: unknown): boolean {
+function isUniqueViolation(err: unknown, constraint: string): boolean {
   for (let e: unknown = err, i = 0; e && i < 4; i++, e = (e as { cause?: unknown }).cause) {
     const x = e as { code?: string; constraint_name?: string };
-    if (x.code === '23505' && x.constraint_name === 'sales_channels_org_platform_code_key') return true;
+    if (x.code === '23505' && x.constraint_name === constraint) return true;
   }
   return false;
 }
+
+/** T-592 R2: the sentence for "this store already has an active channel on this platform" (pre-read and the index's 23505 say the same). */
+const storePlatformClash = (platform: 'grab' | 'foodpanda', holderName?: string): string =>
+  `This store already has an active ${PLATFORM_NAME[platform]} channel${holderName ? `, "${holderName}"` : ''}. A store can have only one.`;
 
 /**
  * ⭐ **Say which platform a channel is and what store code that platform prints on its statements** (T-511 S2b).
@@ -286,8 +297,22 @@ export async function setSalesChannelPlatformCode(
     throw refuse('setSalesChannelPlatformCode: not a Foodpanda store code.', 'A Foodpanda store code is 3 to 12 letters or digits.');
   }
 
+  // T-592 R1: only a settle-later channel gets a store code. Clearing (both null) is always allowed. The CHECK is the authority.
+  if (platform && channel.isRemittedDaily) {
+    throw refuse(
+      'setSalesChannelPlatformCode: a channel remitted daily has no store code.',
+      `"${channel.name}" reaches the till, so it has no store code.`,
+    );
+  }
+
   // Same value: nothing to write. Compared as typed (a case-only edit of the code is a real change).
   if (channel.platform === platform && channel.platformStoreCode === code) return { wrote: false };
+
+  // T-592 R2: one active channel per platform per store. The unique index is the authority.
+  if (platform && channel.isActive) {
+    const rival = await salesDaysRepo.activeChannelOnPlatformAtStore(tx, actor.orgId, channel.storeId, platform, input.channelId);
+    if (rival) throw refuse('setSalesChannelPlatformCode: the store already has an active channel on this platform.', storePlatformClash(platform, rival.name));
+  }
 
   if (platform && code) {
     const holder = await salesDaysRepo.channelByPlatformCode(tx, actor.orgId, platform, code, input.channelId);
@@ -306,8 +331,11 @@ export async function setSalesChannelPlatformCode(
   try {
     await salesDaysRepo.setChannelPlatformCode(tx, actor.orgId, input.channelId, platform, code);
   } catch (err) {
-    if (isPlatformCodeTaken(err)) {
+    if (isUniqueViolation(err, 'sales_channels_org_platform_code_key')) {
       throw refuse('setSalesChannelPlatformCode: the unique index refused the code.', 'That code is already used by another channel.');
+    }
+    if (platform && isUniqueViolation(err, 'sales_channels_store_platform_active_key')) {
+      throw refuse('setSalesChannelPlatformCode: the unique index refused a second active channel on the platform.', storePlatformClash(platform));
     }
     throw err;
   }
@@ -375,7 +403,19 @@ export async function setSalesChannelActive(
   if (!channel) throw new Error('setSalesChannelActive: that sales channel does not exist in this organisation.');
   await authorize(tx, actor, CAPABILITY, { storeId: channel.storeId });
   if (!input.isActive) await refuseIfLinkedToPos(tx, actor.orgId, input.channelId);
-  await salesDaysRepo.setChannelActive(tx, actor.orgId, input.channelId, input.isActive);
+  // T-592 R2: reactivating must not make a second active channel on one platform at the store. The unique index is the authority.
+  if (input.isActive && channel.platform) {
+    const rival = await salesDaysRepo.activeChannelOnPlatformAtStore(tx, actor.orgId, channel.storeId, channel.platform, input.channelId);
+    if (rival) throw refuse('setSalesChannelActive: the store already has an active channel on this platform.', storePlatformClash(channel.platform, rival.name));
+  }
+  try {
+    await salesDaysRepo.setChannelActive(tx, actor.orgId, input.channelId, input.isActive);
+  } catch (err) {
+    if (channel.platform && isUniqueViolation(err, 'sales_channels_store_platform_active_key')) {
+      throw refuse('setSalesChannelActive: the unique index refused a second active channel on the platform.', storePlatformClash(channel.platform));
+    }
+    throw err;
+  }
 }
 
 /**
