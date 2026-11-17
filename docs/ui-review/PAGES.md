@@ -71,7 +71,7 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /opening-balances | apps/erp/src/app/opening-balances/page.tsx | 2026-11-15 | fix | G4 | T-589 B3d, #288 | could improve: Very long 16-step checklist; the next step is hard to spot. |
 | /opening-balances/stock-count | apps/erp/src/app/opening-balances/stock-count/page.tsx | 2026-11-15 | fix | G4 |  | could improve: Desktop table is clear; phone cards repeat labels and run very long. |
 | /opening-balances/stock-count/sheet | apps/erp/src/app/opening-balances/stock-count/sheet/page.tsx | 2026-11-15 | minor | G4 | #289 | good: Clean printable count sheet at both widths. |
-| /opening-balances/balance-sheet | apps/erp/src/app/opening-balances/balance-sheet/page.tsx | 2026-11-15 | fix | G4 | T-589 B3d, #288, T-589 B5, #296 | needs fixing: Red error text shows raw account code 1400 to users, both widths. |
+| /opening-balances/balance-sheet | apps/erp/src/app/opening-balances/balance-sheet/page.tsx | 2026-11-15 | fix | G4 | T-589 B3d, #288, T-589 B5, #296, T-589 B5b, #297 | needs fixing: Red error text shows raw account code 1400 to users, both widths. |
 | /expenses | apps/erp/src/app/expenses/page.tsx | 2026-11-15 | fix | G4 | T-589 B3d, #289, #288 | could improve: Phone "New expense" button wraps onto two lines beside the heading. |
 | /expenses/[id] | apps/erp/src/app/expenses/[id]/page.tsx | 2026-11-15 | fix | G4 | #278, #289, #279, T-589 B4b, #294 | could improve: Approve blocked by jargon ("payment #1", "nameable") shown to users; otherwise layout holds. |
 | /expenses/new | apps/erp/src/app/expenses/new/page.tsx | 2026-11-15 | fix | G4 | T-589 B3d, #289, #288 | good: Form reads top to bottom; Save draft disabled with a clear count of missing fields. |

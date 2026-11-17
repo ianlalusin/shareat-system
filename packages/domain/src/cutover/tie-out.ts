@@ -51,6 +51,8 @@ export interface TieLine {
 
 export interface NotCheckedLine {
   account: string;
+  /** The account as a person reads it, `1400 · Prepaid expenses` (`account` alone is the React key). */
+  accountLabel: string;
   /** Pesos with the side it sits on, e.g. `₱3,333.00 debit`. */
   amount: string;
   reason: string;
@@ -289,6 +291,7 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([account, c]) => ({
       account,
+      accountLabel: acct(account),
       amount: `${pesos(c)} ${c > 0n ? 'debit' : 'credit'}`,
       reason: "This system has no register to compare it with. Agree it with the old system's trial balance at the rehearsal.",
     }));
@@ -297,6 +300,7 @@ export async function openingTieOut(tx: Tx, orgId: string): Promise<TieOut> {
     if (c === 0n) continue;
     notChecked.push({
       account,
+      accountLabel: acct(account),
       amount: `${pesos(c)} ${c > 0n ? 'debit' : 'credit'}`,
       reason: "No money account was named on this figure, so it is not compared with any money account's balance. Agree it with the bank or cash count.",
     });

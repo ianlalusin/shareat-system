@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-const NAMES = new Map([['1400', 'Prepaid expenses'], ['1510', 'Fixed assets at cost'], ['3900', 'Opening balance equity']]);
+const NAMES = new Map([['1400', 'Prepaid expenses'], ['1510', 'Fixed assets at cost'], ['3900', 'Opening balance equity'], ['6100', 'Rent expense']]);
 const line = (accountCode: string, debit: string, credit: string, entryDate = '2027-01-01') => ({
   entryId: 'e1', entryDate, accountCode, storeId: 's1', debit, credit, partyType: null, partyId: null, partyName: null,
   partyStoreId: null, partyGlCode: null, partyActive: null, employedAtStore: null,
@@ -14,7 +14,7 @@ vi.mock('@shareat/db', () => ({
   cutoverRepo: {
     storeNamesOf: async () => new Map([['s1', 'Lipa']]),
     accountNamesOf: async () => chart.names,
-    openingLines: async () => [line('1400', '500.00', '0.00'), line('1510', '300.00', '0.00'), line('1400', '10.00', '0.00', '2026-12-30'), line('3900', '0.00', '800.00')],
+    openingLines: async () => [line('1400', '500.00', '0.00'), line('1510', '300.00', '0.00'), line('1400', '10.00', '0.00', '2026-12-30'), line('3900', '0.00', '800.00'), line('6100', '42.00', '0.00')],
     countsForStore: async () => [],
     openingAssetCostByStore: async () => [],
     pendingAssetShells: async () => [],
@@ -45,6 +45,14 @@ describe('tie-out sentences name the account', () => {
     const all = (await sentences(NAMES)).join('\n');
     expect(all).not.toMatch(/the 1400 opening/);
     expect(all).not.toMatch(/\b(1400|1510|3900)\b(?! · )/);
+  });
+
+  // MUTANT: accountLabel: account (bare code) -> red
+  it('the not-checked list names an account with no register as `code · name`', async () => {
+    chart.names = NAMES;
+    const { openingTieOut } = await import('../src/cutover/tie-out');
+    const tie = await openingTieOut({} as never, 'org');
+    expect(tie.notChecked.find((n) => n.account === '6100')?.accountLabel).toBe('6100 · Rent expense');
   });
 
   it('an account missing from the chart falls back to the bare code instead of failing', async () => {
