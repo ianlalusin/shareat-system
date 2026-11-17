@@ -43,7 +43,7 @@ export function UploadForm() {
     <div className="space-y-6">
       <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3">
         <CsvFileInput name="files" label="Grab CSV files and Foodpanda zips" accept=".csv,.zip,text/csv,application/zip" multiple />
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" variant="primary" disabled={pending}>
           Upload the files
         </Button>
         {pending ? <span role="status" className="text-sm">Reading the files…</span> : null}

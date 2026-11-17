@@ -49,6 +49,7 @@ export async function SchedulerStatus({
   label,
   cadence = 'monthly',
   visibleSubjectIds,
+  meanwhile,
 }: {
   orgId: string;
   job: SchedulerJob;
@@ -57,6 +58,8 @@ export async function SchedulerStatus({
   cadence?: 'daily' | 'monthly';
   /** When given, only lines whose `subjectId` is in this list are shown (per-store visibility, T-396 S2). */
   visibleSubjectIds?: readonly string[];
+  /** What a person can do by hand until the schedule is on, said in the never-run banner (plain, no role named). */
+  meanwhile?: string;
 }) {
   const [last, unfinished] = await withOrgPrincipal(orgId, async (tx) => [
     await schedulerRepo.lastRunFor(tx, orgId, job),
@@ -70,14 +73,14 @@ export async function SchedulerStatus({
       return (
         <Banner tone="warning">
           <strong className="font-medium">The {label.toLowerCase()} has never run.</strong> Nothing is drafting
-          the stores&apos; days on a schedule, so days are only typed in. Ask whoever looks after the server to switch it on.
+          the stores&apos; days on a schedule, so days are only typed in. {meanwhile}
         </Banner>
       );
     }
     return (
       <Banner tone="warning">
         <strong className="font-medium">{label} has never run.</strong> Nothing is posting it on a
-        schedule, so the charge only lands when somebody remembers to post it. Ask whoever looks after the server to switch it on.
+        schedule, so the charge only lands when somebody remembers to post it. {meanwhile}
       </Banner>
     );
   }

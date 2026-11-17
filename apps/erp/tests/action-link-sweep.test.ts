@@ -561,7 +561,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1686 -> 1687, T-590 A1: the Edit name, Edit positions and Change photo buttons were added and the Name card's Edit and Photo and signature controls left; re-measured by runCensus().
     // 1687 -> 1690, T-589 B4b: 44px links on the new print / branch-order message pages and the swapped filter and back links; re-measured by runCensus() after merging main.
     // 1690 -> 1689, T-586: settings crumbs and descriptions moved into <Page>; re-measured by runCensus().
-    expect(results.length).toBe(1689);
+    // 1689 -> 1692, T-589 B8: the commissary/catalogue empty state carries its own "+ Link store" modal (trigger + 2 selects); re-measured by runCensus() after merging main.
+    expect(results.length).toBe(1692);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

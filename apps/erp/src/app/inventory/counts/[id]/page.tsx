@@ -259,7 +259,7 @@ export default async function CountSessionPage({
           {canCancel && (
             <form action={cancelCountAction} className="ml-auto">
               <input type="hidden" name="sessionId" value={detail.id} />
-              <Button type="submit" variant="danger">
+              <Button type="submit" variant="danger" icon={null}>
                 Cancel count
               </Button>
             </form>

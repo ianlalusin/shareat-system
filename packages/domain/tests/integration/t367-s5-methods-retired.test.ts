@@ -15,7 +15,7 @@ import { sql as dsql } from 'drizzle-orm';
  * are accepted at create/edit, so the reds fail on `NOT REFUSED`.
  *
  * ⚠️ SPEC DEFECT: the spec writes `payment #0:` for the approve-time refusal, but `routing.ts` numbers payments from 1
- * (`fundingLine(payment, i + 1, …)`), so the first payment is `payment #1:`. F3d pins the real, 1-based numbering.
+ * (`fundingLine(payment, i + 1, …)`), so the first payment is `Payment 1:`. F3d pins the real, 1-based numbering.
  */
 config({ path: '.env.local' });
 
@@ -245,7 +245,7 @@ describe('F3d — approving a LEGACY draft that holds a retired method is refuse
     (await sql<{ status: string; je: string | null }[]>`select status, journal_entry_id::text as je from expenses where id = ${id}`)[0]!;
 
   for (const method of ['other', 'ar_collection'] as const) {
-    it(`'${method}' draft -> approveExpense refused with "payment #1: " + its sentence; no journal entry; still draft`, async () => {
+    it(`'${method}' draft -> approveExpense refused with "Payment 1: " + its sentence; no journal entry; still draft`, async () => {
       const f = await fixture(`f3d-${method}`);
       const id = await legacyDraft(f, method);
       let err: unknown;
@@ -255,7 +255,7 @@ describe('F3d — approving a LEGACY draft that holds a retired method is refuse
         err = e;
       }
       if (err === undefined) throw new Error(`NOT REFUSED — a legacy '${method}' draft was approved`);
-      expect(String((err as Error).message)).toContain(`payment #1: ${SENTENCE[method]}`);
+      expect(String((err as Error).message)).toContain(`Payment 1: ${SENTENCE[method]}`);
       expect(await statusOf(id)).toEqual({ status: 'draft', je: null });
     });
   }

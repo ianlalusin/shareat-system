@@ -13,6 +13,12 @@ export const COMMISSARY_LINK_RULES = defineFieldRules('commissary.upsertCommissa
   branchStoreId: { label: 'The branch', kind: 'text', requires: 'Choose the branch to link.' },
 });
 
+/** The same link, from the empty state where no commissary exists yet: the person names the commissary too. The domain checks the pair. */
+export const COMMISSARY_FIRST_LINK_RULES = defineFieldRules('commissary.upsertCommissaryLinkFirst', {
+  commissaryStoreId: { label: 'The commissary', kind: 'text', requires: 'Choose the commissary.' },
+  branchStoreId: { label: 'The branch', kind: 'text', requires: 'Choose the branch to link.' },
+});
+
 /** Offer an item. The row toggles post this action too, carrying the stored item and cost in hidden boxes. */
 export const COMMISSARY_OFFERING_RULES = defineFieldRules('commissary.upsertOffering', {
   itemId: { label: 'The item', kind: 'text', requires: 'Choose the item to offer.' },

@@ -98,6 +98,9 @@ const ROWS: Record<string, Row> = {
   'items.changeItemUnit.baseUnit': req('Choose the unit this item is measured in: pcs, kg, g, ltr, ml or roll.'),
   // ---- commissary
   'commissary.upsertCommissaryLink.branchStoreId': req('Choose the branch to link.'),
+  // T-589 B8: the empty-state link form names the commissary too.
+  'commissary.upsertCommissaryLinkFirst.commissaryStoreId': req('Choose the commissary.'),
+  'commissary.upsertCommissaryLinkFirst.branchStoreId': req('Choose the branch to link.'),
   'commissary.upsertOffering.itemId': req('Choose the item to offer.'),
   'commissary.upsertOffering.manualCost': optNum0('The manual cost'),
   'commissary.upsertMap.commissaryItemId': req('Choose the commissary item.'),

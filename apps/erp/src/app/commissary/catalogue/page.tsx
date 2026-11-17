@@ -14,7 +14,7 @@ import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
 import { Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
-import { COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { COMMISSARY_FIRST_LINK_RULES, COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -54,6 +54,45 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
             ? 'This organisation has no stores yet.'
             : 'No store is set up as a commissary yet. Link a store to a commissary to get started.'}
         </p>
+        {stores.length > 0 && (
+          // T-589 B8 G3: the way out sits in the empty state itself. Here no commissary exists to be pre-chosen, so the person names both stores.
+          <div className="mt-3">
+          <FormModal trigger="+ Link store" title="Link a store to a commissary" size="md">
+            <CheckedForm rules={COMMISSARY_FIRST_LINK_RULES} action={upsertLinkAction} className="flex flex-wrap items-end gap-3">
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Commissary</span>} className="text-sm" rule={COMMISSARY_FIRST_LINK_RULES.commissaryStoreId}>
+                <Select {...nativeAttrs(COMMISSARY_FIRST_LINK_RULES.commissaryStoreId)} defaultValue="">
+                  <option value="" disabled>
+                    Select the commissary
+                  </option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Store</span>} className="text-sm" rule={COMMISSARY_FIRST_LINK_RULES.branchStoreId}>
+                <Select {...nativeAttrs(COMMISSARY_FIRST_LINK_RULES.branchStoreId)} defaultValue="">
+                  <option value="" disabled>
+                    Select a store
+                  </option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <input type="hidden" name="status" value="active" />
+              <DialogActions className="w-full">
+                <Button type="submit" variant="primary">
+                  Save
+                </Button>
+              </DialogActions>
+            </CheckedForm>
+          </FormModal>
+          </div>
+        )}
       </Page>
     );
   }

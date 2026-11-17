@@ -31,7 +31,8 @@ export interface SalesDayDefaults {
 }
 
 export interface SalesDayFormProps {
-  storeLabel: string;
+  /** Left out when the page already shows the store (the New page's store switcher): the field would say it twice. */
+  storeLabel?: string;
   /** New: an editable date defaulting to this. Edit: shown as text, never an input (R1). */
   businessDate: string;
   dateEditable: boolean;
@@ -55,12 +56,14 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
     <>
       <DraftMemory personId={draft.personId} storeId={draft.storeId} businessDate={businessDate} dateFieldName={dateEditable ? 'businessDate' : undefined} />
       <section className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-1">
-          <span className={LABEL}>Store</span>
-          <p className="rounded border border-neutral-300 bg-neutral-50 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
-            {storeLabel}
-          </p>
-        </div>
+        {storeLabel !== undefined && (
+          <div className="flex flex-col gap-1">
+            <span className={LABEL}>Store</span>
+            <p className="rounded border border-neutral-300 bg-neutral-50 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
+              {storeLabel}
+            </p>
+          </div>
+        )}
         {dateEditable ? (
           dateField
         ) : (
@@ -234,9 +237,12 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
         </section>
       )}
 
-      <Button type="submit" variant="primary">
-        {submitLabel}
-      </Button>
+      {/* T-589 B8 G8: the long form scrolls under the save, so it is never off-screen on a phone (same bar as admin/users). */}
+      <div className="sticky bottom-0 z-10 -mx-2 border-t border-surface-border bg-canvas/95 px-2 py-3 backdrop-blur">
+        <Button type="submit" variant="primary">
+          {submitLabel}
+        </Button>
+      </div>
     </>
   );
 }

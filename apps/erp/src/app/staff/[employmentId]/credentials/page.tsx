@@ -158,27 +158,30 @@ export default async function CredentialsPage({
         </CheckedForm>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-warning bg-warning-soft p-4">
-        <h2 className="font-medium text-warning-ink">
-          Enrol a fingerprint (testing only)
-        </h2>
-        <p className="text-xs text-warning-ink">
-          No fingerprint reader is connected to this app yet, so a real fingerprint <strong>cannot</strong> be enrolled here today.
-          This form takes template text, one per line, for testing only.
-        </p>
-        <form action={enrolFingerprintAction} className="space-y-2">
-          <input type="hidden" name="employmentId" value={employmentId} />
-          <Textarea
-            name="templates"
-            rows={3}
-            placeholder={`Up to ${MAX_TEMPLATES} templates, one per line`}
-            className="w-full font-mono text-xs"
-          />
-          <Button type="submit" variant="secondary">
-            Enrol fingerprint
-          </Button>
-        </form>
-      </section>
+      {/* T-589 B8 F3: testing-only, so a manager never sees it in production. */}
+      {process.env.NODE_ENV === 'development' && (
+        <section className="space-y-3 rounded-lg border border-warning bg-warning-soft p-4">
+          <h2 className="font-medium text-warning-ink">
+            Enrol a fingerprint (testing only)
+          </h2>
+          <p className="text-xs text-warning-ink">
+            No fingerprint reader is connected to this app yet, so a real fingerprint <strong>cannot</strong> be enrolled here today.
+            This form takes template text, one per line, for testing only.
+          </p>
+          <form action={enrolFingerprintAction} className="space-y-2">
+            <input type="hidden" name="employmentId" value={employmentId} />
+            <Textarea
+              name="templates"
+              rows={3}
+              placeholder={`Up to ${MAX_TEMPLATES} templates, one per line`}
+              className="w-full font-mono text-xs"
+            />
+            <Button type="submit" variant="secondary">
+              Enrol fingerprint
+            </Button>
+          </form>
+        </section>
+      )}
     </Page>
   );
 }
