@@ -30,6 +30,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Button, FlashBanner, FormModal, Input, Select, DialogActions } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Cash request — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -72,7 +73,7 @@ export default async function CashRequestPage({
   return (
     <Page view="detail" density="table">
       <div>
-        <Link href="/cash-requests" className="text-sm underline underline-offset-2">
+        <Link href="/cash-requests" className={NAV_LINK}>
           ← Cash requests
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{req.purpose}</h1>

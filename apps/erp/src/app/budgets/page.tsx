@@ -27,6 +27,7 @@ import { accountLabel } from '@/lib/account-label';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { BUDGET_CAP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Budgets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -103,7 +104,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
       {stores.length === 0 ? (
         <Banner tone="warning">
           This organization has no store yet, so there is nothing to cap. Add one under{' '}
-          <Link href="/admin/stores" className="text-sm underline">
+          <Link href="/admin/stores" className={NAV_LINK}>
             stores
           </Link>
           .

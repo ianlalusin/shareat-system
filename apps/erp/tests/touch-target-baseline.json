@@ -8,30 +8,17 @@
     ],
     "app/admin/users/[personId]/page.tsx": [
       16,
-      20,
       20
     ],
     "app/ap/invoices/[id]/page.tsx": [
-      20,
-      20
-    ],
-    "app/ap/suppliers/[id]/page.tsx": [
       20
     ],
     "app/attendance/lane/page.tsx": [
-      16,
       16
-    ],
-    "app/attendance/[dayId]/page.tsx": [
-      20
     ],
     "app/budgets/page.tsx": [
       16,
       20,
-      20,
-      20
-    ],
-    "app/cash-requests/[id]/page.tsx": [
       20
     ],
     "app/commissary/discrepancies/page.tsx": [
@@ -45,18 +32,11 @@
     ],
     "app/commissary/orders/[id]/page.tsx": [
       16,
-      20,
       20
     ],
     "app/customers/page.tsx": [
       20,
       22
-    ],
-    "app/customers/price-lists/page.tsx": [
-      20
-    ],
-    "app/customers/price-lists/[id]/page.tsx": [
-      20
     ],
     "app/customers/[customerId]/page.tsx": [
       20
@@ -67,64 +47,15 @@
     ],
     "app/expenses/recurring/page.tsx": [
       16,
-      16,
-      20
+      16
     ],
     "app/expenses/[id]/page.tsx": [
-      20,
-      20
-    ],
-    "app/findings/page.tsx": [
-      20
-    ],
-    "app/findings/scorecard/page.tsx": [
       20
     ],
     "app/fixed-assets/new/page.tsx": [
       20
     ],
-    "app/fixed-assets/[id]/page.tsx": [
-      20
-    ],
-    "app/inventory/counts/page.tsx": [
-      20
-    ],
     "app/inventory/counts/[id]/page.tsx": [
-      20,
-      20
-    ],
-    "app/inventory/deliveries/page.tsx": [
-      20
-    ],
-    "app/inventory/deliveries/[id]/page.tsx": [
-      20,
-      20
-    ],
-    "app/inventory/locations/page.tsx": [
-      20
-    ],
-    "app/inventory/low-stock/page.tsx": [
-      20
-    ],
-    "app/inventory/production/page.tsx": [
-      20,
-      20
-    ],
-    "app/inventory/production/[id]/page.tsx": [
-      20
-    ],
-    "app/inventory/returns/page.tsx": [
-      20
-    ],
-    "app/inventory/transfers/page.tsx": [
-      20
-    ],
-    "app/inventory/usage/page.tsx": [
-      20,
-      20
-    ],
-    "app/inventory/usage/[id]/page.tsx": [
-      20,
       20
     ],
     "app/items/page.tsx": [
@@ -132,23 +63,15 @@
       20
     ],
     "app/items/[id]/page.tsx": [
-      20,
       20
     ],
     "app/liabilities/page.tsx": [
-      20
-    ],
-    "app/liabilities/[id]/page.tsx": [
-      20
-    ],
-    "app/loans/[id]/page.tsx": [
       20
     ],
     "app/money-accounts/page.tsx": [
       20
     ],
     "app/money-transfers/page.tsx": [
-      20,
       20
     ],
     "app/not-found.tsx": [
@@ -157,26 +80,11 @@
     "app/owners/page.tsx": [
       20
     ],
-    "app/owners/[id]/page.tsx": [
-      20
-    ],
-    "app/payroll/page.tsx": [
-      16,
-      20,
-      20
-    ],
     "app/payroll/separations/page.tsx": [
       20,
       20
     ],
     "app/prepaid/[id]/page.tsx": [
-      20,
-      20
-    ],
-    "app/sales-days/new/page.tsx": [
-      20
-    ],
-    "app/sales-days/[id]/page.tsx": [
       20
     ],
     "app/settings/attendance/page.tsx": [
@@ -205,9 +113,6 @@
       20
     ],
     "app/staff/[employmentId]/page.tsx": [
-      20
-    ],
-    "app/trade/orders/page.tsx": [
       20
     ],
     "app/trade/orders/[id]/page.tsx": [

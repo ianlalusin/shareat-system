@@ -107,15 +107,20 @@ describe('S2 delivery receipt (print view)', () => {
     expect(await printHtml(o.orderId)).toContain('001234');
   });
 
-  it('23. a draft order and a void order are 404 (M23: drop the status check)', async () => {
+  it('23. a draft order and a void order get a plain message, not a receipt and not a 404 (M23: drop the status check)', async () => {
     const f = await fixture(sql, 'r23');
     const customerId = await buyer(sql, f);
     const draft = await orderWorth(sql, f, customerId, '1000.00');
     const voided = await orderWorth(sql, f, customerId, '1000.00');
     await asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: voided.orderId, reason: 'test' }));
     as(f.manager);
-    expect(await is404(printHtml(draft.orderId)), 'draft').toBe(true);
-    expect(await is404(printHtml(voided.orderId)), 'void').toBe(true);
+    // T-589 B4b: someone who can open the order is told why, with a link back (was a 404).
+    const draftHtml = await printHtml(draft.orderId);
+    expect(draftHtml).toContain('Dispatch it first');
+    expect(draftHtml).not.toContain('Delivery receipt');
+    const voidHtml = await printHtml(voided.orderId);
+    expect(voidHtml).toContain('was voided');
+    expect(voidHtml).not.toContain('Delivery receipt');
     // control: a dispatched order renders
     const live = await partlyPaid(f);
     await expect(printHtml(live.orderId)).resolves.toContain('Delivery receipt');

@@ -12,6 +12,7 @@ import { Badge, Banner, Button, ConfirmDestructive, DialogActions, Field, FlashB
 import { createCategoryAction, createItemAction, editCategoryAction, retireCategoryAction } from './actions';
 import { listCategories, listOverviewItems, storesInScope, withOrgPrincipal } from './lib';
 import { MENU_CATEGORY } from './typed-forms';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Menu - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -124,19 +125,19 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
           )}
         </div>
         <div className="flex flex-wrap gap-4 text-sm">
-          <Link href="/menu/prices" className="inline-flex min-h-6 items-center underline underline-offset-4">
+          <Link href="/menu/prices" className={NAV_LINK}>
             Prices
           </Link>
           {held.has('manage_store_settings') && (
-            <Link href="/menu/hours" className="inline-flex min-h-6 items-center underline underline-offset-4">
+            <Link href="/menu/hours" className={NAV_LINK}>
               Menu hours
             </Link>
           )}
-          <Link href="/menu/requests" className="inline-flex min-h-6 items-center underline underline-offset-4">
+          <Link href="/menu/requests" className={NAV_LINK}>
             Request an item
           </Link>
           {(held.has('switch_usage_source') || held.has('manage_pos_map')) && (
-            <Link href="/menu/usage-source" className="inline-flex min-h-6 items-center underline underline-offset-4">
+            <Link href="/menu/usage-source" className={NAV_LINK}>
               Usage source
             </Link>
           )}

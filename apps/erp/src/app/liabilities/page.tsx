@@ -10,7 +10,7 @@ import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { Banner, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, DialogActions } from '@/components/ui';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
@@ -47,7 +47,7 @@ export default async function LiabilitiesPage({
             What the business owes that is not tracked anywhere else. Supplier invoices, loans, wages
             and statutory contributions each have their own page.
           </PageDescription>
-          <Link href="/liabilities/unpaid" className={ACTION_LINK}>
+          <Link href="/liabilities/unpaid" className={NAV_LINK}>
             Everything unpaid
           </Link>
         </div>

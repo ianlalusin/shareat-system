@@ -24,6 +24,7 @@ import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, DialogAc
 import { CheckedForm } from '@/components/forms';
 import { PAYROLL_PAY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { chargeRepaymentLabel } from '../staff/deduction-labels';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Payroll — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -100,11 +101,11 @@ export default async function PayrollPage({
             fix a mistake through payroll, not by changing the day.
           </PageDescription>
         </div>
-        <span className="flex shrink-0 gap-3 text-sm">
-          <a href="/payroll/thirteenth-month" className="underline">
+        <span className="flex shrink-0 flex-wrap gap-x-4 text-sm">
+          <a href="/payroll/thirteenth-month" className={NAV_LINK}>
             13th-month pay
           </a>
-          <a href="/payroll/separations" className="underline">
+          <a href="/payroll/separations" className={NAV_LINK}>
             Separations
           </a>
         </span>
@@ -153,7 +154,7 @@ export default async function PayrollPage({
           T-189b; a number that decides somebody's pay belongs on the screen that spends it. */}
       {cfg && (
         <p className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-xs text-neutral-500">
-          <a href={`/settings/attendance?store=${storeId}`} className="underline">
+          <a href={`/settings/attendance?store=${storeId}`} className={NAV_LINK}>
             Edit these settings
           </a>
           <span>

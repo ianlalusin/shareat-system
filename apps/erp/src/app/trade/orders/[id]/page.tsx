@@ -5,7 +5,7 @@ import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../../lib/session';
 import { dispatchOrderAction, postFranchiseCreditAction, receiveOrderAction, setBirInvoiceNoAction, voidOrderAction } from '../actions';
 import { canSeeCreditLimit, creditPreview, orderDetail, peso, storeMoneyAccounts, today } from '../lib';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { TRADE_DISPATCH_RULES, TRADE_RECEIVE_RULES, TRADE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -325,7 +325,7 @@ export default async function TradeOrderPage({
         <div className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-medium">Delivery receipt</h2>
-            <Link href={`/trade/orders/${order.id}/print`} className={ACTION_LINK}>
+            <Link href={`/trade/orders/${order.id}/print`} className={NAV_LINK}>
               Print delivery receipt
             </Link>
           </div>

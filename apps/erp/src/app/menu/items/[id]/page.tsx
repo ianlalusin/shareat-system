@@ -31,6 +31,7 @@ import {
 } from './actions';
 import { MENU_ITEM, MENU_OPTION_GROUP, MENU_OPTION_VALUE } from './typed-forms';
 import { listActiveRecipes, listActiveStockItems, loadItemPage, withOrgPrincipal, type ItemPageData, type OfferHistoryRow, type OptionGroupView } from '../../lib';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Menu item - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -93,10 +94,10 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <Badge status={item.status} />
-          <Link href="/menu" className="inline-flex min-h-6 items-center underline underline-offset-4">
+          <Link href="/menu" className={NAV_LINK}>
             Back to the menu
           </Link>
-          <Link href="/menu/prices" className="inline-flex min-h-6 items-center underline underline-offset-4">
+          <Link href="/menu/prices" className={NAV_LINK}>
             Prices
           </Link>
         </div>
@@ -314,7 +315,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
           </Table>
         )}
         <p className="text-sm">
-          <Link href="/menu/prices" className="inline-flex min-h-6 items-center underline underline-offset-4">
+          <Link href="/menu/prices" className={NAV_LINK}>
             Set or change prices
           </Link>
         </p>

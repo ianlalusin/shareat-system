@@ -7,7 +7,7 @@ import { listStores, peso, withOrgPrincipal } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Button, Input, LinkRow, RowLink, Select } from '@/components/ui';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Invoices by VAT type and official receipt — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -43,7 +43,7 @@ export default async function VatListPage({ searchParams }: { searchParams: Prom
   return (
     <Page density="table">
       <div>
-        <Link href="/ap" className={ACTION_LINK}>
+        <Link href="/ap" className={NAV_LINK}>
           ← Accounts payable
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">Invoices by VAT type and official receipt</h1>

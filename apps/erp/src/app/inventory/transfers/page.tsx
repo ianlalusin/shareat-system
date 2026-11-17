@@ -17,6 +17,7 @@ import { Badge, Button, ConfirmDestructive, Field, FlashBanner, FormModal, Input
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Stock transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -95,7 +96,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
     <Page density="table" className="">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Stock transfers</h1>
-        <Link href="/inventory" className="text-sm underline underline-offset-4">
+        <Link href="/inventory" className={NAV_LINK}>
           ← Stock on hand
         </Link>
       </div>

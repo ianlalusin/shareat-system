@@ -8,6 +8,7 @@ import { withFlash } from '@/lib/flash';
 import { Button, CardGrid, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { PRICE_LIST_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Price lists — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,7 @@ export default async function PriceListsPage({
     <Page density="table">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <Link href="/customers" className="text-sm underline underline-offset-2">
+          <Link href="/customers" className={NAV_LINK}>
             ← Customers
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">Price lists</h1>

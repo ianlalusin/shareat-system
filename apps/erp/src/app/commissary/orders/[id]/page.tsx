@@ -20,6 +20,8 @@ import {
   withdrawOrderAction,
 } from './actions';
 import { actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
+import { orderDetail } from '../../../trade/orders/lib';
+import { WRONG_LIST_MESSAGE, wrongListHref } from './wrong-list';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import {
@@ -36,6 +38,7 @@ import { withFlash } from '@/lib/flash';
 import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
 import { COMMISSARY_LINE_FULFIL, COMMISSARY_LINE_UPDATE } from './typed-forms';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Branch order — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -80,7 +83,24 @@ export default async function BranchOrderPage({
   const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/commissary/orders/${id}`);
   const [view, scope] = await Promise.all([orderView(actor.orgId, id), actorStoreIds(actor)]);
-  if (!view) notFound();
+  if (!view) {
+    // T-589 B4b: a trade (customer) order opened here gets a pointer to where it lives, only for someone who may open it
+    // there. A missing id, another org's order or a branch order that cannot be shown stays a 404.
+    const other = await orderDetail(actor, id);
+    if (!other || other.order.requestedByStoreId) notFound();
+    return (
+      <Page view="detail" density="table">
+        <Link href="/commissary/orders" className={NAV_LINK}>
+          ← Branch orders
+        </Link>
+        <h1 className="mt-1 text-xl font-semibold">This is not a branch order</h1>
+        <p className="mt-2 text-sm" role="status">{WRONG_LIST_MESSAGE}</p>
+        <Link href={wrongListHref(other.order.id)} className={NAV_LINK}>
+          Open it under Trade orders
+        </Link>
+      </Page>
+    );
+  }
   const { order, stage, lines, commissary, branch, rooms, catalogue, items, messages, authors, pendingCount } = view;
 
   // ⚠️ Which SIDE(S) this person may act for decides what is shown — the domain decides what is
@@ -108,7 +128,7 @@ export default async function BranchOrderPage({
   return (
     <Page view="detail" sectioned density="table">
       <div>
-        <Link href={`/commissary/orders?store=${branchSide ? branch.id : commissary.id}`} className="text-sm underline underline-offset-4">
+        <Link href={`/commissary/orders?store=${branchSide ? branch.id : commissary.id}`} className={NAV_LINK}>
           ← Branch orders
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">

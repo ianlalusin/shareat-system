@@ -11,7 +11,7 @@ import { TillsSection } from '../../admin/pos-tablets/TillsSection';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner, Button, ConfirmDestructive, FlashBanner, Input } from '@/components/ui';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'POS tablet — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -55,7 +55,7 @@ export default async function PosTabletPage({ searchParams }: { searchParams: Pr
     <Page density="table">
       <div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/settings" className={ACTION_LINK}>
+          <a href="/settings" className={NAV_LINK}>
             Settings
           </a>{' '}
           / POS tablet

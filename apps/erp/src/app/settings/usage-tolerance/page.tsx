@@ -4,7 +4,7 @@ import { setItemUsageToleranceAction, setOrgUsageToleranceAction } from './actio
 import { percentOf, toleranceView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { CheckedForm } from '@/components/forms';
 import { Button, DialogActions, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
 import { SETTINGS_ITEM_TOLERANCE_RULES, SETTINGS_ORG_TOLERANCE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -30,7 +30,7 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
     <Page density="table" className="space-y-6">
       <div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/settings" className={ACTION_LINK}>
+          <a href="/settings" className={NAV_LINK}>
             Settings
           </a>{' '}
           / Usage tolerance
@@ -46,13 +46,13 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">Whole business: {percentOf(view.org)}</h2>
-        <CheckedForm rules={SETTINGS_ORG_TOLERANCE_RULES} action={setOrgUsageToleranceAction} className="mt-3 flex flex-wrap items-end gap-3">
-          <Field label="Allowed difference (type 0.10 for 10%)" rule={SETTINGS_ORG_TOLERANCE_RULES.tolerance} className="text-sm">
+        <CheckedForm rules={SETTINGS_ORG_TOLERANCE_RULES} action={setOrgUsageToleranceAction} className="mt-3 flex flex-col items-start gap-3">
+          <Field label="Allowed difference (type 0.10 for 10%)" rule={SETTINGS_ORG_TOLERANCE_RULES.tolerance} className="w-full text-sm sm:max-w-sm">
             <Input
               {...nativeAttrs(SETTINGS_ORG_TOLERANCE_RULES.tolerance)}
               defaultValue={view.org}
               inputMode="decimal"
-              className="w-full sm:w-auto sm:min-w-48 sm:flex-1"
+              className="w-full"
             />
           </Field>
           <Button type="submit" variant="primary">

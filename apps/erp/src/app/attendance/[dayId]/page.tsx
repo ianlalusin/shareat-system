@@ -19,6 +19,7 @@ import { withFlash } from '@/lib/flash';
 import { Banner, Button, ConfirmDestructive, Field, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { ATTENDANCE_EARLY_OUT_RULES, ATTENDANCE_OVERTIME_RULES, ATTENDANCE_START_ANCHOR_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { NAV_LINK } from '@/components/action-link';
 
 /**
  * Plain-language names for the engine's anomaly codes.
@@ -82,7 +83,7 @@ export default async function AttendanceDayPage({
   return (
     <Page view="detail" sectioned density="table">
       <div className="space-y-1">
-        <Link href="/attendance" className="text-sm underline underline-offset-2">
+        <Link href="/attendance" className={NAV_LINK}>
           ← Attendance review
         </Link>
         <h1 className="text-2xl font-semibold">

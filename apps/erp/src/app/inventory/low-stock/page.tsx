@@ -14,6 +14,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { LOW_STOCK_THRESHOLD } from './typed-forms';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Low stock — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -64,7 +65,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
     <Page density="table" className="">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Low stock</h1>
-        <Link href="/inventory" className="text-sm underline underline-offset-4">
+        <Link href="/inventory" className={NAV_LINK}>
           ← Stock on hand
         </Link>
       </div>

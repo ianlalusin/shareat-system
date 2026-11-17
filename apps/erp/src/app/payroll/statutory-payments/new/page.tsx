@@ -14,7 +14,7 @@ import { CheckedForm } from '@/components/forms';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { ACTION_LINK } from '@/components/action-link';
+import { NAV_LINK } from '@/components/action-link';
 import { Button, Field, FlashBanner, FormGrid, FormSection, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Record a government payment — Shareat System' };
@@ -82,7 +82,7 @@ export default async function NewStatutoryPaymentPage({ searchParams }: { search
   return (
     <Page density="table" className="space-y-6">
       <div>
-        <Link href="/payroll/statutory-payments" className={ACTION_LINK}>
+        <Link href="/payroll/statutory-payments" className={NAV_LINK}>
           ← All government payments
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">Record a government payment</h1>
@@ -190,7 +190,7 @@ export default async function NewStatutoryPaymentPage({ searchParams }: { search
             <Button type="submit" variant="primary">
               Record payment
             </Button>
-            <Link href="/payroll/statutory-payments" className={ACTION_LINK}>
+            <Link href="/payroll/statutory-payments" className={NAV_LINK}>
               Cancel
             </Link>
           </div>

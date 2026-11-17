@@ -10,6 +10,7 @@ import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Physical counts — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -57,7 +58,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
     <Page density="table">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Physical counts</h1>
-        <Link href="/inventory" className="text-sm underline underline-offset-4">
+        <Link href="/inventory" className={NAV_LINK}>
           ← Stock on hand
         </Link>
       </div>
@@ -135,7 +136,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
             body="Open a count above, tick the rooms to freeze, and the resulting lines will appear here."
           />
         ) : (
-          <Table card={{ title: 'Rooms', subtitle: 'Counted on', keys: ['Status', 'Lines'] }}>
+          <Table card={{ title: 'Rooms', subtitle: 'Status', keys: ['Counted on', 'Lines'] }}>
             <thead>
               <tr>
                 <Th>Rooms</Th>

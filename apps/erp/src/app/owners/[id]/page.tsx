@@ -31,6 +31,7 @@ import {
   nativeAttrs,
 } from '@shareat/domain/field-rules';
 import { SettleForm } from './SettleForm';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Owner — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -72,7 +73,7 @@ export default async function OwnerPage({
   return (
     <Page view="detail" density="table">
       <div>
-        <Link href="/owners" className="text-sm underline underline-offset-2">
+        <Link href="/owners" className={NAV_LINK}>
           ← Owners
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{who?.displayName ?? 'Unknown owner'}</h1>

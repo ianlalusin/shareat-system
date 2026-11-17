@@ -10,6 +10,7 @@ import { Badge, EmptyState, FlashBanner, FormModal, LinkRow, NumTd, RowLink, Sel
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Deliveries — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -53,10 +54,10 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
           </PageDescription>
         </div>
         <div className="flex flex-wrap items-baseline gap-4">
-          <Link href="/inventory/deliveries/inbound" className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+          <Link href="/inventory/deliveries/inbound" className={NAV_LINK}>
             Shipments to receive
           </Link>
-          <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
+          <Link href={`/inventory?store=${storeId}`} className={NAV_LINK}>
             ← Stock on hand
           </Link>
         </div>

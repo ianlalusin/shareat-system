@@ -15,6 +15,7 @@ import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { Badge, Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_REFUND_RULES, INVENTORY_RETURN_RULES, INVENTORY_RETURN_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Supplier returns — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -127,7 +128,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
     <Page density="table" className="">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Supplier returns</h1>
-        <Link href="/inventory" className="text-sm underline underline-offset-4">
+        <Link href="/inventory" className={NAV_LINK}>
           ← Stock on hand
         </Link>
       </div>

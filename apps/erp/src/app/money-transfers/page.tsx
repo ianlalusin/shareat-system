@@ -13,6 +13,7 @@ import { withFlash } from '@/lib/flash';
 import { Badge, Banner, ConfirmDestructive, Field, FlashBanner, Input, FormModal, NumTd, Table, Td, Th } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Money transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -140,7 +141,7 @@ export default async function MoneyTransfersPage({
       {usable.length > 0 && usable.length < 2 && (
         <Banner tone="warning">
           <strong className="font-medium">A transfer needs two accounts.</strong> Add them on{' '}
-          <Link href="/money-accounts" className="text-sm underline underline-offset-2">
+          <Link href="/money-accounts" className={NAV_LINK}>
             money accounts
           </Link>{' '}
           first — a transfer has to name where the money left and where it landed.

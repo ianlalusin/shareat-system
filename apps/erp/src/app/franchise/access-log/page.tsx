@@ -2,6 +2,7 @@ import { listFranchiseAccessLog } from '@shareat/domain';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { withActorPrincipal } from '../../expenses/lib';
+import { FILTER_CHIP, FILTER_CHIP_ON } from '@/components/action-link';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { NumTd, Table, Td, Th } from '@/components/ui';
@@ -17,7 +18,6 @@ const KINDS = {
 } as const;
 type Kind = keyof typeof KINDS;
 const isKind = (v: string | undefined): v is Kind => v !== undefined && Object.prototype.hasOwnProperty.call(KINDS, v);
-const LINK = 'inline-flex min-h-6 items-center underline underline-offset-4';
 
 export default async function FranchiseAccessLogPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
@@ -37,12 +37,12 @@ export default async function FranchiseAccessLogPage({ searchParams }: { searchP
           here with who it was, when, and the reason they gave. Newest first.
         </PageDescription>
       </div>
-      <p className="flex flex-wrap gap-4 text-sm">
-        <a href="/franchise/access-log" className={LINK}>
+      <p className="flex flex-wrap gap-2 text-sm">
+        <a href="/franchise/access-log" aria-current={what ? undefined : 'page'} className={what ? FILTER_CHIP : FILTER_CHIP_ON}>
           All
         </a>
         {(Object.keys(KINDS) as Kind[]).map((k) => (
-          <a key={k} href={`/franchise/access-log?what=${k}`} className={LINK}>
+          <a key={k} href={`/franchise/access-log?what=${k}`} aria-current={what === k ? 'page' : undefined} className={what === k ? FILTER_CHIP_ON : FILTER_CHIP}>
             {KINDS[k]}
           </a>
         ))}

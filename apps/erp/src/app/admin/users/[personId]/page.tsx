@@ -33,6 +33,7 @@ import {
   nativeAttrs,
 } from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
+import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'User access — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -88,7 +89,7 @@ export default async function UserAccessPage({
   return (
     <Page view="detail" sectioned density="table">
       <div>
-        <a href="/admin/users" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
+        <a href="/admin/users" className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
           ← Users and roles
         </a>
         <h1 className="mt-1 text-2xl font-semibold">{person.displayName}</h1>

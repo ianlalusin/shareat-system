@@ -12,7 +12,7 @@ import { CheckedForm, RuleCheck } from '@/components/forms';
 import { buildSupplierFacts } from '@shareat/domain/business-rules';
 import { InvoiceNumberCheck } from './InvoiceNumberCheck';
 import { SUPPLIER_INVOICE_LOG_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { ACTION_LINK } from '@/components/action-link';
+import { FILTER_CHIP, NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -61,7 +61,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
           </PageDescription>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/ap/suppliers" className={ACTION_LINK}>Suppliers →</Link>
+          <Link href="/ap/suppliers" className={NAV_LINK}>Suppliers →</Link>
           {/* T-448: invoices are logged daily, so the form opens from the header instead of sitting under the list. */}
           <FormModal
             trigger="+ Log invoice"
@@ -160,20 +160,20 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
       <FlashBanner flash={sp} />
 
       <p className="text-sm">
-        <Link href="/ap/vat" className={ACTION_LINK}>Monthly list by VAT type and official receipt</Link>
+        <Link href="/ap/vat" className={NAV_LINK}>Monthly list by VAT type and official receipt</Link>
       </p>
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-medium">Invoices</h2>
           {/* Plain GET links: each filter is a flag, so no typing is read from the URL. */}
-          <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="flex flex-wrap items-center gap-2">
             {onlySelfVerified || onlyPending ? (
-              <Link href="/ap" className={ACTION_LINK}>Show all invoices →</Link>
+              <Link href="/ap" className={FILTER_CHIP}>Show all invoices →</Link>
             ) : (
               <>
-                {pendingCount > 0 && <Link href="/ap?status=pending" className={ACTION_LINK}>Not verified ({pendingCount}) →</Link>}
-                <Link href="/ap?selfVerified=1" className={ACTION_LINK}>Self-verified only →</Link>
+                {pendingCount > 0 && <Link href="/ap?status=pending" className={FILTER_CHIP}>Not verified ({pendingCount}) →</Link>}
+                <Link href="/ap?selfVerified=1" className={FILTER_CHIP}>Self-verified only →</Link>
               </>
             )}
           </span>
