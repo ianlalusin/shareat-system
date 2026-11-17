@@ -9,7 +9,6 @@ import { PendingSalesFence } from './PendingSalesFence';
 import { loadTills } from '../../admin/pos-tablets/lib';
 import { TillsSection } from '../../admin/pos-tablets/TillsSection';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner, Button, ConfirmDestructive, FlashBanner, Input } from '@/components/ui';
 import { NAV_LINK } from '@/components/action-link';
 
@@ -52,20 +51,17 @@ export default async function PosTabletPage({ searchParams }: { searchParams: Pr
   for (const s of stores) tillsByStore.set(s.id, await loadTills(actor, s.id));
 
   return (
-    <Page density="table">
-      <div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/settings" className={NAV_LINK}>
-            Settings
-          </a>{' '}
-          / POS tablet
-        </p>
-        <h1 className="text-2xl font-semibold">POS tablet</h1>
-        <PageDescription>
+    <Page
+      density="table"
+      crumb={<><a href="/settings" className={NAV_LINK}>Settings</a> / POS tablet</>}
+      title="POS tablet"
+      description={
+        <>
           Set a store&apos;s counter tablet up once. After that, staff sign in on it with their Employee ID and PIN only. To pair, open this page
           on the tablet itself.
-        </PageDescription>
-      </div>
+        </>
+      }
+    >
 
       <FlashBanner flash={sp} />
 

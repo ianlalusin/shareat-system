@@ -153,7 +153,7 @@ describe('T-348 S2 — the two neutral-500 prose sites move too (SW3)', () => {
 });
 
 describe('T-348 S2 — the population lands exactly, nothing dropped or doubled (SW4)', () => {
-  it('SW4: exactly 130 <PageDescription> call sites exist under app/', () => {
+  it('SW4: exactly 122 <PageDescription> call sites exist under app/', () => {
     let count = 0;
     for (const file of walk(appRoot)) {
       const content = readFileSync(file, 'utf8');
@@ -182,7 +182,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 128 -> 129, T-533 S3: /admin/stores/[id]/pos-preflight carries its <PageDescription>; measured by walking app/.
     // 129 -> 132, T-584: Documents, Issue a document, Document templates; measured by walking app/.
     // 132 -> 131, T-589 B6: /expenses now uses PageHeader, whose own <PageDescription> lives in Page.tsx; re-measured.
-    expect(count).toBe(131);
+    // 131 -> 122, T-586: seven settings pages (organization, expense-categories, pos-link, pos-tablet, usage-tolerance, wastage-monitor x2 branches, attendance x2 branches) moved onto <Page crumb title description>, which renders the prose through PageHeader, so nine call sites left app/; measured by walking app/.
+    expect(count).toBe(122);
   });
 });
 
@@ -199,8 +200,7 @@ describe('T-348 S2 — the 9 linked descriptions keep their link target (SW5)', 
     'money-accounts/page.tsx': '/money-transfers',
     'money-transfers/page.tsx': '/money-accounts',
     'payroll/separations/page.tsx': '/payroll',
-    'settings/attendance/page.tsx': '/payroll',
-    'settings/organization/page.tsx': '/admin/stores',
+    // T-586: settings/attendance and settings/organization now pass their description to <Page description={...}> (PageHeader renders it), so no <PageDescription> block remains in the page; their /payroll and /admin/stores links are covered by SW5b below.
     'settings/sales-channels/page.tsx': '/admin/stores',
   };
 
@@ -213,6 +213,18 @@ describe('T-348 S2 — the 9 linked descriptions keep their link target (SW5)', 
       if (!hit) report.push(`${rel}: no <PageDescription> block contains href="${href}"`);
     }
     expect(report).toEqual([]);
+  });
+});
+
+describe('T-586 — SW5b: the two migrated linked descriptions keep their link target', () => {
+  it('SW5b: attendance and organization still link from the description prop of <Page>', () => {
+    for (const [rel, href] of [['settings/attendance/page.tsx', '/payroll'], ['settings/organization/page.tsx', '/admin/stores']] as const) {
+      const content = readFileSync(resolve(appRoot, rel), 'utf8');
+      // The description JSX sits between its `description={` / `DESCRIPTION = (` opener and the next top-level prop or function.
+      const at = content.includes('const DESCRIPTION = (') ? content.indexOf('const DESCRIPTION = (') : content.indexOf('description={');
+      expect(at, `${rel}: no description prop found`).toBeGreaterThan(-1);
+      expect(content.slice(at, at + 900), rel).toContain(`"${href}"`);
+    }
   });
 });
 

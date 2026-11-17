@@ -10,8 +10,7 @@ import {
 } from './actions';
 import { categoriesForAdmin, mappableAccounts, subcategoriesForAdmin } from './lib';
 import { Page } from '@/components/shell/Page';
-import { ACTION_LINK } from '@/components/action-link';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { ACTION_LINK, NAV_LINK } from '@/components/action-link';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_EXPENSE_CATEGORY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Button, Card, ConfirmDestructive, DialogActions, EmptyState, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
@@ -89,20 +88,17 @@ export default async function ExpenseCategoriesSettingsPage({
   const groups = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
 
   return (
-    <Page density="table">
-      <div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/settings" className="underline">
-            Settings
-          </a>{' '}
-          / Expense categories
-        </p>
-        <h1 className="text-2xl font-semibold">Expense categories</h1>
-        <PageDescription>
+    <Page
+      density="table"
+      crumb={<><a href="/settings" className={NAV_LINK}>Settings</a> / Expense categories</>}
+      title="Expense categories"
+      description={
+        <>
           Which account each kind of spend goes to. A category with{' '}
           <strong>no account blocks posting</strong> until you pick one.
-        </PageDescription>
-      </div>
+        </>
+      }
+    >
 
       <FlashBanner flash={sp} />
 

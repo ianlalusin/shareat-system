@@ -2,7 +2,7 @@
 
 ## Overview
 
-Settings at `/settings`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
+Settings at `/settings`. The one door to every business setting: a role-aware list of rows (hidden when you may not open one, "View only" when you may open but not change). Nine screens live under it: organisation, expense categories, business rules, attendance and payroll, POS link, POS tablet, sales channels, usage tolerance and the Wastage Monitor.
 
 Parent blueprint: [up one directory](../README.md).
 
@@ -10,14 +10,15 @@ Parent blueprint: [up one directory](../README.md).
 
 - Page route `/settings`; dynamic route segments are supplied through App Router params.
 - [page.tsx](./page.tsx) — `SettingsPage`.
-- [attendance](./attendance/README.md) — Attendance & payroll settings at `/settings/attendance`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
-- [expense-categories](./expense-categories/README.md) — Expense categories at `/settings/expense-categories`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
-- [organization](./organization/README.md) — Organisation at `/settings/organization`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
-- [pos-link](./pos-link/README.md) — POS link at `/settings/pos-link`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
-- [pos-tablet](./pos-tablet/README.md) — POS tablet at `/settings/pos-tablet`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
-- [sales-channels](./sales-channels/README.md) — Sales channels at `/settings/sales-channels`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
-- [usage-tolerance](./usage-tolerance/README.md) — Usage tolerance at `/settings/usage-tolerance`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
-- [wastage-monitor](./wastage-monitor/README.md) — Wastage Monitor at `/settings/wastage-monitor`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
+- [attendance](./attendance/README.md) — Attendance & payroll settings at `/settings/attendance`. One attendance and payroll policy per store: shift hours, late policy, overtime, holiday pay, leave and the pay period.
+- business-rules — Business rules at `/settings/business-rules` (no README of its own yet). The figures the system checks money against: payout tolerance, loan rounding, withholding and VAT rates.
+- [expense-categories](./expense-categories/README.md) — Expense categories at `/settings/expense-categories`. Which account each expense category and subcategory posts to; a category with no account blocks posting.
+- [organization](./organization/README.md) — Organisation at `/settings/organization`. The registered name, TIN and tax type the books are kept under; printed on documents.
+- [pos-link](./pos-link/README.md) — POS link at `/settings/pos-link`. Which POS store each store sells under; a linked store takes its sales days from POS instead of typing them.
+- [pos-tablet](./pos-tablet/README.md) — POS tablet at `/settings/pos-tablet`. Pair a store's counter tablet once (staff then sign in with Employee ID and PIN) and cut off a lost one.
+- [sales-channels](./sales-channels/README.md) — Sales channels at `/settings/sales-channels`. Per sales channel (walk-in, Grab, Foodpanda): whether its money arrives that day or waits for the platform to pay.
+- [usage-tolerance](./usage-tolerance/README.md) — Usage tolerance at `/settings/usage-tolerance`. How far recorded stock usage may differ from what the day's POS sales imply before a manager must give a reason.
+- [wastage-monitor](./wastage-monitor/README.md) — Wastage Monitor at `/settings/wastage-monitor`. Who answers for a wasted or refunded order at each store when nobody else is named (charged to them after 15 days).
 
 ## Invariants
 

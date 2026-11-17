@@ -65,7 +65,9 @@ export interface PageProps {
    * for new pages and for a later, deliberate pass; the candidates are nominated in T-234's report.
    */
   readonly title?: string;
-  readonly description?: string;
+  readonly description?: ReactNode;
+  /** Optional breadcrumb rendered ABOVE the title, e.g. `<><a href="/settings">Settings</a> / X</>`. Needs `title`. */
+  readonly crumb?: ReactNode;
   readonly actions?: ReactNode;
   /**
    * The page's own vertical rhythm, carried forward verbatim so the sweep changed width and
@@ -88,7 +90,7 @@ export interface PageProps {
   readonly children: ReactNode;
 }
 
-export function Page({ density, view, sectioned = false, title, description, actions, className, children }: PageProps) {
+export function Page({ density, view, sectioned = false, title, description, crumb, actions, className, children }: PageProps) {
   return (
     <div
       data-view={view}
@@ -98,7 +100,7 @@ export function Page({ density, view, sectioned = false, title, description, act
       className={`erp-page mx-auto w-full${WIDTH[density] ? ` ${WIDTH[density]}` : ''} px-4 py-4 md:px-6 md:py-6 xl:px-6 xl:py-4 ${className ?? 'space-y-6 xl:space-y-4'}`}
     >
       {title !== undefined && (
-        <PageHeader title={title} description={description} actions={actions} />
+        <PageHeader title={title} description={description} crumb={crumb} actions={actions} />
       )}
       {children}
     </div>
@@ -107,7 +109,8 @@ export function Page({ density, view, sectioned = false, title, description, act
 
 export interface PageHeaderProps {
   readonly title: string;
-  readonly description?: string;
+  readonly description?: ReactNode;
+  readonly crumb?: ReactNode;
   readonly actions?: ReactNode;
 }
 
@@ -118,8 +121,8 @@ export interface PageHeaderProps {
  * layer up: a label beside a button in a row that cannot wrap is what made twelve routes scroll
  * sideways at 390 px. A header is the same shape and would fail the same way.
  */
-export function PageHeader({ title, description, actions }: PageHeaderProps) {
-  return (
+export function PageHeader({ title, description, crumb, actions }: PageHeaderProps) {
+  const row = (
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
       {/* basis-[16rem]: without a basis the row never wraps and a phone squeezes the title (T-589 B6). */}
       <div className="min-w-0 flex-1 basis-[16rem]">
@@ -127,6 +130,14 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
         {description && <PageDescription className="mt-1">{description}</PageDescription>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </div>
+  );
+  // No crumb: the row alone, so every existing header's markup is unchanged.
+  if (!crumb) return row;
+  return (
+    <div>
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">{crumb}</p>
+      {row}
     </div>
   );
 }

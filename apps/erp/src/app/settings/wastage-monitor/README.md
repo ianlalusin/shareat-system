@@ -2,7 +2,7 @@
 
 ## Overview
 
-Wastage Monitor at `/settings/wastage-monitor`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
+Wastage Monitor at `/settings/wastage-monitor`. Who answers for a wasted or refunded order at each store when nobody else is named (charged to them after 15 days).
 
 Parent blueprint: [up one directory](../README.md).
 
