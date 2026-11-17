@@ -2,7 +2,7 @@
 
 ## Overview
 
-POS tablet at `/settings/pos-tablet`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
+POS tablet at `/settings/pos-tablet`. Pair a store's counter tablet once (staff then sign in with Employee ID and PIN) and cut off a lost one.
 
 Parent blueprint: [up one directory](../README.md).
 

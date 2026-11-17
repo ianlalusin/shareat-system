@@ -2,7 +2,7 @@
 
 ## Overview
 
-Organisation at `/settings/organization`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
+Organisation at `/settings/organization`. The registered name, TIN and tax type the books are kept under; printed on documents.
 
 Parent blueprint: [up one directory](../README.md).
 

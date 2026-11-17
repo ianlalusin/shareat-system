@@ -13,7 +13,6 @@ import { ChevronIcon } from '@/components/shell/icons';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_POS_LINK_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_TENDER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select, Textarea } from '@/components/ui';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Link to POS store — Shareat System' };
@@ -46,20 +45,17 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
   const cardShowsFeedback = !!sp.store && rows.some((r) => r.storeId === sp.store);
 
   return (
-    <Page density="table">
-      <div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/settings" className={NAV_LINK}>
-            Settings
-          </a>{' '}
-          / Link to POS store
-        </p>
-        <h1 className="text-2xl font-semibold">Link to POS store</h1>
-        <PageDescription>
+    <Page
+      density="table"
+      crumb={<><a href="/settings" className={NAV_LINK}>Settings</a> / Link to POS store</>}
+      title="Link to POS store"
+      description={
+        <>
           Which POS store each store sells under. A linked store&apos;s sales days come from POS and cannot be typed;
           a store that is not linked keeps typing them in.
-        </PageDescription>
-      </div>
+        </>
+      }
+    >
 
       {!cardShowsFeedback && <FlashBanner flash={sp} />}
 

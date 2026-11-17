@@ -2,7 +2,7 @@
 
 ## Overview
 
-POS link at `/settings/pos-link`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
+POS link at `/settings/pos-link`. Which POS store each store sells under; a linked store takes its sales days from POS instead of typing them.
 
 Parent blueprint: [up one directory](../README.md).
 

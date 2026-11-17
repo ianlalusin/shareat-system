@@ -2,7 +2,7 @@
 
 ## Overview
 
-Attendance & payroll settings at `/settings/attendance`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
+Attendance & payroll settings at `/settings/attendance`. One attendance and payroll policy per store: shift hours, late policy, overtime, holiday pay, leave and the pay period.
 
 Parent blueprint: [up one directory](../README.md).
 

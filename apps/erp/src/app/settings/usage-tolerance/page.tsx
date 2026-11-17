@@ -3,7 +3,6 @@ import { withFlash } from '../../../lib/flash';
 import { setItemUsageToleranceAction, setOrgUsageToleranceAction } from './actions';
 import { percentOf, toleranceView } from './lib';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { NAV_LINK } from '@/components/action-link';
 import { CheckedForm } from '@/components/forms';
 import { Button, DialogActions, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
@@ -27,20 +26,18 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
   const overridden = view.items.filter((i) => i.override !== null);
 
   return (
-    <Page density="table" className="space-y-6">
-      <div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/settings" className={NAV_LINK}>
-            Settings
-          </a>{' '}
-          / Usage tolerance
-        </p>
-        <h1 className="text-2xl font-semibold">Usage tolerance</h1>
-        <PageDescription>
+    <Page
+      density="table"
+      className="space-y-6"
+      crumb={<><a href="/settings" className={NAV_LINK}>Settings</a> / Usage tolerance</>}
+      title="Usage tolerance"
+      description={
+        <>
           How far the usage staff record may differ from what the day&apos;s POS sales say was used. Inside the limit a manager posts as usual;
           outside it the manager must give a reason.
-        </PageDescription>
-      </div>
+        </>
+      }
+    >
 
       <FlashBanner flash={sp} />
 
