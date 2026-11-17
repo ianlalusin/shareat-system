@@ -114,7 +114,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   return (
     <Page density="table" className="space-y-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
+        <div className="min-w-0 flex-1 basis-[16rem]">
           <h1 className="text-2xl font-semibold">Staff and positions</h1>
           <PageDescription className="mt-1">
             Who is on the roster at this store, which position they hold, and where they are in the day.

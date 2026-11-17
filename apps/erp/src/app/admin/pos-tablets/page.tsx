@@ -100,7 +100,7 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
   return (
     <Page density="table">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[16rem]">
           <h1 className="text-2xl font-semibold">POS tablets</h1>
           <PageDescription>
             Register a store&apos;s POS tablet so it can ask a manager for a refund approval. Admin or super admin only. This is not the clock-in

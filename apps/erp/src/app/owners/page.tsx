@@ -49,7 +49,7 @@ export default async function OwnersPage({
   return (
     <Page density="table">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[16rem]">
           <h1 className="text-2xl font-semibold">Owners</h1>
           <PageDescription>
             What each owner has put in, taken out, and still owes.
