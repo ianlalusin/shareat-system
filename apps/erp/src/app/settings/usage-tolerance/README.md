@@ -2,7 +2,7 @@
 
 ## Overview
 
-Usage tolerance at `/settings/usage-tolerance`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
+Usage tolerance at `/settings/usage-tolerance`. How far recorded stock usage may differ from what the day's POS sales imply before a manager must give a reason.
 
 Parent blueprint: [up one directory](../README.md).
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Expense categories at `/settings/expense-categories`. Configuration screens for organization, attendance, POS links, sales channels and monitoring.
+Expense categories at `/settings/expense-categories`. Which account each expense category and subcategory posts to; a category with no account blocks posting.
 
 Parent blueprint: [up one directory](../README.md).
 
