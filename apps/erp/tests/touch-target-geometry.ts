@@ -112,6 +112,19 @@ const OPAQUE_COMPONENTS = new Set(['TokenReveal', 'SidebarNav']);
 // back to this table when that resolves cleanly but yields no font-size class of its own.
 const ANCESTOR_FONT_SIZE_COMPONENTS: Record<string, keyof typeof FONT_SIZE_PX> = { PageDescription: 'sm' };
 
+// T-589 B9 — links passed as JSX in a PROP (`<Page crumb={<a/>} description={<>…<a/>…</>}>`, or a
+// hoisted `const DESCRIPTION = <>…</>` used as `description={DESCRIPTION}`). FINDING: the census
+// always VISITED these (`ts.forEachChild` descends into attribute values); what it lost was their
+// FONT SIZE. `resolveAncestorFontSize` climbs JSX parents, and a prop value's parents end at the
+// `Page` call site, whose own className says nothing — so a sentence link in a description went
+// `ancestry truncated` UNRESOLVED (T-586 moved them there: FAIL 58 -> 53, UNRESOLVED +2), and a link in
+// a hoisted const never reached the call site at all. `Page`/`PageHeader` render the description in
+// `PageDescription` (text-sm) and the crumb in `text-xs` (Page.tsx), so the prop name supplies the size.
+// BOSS ruling 17 Nov: a link inside a description SENTENCE keeps its size (WCAG 2.5.8 inline exemption) and
+// is recorded `inline-exempt`, not left unseen. A crumb is NOT exempt: it is measured like any control.
+const PAGE_PROP_TAGS = new Set(['Page', 'PageHeader']);
+const PAGE_PROP_FONT_SIZE: Record<string, keyof typeof FONT_SIZE_PX> = { description: 'sm', crumb: 'xs' };
+
 // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): a call site adopting `<Input>`/`<Button>`
 // (T-334 slice 3) is a CAPITALISED tag — invisible to NATIVE_ALWAYS_INTERACTIVE, not `Link`, and
 // (being capitalised) never matches the onClick-div rule either. It is also NOT in
@@ -186,7 +199,8 @@ const UA_PADDING_TAGS = new Set(['input', 'select', 'textarea']);
 export type ControlResult =
   | { file: string; line: number; tag: string; status: 'pass'; px: number }
   | { file: string; line: number; tag: string; status: 'fail'; px: number }
-  | { file: string; line: number; tag: string; status: 'unresolved'; reason: string };
+  | { file: string; line: number; tag: string; status: 'unresolved'; reason: string }
+  | { file: string; line: number; tag: string; status: 'inline-exempt'; px: number; reason: string };
 
 function spacingToPx(token: string): number | undefined {
   if (token === 'px') return 1;
@@ -519,6 +533,41 @@ function leadingLineHeightPx(tokens: string[], fontSize: keyof typeof FONT_SIZE_
   return LINE_HEIGHT_PX[fontSize];
 }
 
+/** The `description` / `crumb` prop of a `Page`/`PageHeader` that `node` is passed in, directly or through a
+ *  hoisted `const X = <…/>` used as `prop={X}`; undefined when it is not a prop value. */
+function pagePropOf(node: ts.Node): string | undefined {
+  const propName = (attr: ts.JsxAttribute): string | undefined => {
+    const el = attr.parent.parent;
+    const tag = ts.isJsxOpeningElement(el) || ts.isJsxSelfClosingElement(el) ? el.tagName.getText() : undefined;
+    const name = attr.name.getText();
+    return tag !== undefined && PAGE_PROP_TAGS.has(tag) && name in PAGE_PROP_FONT_SIZE ? name : undefined;
+  };
+  for (let cur: ts.Node | undefined = node.parent; cur; cur = cur.parent) {
+    if (ts.isJsxAttribute(cur)) return propName(cur);
+    if (ts.isVariableDeclaration(cur) && ts.isIdentifier(cur.name)) {
+      const name = cur.name.text;
+      let found: string | undefined;
+      const scan = (n: ts.Node) => {
+        if (found === undefined && ts.isJsxAttribute(n) && n.initializer && ts.isJsxExpression(n.initializer)) {
+          const e = n.initializer.expression;
+          if (e && ts.isIdentifier(e) && e.text === name) found = propName(n);
+        }
+        ts.forEachChild(n, scan);
+      };
+      scan(cur.getSourceFile());
+      return found;
+    }
+  }
+  return undefined;
+}
+
+/** True when `node`'s JSX parent is running text: it has a sibling text node with real words in it. */
+function isInlineInSentence(node: ts.Node): boolean {
+  const p = node.parent;
+  if (!ts.isJsxElement(p) && !ts.isJsxFragment(p)) return false;
+  return p.children.some((c) => ts.isJsxText(c) && c.text.trim() !== '');
+}
+
 interface AncestorFontSizeResult {
   size?: keyof typeof FONT_SIZE_PX;
   unresolvedReason?: string;
@@ -529,6 +578,8 @@ function resolveAncestorFontSize(
   info: FileInfo,
   infos: Map<string, FileInfo>,
 ): AncestorFontSizeResult {
+  const prop = pagePropOf(node);
+  if (prop !== undefined) return { size: PAGE_PROP_FONT_SIZE[prop]! };
   let current: ts.Node | undefined = node.parent;
   while (current) {
     let attrs: ts.JsxAttributes | undefined;
@@ -693,7 +744,10 @@ export function runCensus(srcRoot: string, globalsCssPath: string): { files: str
           });
         } else if (isNative || isLink || isOnClickDiv) {
           const outcome = computeControl(isLink ? 'a' : tag, attrs, node, info, infos, cssMinHeights);
-          if (outcome.status === 'unresolved') {
+          if (outcome.status !== 'pass' && isInlineInSentence(node) && pagePropOf(node) === 'description') {
+            const px = outcome.status === 'fail' ? outcome.px : 0;
+            results.push({ file: relFile, line, tag, status: 'inline-exempt', px, reason: 'inline link in a sentence (WCAG 2.5.8 exemption)' });
+          } else if (outcome.status === 'unresolved') {
             results.push({ file: relFile, line, tag, status: 'unresolved', reason: outcome.reason });
           } else {
             results.push({ file: relFile, line, tag, status: outcome.status, px: outcome.px });
