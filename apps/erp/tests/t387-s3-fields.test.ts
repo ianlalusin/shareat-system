@@ -42,8 +42,10 @@ describe('Select', () => {
     expect(html).toContain('<option value="a">Alpha</option>');
   });
   it('has exactly Input\'s class tokens when valid, and exactly Input\'s invalid tokens when invalid', () => {
-    expect(sorted(classesOf(R(Select, { name: 'k' }, opts), 'select'))).toEqual(sorted(inputValid));
-    expect(sorted(classesOf(R(Select, { name: 'k', invalid: true }, opts), 'select'))).toEqual(sorted(inputInvalid));
+    // T-589 B7: Select alone also stays inside its container and is full width on a phone.
+    const grow = ['max-w-full', 'max-sm:w-full'];
+    expect(sorted(classesOf(R(Select, { name: 'k' }, opts), 'select'))).toEqual(sorted([...inputValid, ...grow]));
+    expect(sorted(classesOf(R(Select, { name: 'k', invalid: true }, opts), 'select'))).toEqual(sorted([...inputInvalid, ...grow]));
   });
   it('invalid: aria-invalid="true" AND a 2px danger border; valid: neither', () => {
     const bad = R(Select, { name: 'k', invalid: true }, opts);
