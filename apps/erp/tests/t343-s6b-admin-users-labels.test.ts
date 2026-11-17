@@ -384,24 +384,29 @@ describe('U1 — held/revoked/picker capabilities show the label; the raw key ap
     const revokedSection = html.slice(revokedHeadingIdx);
     const boxesIn = (section: string, key: string) =>
       (section.match(new RegExp(`<input[^>]*type="checkbox"[^>]*value="${key}"`, 'g')) ?? []).length;
-    const labelsIn = (section: string, key: string) => stripTags(section).split(capabilityTitle(key)).length - 1;
+    // What is counted: the <li> rows of a section whose own text STARTS with the capability's label. A grant row opens with its
+    // label, and exactly one row exists per grant, so this is one per held (or revoked) grant; the label may also sit inside
+    // that row's confirm dialog or hold form, which is why plain label occurrences are not counted.
+    const rowsIn = (section: string, key: string) => liBlocks(section).filter((li) => stripTags(li).startsWith(capabilityTitle(key))).length;
 
     // record_sale: held org-wide, so it is NOT offered in the picker; its label shows once in the held list.
     expect(boxesIn(pickerSection, 'record_sale'), 'record_sale: picker (must not offer an org-wide-held capability)').toBe(0);
-    expect(labelsIn(heldSection, 'record_sale'), 'record_sale: held section').toBeGreaterThanOrEqual(1);
-    expect(labelsIn(revokedSection, 'record_sale'), 'record_sale: revoked section').toBe(0);
+    expect(rowsIn(heldSection, 'record_sale'), 'record_sale: held section').toBe(1);
+    expect(rowsIn(revokedSection, 'record_sale'), 'record_sale: revoked section').toBe(0);
     // void_sales_day: revoked AND still picker-offerable: its label shows in the revoked list and as a picker box.
-    expect(labelsIn(heldSection, 'void_sales_day'), 'void_sales_day: held section').toBe(0);
+    expect(rowsIn(heldSection, 'void_sales_day'), 'void_sales_day: held section').toBe(0);
     expect(boxesIn(pickerSection, 'void_sales_day'), 'void_sales_day: picker').toBe(1);
-    expect(labelsIn(revokedSection, 'void_sales_day'), 'void_sales_day: revoked section').toBe(1);
+    expect(rowsIn(revokedSection, 'void_sales_day'), 'void_sales_day: revoked section').toBe(1);
     // submit_sales_day: held (store-scoped position row) AND still picker-offerable.
-    expect(labelsIn(heldSection, 'submit_sales_day'), 'submit_sales_day: held section').toBeGreaterThanOrEqual(1);
+    expect(rowsIn(heldSection, 'submit_sales_day'), 'submit_sales_day: held section').toBe(1);
     expect(boxesIn(pickerSection, 'submit_sales_day'), 'submit_sales_day: picker').toBe(1);
-    expect(labelsIn(revokedSection, 'submit_sales_day'), 'submit_sales_day: revoked section').toBe(0);
+    expect(rowsIn(revokedSection, 'submit_sales_day'), 'submit_sales_day: revoked section').toBe(0);
     // Every OTHER offerable capability: one picker checkbox (the key lives in its value=), nowhere else.
     for (const c of pureOfferable) {
       expect(boxesIn(pickerSection, c), `${c}: picker`).toBe(1);
-      expect(boxesIn(heldSection, c) + boxesIn(revokedSection, c), `${c}: outside the picker`).toBe(0);
+      expect(boxesIn(heldSection, c) + boxesIn(revokedSection, c), `${c}: checkbox outside the picker`).toBe(0);
+      expect(rowsIn(heldSection, c), `${c}: held section`).toBe(0);
+      expect(rowsIn(revokedSection, c), `${c}: revoked section`).toBe(0);
     }
 
     // Within the SAME <li> row the label shows and the key does not.
