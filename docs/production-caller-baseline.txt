@@ -73,6 +73,7 @@ getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
+getStoreChannelSettlementConfig
 groupIntoFamilies
 hasFingerprint
 hasOtherActiveAdmin
@@ -166,6 +167,7 @@ runCapture
 runLoad
 saleOps
 sampleCandidates
+saveStoreChannelSettlement
 seatEntry
 seedCanonicalPositions
 seedRefundRecord
@@ -178,6 +180,7 @@ setActiveFake
 setCostBasisItem
 setDocumentNonBlocking
 setItemPricing
+setSalesChannelBankHints
 setTillFloat
 signOffPack
 signatureForPrint

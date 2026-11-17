@@ -185,6 +185,12 @@ const EXEMPT: Record<string, string> = {
     'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
   decideMapRequest:
     'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+  getStoreChannelSettlementConfig:
+    'UNWIRED — T-592 R4=A (Ian, 17 Nov 2026): the settlement wiring left the sales-channels page; nothing reads it, DB data and domain kept until a real reader (the wastage email) is built.',
+  saveStoreChannelSettlement:
+    'UNWIRED — T-592 R4=A (Ian, 17 Nov 2026): the settlement wiring left the sales-channels page; nothing reads it, DB data and domain kept until a real reader (the wastage email) is built.',
+  setSalesChannelBankHints:
+    'UNWIRED — T-592 R4=A (Ian, 17 Nov 2026): bank names left the sales-channels page; nothing reads them, DB data and domain kept until a real reader is built.',
 
   // ---- 4. unwired: nothing calls it, and that is the gap -------------------------------------
   //
