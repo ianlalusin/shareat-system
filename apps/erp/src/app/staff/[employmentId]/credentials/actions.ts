@@ -48,6 +48,10 @@ export async function enrolCardAction(formData: FormData): Promise<void> {
 export async function enrolFingerprintAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const employmentId = str(formData, 'employmentId');
+  // T-589 B8 F3: a testing-only form. The screen hides it outside development; the server refuses too.
+  if (process.env.NODE_ENV !== 'development') {
+    return await redirectWithFlash(`/staff/${employmentId}/credentials`, {}, { error: 'Fingerprint enrolment is not available yet.' });
+  }
   const templates = str(formData, 'templates')
     .split(/\r?\n|,/)
     .map((t) => t.trim())

@@ -244,6 +244,7 @@ export default async function ExpenseDetailPage({
             <CheckedForm
               rules={EXPENSE_APPROVE_RULES}
               action={approveExpenseAction}
+              pointerSummary
               className="flex flex-col justify-between gap-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
             >
               {hiddenIds}

@@ -100,7 +100,7 @@ export default async function FixedAssetsPage({
       {/* ⭐ Is anybody keeping these books? Reads scheduler_runs, not the ledger — a run that
           posts nothing looks exactly like a run that never happened. This is the surface that
           would have caught DEF-044 on day one (T-140). */}
-      <SchedulerStatus orgId={actor.orgId} job="depreciation" label="Depreciation" />
+      <SchedulerStatus orgId={actor.orgId} job="depreciation" label="Depreciation" meanwhile="Until it is switched on, press Run depreciation each month." />
 
       {reviewCount > 0 && !needsReviewOnly && (
         <Banner tone="warning">

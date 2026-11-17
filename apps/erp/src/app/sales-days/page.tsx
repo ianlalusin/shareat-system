@@ -96,6 +96,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
           job="pos_day_import"
           label="Morning POS import"
           cadence="daily"
+          meanwhile="Until it is switched on, press New sales day to enter each day yourself."
           visibleSubjectIds={submitStoreIds}
         />
       )}

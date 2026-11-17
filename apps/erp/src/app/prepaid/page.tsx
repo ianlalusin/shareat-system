@@ -143,7 +143,7 @@ export default async function PrepaidPage({
 
       {/* ⭐ Is anybody keeping these books? Reads scheduler_runs, not the ledger — a run that
           posts nothing looks exactly like a run that never happened (T-140, DEF-044). */}
-      <SchedulerStatus orgId={actor.orgId} job="amortisation" label="Prepaid release" />
+      <SchedulerStatus orgId={actor.orgId} job="amortisation" label="Prepaid release" meanwhile="Until it is switched on, open each item and press Release every month." />
 
       {/*
         ⭐ THE REVIEW COUNTER IS THE WHOLE DESIGN (§11.2).

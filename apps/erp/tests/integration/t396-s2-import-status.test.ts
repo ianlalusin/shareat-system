@@ -132,7 +132,7 @@ describe('S2-1 never run', () => {
     const html = await renderPageAs(f, f.admin);
     expect(html).toMatch(/morning[^<]*import/i);
     expect(html).toMatch(/never run/i);
-    expect(html).toContain('Ask whoever looks after the server to switch it on.');
+    expect(html).toContain('Until it is switched on, press New sales day to enter each day yourself.');
     expect(html).not.toContain('npm run');
     expect(html).not.toContain('month-end');
   }, 30_000);

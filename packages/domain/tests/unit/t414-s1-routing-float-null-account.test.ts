@@ -10,7 +10,7 @@ import { routeExpense, type RoutingPayment } from '../../src/expenses/routing';
  * which `approve.ts` reads as "the expense's store"). A cash leg naming neither still refuses (routing.ts:166).
  *
  * MUTANT M4 (routing drops the party on the null-account path) turns the party asserts red.
- * Red on HEAD: the null-account leg returns the "names no money account" refusal.
+ * Red on HEAD: the null-account leg returns the "does not say where the money came from" refusal.
  */
 const cash = (over: Partial<RoutingPayment>): RoutingPayment => ({
   method: 'cash',
@@ -52,7 +52,7 @@ describe('T-414 I4 - a cash leg that names a cash request and no money account',
     const r = route([cash({})], '600.00');
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.reason).toMatch(/names no money account/);
+    expect(r.reason).toMatch(/does not say where the money came from/);
   });
 
   it('control: the existing path (staff-float account + request) is unchanged', () => {

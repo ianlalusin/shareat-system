@@ -111,10 +111,17 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
               <input type="hidden" name="storeId" value={storeId} />
               <section className="grid gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <span className={LABEL}>Store</span>
+                  {/* T-589 B8 G6: with the store switcher above, the store is named once; this field then only names the POS store. */}
+                  <span className={LABEL}>{stores.length > 1 ? 'POS store' : 'Store'}</span>
                   <p className="rounded border border-neutral-300 bg-neutral-50 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
-                    {stores.find((s) => s.id === storeId)?.name} ({stores.find((s) => s.id === storeId)?.code}) · POS:{' '}
-                    {link.posStoreName}
+                    {stores.length > 1 ? (
+                      link.posStoreName
+                    ) : (
+                      <>
+                        {stores.find((s) => s.id === storeId)?.name} ({stores.find((s) => s.id === storeId)?.code}) · POS:{' '}
+                        {link.posStoreName}
+                      </>
+                    )}
                   </p>
                 </div>
                 <Field label="Business date" rule={SALES_DAY_IMPORT_RULES.businessDate}>
@@ -142,7 +149,7 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
                 {/* ⭐ No orgId and no "acting as" — both come from the session now (T-138). */}
                 <input type="hidden" name="storeId" value={storeId} />
                 <SalesDayForm
-                  storeLabel={`${stores.find((s) => s.id === storeId)?.name} (${stores.find((s) => s.id === storeId)?.code})`}
+                  storeLabel={stores.length > 1 ? undefined : `${stores.find((s) => s.id === storeId)?.name} (${stores.find((s) => s.id === storeId)?.code})`}
                   businessDate={toBusinessDate()}
                   dateEditable
                   dateField={

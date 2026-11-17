@@ -772,6 +772,8 @@ html { scrollbar-gutter: stable; }
   }
   /* A link-only action needs no "Actions" heading; a form action still needs its field label. */
   [data-phone-table-root] [data-card-slot="actions"]:has(> a):not(:has(:is(input, select, textarea, button)))::before { content: none; }
+  /* T-589 B8: a form that spans several columns is labelled by its own fields; the joined column names ("Quantity · Cost per unit · Value · Count") are not a heading. */
+  [data-phone-table-root] [data-card-slot="actions"][colspan]::before { content: none; }
   [data-phone-table-root] tr:not([data-card-expanded]) > [data-card-slot="extra"] { display: none !important; }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr > [data-card-toggle-cell] {
     display: block; position: relative; z-index: 10; grid-column: -2 / -1; grid-row: 1 / span 2; align-self: center;

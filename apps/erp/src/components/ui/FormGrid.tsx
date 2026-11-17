@@ -97,8 +97,11 @@ export function Field({ label, hint, span, width, className, rule, children }: F
     <>
       {/* T-448: the hint is a (?) beside the label, not a line under it, so neighbouring controls line up. */}
       <span className="erp-field-label flex items-center text-sm font-medium leading-5 text-ink">
-        {label}
-        {rule && rule.optional !== true ? <span aria-hidden="true" className="ml-0.5 text-danger">*</span> : null}
+        {/* T-589 B8 G7: one flex item, so a label that wraps keeps its asterisk beside its last word. */}
+        <span>
+          {label}
+          {rule && rule.optional !== true ? <span aria-hidden="true" className="ml-0.5 text-danger">*</span> : null}
+        </span>
         {hint !== undefined && hint !== null && hint !== false && (
           <HelpTip label={typeof label === 'string' ? label : undefined}>{hint}</HelpTip>
         )}
