@@ -118,7 +118,8 @@ const INACTIVE: CheckCtx = {
   registerBand: () => () => {},
 };
 
-export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState): CheckCtx {
+/** `pointerOnly` (T-589 B5): a page that already prints every business-rule sentence beside its controls gets a pointer, never the sentences again. */
+export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState, pointerOnly = false): CheckCtx {
   if (!state.active) return INACTIVE;
   const results = new Map<string, FieldCheck>();
   const failing: string[] = [];
@@ -141,7 +142,9 @@ export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState
       ? null
       : blockerSentences.length === 0
         ? `To save, ${fieldPart}`
-        : `To save: ${[fieldPart, ...blockerSentences].filter(Boolean).join(' ')}`;
+        : pointerOnly
+          ? 'To save, fix what is marked above.'
+          : `To save: ${[fieldPart, ...blockerSentences].filter(Boolean).join(' ')}`;
   return {
     active: true,
     blocked: failing.length > 0 || blockerSentences.length > 0,

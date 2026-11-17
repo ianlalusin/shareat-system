@@ -243,9 +243,6 @@ export default async function UserAccessPage({
                         also {positionProvenanceLine(source)}
                       </span>
                     ))}
-                    <span className="block font-mono text-xs text-neutral-500 dark:text-neutral-400">
-                      {g.grantName}
-                    </span>
                   </span>
                   {revocable ? (
                     <CheckedForm rules={ADMIN_GRANT_REVOKE_RULES} action={setCapabilityGrantAction} className="flex items-center gap-2">
@@ -340,9 +337,6 @@ export default async function UserAccessPage({
                   <span>
                     {capabilityTitle(g.grantName)} — revoked{' '}
                     {g.revokedAt ? formatBusinessDateTime(g.revokedAt, { dateStyle: 'long' }) : null}
-                  </span>
-                  <span className="block font-mono text-xs text-neutral-500 dark:text-neutral-400">
-                    {g.grantName}
                   </span>
                   <span className="block text-neutral-500 dark:text-neutral-400">
                     {g.grantSource === 'position'
@@ -532,7 +526,6 @@ function GrantPicker({ personId, offerable }: { personId: string; offerable: rea
                 <input type="checkbox" name="capability" value={c} className="mt-0.5" />
                 <span>
                   <span>{capabilityTitle(c)}</span>
-                  <span className="block font-mono text-xs text-neutral-500 dark:text-neutral-400">{c}</span>
                 </span>
               </label>
             ))}

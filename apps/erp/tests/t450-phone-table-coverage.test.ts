@@ -59,7 +59,7 @@ describe('T-450 entire ERP table rollout', () => {
     expect(items).toContain('data-card-title="Item" data-card-subtitle="Kind" data-card-keys="Code"');
     expect(items).not.toContain('data-card-toggle');
     const css = read('apps/erp/src/app/globals.css');
-    expect(css).toContain('grid-template-columns: 44px minmax(0, 1fr) auto');
+    expect(css).toContain('grid-template-columns: 44px minmax(min(9rem, 100%), 1fr) auto');
     expect(css).toContain('tr:not([data-card-expanded]) > [data-card-slot="extra"]');
     expect(css).toContain('[data-phone-table-root] [data-card-toggle-cell] { display: none; }');
     expect(read('docs/ERP-UI-PATTERNS.md')).toContain('FormGrid, Field, FormSection');

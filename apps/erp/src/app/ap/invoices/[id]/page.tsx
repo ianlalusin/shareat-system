@@ -422,6 +422,7 @@ return (
         <CheckedForm
           rules={INVOICE_VERIFY_RULES}
           action={verifyInvoiceAction}
+          pointerSummary
           className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
         >
           <input type="hidden" name="invoiceId" value={invoice.id} />
@@ -519,7 +520,7 @@ return (
                     <summary className="inline-flex min-h-[44px] cursor-pointer items-center px-1 text-sm font-medium">
                       Void this payment
                     </summary>
-                    <CheckedForm rules={PAYMENT_VOID_RULES} action={voidPaymentAction} className="mt-2 space-y-3">
+                    <CheckedForm rules={PAYMENT_VOID_RULES} action={voidPaymentAction} quietSummary className="mt-2 space-y-3">
                       <input type="hidden" name="paymentId" value={p.paymentId} />
                       <input type="hidden" name="supplierId" value={p.supplierId} />
                       <input type="hidden" name="invoiceId" value={invoice.id} />
@@ -623,7 +624,7 @@ return (
       )}
 
       {invoice.status !== 'voided' && (
-        <CheckedForm rules={INVOICE_VOID_RULES} action={voidInvoiceAction} className="flex flex-wrap items-end gap-3 rounded-lg border border-danger p-4 text-sm gap-y-2">
+        <CheckedForm rules={INVOICE_VOID_RULES} action={voidInvoiceAction} quietSummary className="flex flex-wrap items-end gap-3 rounded-lg border border-danger p-4 text-sm gap-y-2">
           <input type="hidden" name="invoiceId" value={invoice.id} />
           <Field label="Void reason" rule={INVOICE_VOID_RULES.reason}>
             <Input {...nativeAttrs(INVOICE_VOID_RULES.reason)} className="w-full" />

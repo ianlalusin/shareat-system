@@ -486,6 +486,12 @@ export async function storeNamesOf(tx: Tx, orgId: string): Promise<Map<string, s
   return new Map(rows.map((r) => [String(r.id), String(r.name)]));
 }
 
+/** Every account of the org's chart, by code, so a sentence can say `1400 · Prepaid expenses` and not a bare number. */
+export async function accountNamesOf(tx: Tx, orgId: string): Promise<Map<string, string>> {
+  const rows = (await tx.execute(sql`select code, name from accounts where org_id = ${orgId}`)) as unknown as Record<string, string>[];
+  return new Map(rows.map((r) => [String(r.code), String(r.name)]));
+}
+
 export interface OpeningLine {
   entryId: string;
   entryDate: string;

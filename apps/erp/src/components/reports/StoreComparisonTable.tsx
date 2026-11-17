@@ -37,12 +37,12 @@ export function StoreComparisonTable({ stores }: { stores: StoreComparisonColumn
 
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-      <table className="w-full min-w-[560px] border-collapse text-sm">
+      <table data-card-keys={stores.map((s) => s.storeName).join('|')} className="w-full min-w-[560px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
             <th className="px-3 py-2 font-medium">Figure</th>
             {stores.map((s) => (
-              <th key={s.storeId} className="px-3 py-2 text-right font-medium">
+              <th key={s.storeId} data-card-heading={s.storeName} className="px-3 py-2 text-right font-medium">
                 {s.storeName}
                 <span className="block text-xs font-normal text-neutral-500 dark:text-neutral-400">
                   {s.openingLabel}

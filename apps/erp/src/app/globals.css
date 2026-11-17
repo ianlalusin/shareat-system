@@ -699,17 +699,17 @@ html { scrollbar-gutter: stable; }
     border: 1px solid var(--surface-border); border-radius: 0.75rem;
   }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"] {
-    position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr);
+    position: relative; display: grid; grid-template-columns: 44px minmax(min(9rem, 100%), 1fr);
     column-gap: 0.625rem; align-items: start;
   }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-keys] {
-    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-columns: 44px minmax(min(9rem, 100%), 1fr) auto;
   }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-extra]:not([data-card-has-keys]) {
-    grid-template-columns: 44px minmax(0, 1fr) 52px;
+    grid-template-columns: 44px minmax(min(9rem, 100%), 1fr) 52px;
   }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-extra][data-card-has-keys] {
-    grid-template-columns: 44px minmax(0, 1fr) auto 52px;
+    grid-template-columns: 44px minmax(min(9rem, 100%), 1fr) auto 52px;
   }
   [data-phone-table-root] tr[data-card-kind="summary"]::before {
     content: attr(data-card-avatar) / ""; grid-column: 1; grid-row: 1 / span 2;
@@ -720,10 +720,10 @@ html { scrollbar-gutter: stable; }
   [data-phone-table-root] tr[data-card-has-image]::before { visibility: hidden; }
   /* T-589 B4a: a name with no letters in it (an account number) has no initials, so no round avatar, and the card closes up. */
   [data-phone-table-root] tr[data-card-kind="summary"]:not([data-card-avatar]):not([data-card-has-image])::before { content: none; display: none; }
-  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"]:not([data-card-avatar]):not([data-card-has-image]) { grid-template-columns: 0 minmax(0, 1fr); column-gap: 0; }
-  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"][data-card-has-keys]:not([data-card-avatar]):not([data-card-has-image]) { grid-template-columns: 0 minmax(0, 1fr) auto; }
-  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"][data-card-has-extra]:not([data-card-has-keys]):not([data-card-avatar]):not([data-card-has-image]) { grid-template-columns: 0 minmax(0, 1fr) 52px; }
-  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"][data-card-has-extra][data-card-has-keys]:not([data-card-avatar]):not([data-card-has-image]) { grid-template-columns: 0 minmax(0, 1fr) auto 52px; }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"]:not([data-card-avatar]):not([data-card-has-image]) { grid-template-columns: 0 minmax(min(9rem, 100%), 1fr); column-gap: 0; }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"][data-card-has-keys]:not([data-card-avatar]):not([data-card-has-image]) { grid-template-columns: 0 minmax(min(9rem, 100%), 1fr) auto; }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"][data-card-has-extra]:not([data-card-has-keys]):not([data-card-avatar]):not([data-card-has-image]) { grid-template-columns: 0 minmax(min(9rem, 100%), 1fr) 52px; }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"][data-card-has-extra][data-card-has-keys]:not([data-card-avatar]):not([data-card-has-image]) { grid-template-columns: 0 minmax(min(9rem, 100%), 1fr) auto 52px; }
   /* A footer / "Total" row is a bar of label + figure pairs, not a record: no avatar, no chevron, empty cells dropped. */
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="total"] {
     display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; background: var(--workspace-stripe); font-weight: 600; font-variant-numeric: tabular-nums;
@@ -747,12 +747,12 @@ html { scrollbar-gutter: stable; }
      customer's group), and a two-line max-height sliced that line in half over the subtitle. Grid rows grow. */
   [data-phone-table-root] [data-card-slot="title"] {
     grid-column: 2; grid-row: 1; font-size: 1rem; font-weight: 600; line-height: 1.4;
-    min-width: 0; white-space: normal !important; overflow: visible; overflow-wrap: anywhere;
+    min-width: 0; white-space: normal !important; overflow: visible; overflow-wrap: break-word; word-break: normal;
   }
   /* T-589 B4a: the subtitle wraps too. One ellipsised line cut "Internal — eliminates, Dem…" and a room name to "Main stoc". */
   [data-phone-table-root] [data-card-slot="subtitle"] {
     grid-column: 2; grid-row: 2; min-width: 0; color: var(--muted); font-size: 0.75rem; line-height: 1.4;
-    overflow: visible; white-space: normal !important; overflow-wrap: anywhere;
+    overflow: visible; white-space: normal !important; overflow-wrap: break-word; word-break: normal;
   }
   [data-phone-table-root] [data-card-slot="key"] {
     position: relative; z-index: 10; grid-column: 3; grid-row: 1;
@@ -803,7 +803,7 @@ html { scrollbar-gutter: stable; }
   [data-phone-table-root] table[data-phone-cards] a { display: inline-flex; align-items: center; overflow-wrap: anywhere; }
   [data-phone-table-root] [data-card-slot="title"] a,
   [data-phone-table-root] [data-card-slot="key"] a { min-height: 0 !important; }
-  [data-phone-table-root] [data-card-slot="title"] a { display: inline; text-decoration: none; }
+  [data-phone-table-root] [data-card-slot="title"] a { display: inline; text-decoration: none; overflow-wrap: break-word; }
   [data-phone-table-root] table[data-phone-cards] :is(button, select, input, textarea) { box-sizing: border-box; }
   [data-phone-table-root] table[data-phone-cards] form { min-width: 0; max-width: 100%; flex-wrap: wrap; }
   [data-phone-table-root] table[data-phone-cards] :is(.truncate, .text-ellipsis, .line-clamp-1, .line-clamp-2) {
@@ -814,6 +814,16 @@ html { scrollbar-gutter: stable; }
   }
   [data-phone-table-root] .catalogue-table { max-height: none; border: 0; background: transparent; }
   [data-phone-table-root] .catalogue-table thead th { position: static; }
+  /* T-589 B5: the card measures itself. A status pill (Open — no lines counted yet) wraps at words like the name. */
+  [data-phone-table-root] table[data-phone-cards] { container-type: inline-size; }
+  [data-phone-table-root] [data-card-slot] :is(.rounded-full, [class*="rounded-full"]) { overflow-wrap: break-word; word-break: normal; }
+  /* T-589 B5: when the card is narrow the figures take a row of their own under the name, so the name keeps its width. */
+  @container (max-width: 24rem) {
+    [data-phone-table-root] [data-card-slot="key"],
+    [data-phone-table-root] [data-card-slot="key"][data-card-key-order="2"] {
+      grid-column: 2 / -1; grid-row: auto; text-align: left !important; max-width: 100%; white-space: normal !important; overflow-wrap: break-word;
+    }
+  }
 }
 
 /* T-448: a named, keyboard-scrollable summary strip becomes a grid when space permits.

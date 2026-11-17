@@ -196,7 +196,7 @@ function hiddenFieldsOf(formHtml: string): HiddenField[] {
 }
 
 function rowsCarryingCapability(html: string): string[] {
-  return liBlocks(html).filter((li) => li.includes(`>${CAP}<`));
+  return liBlocks(html).filter((li) => li.includes(`>${CAP_TITLE}<`));
 }
 
 let UserAccessPage: typeof import('../src/app/admin/users/[personId]/page').default;
