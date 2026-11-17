@@ -3,8 +3,7 @@ import { formatMoney, money } from '@shareat/core/money';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listCategoriesGrouped, withOrgPrincipal } from './lib';
 import { requireSession } from '../../lib/session';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, Button, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Expenses — Shareat System' };
@@ -44,20 +43,18 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
 
   return (
     <Page density="table">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Expenses</h1>
-          <PageDescription>
-            Money spent on things that are not stock: record it, approve it, or void it.
-          </PageDescription>
-        </div>
-        <a
-          href={`/expenses/new?${carry}`}
-          className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
-        >
-          New expense
-        </a>
-      </div>
+      <PageHeader
+        title="Expenses"
+        description="Money spent on things that are not stock: record it, approve it, or void it."
+        actions={
+          <a
+            href={`/expenses/new?${carry}`}
+            className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
+          >
+            New expense
+          </a>
+        }
+      />
 
       <form
         method="GET"

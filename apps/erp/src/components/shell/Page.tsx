@@ -121,7 +121,8 @@ export interface PageHeaderProps {
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-      <div className="min-w-0 flex-1">
+      {/* basis-[16rem]: without a basis the row never wraps and a phone squeezes the title (T-589 B6). */}
+      <div className="min-w-0 flex-1 basis-[16rem]">
         <h1 className="text-2xl font-semibold">{title}</h1>
         {description && <PageDescription className="mt-1">{description}</PageDescription>}
       </div>

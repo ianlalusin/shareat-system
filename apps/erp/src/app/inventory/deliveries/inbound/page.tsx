@@ -26,7 +26,7 @@ export default async function InboundShipmentsPage({
   return (
     <Page density="table" className="space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
+        <div className="min-w-0 flex-1 basis-[16rem]">
           <h1 className="text-2xl font-semibold">Shipments to receive</h1>
           <PageDescription className="mt-1">
             Goods another company in your group has sent you. Count what arrived, line by line, and receive it: your stock goes up and the
