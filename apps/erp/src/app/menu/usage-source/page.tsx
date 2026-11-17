@@ -8,7 +8,7 @@ import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
-import { Badge, Banner, Button, Checkbox, Field, FlashBanner, FormGrid, Input, Select, Table, Td, Th } from '@/components/ui';
+import { Badge, Banner, Button, Checkbox, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
 import { linkItemAction, seedLinkAction, switchSourceAction, unlinkItemAction } from './actions';
 import { loadUsageSourcePage, type UsageSourcePageData } from './lib';
 import { storesInScope, withOrgPrincipal } from '../lib';
@@ -130,7 +130,77 @@ function History({ data }: { data: UsageSourcePageData }) {
 function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId: string; canLink: boolean }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold">Links</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Links</h2>
+        {/* T-589 B7: adding a link is a button here, not two forms under the table. Neither keeps typing, so neither opens on load. */}
+        {canLink && (
+          <div className="flex flex-wrap items-center gap-2">
+            {data.unlinked.length > 0 && (
+              <FormModal trigger="+ Link from the POS map" title="Link from the POS map" size="md">
+                <form action={seedLinkAction} className="space-y-3">
+                  <p className="text-sm text-muted">Copies the POS item map exactly: its room, and, if the menu item has no stock rule yet, its rule.</p>
+                  <input type="hidden" name="storeId" value={storeId} />
+                  <FormGrid>
+                    <Field label="POS item" className="text-sm">
+                      <Select name="posItemKey" className="w-full">
+                        {data.unlinked.map((m) => (
+                          <option key={m.posItemKey} value={m.posItemKey}>
+                            {m.posItemName === m.posItemKey ? m.posItemKey : `${m.posItemName} (${m.posItemKey})`}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label="Menu item" className="text-sm">
+                      <Select name="variantId" className="w-full">
+                        {data.variants.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </FormGrid>
+                  <Button type="submit" variant="secondary">
+                    Seed from map
+                  </Button>
+                </form>
+              </FormModal>
+            )}
+            <FormModal trigger="+ Link to a menu item" title="Link to a menu item that already has a stock rule" size="md">
+              <form action={linkItemAction} className="space-y-3">
+                <input type="hidden" name="storeId" value={storeId} />
+                <FormGrid>
+                  <Field label="POS item code" className="text-sm">
+                    <Input name="posItemKey" className="w-full" />
+                  </Field>
+                  <Field label="Menu item" className="text-sm">
+                    <Select name="variantId" className="w-full">
+                      {data.variants.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Room (empty = the default room)" className="text-sm">
+                    <Select name="locationId" className="w-full" defaultValue="">
+                      <option value="">The default room</option>
+                      {data.rooms.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </FormGrid>
+                <Button type="submit" variant="secondary">
+                  Save link
+                </Button>
+              </form>
+            </FormModal>
+          </div>
+        )}
+      </div>
       <p className="text-sm text-muted">
         A link says &quot;this POS item at this store is that menu item&quot;. Once the store is switched, a linked item uses the menu item&apos;s stock
         rule; an unlinked item keeps using its POS item map.
@@ -175,71 +245,7 @@ function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId:
         </Table>
       )}
 
-      {canLink ? (
-        <>
-          {data.unlinked.length > 0 && (
-            <form action={seedLinkAction} className="space-y-3 rounded-[14px] border border-surface-border p-4">
-              <h3 className="text-sm font-semibold">Link from the POS map</h3>
-              <p className="text-sm text-muted">Copies the POS item map exactly: its room, and, if the menu item has no stock rule yet, its rule.</p>
-              <input type="hidden" name="storeId" value={storeId} />
-              <FormGrid>
-                <Field label="POS item" className="text-sm">
-                  <Select name="posItemKey" className="w-full">
-                    {data.unlinked.map((m) => (
-                      <option key={m.posItemKey} value={m.posItemKey}>
-                        {m.posItemName === m.posItemKey ? m.posItemKey : `${m.posItemName} (${m.posItemKey})`}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Menu item" className="text-sm">
-                  <Select name="variantId" className="w-full">
-                    {data.variants.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </FormGrid>
-              <Button type="submit" variant="secondary">
-                Seed from map
-              </Button>
-            </form>
-          )}
-          <form action={linkItemAction} className="space-y-3 rounded-[14px] border border-surface-border p-4">
-            <h3 className="text-sm font-semibold">Link to a menu item that already has a stock rule</h3>
-            <input type="hidden" name="storeId" value={storeId} />
-            <FormGrid>
-              <Field label="POS item code" className="text-sm">
-                <Input name="posItemKey" className="w-full" />
-              </Field>
-              <Field label="Menu item" className="text-sm">
-                <Select name="variantId" className="w-full">
-                  {data.variants.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Room (empty = the default room)" className="text-sm">
-                <Select name="locationId" className="w-full" defaultValue="">
-                  <option value="">The default room</option>
-                  {data.rooms.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="secondary">
-              Save link
-            </Button>
-          </form>
-        </>
-      ) : (
+      {!canLink && (
         <p className="text-sm text-muted">You can read the links but not change them.</p>
       )}
     </section>

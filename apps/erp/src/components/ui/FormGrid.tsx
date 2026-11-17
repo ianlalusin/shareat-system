@@ -26,6 +26,7 @@ import { Children, Fragment, isValidElement, type ReactNode } from 'react';
 import type { FieldRule } from '@shareat/domain/field-rules';
 import { FieldCheck } from '@/components/forms/FieldCheck';
 import { HelpTip } from './HelpTip';
+import { Select } from './Select';
 
 export interface FormGridProps {
   /** T-445: content-sized fields wrap within their container; existing grids remain unchanged. */
@@ -80,11 +81,13 @@ function inferredWidth(children: ReactNode): FieldProps['width'] {
     && child.props.type !== 'hidden' && (child.props.name || child.props.type || child.props.inputMode));
   if (!isValidElement<{ type?: string; name?: string; inputMode?: string }>(control)) return undefined;
   const { type, name = '', inputMode } = control.props;
+  // T-589 B7: a select grows to its longest option (Select's min-w); a 12rem "code" cap would cut it, so it never infers 'code'.
+  const isSelect = control.type === Select || control.type === 'select';
   if (/^(date|month|time)$/.test(type ?? '')) return 'date';
   if (/^(baseUnit|purchaseUnit|unit|quantity|creditTermsDays|days|year|month|vatPercent)$/.test(name)) return 'short';
-  if (/amount|rate|price|cost|total|fee|balance|limit|deposit|gross|deduction|principal|interest/i.test(name)) return 'code';
-  if (/code|reference|invoiceNo/i.test(name)) return 'code';
-  if (/kind|vatType|customerGroup/i.test(name)) return 'code';
+  if (/amount|rate|price|cost|total|fee|balance|limit|deposit|gross|deduction|principal|interest/i.test(name) && !isSelect) return 'code';
+  if (/code|reference|invoiceNo/i.test(name) && !isSelect) return 'code';
+  if (/kind|vatType|customerGroup/i.test(name) && !isSelect) return 'code';
   if (/description|notes|reason|address/i.test(name)) return 'long';
   if (type === 'number' || inputMode === 'numeric' || inputMode === 'decimal') return 'short';
   return undefined;
