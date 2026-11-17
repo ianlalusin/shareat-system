@@ -187,9 +187,11 @@ describe('T-587 S1 renames - the sidebar label and the screen title agree', () =
     ['apps/erp/src/app/settings/sales-channels/page.tsx', 'Sales channels (walk-in, Grab, Foodpanda)', 'Sales channels'],
   ])('%s: h1 and title use "%s", not "%s"', (file, fresh, old) => {
     const src = read(file);
-    expect(src).toContain(`<h1 className="text-2xl font-semibold">${fresh}</h1>`);
+    // T-586: a page that passes its heading to <Page title=...> has no literal <h1> in its own source.
+    const heading = (t: string) => src.includes(`<h1 className="text-2xl font-semibold">${t}</h1>`) || src.includes(`title="${t}"`);
+    expect(heading(fresh)).toBe(true);
     expect(src).toContain(`title: '${fresh} —`);
-    expect(src).not.toContain(`<h1 className="text-2xl font-semibold">${old}</h1>`);
+    expect(heading(old)).toBe(false);
     expect(src).not.toContain(`title: '${old} —`);
   });
 

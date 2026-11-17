@@ -2,7 +2,7 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { setOrganizationIdentityAction } from './actions';
 import { identityView } from './lib';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { NAV_LINK } from '@/components/action-link';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -61,24 +61,21 @@ export default async function OrganizationSettingsPage({
   ].filter((x): x is string => x !== null);
 
   return (
-    <Page density="table">
-      <div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/settings" className="underline">
-            Settings
-          </a>{' '}
-          / Organisation
-        </p>
-        <h1 className="text-2xl font-semibold">Organisation</h1>
-        <PageDescription>
+    <Page
+      density="table"
+      crumb={<><a href="/settings" className={NAV_LINK}>Settings</a> / Organisation</>}
+      title="Organisation"
+      description={
+        <>
           The registered identity the books are kept under. It appears on documents printed from this
           system. Each store&apos;s own address and tax registration code are on{' '}
           <a href="/admin/stores" className="underline">
             its store
           </a>
           .
-        </PageDescription>
-      </div>
+        </>
+      }
+    >
 
       <FlashBanner flash={sp} />
 

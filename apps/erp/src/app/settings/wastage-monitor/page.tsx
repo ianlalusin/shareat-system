@@ -3,9 +3,9 @@ import { setWastageMonitorAction } from './actions';
 import { listActivePersons, listStores, monitorView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { NAV_LINK } from '@/components/action-link';
 import { EditableRecord } from '@/components/forms';
-import { Banner, Button, Field, FlashBanner, FormGrid, Select } from '@/components/ui';
+import { Banner, Button, EmptyState, Field, FlashBanner, FormGrid, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { WASTAGE_MONITOR_EDIT } from './typed-forms';
@@ -45,6 +45,24 @@ interface SearchParams {
  * allocation is an attribution; back-filling one would assert a decision nobody made. A number
  * that stubbornly does not drop needs its sentence, or it reads as a bug.
  */
+const CRUMB = (
+  <>
+    <a href="/settings" className={NAV_LINK}>
+      Settings
+    </a>{' '}
+    / Wastage Monitor
+  </>
+);
+
+const DESCRIPTION = (
+  <>
+    Who answers for a wasted or refunded order at this store when nobody else is named. A
+    reviewed wastage is created in this person&apos;s name, and{' '}
+    <strong>if it is still unresolved after 15 days it is charged to them automatically</strong>
+    .
+  </>
+);
+
 export default async function WastageMonitorSettingsPage({
   searchParams,
 }: {
@@ -59,12 +77,8 @@ export default async function WastageMonitorSettingsPage({
 
   if (!storeId) {
     return (
-      <Page density="table" className="space-y-4">
-        <Crumb />
-        <h1 className="text-2xl font-semibold">Wastage Monitor</h1>
-        <PageDescription>
-          This organisation has no stores yet. A Monitor belongs to a store.
-        </PageDescription>
+      <Page density="table" className="space-y-4" crumb={CRUMB} title="Wastage Monitor" description={DESCRIPTION}>
+        <EmptyState illustration="magnifier" title="No stores yet" body="Create a store under Stores first. A Monitor belongs to a store." />
       </Page>
     );
   }
@@ -75,17 +89,7 @@ export default async function WastageMonitorSettingsPage({
   ]);
 
   return (
-    <Page density="table">
-      <div>
-        <Crumb />
-        <h1 className="text-2xl font-semibold">Wastage Monitor</h1>
-        <PageDescription>
-          Who answers for a wasted or refunded order at this store when nobody else is named. A
-          reviewed wastage is created in this person&apos;s name, and{' '}
-          <strong>if it is still unresolved after 15 days it is charged to them automatically</strong>
-          .
-        </PageDescription>
-      </div>
+    <Page density="table" crumb={CRUMB} title="Wastage Monitor" description={DESCRIPTION}>
 
       <FilterRow>
         <label className="text-sm">
@@ -154,22 +158,7 @@ export default async function WastageMonitorSettingsPage({
       >
         <FormGrid className="text-sm">
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>
-            <Select
-              name="personId"
-              defaultValue={monitor?.personId ?? ''}
-              className="mt-1 w-full"
-              aria-label="Wastage Monitor"
-            >
-              {/* ⭐ A real choice, not a placeholder: picking it CLEARS the assignment. The column is
-                  nullable on purpose — a Monitor who leaves must be removable, and a screen that
-                  could only ever set one would make a wrong assignment permanent. */}
-              <option value="">Nobody (the store absorbs it after 15 days)</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.displayName}
-                </option>
-              ))}
-            </Select>
+            <MonitorSelect defaultValue={monitor?.personId ?? ''} people={people} />
           </Field>
         </FormGrid>
       </EditableRecord> ) : (
@@ -179,22 +168,7 @@ export default async function WastageMonitorSettingsPage({
           <input type="hidden" name="personLabel" value="" />
           <FormGrid className="text-sm">
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Monitor</span>}>
-            <Select
-              name="personId"
-              defaultValue=""
-              className="mt-1 w-full"
-              aria-label="Wastage Monitor"
-            >
-              {/* ⭐ A real choice, not a placeholder: picking it CLEARS the assignment. The column is
-                  nullable on purpose — a Monitor who leaves must be removable, and a screen that
-                  could only ever set one would make a wrong assignment permanent. */}
-              <option value="">Nobody (the store absorbs it after 15 days)</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.displayName}
-                </option>
-              ))}
-            </Select>
+            <MonitorSelect defaultValue="" people={people} />
           </Field>
         </FormGrid>
           <Button type="submit" variant="primary">
@@ -215,13 +189,18 @@ export default async function WastageMonitorSettingsPage({
   );
 }
 
-function Crumb() {
+function MonitorSelect({ defaultValue, people }: { defaultValue: string; people: { id: string; displayName: string }[] }) {
   return (
-    <p className="text-xs text-neutral-500 dark:text-neutral-400">
-      <a href="/settings" className="underline">
-        Settings
-      </a>{' '}
-      / Wastage Monitor
-    </p>
+    <Select name="personId" defaultValue={defaultValue} className="mt-1 w-full" aria-label="Wastage Monitor">
+      {/* ⭐ A real choice, not a placeholder: picking it CLEARS the assignment. The column is
+          nullable on purpose — a Monitor who leaves must be removable, and a screen that
+          could only ever set one would make a wrong assignment permanent. */}
+      <option value="">Nobody (the store absorbs it after 15 days)</option>
+      {people.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.displayName}
+        </option>
+      ))}
+    </Select>
   );
 }
