@@ -99,10 +99,10 @@ export default async function NewAssetPage({
           <h2 className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
             When it goes into service
           </h2>
-          <Field label="Goes into service">
+          <Field label="Goes into service" hint="When the store opens, or on the acquisition date if it already has. 'On the acquisition date' counts even if the store has not opened yet.">
             <Select name="inServiceMode" defaultValue="" className="w-full">
-              <option value="">When the store opens (or on the acquisition date if it already has)</option>
-              <option value="acquired">On the acquisition date — even if the store has not opened yet</option>
+              <option value="">When the store opens</option>
+              <option value="acquired">On the acquisition date</option>
               <option value="set">On a date I choose</option>
             </Select>
           </Field>

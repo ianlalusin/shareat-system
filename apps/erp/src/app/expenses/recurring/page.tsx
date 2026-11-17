@@ -23,7 +23,7 @@ import {
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { Banner, Button, FlashBanner, FormGrid, Input } from '@/components/ui';
+import { Banner, Button, FlashBanner, FormGrid, FormModal, Input } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -82,15 +82,35 @@ export default async function RecurringExpensesPage({
 
   return (
     <Page density="table">
-      <div>
-        <Link href="/expenses" className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
-          ← Expenses
-        </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Recurring expenses</h1>
-        <PageDescription>
-          The fixed bills: rent, internet, utilities, subscriptions, leases. A store that forgets
-          rent pays it late and the month closes wrong.
-        </PageDescription>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 basis-[16rem]">
+          <Link href="/expenses" className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
+            ← Expenses
+          </Link>
+          <h1 className="mt-1 text-2xl font-semibold">Recurring expenses</h1>
+          <PageDescription>
+            The fixed bills: rent, internet, utilities, subscriptions, leases. A store that forgets
+            rent pays it late and the month closes wrong.
+          </PageDescription>
+        </div>
+        {/* T-589 B7: adding a template is a header action. The add form keeps nothing typed, so it never opens on load. */}
+        {stores.length > 0 && (
+          <FormModal trigger="+ Add a template" title="Add a template" size="lg">
+            <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+              The amount is a <strong>default</strong>, not the bill. Rent is fixed; electricity is
+              not, so each draft is checked against the real invoice before anyone posts it.{' '}
+              <strong>No payroll templates:</strong> payroll posts its own salaries and its own
+              statutory payments.
+            </p>
+            <TemplateForm
+              storeId={storeId}
+              cats={cats}
+              accounts={accounts}
+              suppliers={suppliers}
+              submitLabel="Save"
+            />
+          </FormModal>
+        )}
       </div>
 
       {/* ⛔ The banner that said "the job is not built" is gone because the job is built. What
@@ -259,23 +279,6 @@ export default async function RecurringExpensesPage({
                 })}
               </div>
             )}
-          </section>
-
-          <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <h2 className="font-medium">Add a template</h2>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              The amount is a <strong>default</strong>, not the bill. Rent is fixed; electricity is
-              not, so each draft is checked against the real invoice before anyone posts it.{' '}
-              <strong>No payroll templates:</strong> payroll posts its own salaries and its own
-              statutory payments.
-            </p>
-            <TemplateForm
-              storeId={storeId}
-              cats={cats}
-              accounts={accounts}
-              suppliers={suppliers}
-              submitLabel="Save"
-            />
           </section>
         </>
       )}
