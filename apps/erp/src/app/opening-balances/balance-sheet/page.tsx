@@ -303,7 +303,7 @@ export default async function OpeningPage({
             <ul className="mt-1 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
               {tie.notChecked.map((n, k) => (
                 <li key={`${n.account}:${k}`}>
-                  {accountLabel(n.account)} — {n.amount} — {n.reason}
+                  {n.accountLabel} — {n.amount} — {n.reason}
                 </li>
               ))}
             </ul>
