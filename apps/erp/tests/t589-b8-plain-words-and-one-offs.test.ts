@@ -51,7 +51,7 @@ describe('G3 - the commissary empty state carries the Link store button', () => 
     const empty = page.slice(page.indexOf('if (!commissaryStoreId)'), page.indexOf('const [{ links, offerings'));
     expect(empty).toContain('<FormModal trigger="+ Link store"');
     expect(empty).toContain('action={upsertLinkAction}');
-    expect(empty).toContain('name="commissaryStoreId"');
+    expect(empty).toContain('COMMISSARY_FIRST_LINK_RULES.commissaryStoreId');
     expect(empty).toContain('<div className="mt-3">'); // MUTANT: drop the wrapper margin -> the button touches the sentence above
   });
 });
