@@ -135,8 +135,9 @@ export async function setSalesChannelActiveAction(fd: FormData): Promise<void> {
 export async function setPlatformCodeAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/settings/sales-channels');
   const storeId = str(fd, 'storeId');
-  const platform = (str(fd, 'platform') || null) as 'grab' | 'foodpanda' | null;
   const code = str(fd, 'code') || null;
+  // T-592 R3: a blank code means "remove", so the hidden platform box is dropped with it (the domain refuses a lone platform).
+  const platform = code ? ((str(fd, 'platform') || null) as 'grab' | 'foodpanda' | null) : null;
   let wrote = false;
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
