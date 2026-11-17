@@ -64,7 +64,7 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
   return (
     <Page density="table">
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
+        <div className="min-w-0 flex-1 basis-[16rem] space-y-2">
           <h1 className="text-2xl font-semibold">Senior citizen / PWD register</h1>
           <PageDescription>
             The per-transaction record required by <strong>RR 5-2017 §5.9</strong> (PWD) and{' '}

@@ -41,7 +41,7 @@ export default async function LiabilitiesPage({
   return (
     <Page density="table">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[16rem]">
           <h1 className="text-2xl font-semibold">Liabilities</h1>
           <PageDescription>
             What the business owes that is not tracked anywhere else. Supplier invoices, loans, wages

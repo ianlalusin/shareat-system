@@ -53,7 +53,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
   return (
     <Page density="table">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[16rem]">
           <h1 className="text-2xl font-semibold">Accounts payable</h1>
           <PageDescription>
             An expense, paid in cash or on credit, can only be recorded once its supplier invoice is

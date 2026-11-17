@@ -181,7 +181,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 126 -> 127, T-568 S1: the Inventory landing's description moved to the shared <PageDescription> component; measured by walking app/.
     // 128 -> 129, T-533 S3: /admin/stores/[id]/pos-preflight carries its <PageDescription>; measured by walking app/.
     // 129 -> 132, T-584: Documents, Issue a document, Document templates; measured by walking app/.
-    expect(count).toBe(132);
+    // 132 -> 131, T-589 B6: /expenses now uses PageHeader, whose own <PageDescription> lives in Page.tsx; re-measured.
+    expect(count).toBe(131);
   });
 });
 
