@@ -31,7 +31,7 @@
  */
 import { auditLogRepo, channelSettlementsRepo, fiscalPeriodsRepo, journalRepo, manilaToday, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
 import { authorize, can, type Actor } from '@shareat/auth';
-import { add, compare, negate, ZERO } from '@shareat/core/money';
+import { add, compare, formatMoney, negate, ZERO } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
 import { postEntry } from '../ledger/post-entry';
 import { requireRequestId } from '../ledger/replay';
@@ -70,6 +70,8 @@ export interface SalesChannelAdminRow {
   readonly platformStoreCode: string | null;
   /** T-564 — bank-name fragments for the payout parser. Stored, not yet read by intake. */
   readonly bankHints: readonly string[];
+  /** T-606: what the channel holds on accounts other than the channel receivable, net (a credit is negative); null when nothing. Presentation for the move button. */
+  readonly offAccountBalance: string | null;
 }
 
 export interface CreateSalesChannelInput {
@@ -264,7 +266,7 @@ export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSale
       const oldAccount = await salesDaysRepo.receivableAccountFor(tx, actor.orgId, old);
       // Never a negative amount on screen: a credit balance is "in its favour".
       const where = `${old}${oldAccount ? ` ${oldAccount.name}` : ''}`;
-      const held = compare(total, ZERO) < 0 ? `has ₱${negate(total)} in its favour on ${where}` : `still has ₱${total} owed on ${where}`;
+      const held = compare(total, ZERO) < 0 ? `has ${formatMoney(negate(total))} in its favour on ${where}` : `still has ${formatMoney(total)} owed on ${where}`;
       throw refuse(
         `updateSalesChannel: channel ${channel.id} still has ${total} on ${old}; its receivable account cannot change.`,
         channel.platform
@@ -283,23 +285,28 @@ export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSale
 }
 
 /**
- * ⭐ **T-606 S4 - "Move to Channel receivable"** (Ian, 18 Nov: "move the foodpanda and grab sales directly"). A delivery-platform channel whose receivable is another account (Lipa's
- * Foodpanda and Grab sat on 1210) gets its balance and its setting moved to the channel receivable in ONE transaction, so the books and the screen can never disagree:
- * `authorize` (`manage_chart_of_accounts`, admin) -> request id -> the channel row LOCKED and re-read -> refuse a channel with no platform -> already on the channel receivable is a no-op
- * -> the balance per store on the OLD account (as the S2 guard reads it) -> one reclass entry, per store Dr 1220 / Cr old (a credit balance the other way), party = the channel, dated TODAY
- * (Manila) when today's month is open, else refused, never a closed period -> the channel's receivable set to the channel receivable -> the audit row. Zero balance: it only switches the account.
- * A second press finds the channel already moved and does nothing. Undoing it is a normal reversal of the entry by an admin (`reverseEntry`); a reversal does not change the setting.
+ * ⭐ **T-606 S4 - "Move to Channel receivable"** (Ian, 18 Nov: "move the foodpanda and grab sales directly"). A delivery-platform channel whose balance sits on another account (Lipa's
+ * Foodpanda and Grab sat on 1210) gets that balance moved to the channel receivable, and its setting switched, in ONE transaction, so the books and the screen can never disagree:
+ * `authorize` FIRST (`manage_chart_of_accounts`, admin; a non-admin learns nothing about whether an id exists) -> the channel row LOCKED and re-read -> refuse a channel with no platform
+ * -> the balance per store on EVERY account other than the channel receivable (exactly what the stranded-balance refusal reads) -> one reclass entry, per store Dr 1220 / Cr that account (a credit balance
+ * the other way), party = the channel, dated TODAY (Manila) when today's month is open, else refused, never a closed period -> the channel's receivable set to the channel receivable -> the audit row.
+ * Zero balance: it only switches the account. Already on the channel receivable with nothing elsewhere: nothing to do.
+ *
+ * ⭐ **It also runs for a channel ALREADY on the channel receivable** whose balance sits elsewhere again (an admin reversed the move entry, an old day was voided, a posting landed during the move):
+ * that leftover is swept with the same entry and audit row. Without it the stranded-balance refusal would tell the user to "move it" while the button was gone.
+ * Each press carries its own request id (minted when the page renders): a real second sweep posts; a replay of the SAME press finds its entry already written (idempotency key) and posts nothing.
+ * Undoing a move is a normal reversal of its entry by an admin (`reverseEntry`); a reversal does not change the setting, and what it puts back on the old account is swept by the next press.
  */
 export async function moveChannelToChannelReceivable(
   tx: Tx,
   actor: Actor,
   input: { channelId: string; requestId: string },
-  /** Tests only: the Manila business date to date the entry by (the screen never passes it). */
+  /** Tests only: the Manila business date to date the entry by (the screen never passes one). */
   today?: string,
 ): Promise<{ moved: boolean; entryId: string | null; total: string }> {
+  await authorize(tx, actor, 'manage_chart_of_accounts', {});
   const seen = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
   if (!seen) throw refuse(`moveChannelToChannelReceivable: channel ${input.channelId} does not exist in this organisation.`, 'That channel no longer exists.');
-  await authorize(tx, actor, 'manage_chart_of_accounts', {});
   const requestId = requireRequestId('moveChannelToChannelReceivable', input.requestId);
   // Under the row lock, so a verify or an edit racing this move reads what it committed; re-read, because a press that queued ahead may already have moved it.
   const channel = await salesDaysRepo.lockChannel(tx, actor.orgId, seen.id);
@@ -311,13 +318,14 @@ export async function moveChannelToChannelReceivable(
     );
   }
   const old = channel.receivableAccountCode;
-  if (old === PLATFORM_RECEIVABLE_CODE) return { moved: false, entryId: null, total: '0.00' };
+  // Every account but the channel receivable: the set the stranded-balance refusal blocks on, so one press clears exactly what it complains about.
+  const balances = await channelSettlementsRepo.partyBalancesOffAccount(tx, actor.orgId, channel.id, PLATFORM_RECEIVABLE_CODE);
+  if (old === PLATFORM_RECEIVABLE_CODE && balances.length === 0) return { moved: false, entryId: null, total: '0.00' };
 
-  const balances = old ? await channelSettlementsRepo.partyBalancesByStore(tx, actor.orgId, channel.id, old) : [];
   let entryId: string | null = null;
   let total = ZERO;
   let entryDate: string | null = null;
-  if (balances.length > 0 && old) {
+  if (balances.length > 0) {
     const clock = today ?? (await manilaToday(tx));
     const open = await fiscalPeriodsRepo.firstOpenDateOnOrAfter(tx, actor.orgId, clock, clock);
     if (open === null || open.shutBy !== null) {
@@ -331,14 +339,15 @@ export async function moveChannelToChannelReceivable(
     }
     entryDate = clock;
     total = add(...balances.map((b) => b.balance));
-    const memo = `${channel.name} receivable moved from ${old} to ${PLATFORM_RECEIVABLE_CODE}`;
+    const from = [...new Set(balances.map((b) => b.accountCode))].join(', ');
+    const memo = `${channel.name} receivable moved from ${from} to ${PLATFORM_RECEIVABLE_CODE}`;
     const party = { partyType: 'channel' as const, partyId: channel.id };
     const lines = balances.flatMap((b) => {
       const owed = compare(b.balance, ZERO) > 0; // a credit balance posts the other way round
       const amount = String(owed ? b.balance : negate(b.balance));
       return [
         { accountCode: PLATFORM_RECEIVABLE_CODE, storeId: b.storeId, debit: owed ? amount : '0', credit: owed ? '0' : amount, ...party, lineMemo: memo },
-        { accountCode: old, storeId: b.storeId, debit: owed ? '0' : amount, credit: owed ? amount : '0', ...party, lineMemo: memo },
+        { accountCode: b.accountCode, storeId: b.storeId, debit: owed ? '0' : amount, credit: owed ? amount : '0', ...party, lineMemo: memo },
       ];
     });
     const posted = await postEntry(tx, {
@@ -351,14 +360,18 @@ export async function moveChannelToChannelReceivable(
       postedBy: actor.personId,
       lines,
     });
+    // A replay of a press whose entry was written (and later reversed): nothing new was posted, so nothing else happens either.
+    if (!posted.created) return { moved: false, entryId: posted.entryId, total: '0.00' };
     entryId = posted.entryId;
   }
-  await salesDaysRepo.updateChannel(tx, actor.orgId, channel.id, {
-    name: channel.name,
-    isRemittedDaily: channel.isRemittedDaily,
-    receivableAccountCode: PLATFORM_RECEIVABLE_CODE,
-    wastageTypeMode: channel.wastageTypeMode,
-  });
+  if (old !== PLATFORM_RECEIVABLE_CODE) {
+    await salesDaysRepo.updateChannel(tx, actor.orgId, channel.id, {
+      name: channel.name,
+      isRemittedDaily: channel.isRemittedDaily,
+      receivableAccountCode: PLATFORM_RECEIVABLE_CODE,
+      wastageTypeMode: channel.wastageTypeMode,
+    });
+  }
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'sales_channel.receivable_moved',
@@ -579,6 +592,11 @@ export async function listSalesChannelsForAdmin(
   input: { storeId: string },
 ): Promise<SalesChannelAdminRow[]> {
   const rows = await salesDaysRepo.listChannels(tx, _actor.orgId, input.storeId);
+  const off = new Map<string, string>();
+  for (const r of rows.filter((c) => c.platform !== null)) {
+    const b = await channelSettlementsRepo.partyBalancesOffAccount(tx, _actor.orgId, r.id, PLATFORM_RECEIVABLE_CODE);
+    if (b.length > 0) off.set(r.id, String(add(...b.map((x) => x.balance))));
+  }
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -591,6 +609,7 @@ export async function listSalesChannelsForAdmin(
     platform: r.platform,
     platformStoreCode: r.platformStoreCode,
     bankHints: r.bankHints,
+    offAccountBalance: off.get(r.id) ?? null,
   }));
 }
 

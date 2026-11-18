@@ -254,7 +254,7 @@ describe('S6b receivable code - only the channel receivable (T-606: by design, n
     const f = await fx(sql, 'stranded', { staff: '10000.00', file: '11000.00', receivable: '1210' });
     expect(Number(await netDebit(sql, f.orgId, '1210')), 'control: the day raised 10,000 on 1210').toBe(10000);
     await sql`update sales_channels set receivable_account_code = '1220' where id = ${f.channelId}`; // the setting changed, the balance did not move
-    expect(await sentenceOf(correct(f, f.admin))).toBe('Foodpanda still has \u20b110000.00 on 1210 Accounts receivable. Move it to Channel receivable in Settings \u203a Sales channels, then approve this file.');
+    expect(await sentenceOf(correct(f, f.admin))).toBe('Foodpanda still has \u20b110,000.00 on 1210 Accounts receivable. Move it to Channel receivable in Settings \u203a Sales channels, then approve this file.');
     expect(await corrections(sql, f.orgId)).toHaveLength(0);
     expect(Number(await netDebit(sql, f.orgId, '1210'))).toBe(10000);
     expect(Number(await netDebit(sql, f.orgId, '1220'))).toBe(0);

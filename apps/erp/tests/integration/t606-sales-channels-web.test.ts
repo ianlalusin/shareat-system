@@ -35,7 +35,7 @@ vi.mock('../../src/lib/session', () => ({
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
 
 import { APP_ROLE, transaction, type Tx } from '@shareat/db';
-import { createSalesChannel, setSalesChannelPlatformCode } from '@shareat/domain';
+import { createSalesChannel, postEntry, setSalesChannelPlatformCode } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { paramsOf } from '../helpers/flash-jar';
 
@@ -128,5 +128,29 @@ describe('T-606 S1 - the edit action and the platform receivable', () => {
     expect(first.get('ok')).toMatch(/Moved\./);
     expect(await receivableOf(id)).toBe('1220');
     expect(paramsOf(await press()).get('ok')).toMatch(/already uses Channel receivable/);
+  });
+  it('the success flash prints the moved amount with its thousands comma, "₱6,000.00", never "₱6000.00" - Mutant: print the raw total -> red', async () => {
+    const { storeId, actor, orgId, channel } = await world('flash');
+    const id = await channel('Foodpanda', '1220');
+    await asOrg(orgId, (tx) => setSalesChannelPlatformCode(tx, actor as never, { channelId: id, platform: 'foodpanda', code: 'FP6000' }));
+    await sql`update sales_channels set receivable_account_code = '1210' where id = ${id}`;
+    // The action dates the move by the real Manila today, so the open period is this month's.
+    const [m] = await sql<{ s: string; e: string }[]>`
+      select to_char(date_trunc('month', now() at time zone 'Asia/Manila'), 'YYYY-MM-DD') s,
+             to_char(date_trunc('month', now() at time zone 'Asia/Manila') + interval '1 month - 1 day', 'YYYY-MM-DD') e`;
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, ${m!.s}, ${m!.e}, 'open')`;
+    await asOrg(orgId, (tx) =>
+      postEntry(tx, {
+        orgId, entryDate: m!.s, sourceType: 'sales_day', sourceId: id, idempotencyKey: uid('t606-flash'), memo: 'Platform sales on 1210', postedBy: actor.personId,
+        lines: [
+          { accountCode: '1210', storeId, debit: '6000.00', partyType: 'channel', partyId: id },
+          { accountCode: '4150', storeId, credit: '6000.00' },
+        ],
+      }),
+    );
+    const { moveChannelReceivableAction } = await import('../../src/app/settings/sales-channels/actions');
+    const flash = paramsOf(await redirectOf(() => moveChannelReceivableAction(form({ storeId, channelId: id, requestId: crypto.randomUUID() })))).get('ok');
+    expect(flash).toContain('₱6,000.00');
+    expect(flash).not.toContain('6000.00');
   });
 });

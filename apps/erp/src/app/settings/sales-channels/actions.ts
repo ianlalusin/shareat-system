@@ -9,6 +9,7 @@
  * here would protect only this one caller, and the screen would be one new form away from a hole.
  */
 import { revalidatePath } from 'next/cache';
+import { compare, formatMoney, money, negate, ZERO } from '@shareat/core/money';
 import {
   createSalesChannel,
   moveChannelToChannelReceivable,
@@ -127,7 +128,7 @@ export async function setSalesChannelActiveAction(fd: FormData): Promise<void> {
   });
 }
 
-/** T-606 S4: the admin-only "Move to Channel receivable" button on a platform channel's card. The request id is minted when the page renders, so a second press is a no-op. */
+/** T-606 S4: the admin-only "Move to Channel receivable" button on a platform channel's card. The request id is minted when the page renders: a replay of the same press posts nothing, a later page load sweeps whatever is left. */
 export async function moveChannelReceivableAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/settings/sales-channels');
   const storeId = str(fd, 'storeId');
@@ -136,11 +137,14 @@ export async function moveChannelReceivableAction(fd: FormData): Promise<void> {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       moveChannelToChannelReceivable(tx, actor, { channelId: str(fd, 'channelId'), requestId: str(fd, 'requestId') }),
     );
+    // Never a negative peso amount: a credit balance is "in its favour"; amounts carry the thousands comma.
+    const total = money(result.total);
+    const amount = compare(total, ZERO) < 0 ? `${formatMoney(negate(total))} in its favour` : formatMoney(total);
     ok = result.moved
       ? result.entryId
-        ? `Moved. The balance of \u20b1${result.total} is now on Channel receivable and the channel uses it from now on.`
+        ? `Moved. The balance of ${amount} is now on Channel receivable and the channel uses it from now on.`
         : 'Moved. Nothing was owed on the old account, so only the setting changed. The channel uses Channel receivable from now on.'
-      : 'Nothing to do: this channel already uses Channel receivable.';
+      : 'Nothing to do: this channel already uses Channel receivable with nothing left on another account.';
   } catch (err) {
     return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err) });
   }

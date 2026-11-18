@@ -5,7 +5,7 @@
  * Computed as the S2 guard computes it: party = the channel, per store, posted entries only, drafts excluded.
  */
 import { channelSettlementsRepo, salesDaysRepo, type Tx } from '@shareat/db';
-import { add, compare, negate, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, formatMoney, negate, ZERO, type Money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
 
 export async function refuseStrandedChannelBalance(
@@ -24,7 +24,7 @@ export async function refuseStrandedChannelBalance(
     const total = add(...balances);
     const account = await salesDaysRepo.receivableAccountFor(tx, orgId, code);
     const where = `${code}${account ? ` ${account.name}` : ''}`;
-    parts.push(compare(total, ZERO) < 0 ? `\u20b1${negate(total)} in its favour on ${where}` : `\u20b1${total} on ${where}`);
+    parts.push(compare(total, ZERO) < 0 ? `${formatMoney(negate(total))} in its favour on ${where}` : `${formatMoney(total)} on ${where}`);
   }
   throw refuse(
     `${fn}: channel ${channel.id} still has a balance on an account other than ${currentCode}`,

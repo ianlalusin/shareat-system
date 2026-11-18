@@ -19,7 +19,7 @@ if (!isTestDatabaseUrl(url)) {
 import { channelSettlementsRepo, closeDb } from '@shareat/db';
 import { AuthorizationError } from '@shareat/auth';
 import * as D from '@shareat/domain';
-import { asOrg, auditRows, fx, linesOf, lineText, netDebit, sentenceOf, uid, type Fx } from './_fixtures/t511-s6b-world';
+import { asOrg, auditRows, correct, fx, linesOf, lineText, netDebit, sentenceOf, uid, type Fx } from './_fixtures/t511-s6b-world';
 
 const sql = postgres(url, { max: 8 });
 afterAll(async () => {
@@ -58,7 +58,7 @@ describe('T-606 S4 - the move', () => {
     expect(audit[0]).toMatchObject({ entity_id: f.channelId, store_id: f.storeA, actor_person_id: f.admin.personId });
   });
 
-  it('a second press (the same request id, or a new one) does nothing: one entry, one audit row', async () => {
+  it('a second press (the same request id, or a new one) does nothing once nothing is left: one entry, one audit row', async () => {
     const f = await fx(sql, 's4-twice', { staff: '10000.00', file: '10000.00', receivable: '1210' });
     const requestId = crypto.randomUUID();
     await move(f, { requestId });
@@ -124,5 +124,55 @@ describe('T-606 S4 - what is refused', () => {
     expect(await channelCode(f)).toBe('1210');
     expect(await reclassEntries(f)).toHaveLength(0);
     expect(Number(await netDebit(sql, f.orgId, '1210'))).toBe(10000);
+  });
+});
+
+describe('T-606 S4 - a balance that comes back after the move', () => {
+  const reverseIt = (f: Fx, entryId: string) =>
+    asOrg(f.orgId, (tx) => D.reverseEntry(tx, { entryId, reason: 'Undo the move (test)', reversalDate: CLOCK, reversedBy: f.admin.personId }));
+  const offBalance = async (f: Fx) =>
+    (await asOrg(f.orgId, (tx) => D.listSalesChannelsForAdmin(tx, f.admin, { storeId: f.storeA }))).find((c) => c.id === f.channelId)!.offAccountBalance;
+
+  it('move, an admin reverses the move entry, the button comes back and a second move sweeps the balance so the platform file can be approved again - Mutant: restore the "already on 1220 -> nothing to do" return -> red', async () => {
+    const f = await fx(sql, 's4-leftover', { staff: '10000.00', file: '11000.00', receivable: '1210' });
+    const first = await move(f);
+    await reverseIt(f, first.entryId!);
+    expect(await channelCode(f), 'the reversal does not change the setting').toBe('1220');
+    expect(Number(await netDebit(sql, f.orgId, '1210')), 'the balance is stranded on 1210 again').toBe(10000);
+    expect(await offBalance(f), 'the screen has the figure to show the button').toBe('10000.00');
+    expect(await sentenceOf(correct(f, f.admin))).toMatch(/still has \u20b110,000\.00 on 1210 Accounts receivable/);
+
+    const before = (await reclassEntries(f)).length;
+    const second = await move(f);
+    expect(second).toMatchObject({ moved: true, total: '10000.00' });
+    expect((await reclassEntries(f)).length).toBe(before + 1);
+    expect(Number(await netDebit(sql, f.orgId, '1210'))).toBe(0);
+    expect(Number(await netDebit(sql, f.orgId, '1220'))).toBe(10000);
+    expect(await offBalance(f)).toBeNull();
+    expect(await auditRows(sql, f.orgId, 'sales_channel.receivable_moved')).toHaveLength(2);
+    expect((await correct(f, f.admin)).corrected, 'approvals work again').toBe(true);
+    // Nothing left: a further press does nothing.
+    expect(await move(f)).toMatchObject({ moved: false, entryId: null });
+  });
+
+  it('a replay of the same press posts nothing (even after the entry was reversed), while a new press posts - Mutant: drop the "created: false" return -> a replay audits a move that never happened, red', async () => {
+    const f = await fx(sql, 's4-replay', { staff: '10000.00', file: '10000.00', receivable: '1210' });
+    const requestId = crypto.randomUUID();
+    const first = await move(f, { requestId });
+    await reverseIt(f, first.entryId!);
+    const entries = (await reclassEntries(f)).length;
+    const audits = (await auditRows(sql, f.orgId, 'sales_channel.receivable_moved')).length;
+    expect(await move(f, { requestId }), 'a stale tab pressing again').toMatchObject({ moved: false });
+    expect((await reclassEntries(f)).length).toBe(entries);
+    expect((await auditRows(sql, f.orgId, 'sales_channel.receivable_moved')).length).toBe(audits);
+    expect(Number(await netDebit(sql, f.orgId, '1210'))).toBe(10000);
+    expect(await move(f), 'a real second press').toMatchObject({ moved: true });
+    expect(Number(await netDebit(sql, f.orgId, '1210'))).toBe(0);
+  });
+
+  it('a non-admin learns nothing about whether a channel id exists: both a real id and a made-up one are refused as not allowed - Mutant: read the channel before authorize -> the made-up id gets "no longer exists", red', async () => {
+    const f = await fx(sql, 's4-oracle', { staff: '10000.00', file: '10000.00', receivable: '1210' });
+    await expect(move(f, { who: f.managerA, channelId: f.channelId })).rejects.toThrow(AuthorizationError);
+    await expect(move(f, { who: f.managerA, channelId: crypto.randomUUID() })).rejects.toThrow(AuthorizationError);
   });
 });

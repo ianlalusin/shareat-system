@@ -19,6 +19,14 @@ import { typedFor } from '@/lib/keep-typing';
 import { SALES_CHANNEL_EDIT } from './typed-forms';
 import { accountLabel } from '@/lib/account-label';
 import { PLATFORM_RECEIVABLE_CODE, platformReceivableOptions } from '@shareat/domain';
+import { compare, formatMoney, money, negate, ZERO } from '@shareat/core/money';
+
+/** What a channel still holds off the channel receivable, in words; never a negative peso amount. */
+function remainingText(net: string): string {
+  const m = money(net);
+  if (compare(m, ZERO) < 0) return `${formatMoney(negate(m))} in its favour`;
+  return compare(m, ZERO) === 0 ? 'A balance' : `The remaining ${formatMoney(m)}`;
+}
 
 export const metadata = { title: 'Sales channels (walk-in, Grab, Foodpanda) — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -269,7 +277,13 @@ function ChannelBand({
                   {canMoveReceivable ? ' Move it, with whatever is owed on it, to Channel receivable.' : ' An admin can move it to Channel receivable.'}
                 </p>
               )}
-              {channel.platform && channel.receivableAccountCode !== PLATFORM_RECEIVABLE_CODE && canMoveReceivable && (
+              {channel.platform && channel.receivableAccountCode === PLATFORM_RECEIVABLE_CODE && channel.offAccountBalance !== null && (
+                <p className="text-neutral-600 dark:text-neutral-400">
+                  {remainingText(channel.offAccountBalance)} is still on another account, so approving a platform file or booking a charge is blocked.
+                  {canMoveReceivable ? ' Move it to Channel receivable.' : ' An admin can move it to Channel receivable.'}
+                </p>
+              )}
+              {channel.platform && (channel.receivableAccountCode !== PLATFORM_RECEIVABLE_CODE || channel.offAccountBalance !== null) && canMoveReceivable && (
                 <form action={moveChannelReceivableAction} className="pt-1">
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="channelId" value={channel.id} />

@@ -300,7 +300,7 @@ describe('S6c what is refused (plain sentence, nothing written)', () => {
     const ol = await periodCharge(sql, f);
     await sql`update sales_channels set receivable_account_code = '1220' where id = ${f.channelId}`;
     const before = await entryCount(sql, f.orgId);
-    expect(await sentenceOf(postCharge(f, f.admin, ol))).toBe('Foodpanda still has \u20b110000.00 on 1210 Accounts receivable. Move it to Channel receivable in Settings \u203a Sales channels, then approve this file.');
+    expect(await sentenceOf(postCharge(f, f.admin, ol))).toBe('Foodpanda still has \u20b110,000.00 on 1210 Accounts receivable. Move it to Channel receivable in Settings \u203a Sales channels, then approve this file.');
     await untouched(f, before);
   });
 

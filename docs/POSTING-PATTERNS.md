@@ -1364,7 +1364,7 @@ Lipa Foodpanda is owed ₱12,345.00 and its days were posted on 1210.
 **Trap:** both lines carry the channel as party and the store the balance sits at, one pair per store. A net credit balance
 posts the opposite sides, never a negative amount. The old day entries are not touched: they stay on 1210 for ever, so a later
 platform-file correction reads what was posted for the day by party, not by account. A zero balance posts nothing and only switches
-the setting. A second press finds the channel already moved and does nothing.
+the setting. The button also shows for a channel already on 1220 while a balance sits on another account (the move entry was reversed, an old day voided): that press sweeps it with the same entry. Each press has its own request id, so a replay of the same press posts nothing; with nothing left a press does nothing.
 
 ---
 
