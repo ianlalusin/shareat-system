@@ -486,3 +486,52 @@ describe('G - the link\'s sales channel changed after verify', () => {
     expect(ch.map((r) => r.channel_id), 'the day keeps its own channel row').toEqual([f.walkInId]);
   });
 });
+
+// T-606 (DEF-924): a day posted on 1210 before its platform channel moved to 1220. The day's old lines are netted with the new routed line by CHANNEL, across accounts.
+describe('T-606 - a POS correction of a day whose platform line was posted on 1210 before the channel moved to 1220', () => {
+  /** Foodpanda on 1210, a 200.00 platform row, day verified (Dr 1210 200 party channel), then the channel gets its platform and is moved to 1220 (the reclass posts Dr 1220 / Cr 1210 200). */
+  async function movedDay(hint: string) {
+    const f = await s6Fixture(sql, hint);
+    await sql`update sales_channels set receivable_account_code = '1210' where id = ${f.foodpandaId}`;
+    const { id: dayId } = await imp(f, DAY);
+    await asOrgOn(f.orgId, (tx) =>
+      D.editSalesDay(tx, f.manager, { salesDayId: dayId, platform: [{ channelId: f.foodpandaId, amount: '200.00', noSales: false }] }),
+    );
+    const { journalEntryId } = await verify(f, dayId);
+    expect(lineText(await lines(journalEntryId)), 'control: the day posted the platform line on 1210').toContain('Dr 1210 200.00');
+    await sql`update sales_channels set platform = 'foodpanda', platform_store_code = ${`FP${hint}`.slice(0, 12)} where id = ${f.foodpandaId}`;
+    const moved = await asOrgOn(f.orgId, (tx) => D.moveChannelToChannelReceivable(tx, f.admin, { channelId: f.foodpandaId, requestId: crypto.randomUUID() }, OPEN_DATE));
+    expect(moved, 'control: the move carried the 200.00').toMatchObject({ moved: true, total: '200.00' });
+    return { f, dayId };
+  }
+
+  it('an unchanged platform amount posts NOTHING for the channel: only the tender difference, no Dr 1220 / Cr 1210 pair - Mutant: net the channel per account again -> a Dr 1220 200 line appears, red', async () => {
+    const { f, dayId } = await movedDay('t606a');
+    const feedId = (await recheck(f, DAY)).ids.sales!;
+    await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: OPEN_DATE });
+    const c = (await corrections(dayId))[0]!;
+    const text = lineText(await lines(c.journal_entry_id));
+    expect(text).toEqual(['Cr 1110 50.00', 'Dr 4100 50.00']);
+    expect(text.some((l) => l.includes('1220') || l.includes('1210'))).toBe(false);
+    const bal = async (code: string) =>
+      Number((await sql<{ b: string | null }[]>`
+        select sum(jl.debit - jl.credit)::text b from journal_lines jl join accounts a on a.id = jl.account_id join journal_entries je on je.id = jl.entry_id
+         where je.org_id = ${f.orgId} and a.code = ${code} and jl.party_type = 'channel' and jl.party_id = ${f.foodpandaId}`)[0]!.b ?? 0);
+    expect(await bal('1210'), '1210 is not left negative').toBe(0);
+    expect(await bal('1220')).toBe(200);
+  });
+
+  it('a changed platform amount posts only the difference, on 1220 (the channel\'s current account) - Mutant: net by account -> Dr 1220 250 / Cr 1210 200 pair, red', async () => {
+    const { f, dayId } = await movedDay('t606b');
+    // The platform figure is POS's (trigger R6 refuses a hand edit), so the test rewrites it as the platform-row feed would, with triggers off for this one statement.
+    await sql.begin(async (t) => {
+      await t`set local session_replication_role = replica`;
+      await t`update sales_day_channels set amount = '250.00' where sales_day_id = ${dayId} and channel_id = ${f.foodpandaId}`;
+    });
+    const feedId = (await recheck(f, DAY)).ids.sales!;
+    await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: OPEN_DATE });
+    const c = (await corrections(dayId))[0]!;
+    const text = lineText(await lines(c.journal_entry_id));
+    expect(text.filter((l) => /\b12[12]0\b/.test(l))).toEqual(['Dr 1220 50.00']);
+  });
+});
