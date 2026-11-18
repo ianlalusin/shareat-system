@@ -157,6 +157,7 @@ on a branch, and never touches `main`. This one is a closer.
 | `PROJECT_BIBLE.md` | The authority. Wins any disagreement. |
 | `docs/CROSS-APP-MAP.md` | **Living map** of every seam between POS / ERP / CUSTOMER / Website |
 | `docs/CAPABILITY-GAPS.md` | **What the business does that the plan does not cover** — 33 unowned capabilities |
+| Code map | **Read-only for everyone except BOSS.** Main map `C:\Users\ianla\webapps\shareat-map-src\graphify-out\graph.json`; how to query it, and its limits, in `C:\Users\ianla\webapps\shareat-system-graph\README.md`. Stale or wrong: tell BOSS, never refresh it yourself. The file is the truth, the map is a pointer (bible row 481) |
 | `docs/DEFECTS-REGISTER.md` | Gaps and bugs found in the reference repos, fixed here, never at the source |
 | `docs/GLOSSARY.md` | **Read before naming anything** — several field names mean the opposite of what they look like |
 | `docs/discovery/` | Read-only findings from ERP-rebuild |

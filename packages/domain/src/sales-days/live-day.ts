@@ -1,6 +1,6 @@
 /**
  * T-373 S1 (DEF-552, R1-R3): the one door a writer walks through before it records something AGAINST a
- * sales day (a POS usage pull, an order wastage). It takes the day row `FOR SHARE` and refuses a day
+ * sales day (a POS usage pull, an order wastage, a cash handover, a payout settlement). It takes the day row `FOR SHARE` and refuses a day
  * that is missing, belongs to another store, or has been voided.
  *
  * `FOR SHARE` conflicts with the `FOR UPDATE` that void/edit/verify take, so a writer and a void
@@ -15,7 +15,7 @@ import type { BusinessDate } from '@shareat/core/datetime';
 export async function lockLiveSalesDay(
   tx: Tx,
   orgId: string,
-  input: { salesDayId: string; storeId: string; doing: 'usage' | 'wastage' },
+  input: { salesDayId: string; storeId: string; doing: 'usage' | 'wastage' | 'a cash handover' | 'a payout settlement' },
 ) {
   const day = await salesDaysRepo.getByIdForShare(tx, orgId, input.salesDayId);
   if (!day) throw gone(`lockLiveSalesDay: sales day ${input.salesDayId} does not exist in org ${orgId}`, 'sales day');

@@ -488,3 +488,27 @@ describe("S6b audit — another branch's options say which branch they are at", 
     expect(other).not.toEqual(own);
   });
 });
+
+// -----------------------------------------------------------------------------------------------
+// T-594 DEF-875 - a transfer that is a leg of a posted remittance shows no Reverse form, only the way out.
+// -----------------------------------------------------------------------------------------------
+describe('T-594 DEF-875 - the history row of a remittance leg', () => {
+  it('shows the sentence and no moneyTransferId input for the leg; the ordinary transfer keeps its form', async () => {
+    const f = await fixture('def875');
+    const { createMoneyTransfer } = await import('@shareat/domain');
+    const [till] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${f.lipaId} and instrument = 'cash' and custodian = 'cashier' and is_foundation`;
+    const move = (from: string, to: string, amount: string) =>
+      asOrg(f.orgId, (tx) =>
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(), fromMoneyAccountId: from, toMoneyAccountId: to, amountOut: amount, amountIn: amount, transferDate: '2026-01-10' }),
+      );
+    const leg = await move(till!.id, f.lipaSafeId, '300.00');
+    const ordinary = await move(f.lipaSafeId, till!.id, '200.00');
+    const [rem] = await sql<{ id: string }[]>`insert into remittances (org_id, store_id, remitted_on, created_by) values (${f.orgId}, ${f.lipaId}, '2026-01-10', ${f.admin.personId}) returning id`;
+    await sql`insert into remittance_lines (remittance_id, from_money_account_id, to_money_account_id, amount, money_transfer_id) values (${rem!.id}, ${till!.id}, ${f.lipaSafeId}, '300.00', ${leg.id})`;
+
+    const html = decodeEntities(await renderPage(f.admin));
+    expect(html, 'the ordinary transfer lost its Reverse form').toContain(`name="moneyTransferId" value="${ordinary.id}"`);
+    expect(html, 'the remittance leg still offers a Reverse form').not.toContain(`value="${leg.id}"`);
+    expect(html).toContain('Part of a remittance. Reverse the remittance instead.');
+  });
+});

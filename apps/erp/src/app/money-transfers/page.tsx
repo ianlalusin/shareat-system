@@ -355,7 +355,11 @@ export default async function MoneyTransfersPage({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {t.status === 'posted' && (
+                      {t.status === 'posted' && t.inRemittance && (
+                        // DEF-875: a handover's transfer is undone by reversing the handover, never on its own.
+                        <span className="text-xs text-neutral-500 dark:text-neutral-400">Part of a remittance. Reverse the remittance instead.</span>
+                      )}
+                      {t.status === 'posted' && !t.inRemittance && (
                         <CheckedForm rules={TRANSFER_VOID_RULES} action={voidMoneyTransferAction} className="flex justify-end gap-1">
                           <input type="hidden" name="moneyTransferId" value={t.id} />
                           {/* A reversal without a reason is a gap, so the reason is part of the

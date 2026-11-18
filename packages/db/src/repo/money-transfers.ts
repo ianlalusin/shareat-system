@@ -45,6 +45,8 @@ export interface MoneyTransferListRow extends MoneyTransferRow {
   /** ⭐ T-369 S9 (DEF-557), DERIVED: this movement cleared what the source store owed the destination store - its
    *  entry DEBITS 2150 at the source. An ordinary cross-store transfer credits 2150 at the destination instead. */
   settles: boolean;
+  /** DEF-875, DERIVED: this transfer is a leg of a POSTED remittance, so it is undone by reversing the remittance. */
+  inRemittance: boolean;
 }
 
 const COLUMNS = {
@@ -139,6 +141,10 @@ export async function listMoneyTransfers(
         where jl.entry_id = ${moneyTransfers.journalEntryId} and a.code = '2150'
           and jl.debit > 0 and jl.store_id = ${moneyTransfers.storeId}
       )`,
+      inRemittance: sql<boolean>`exists (
+        select 1 from remittance_lines rl join remittances r on r.id = rl.remittance_id
+        where rl.money_transfer_id = ${moneyTransfers.id} and r.status = 'posted'
+      )`,
     })
     .from(moneyTransfers)
     .innerJoin(
@@ -183,6 +189,24 @@ export async function markVoided(
       'money transfer',
     );
   }
+}
+
+/** DEF-875: is this transfer a leg of a POSTED remittance? (A reversed remittance's legs are already voided.) */
+export async function isPostedRemittanceLeg(tx: Tx, moneyTransferId: string): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select 1 from remittance_lines rl join remittances r on r.id = rl.remittance_id
+    where rl.money_transfer_id = ${moneyTransferId} and r.status = 'posted' limit 1
+  `)) as unknown as unknown[];
+  return rows.length > 0;
+}
+
+/** DEF-876: did this entry CLEAR what the source store owed (a settlement, DR 2150 at the source), not create a debt? Same test as `settles` in the list. */
+export async function entrySettles(tx: Tx, journalEntryId: string, storeId: string): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select 1 from journal_lines jl join accounts a on a.id = jl.account_id
+    where jl.entry_id = ${journalEntryId} and a.code = '2150' and jl.debit > 0 and jl.store_id = ${storeId} limit 1
+  `)) as unknown as unknown[];
+  return rows.length > 0;
 }
 
 /**
@@ -243,6 +267,32 @@ export async function interStorePosition(
       and a.code in ('1250', '2150') and jl.party_type = 'store'
   `)) as unknown as { per_debtor: string; per_creditor: string }[];
   return { owedPerDebtor: row?.per_debtor ?? '0.00', owedPerCreditor: row?.per_creditor ?? '0.00' };
+}
+
+/**
+ * DEF-876: what the DEBTOR store owes the CREDITOR store IN ONE DIRECTION - its 2150 (due-to) toward the creditor, credits less
+ * debits, every source and its reversals included (transfers, dispatches, settlements). Unlike `interStorePosition` it is NOT
+ * netted against the claims the other way (1250), so two plain transfers in opposite directions do not hide each other.
+ * A settlement the debtor paid shows as a DEBIT here, which is how a void learns it would strand one.
+ */
+export async function interStoreDirectionOwed(tx: Tx, orgId: string, debtorStoreId: string, creditorStoreId: string): Promise<string> {
+  const codes = await storeCodes(tx, orgId, [creditorStoreId]);
+  const creditorCode = codes.get(creditorStoreId);
+  if (!creditorCode) {
+    throw refuse(
+      `interStoreDirectionOwed: store ${creditorStoreId} has no code in org ${orgId}.`,
+      "A store has no code, so what the stores owe each other can't be worked out. Ask the accountant to check the store setup.",
+    );
+  }
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(jl.credit - jl.debit), 0)::numeric(14,2)::text as owed
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId} and je.status <> 'draft' and a.code = '2150' and jl.party_type = 'store'
+      and jl.store_id = ${debtorStoreId} and jl.party_id = ${creditorCode}
+  `)) as unknown as { owed: string }[];
+  return row?.owed ?? '0.00';
 }
 
 /**

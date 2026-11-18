@@ -81,9 +81,9 @@ const INTER_STORE_PAIR_LOCK_NAMESPACE = 369003;
 /** Serialises everything that reads or clears what ONE pair of stores owes each other (1250/2150), so two
  *  settlements in flight cannot both pass the "no more than is owed" cap. Keyed on the UNORDERED pair
  *  (`least:greatest`), so Lipa repaying Malvar and Malvar repaying Lipa serialise together while a different
- *  pair does not wait. ⚠️ The guarantee is exactly that: settlements serialise AGAINST EACH OTHER. Only
- *  settlement takes the lock; a cross-store void (which can lower a position) racing a settlement does not, and
- *  can leave the position reversed - the same end state as a void after a settlement, which the spec accepts. */
+ *  pair does not wait. DEF-876: a settlement, a cross-store `createMoneyTransfer` and a cross-store
+ *  `voidMoneyTransfer` all take it, so the settlement cap and the void's "would go negative" check each read a
+ *  position nobody else is changing. Lock order: this pair lock first, then any account draw lock. */
 export async function lockInterStorePair(tx: Tx, storeA: string, storeB: string): Promise<void> {
   await tx.execute(
     sql`select pg_advisory_xact_lock(${INTER_STORE_PAIR_LOCK_NAMESPACE}::int4, hashtext(least(${storeA}::text, ${storeB}::text) || ':' || greatest(${storeA}::text, ${storeB}::text)))`,
