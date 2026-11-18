@@ -17,13 +17,14 @@ vi.mock('../src/lib/page-access', () => ({ requirePageAccess: async () => ({ act
 vi.mock('../src/app/expenses/lib', () => ({ listStores: async () => [{ id: 'store-1', name: 'Lipa', code: 'LIP' }] }));
 vi.mock('../src/app/settings/sales-channels/actions', () => {
   const noop = async () => {};
-  return { createSalesChannelAction: noop, setPlatformCodeAction: noop, setSalesChannelActiveAction: noop, updateSalesChannelAction: noop };
+  return { createSalesChannelAction: noop, moveChannelReceivableAction: noop, setPlatformCodeAction: noop, setSalesChannelActiveAction: noop, updateSalesChannelAction: noop };
 });
 vi.mock('../src/app/settings/sales-channels/lib', () => ({
   channelsForStore: async () => h.channels,
   receivableOptions: async () => [{ code: '1220', name: 'Platform receivables' }],
   moneyAccountNames: async () => new Map<string, string>(),
   canEditPlatformCode: async () => h.canSet,
+  canMoveChannelReceivable: async () => false, // T-606 S4
 }));
 
 type Page = (props: never) => Promise<unknown>;
