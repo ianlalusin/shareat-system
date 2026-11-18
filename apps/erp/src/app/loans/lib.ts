@@ -8,7 +8,7 @@
 import { toBusinessDate } from '@shareat/core/datetime';
 import { can, type Actor } from '@shareat/auth';
 import { loansRepo, moneyAccountsRepo, type LoanPosition, type LoanRow } from '@shareat/db';
-import { accruedInterest, scheduledInstalment } from '@shareat/domain';
+import { accruedInterest, interestDue, scheduledInstalment } from '@shareat/domain';
 import { compare, money, ZERO as NO_MONEY } from '@shareat/core/money';
 import { withOrgPrincipal } from '../expenses/lib';
 
@@ -64,6 +64,9 @@ export interface LoanDetail extends LoanListRow {
   /** ⭐ Interest that has built up since the last payment — shown BEFORE anyone types an amount. */
   accruedNow: string;
   lastPaymentOn: string | null;
+  /** DEF-896: where the interest still owed runs from, and how much of it a part-payment already covered. */
+  runStart: string;
+  interestPaidInRun: string;
 }
 
 export async function getDetail(orgId: string, id: string): Promise<LoanDetail | null> {
@@ -71,24 +74,26 @@ export async function getDetail(orgId: string, id: string): Promise<LoanDetail |
     const loan = await loansRepo.getById(tx, orgId, id);
     if (!loan) return null;
 
-    const [position, payments, lastPaymentOn] = await Promise.all([
+    const [position, payments, lastPaymentOn, run] = await Promise.all([
       loansRepo.positionOf(tx, orgId, id),
       loansRepo.paymentsFor(tx, orgId, id),
       loansRepo.lastPaymentDate(tx, orgId, id),
+      loansRepo.interestRunOf(tx, orgId, id),
     ]);
 
     const today = toBusinessDate();
+    const runStart = run.since ?? loan.startDate;
     const accruedNow =
       compare(money(position.outstanding), NO_MONEY) > 0
-        ? accruedInterest({
+        ? interestDue(accruedInterest({
             outstanding: money(position.outstanding),
             principal: money(loan.principalAmount),
             ratePercent: loan.interestRate,
             ratePeriod: loan.ratePeriod,
             method: loan.interestMethod,
-            since: lastPaymentOn ?? loan.startDate,
+            since: runStart,
             until: today,
-          })
+          }), run.paidSince)
         : '0.00';
 
     return {
@@ -105,6 +110,8 @@ export async function getDetail(orgId: string, id: string): Promise<LoanDetail |
       }),
       accruedNow: String(accruedNow),
       lastPaymentOn,
+      runStart,
+      interestPaidInRun: run.paidSince,
     };
   });
 }

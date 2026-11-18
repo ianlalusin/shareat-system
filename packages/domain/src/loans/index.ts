@@ -21,7 +21,7 @@ import { LOAN_ADD_RULES, LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REPAYMENT_RUL
 import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
-import { accruedInterest, splitPayment, type PaymentSplit } from './interest';
+import { accruedInterest, interestDue, splitPayment, type PaymentSplit } from './interest';
 
 export * from './interest';
 
@@ -284,8 +284,10 @@ export async function recordLoanPayment(
       throw new Error(`recordLoanPayment: ${loan.name} has nothing outstanding.`);
     }
 
-    // Interest runs from the last payment, or from the loan's start if there has been none.
-    const since = (await loansRepo.lastPaymentDate(trx, actor.orgId, loan.id)) ?? loan.startDate;
+    // DEF-896 (Ian, 18 Nov: carry it forward): interest runs from the last payment that retired principal, and what interest-only
+    // part-payments already covered in that run comes off it - a short payment no longer wipes the interest it left unpaid.
+    const run = await loansRepo.interestRunOf(trx, actor.orgId, loan.id);
+    const since = run.since ?? loan.startDate;
     const accrued = accruedInterest({
       outstanding,
       principal: money(loan.principalAmount),
@@ -299,7 +301,7 @@ export async function recordLoanPayment(
     const split = splitPayment({
       payment: amount,
       outstanding,
-      accrued,
+      accrued: interestDue(accrued, run.paidSince),
     });
 
     // ⛔ An overpayment is money the lender owes back, not a negative loan. Refused rather than

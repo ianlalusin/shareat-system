@@ -29,6 +29,7 @@ import {
   createLoan,
   disburseLoan,
   recordLoanPayment,
+  reverseEntry,
   reverseLoanEntry,
 } from '@shareat/domain';
 
@@ -625,5 +626,50 @@ describe('DEF-869 - one request id, one payment', () => {
       ).rejects.toThrow('requestId is missing or not a uuid');
     }
     expect(await paymentEntries(f)).toBe(0);
+  });
+});
+
+describe('DEF-896 - unpaid interest carries', () => {
+  // ₱200,000 at 2%/month straight, started 2026-05-11: one day of interest is 133.33, two days 266.67 (ONE rounding).
+  async function drawn(hint: string) {
+    const f = await fixture(hint);
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    return f;
+  }
+  const pay = (f: Fixture, amount: string, on: string) =>
+    asOrg(f.orgId, (tx) =>
+      recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount, fromMoneyAccountId: f.safe, on }),
+    );
+
+  it('a short payment leaves interest unpaid, and the next payment collects it (266.67 - 100.00 = 166.67)', async () => {
+    const f = await drawn('def896-carry');
+    const first = await pay(f, '100.00', '2026-05-12');
+    expect(first.split.interest).toBe('100.00');
+    expect(first.split.principal).toBe('0.00');
+    const second = await pay(f, '1000.00', '2026-05-13');
+    expect(second.split.interest).toBe('166.67');
+    expect(second.split.principal).toBe('833.33');
+    expect(second.outstanding).toBe('199166.67');
+  });
+
+  it('a reversed short payment paid nothing: the next payment owes the whole run (266.67)', async () => {
+    const f = await drawn('def896-reversed');
+    const first = await pay(f, '100.00', '2026-05-12');
+    // An interest-only payment carries no 2400 line, so `reverseLoanEntry` cannot bind it to the loan; the ledger reversal is
+    // what `interestRunOf` has to see through (status 'reversed' + the reversal entry).
+    await asOrg(f.orgId, (tx) => reverseEntry(tx, { entryId: first.entryId, reason: 'wrong amount', reversedBy: f.adminId }));
+    const second = await pay(f, '1000.00', '2026-05-13');
+    expect(second.split.interest).toBe('266.67');
+    expect(second.split.principal).toBe('733.33');
+  });
+
+  it('after a payment that retired principal, the next one accrues from that date only (unchanged behaviour)', async () => {
+    const f = await drawn('def896-control');
+    const first = await pay(f, '2355.56', '2026-05-12'); // 133.33 interest + 2,222.23 principal
+    expect(first.split.interest).toBe('133.33');
+    const second = await pay(f, '2355.56', '2026-05-13');
+    expect(second.split.interest).toBe('133.33'); // one day from 05-12, nothing carried
   });
 });
