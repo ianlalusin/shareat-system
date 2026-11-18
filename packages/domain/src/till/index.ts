@@ -20,7 +20,7 @@
  */
 import { money, compare, ZERO, type Money } from '@shareat/core/money';
 import { authorize, type Actor } from '@shareat/auth';
-import { moneyAccountsRepo, tillShiftsRepo, type Tx } from '@shareat/db';
+import { moneyAccountsRepo, personsRepo, tillShiftsRepo, type Tx } from '@shareat/db';
 import { postStaffShortageCharge } from '../shared/staff-shortage-charge';
 import { parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
@@ -287,6 +287,14 @@ export async function chargeTillShortage(
       );
     }
 
+    // DEF-870: the person must be someone in THIS org, as `resolveRemittanceVariance` requires.
+    if (!(await personsRepo.getPersonById(trx, actor.orgId, input.personId))) {
+      throw refuse(
+        'chargeTillShortage: the person does not exist in this organisation.',
+        'That person could not be found - choose someone from the list.',
+      );
+    }
+
     const variance: Money = money(line.variance);
     const cmp = compare(variance, ZERO);
 
@@ -316,7 +324,8 @@ export async function chargeTillShortage(
       entryDate: line.businessDate,
       sourceType: 'tillcountshortage',
       sourceId: input.countLineId,
-      // ⚠️ Derived from the count line, never from a timestamp — a double-click must be a no-op.
+      // ⚠️ Derived from the count line, never from a timestamp — a double-click must be a no-op. DEF-870: the helper posts with
+      // `postEntryOnce`, so the same person/amount/date replays, and a second person or amount is refused, never "posted".
       idempotencyKey: `tillcount:${input.countLineId}:shortage`,
       memo:
         input.note?.trim() ||

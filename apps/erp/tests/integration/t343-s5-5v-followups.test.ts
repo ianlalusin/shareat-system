@@ -460,6 +460,44 @@ describe('Comma legs — SAFE: disburseLoanAction / recordPaymentAction already 
   });
 });
 
+describe('DEF-869 - recordPaymentAction submitted twice with one request id posts one payment', () => {
+  it('a double click on a valid payment form writes one loan_payment entry', async () => {
+    const f = await orgWithAdmin('pay-twice');
+    ACTOR_HOLDER.actor = f.admin;
+    const created = await expectRedirectTo(() =>
+      import('../../src/app/loans/actions').then(({ createLoanAction }) => createLoanAction(loanFormData(f))),
+    );
+    const loanId = created.match(/loans\/([^?]+)/)![1]!;
+    const { disburseLoanAction, recordPaymentAction } = await import('../../src/app/loans/actions');
+    const drawerId = await drawerOf(f);
+    const drawFd = new FormData();
+    drawFd.set('loanId', loanId);
+    drawFd.set('requestId', crypto.randomUUID());
+    drawFd.set('amount', '50000.00');
+    drawFd.set('intoMoneyAccountId', drawerId);
+    drawFd.set('on', '2026-01-10');
+    await expectRedirectTo(() => disburseLoanAction(drawFd));
+
+    const payFd = () => {
+      const fd = new FormData();
+      fd.set('loanId', loanId);
+      fd.set('requestId', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+      fd.set('amount', '500.00');
+      fd.set('fromMoneyAccountId', drawerId);
+      fd.set('on', '2026-01-15');
+      return fd;
+    };
+    const first = await expectRedirectTo(() => recordPaymentAction(payFd()));
+    const second = await expectRedirectTo(() => recordPaymentAction(payFd()));
+    expect(errorOf(first)).toBeNull();
+    expect(errorOf(second)).toBeNull();
+    const [row] = await sql<{ n: string }[]>`
+      select count(*)::text as n from journal_entries where org_id = ${f.orgId} and source_type = 'loan_payment' and source_id = ${loanId}
+    `;
+    expect(Number(row!.n)).toBe(1);
+  });
+});
+
 describe('Converted guards — disburseLoanAction/recordPaymentAction amount="0"', () => {
   it(
     'disburse "0": wanted "The loan amount has to be greater than zero." — observed today ' +

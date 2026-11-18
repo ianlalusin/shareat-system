@@ -147,9 +147,15 @@ export default async function LoanPage({
 
           <div className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
             <span className="text-neutral-600 dark:text-neutral-400">
-              Interest built up since {formatBusinessDayLong(loan.lastPaymentOn ?? loan.startDate)}
+              Interest owed since {formatBusinessDayLong(loan.runStart)}
             </span>{' '}
             <span className="font-mono font-medium tabular-nums">{peso(loan.accruedNow)}</span>
+            {compare(money(loan.interestPaidInRun), ZERO) > 0 && (
+              <span className="text-neutral-600 dark:text-neutral-400"> ({peso(loan.interestPaidInRun)} of it already paid)</span>
+            )}
+            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+              Unpaid interest carries to the next payment; it never earns interest itself.
+            </div>
             <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
               A payment of {peso(loan.instalment)} is one scheduled instalment. Paying less is
               fine; it just reduces what is owed by less.
@@ -159,6 +165,7 @@ export default async function LoanPage({
           <FormModal trigger="Record a payment" title="Record a payment on this loan" size="md">
             <CheckedForm rules={LOAN_PAYMENT_RULES} action={recordPaymentAction} className="grid gap-4 sm:grid-cols-3">
               <input type="hidden" name="loanId" value={loan.id} />
+              <input type="hidden" name="requestId" value={requestId} />
               <Field label="Amount paid" rule={LOAN_PAYMENT_RULES.amount}>
                 <input
                   {...nativeAttrs(LOAN_PAYMENT_RULES.amount)}

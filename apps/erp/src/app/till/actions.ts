@@ -129,6 +129,8 @@ export async function closeShiftAction(formData: FormData): Promise<void> {
  * ⛔ Gated on `resolve_till_variance`, which denies staff. Charging the shortage your own count
  * revealed is the one thing the person who counted must not be able to do.
  */
+const ALREADY_CHARGED = 'This was already recorded with different figures';
+
 export async function chargeShortageAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const storeId = str(formData, 'storeId');
@@ -142,7 +144,11 @@ export async function chargeShortageAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/till', { store: storeId }, { error: errorMessage(err) });
+    // DEF-870: a count line already charged to someone else (or another amount) - the shared sentence never names who, so say where to look.
+    const message = errorMessage(err);
+    return await redirectWithFlash('/till', { store: storeId }, {
+      error: message.startsWith(ALREADY_CHARGED) ? `${message} Open the count to see who was charged.` : message,
+    });
   }
   return await redirectWithFlash('/till', { store: storeId }, {
     ok: outcome.posted

@@ -536,3 +536,56 @@ describe('T-186 — what a till may be counted against', () => {
     expect(accounts[0]!.floatTarget).toBe('20000.00');
   });
 });
+
+// =====================================================================================
+
+describe('DEF-870 - a count line is charged once, to one person', () => {
+  const SENTENCE = 'This was already recorded with different figures. Reload the page and try again.';
+  const sentenceOf = (p: Promise<unknown>) => p.then(() => null, (e: { userMessage?: string }) => e.userMessage ?? null);
+  const entries = async (f: Fixture) =>
+    sql<{ party_id: string | null; debit: string }[]>`
+      select l.party_id, l.debit::text
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id
+      join accounts a on a.id = l.account_id
+      where e.org_id = ${f.orgId} and e.source_type = 'tillcountshortage' and a.code = '1230'
+    `;
+
+  async function shortCount(hint: string) {
+    const f = await fixture(hint);
+    await tillMovement(f, '2026-01-06', '10000.00');
+    const { shiftId } = await asOrg(f.orgId, (tx) => openTillShift(tx, f.admin, { storeId: f.storeId, businessDate: '2026-01-06' }));
+    await asOrg(f.orgId, (tx) =>
+      recordTillCount(tx, f.admin, { shiftId, moment: 'close', counts: [{ moneyAccountId: f.drawer, counted: '9850.00' }] }),
+    );
+    await asOrg(f.orgId, (tx) => closeTillShift(tx, f.admin, { shiftId }));
+    const [line] = await asOrg(f.orgId, (tx) => tillShiftsRepo.countsFor(tx, shiftId));
+    const otherId = await person(f.orgId, f.storeId, 'Second staff', 'staff');
+    return { f, line: line!, otherId };
+  }
+
+  it('charging the same count line to a second person is refused, and the first charge stands', async () => {
+    const { f, line, otherId } = await shortCount('def870-other');
+    const first = await asOrg(f.orgId, (tx) => chargeTillShortage(tx, f.admin, { countLineId: line.id, personId: f.cashierId }));
+    expect(first.posted).toBe(true);
+    expect(await sentenceOf(asOrg(f.orgId, (tx) => chargeTillShortage(tx, f.admin, { countLineId: line.id, personId: otherId })))).toBe(SENTENCE);
+    const rows = await entries(f);
+    expect(rows).toEqual([{ party_id: f.cashierId, debit: '150.00' }]);
+  });
+
+  it('charging the same person twice is a replay: posted, one entry', async () => {
+    const { f, line } = await shortCount('def870-same');
+    const charge = () => asOrg(f.orgId, (tx) => chargeTillShortage(tx, f.admin, { countLineId: line.id, personId: f.cashierId }));
+    expect((await charge()).posted).toBe(true);
+    expect((await charge()).posted).toBe(true);
+    expect(await entries(f)).toHaveLength(1);
+  });
+
+  it('a person who is not in this organisation is refused with a sentence, and nothing posts', async () => {
+    const { f, line } = await shortCount('def870-stranger');
+    expect(
+      await sentenceOf(asOrg(f.orgId, (tx) => chargeTillShortage(tx, f.admin, { countLineId: line.id, personId: crypto.randomUUID() }))),
+    ).toBe('That person could not be found - choose someone from the list.');
+    expect(await entries(f)).toHaveLength(0);
+  });
+});

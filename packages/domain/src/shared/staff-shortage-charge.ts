@@ -19,7 +19,7 @@
  * double-click a no-op and what traces the entry to its document (bible §16.1 inv. 4).
  */
 import type { Tx } from '@shareat/db';
-import { postEntry } from '../ledger/post-entry';
+import { postEntryOnce } from '../ledger/replay';
 
 /** 1230 Advances to employees — the receivable a charged shortage creates. */
 export const STAFF_SHORTAGE_RECEIVABLE_ACCOUNT = '1230';
@@ -47,7 +47,8 @@ export async function postStaffShortageCharge(
   tx: Tx,
   input: StaffShortageChargeInput,
 ): Promise<{ entryId: string; created: boolean }> {
-  return postEntry(tx, {
+  // DEF-870: `postEntryOnce`, not `postEntry` - a known key is a replay only for the SAME lines; another person or amount is refused.
+  return postEntryOnce(tx, {
     orgId: input.orgId,
     entryDate: input.entryDate,
     sourceType: input.sourceType,
