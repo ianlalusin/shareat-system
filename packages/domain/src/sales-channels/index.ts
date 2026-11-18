@@ -29,7 +29,7 @@
  *   plainly: *"today every channel is `expense`."* Offering the other value would let a manager
  *   pick a posture the ledger cannot honour.
  */
-import { auditLogRepo, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, channelSettlementsRepo, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
 import { authorize, can, type Actor } from '@shareat/auth';
 import { refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
@@ -37,6 +37,17 @@ import { SETTINGS_BANK_HINTS_RULES, SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES
 
 /** Store-scoped, manager ✅ — `packages/auth/src/capabilities.ts:206`, `:492`. */
 const CAPABILITY = 'manage_store_settings' as const;
+
+/**
+ * T-606 (DEF-924, Ian 18 Nov): a channel on a delivery PLATFORM must use the channel receivable - the one constant settlement, platform files, charges and wastage read.
+ * Any other channel (dine-in, a wholesale buyer, a branch) may be sold on credit and keeps the free, party-bearing choice.
+ */
+export const PLATFORM_RECEIVABLE_CODE = channelSettlementsRepo.CHANNEL_RECEIVABLE_CODE;
+
+/** The picker's options for a platform channel: only the channel receivable (what the settlement path accepts), from the same list every channel picks from. */
+export function platformReceivableOptions(options: readonly { code: string; name: string }[]): { code: string; name: string }[] {
+  return options.filter((o) => o.code === PLATFORM_RECEIVABLE_CODE);
+}
 
 export type SalesChannelWastageMode = 'tracked' | 'instant';
 
@@ -98,6 +109,8 @@ async function validateWiring(
   orgId: string,
   isRemittedDaily: boolean,
   receivableAccountCode: string | null,
+  /** T-606: the channel has a delivery platform, so only the channel receivable is allowed. */
+  onPlatform = false,
 ): Promise<string | null> {
   if (!isRemittedDaily && !receivableAccountCode) {
     throw new Error(
@@ -123,6 +136,14 @@ async function validateWiring(
     throw new Error(
       `Account ${account.code} ${account.name} does not track who owes the money (no subledger party), ` +
         'so a sales day posting this channel to it would be refused. Use a receivable control account such as 1220.',
+    );
+  }
+  // T-606: last, so the refusals above keep their messages.
+  if (onPlatform && account.code !== PLATFORM_RECEIVABLE_CODE) {
+    throw refuse(
+      `A delivery-platform channel must use ${PLATFORM_RECEIVABLE_CODE} Channel receivable, not ${account.code}.`,
+      `A channel on a delivery platform must use ${PLATFORM_RECEIVABLE_CODE} Channel receivable. Settlements, platform files and wastage all read that account, so ` +
+        `${account.code} ${account.name} would leave its sales uncollected.`,
     );
   }
   return account.code;
@@ -227,6 +248,7 @@ export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSale
     actor.orgId,
     input.isRemittedDaily,
     input.receivableAccountCode ?? null,
+    channel.platform !== null,
   );
 
   await salesDaysRepo.updateChannel(tx, actor.orgId, input.channelId, {
@@ -307,6 +329,14 @@ export async function setSalesChannelPlatformCode(
 
   // Same value: nothing to write. Compared as typed (a case-only edit of the code is a real change).
   if (channel.platform === platform && channel.platformStoreCode === code) return { wrote: false };
+
+  // T-606: a delivery platform needs the channel receivable. Changing the receivable is its own step (and is refused while a balance sits on the old account), so it comes first.
+  if (platform && channel.receivableAccountCode !== PLATFORM_RECEIVABLE_CODE) {
+    throw refuse(
+      `setSalesChannelPlatformCode: channel ${channel.id} receivable account is ${channel.receivableAccountCode ?? 'unset'}, not ${PLATFORM_RECEIVABLE_CODE}.`,
+      `"${channel.name}" uses ${channel.receivableAccountCode ?? 'no receivable account'}. A channel on a delivery platform must use ${PLATFORM_RECEIVABLE_CODE} Channel receivable, so edit the channel and change its receivable account first, then set the platform.`,
+    );
+  }
 
   // T-592 R2: one active channel per platform per store. The unique index is the authority.
   if (platform && channel.isActive) {

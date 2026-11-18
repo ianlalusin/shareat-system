@@ -17,6 +17,7 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { SALES_CHANNEL_EDIT } from './typed-forms';
 import { accountLabel } from '@/lib/account-label';
+import { PLATFORM_RECEIVABLE_CODE, platformReceivableOptions } from '@shareat/domain';
 
 export const metadata = { title: 'Sales channels (walk-in, Grab, Foodpanda) — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -255,6 +256,11 @@ function ChannelBand({
           {settlesLater ? (
             <>
               <p>Owed by the platform until it pays out. Receivable account: <strong>{receivable ? `${receivable.code} · ${receivable.name}` : (channel.receivableAccountCode ?? 'not set')}</strong>.</p>
+              {channel.platform && channel.receivableAccountCode !== PLATFORM_RECEIVABLE_CODE && (
+                <p className="text-neutral-600 dark:text-neutral-400">
+                  A delivery platform&apos;s sales must go to {PLATFORM_RECEIVABLE_CODE}, which payouts and platform files read. This channel uses {channel.receivableAccountCode ?? 'no account'}. Edit the channel to fix it.
+                </p>
+              )}
               <p className="text-neutral-600 dark:text-neutral-400">
                 Payout wallet:{' '}
                 {wallet ? (
@@ -443,26 +449,39 @@ function ChannelFields({
       </fieldset>
 
       <FormGrid>
-        <Field
-          label={
-            <span className="text-neutral-600 dark:text-neutral-400">
-              Receivable account <span className="text-neutral-600 dark:text-neutral-400">(required when it settles later)</span>
-            </span>
-          }
-        >
-          <Select
-            name="receivableAccountCode"
-            defaultValue={channel?.receivableAccountCode ?? ''}
-            className="mt-1 w-full"
+        {channel?.platform ? (
+          // T-606: a delivery platform's receivable is fixed - shown, not chosen. The hidden value is what the save carries (the domain refuses anything else).
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Receivable account</span>}>
+            <input type="hidden" name="receivableAccountCode" value={PLATFORM_RECEIVABLE_CODE} />
+            <p className="mt-1">
+              <strong>
+                {PLATFORM_RECEIVABLE_CODE} · {platformReceivableOptions(accounts)[0]?.name ?? 'Channel receivable'}
+              </strong>{' '}
+              <span className="text-neutral-600 dark:text-neutral-400">(fixed for a delivery platform)</span>
+            </p>
+          </Field>
+        ) : (
+          <Field
+            label={
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Receivable account <span className="text-neutral-600 dark:text-neutral-400">(required when it settles later)</span>
+              </span>
+            }
           >
-            <option value="">None (only when it reaches the till)</option>
-            {accounts.map((a) => (
-              <option key={a.code} value={a.code}>
-                {a.code} · {a.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+            <Select
+              name="receivableAccountCode"
+              defaultValue={channel?.receivableAccountCode ?? ''}
+              className="mt-1 w-full"
+            >
+              <option value="">None (only when it reaches the till)</option>
+              {accounts.map((a) => (
+                <option key={a.code} value={a.code}>
+                  {a.code} · {a.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </FormGrid>
 
       <fieldset className="space-y-2">
