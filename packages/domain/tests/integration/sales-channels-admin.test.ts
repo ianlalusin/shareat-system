@@ -692,3 +692,61 @@ describe('T-606 S1 - the channel receivable for delivery platforms only', () => 
     expect(String((await row(channelId)).platform)).toBe('foodpanda');
   });
 });
+
+describe('T-606 S2 - no switching a channel\'s receivable away from a balance', () => {
+  const R = channelSettlementsRepo.CHANNEL_RECEIVABLE_CODE;
+  const make = (f: Fixture, receivableAccountCode: string | null, isRemittedDaily = false) =>
+    asOrg(f.orgId, (tx) => createSalesChannel(tx, f.admin, { storeId: f.storeId, name: uid('ch'), isRemittedDaily, receivableAccountCode }));
+  const switchTo = (f: Fixture, channelId: string, receivableAccountCode: string | null, isRemittedDaily = false) =>
+    asOrg(f.orgId, (tx) => updateSalesChannel(tx, f.admin, { channelId, name: 'Switched', isRemittedDaily, receivableAccountCode, wastageTypeMode: 'tracked' }));
+  const codeOf = async (id: string) => String((await channelRowById(id)).receivable_account_code);
+  /** A posting on the channel's receivable account: Dr (a sale) or Cr (a payout / a void) on `code`, party = the channel. */
+  async function post(f: Fixture, channelId: string, code: string, side: 'debit' | 'credit', amount: string) {
+    const { postEntry } = await import('../../src/ledger/post-entry');
+    await asOrg(f.orgId, (tx) =>
+      postEntry(tx, {
+        orgId: f.orgId,
+        entryDate: '2026-01-10',
+        sourceType: 'sales_day',
+        sourceId: f.salesDayId,
+        idempotencyKey: `t606:${channelId}:${code}:${side}:${amount}:${uid('k')}`,
+        memo: 'Channel day',
+        postedBy: f.managerId,
+        lines: [
+          { accountCode: code, storeId: f.storeId, [side]: amount, partyType: 'channel', partyId: channelId },
+          { accountCode: '4150', storeId: f.storeId, [side === 'debit' ? 'credit' : 'debit']: amount },
+        ],
+      }),
+    );
+  }
+  const sentenceOf = (p: Promise<unknown>) => p.then(() => null, (e: { userMessage?: string }) => e.userMessage ?? null);
+
+  it('with nothing owed on the old account the receivable switches (1210 to 1220)', async () => {
+    const f = await fixture('t606-s2-ok');
+    const { channelId } = await make(f, '1210');
+    await switchTo(f, channelId, R);
+    expect(await codeOf(channelId)).toBe(R);
+  });
+
+  it('while a balance sits on the old account the switch is refused with a sentence naming the amount and what to do, and nothing changes; once the balance is cleared it works - Mutant: delete the guard -> switches anyway, red', async () => {
+    const f = await fixture('t606-s2-balance');
+    const { channelId } = await make(f, '1210');
+    await post(f, channelId, '1210', 'debit', '500.00');
+    const sentence = await sentenceOf(switchTo(f, channelId, R));
+    expect(sentence).toBe('Switched still has \u20b1500.00 owed on 1210 Accounts receivable. Void and re-post those sales on the normal screens so the balance clears, then change the account.'.replace('Switched', String((await channelRowById(channelId)).name)));
+    expect(await codeOf(channelId)).toBe('1210');
+    await post(f, channelId, '1210', 'credit', '500.00'); // voided / paid: the account is back to nothing
+    await switchTo(f, channelId, R);
+    expect(await codeOf(channelId)).toBe(R);
+  });
+
+  it('a channel on 1220 with a balance cannot be switched to a daily channel with no receivable either; staying on 1220 is fine', async () => {
+    const f = await fixture('t606-s2-daily');
+    const { channelId } = await make(f, R);
+    await post(f, channelId, R, 'debit', '250.00');
+    expect(await sentenceOf(switchTo(f, channelId, null, true))).toMatch(/still has \u20b1250\.00 owed on 1220 Channel receivable/);
+    expect(await codeOf(channelId)).toBe(R);
+    await switchTo(f, channelId, R); // the same account: nothing to strand
+    expect(String((await channelRowById(channelId)).name)).toBe('Switched');
+  });
+});

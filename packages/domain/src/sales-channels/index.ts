@@ -31,6 +31,7 @@
  */
 import { auditLogRepo, channelSettlementsRepo, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
 import { authorize, can, type Actor } from '@shareat/auth';
+import { add } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { SETTINGS_BANK_HINTS_RULES, SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES } from '../field-rules/settings';
@@ -250,6 +251,21 @@ export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSale
     input.receivableAccountCode ?? null,
     channel.platform !== null,
   );
+
+  // T-606 S2: never switch a channel's receivable away from an account that still carries what the channel is owed (or owes). The old account would keep the balance
+  // while settlements, platform files and the aging read the new one. Ian, 18 Nov: such a balance is cleared by voiding and re-posting the sales first.
+  const old = channel.receivableAccountCode;
+  if (old !== null && old !== receivableAccountCode) {
+    const balances = await channelSettlementsRepo.partyBalancesByStore(tx, actor.orgId, channel.id, old);
+    if (balances.length > 0) {
+      const total = add(...balances.map((b) => b.balance));
+      const oldAccount = await salesDaysRepo.receivableAccountFor(tx, actor.orgId, old);
+      throw refuse(
+        `updateSalesChannel: channel ${channel.id} still has ${total} on ${old}; its receivable account cannot change.`,
+        `${channel.name} still has ₱${total} owed on ${old}${oldAccount ? ` ${oldAccount.name}` : ''}. Void and re-post those sales on the normal screens so the balance clears, then change the account.`,
+      );
+    }
+  }
 
   await salesDaysRepo.updateChannel(tx, actor.orgId, input.channelId, {
     name,
