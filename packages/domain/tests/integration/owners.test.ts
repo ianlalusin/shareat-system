@@ -24,7 +24,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { ownersRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
-import type { Actor } from '@shareat/auth';
+import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   closeDrawingMonth,
   createOwner,
@@ -924,5 +924,90 @@ describe('DEF-872 - repayment and pay recovery respect the month close', () => {
     expect(await entryCount(f, 'owner_pay_recovery', id)).toBe(0);
     await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '500.00', on: '2026-02-06' }));
     expect(await entryCount(f, 'owner_pay_recovery', id)).toBe(1);
+  });
+});
+
+// -------------------------------------------------------------------------------------------------
+// T-593 S4 - DEF-873: reverseOwnerEntry only reverses this owner's own postings
+// -------------------------------------------------------------------------------------------------
+
+describe('DEF-873 - reverseOwnerEntry is bound to the owner, the gate and the month', () => {
+  const reversalRows = async (f: Fixture) =>
+    Number((await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${f.orgId} and reversal_of_entry_id is not null`)[0]!.n);
+  const SENTENCE = 'That entry does not belong to this owner.';
+  const userMessage = (p: Promise<unknown>) => p.then(() => null, (e: { userMessage?: string }) => e.userMessage ?? null);
+  const reverse = (f: Fixture, ownerId: string, entryId: string, who: Actor = f.admin) =>
+    asOrg(f.orgId, (tx) => reverseOwnerEntry(tx, who, { ownerId, entryId, reason: 'test' }));
+  const draw = async (f: Fixture, ownerId: string, on = '2026-01-10') =>
+    (await asOrg(f.orgId, (tx) => recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId, amount: '1000.00', fromMoneyAccountId: f.till, on }))).entryId;
+  const secondOwner = async (f: Fixture) =>
+    (await asOrg(f.orgId, (tx) => createOwner(tx, f.admin, { storeId: f.storeId, personId: f.adminId, drawingLimit: null, drawingLimitPeriod: null }))).id;
+
+  it("another owner's drawing is refused, and nothing is reversed - Mutant: delete the entry binding -> red", async () => {
+    const f = await fixture('def873-other');
+    const mine = await owner(f);
+    const theirs = await secondOwner(f);
+    const theirEntry = await draw(f, theirs);
+    expect(await userMessage(reverse(f, mine, theirEntry))).toBe(SENTENCE);
+    expect(await reversalRows(f)).toBe(0);
+  });
+
+  it('an entry that is not an owner posting (an opening balance, an expense) is refused', async () => {
+    const f = await fixture('def873-foreign-type');
+    const id = await owner(f);
+    await owesUs(f, id, '300.00');
+    const [opening] = await sql<{ id: string }[]>`select id from journal_entries where org_id = ${f.orgId} and source_type = 'opening_balance' limit 1`;
+    const [expense] = await sql<{ id: string }[]>`select id from journal_entries where org_id = ${f.orgId} and source_type = 'expense' limit 1`;
+    for (const entryId of [opening!.id, expense!.id]) expect(await userMessage(reverse(f, id, entryId))).toBe(SENTENCE);
+    expect(await reversalRows(f)).toBe(0);
+  });
+
+  it("another organisation's owner entry is refused", async () => {
+    const f = await fixture('def873-org-a');
+    const g = await fixture('def873-org-b');
+    const id = await owner(f);
+    const foreignOwner = await owner(g);
+    const foreignEntry = await draw(g, foreignOwner);
+    expect(await userMessage(reverse(f, id, foreignEntry))).toBe(SENTENCE);
+    expect(await reversalRows(f)).toBe(0);
+    expect(await reversalRows(g)).toBe(0);
+  });
+
+  it('a person holding only transfer_funds reverses a drawing, but not a write-off (approve_expense) - Mutant: delete the second authorize -> red', async () => {
+    const f = await fixture('def873-gate');
+    const id = await owner(f);
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Fund Mover') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${f.orgId}, 'staff')`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${f.storeId})`;
+    await sql`insert into person_grants (person_id, grant_name, granted_by, grant_source, store_id) values (${p!.id}, 'transfer_funds', ${f.adminId}, 'grant', ${f.storeId})`;
+    const mover = actor(f.orgId, p!.id);
+
+    const drawEntry = await draw(f, id);
+    await reverse(f, id, drawEntry, mover); // positive: the cap they hold
+    expect(await reversalRows(f)).toBe(1);
+
+    await owesUs(f, id, '400.00');
+    const writeOff = (await asOrg(f.orgId, (tx) => writeOffReceivable(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '400.00', reason: 'forgiven', on: '2026-01-20' }))).entryId;
+    await expect(reverse(f, id, writeOff, mover)).rejects.toThrow(AuthorizationError);
+    expect(await reversalRows(f)).toBe(1);
+    await reverse(f, id, writeOff); // the admin may
+    expect(await reversalRows(f)).toBe(2);
+  });
+
+  it("a drawing in a closed month cannot be reversed; the original and the month stay as they were - Mutant: delete the month check -> red", async () => {
+    const f = await fixture('def873-closed');
+    const id = await owner(f);
+    const entryId = await draw(f, id, '2026-01-10');
+    await asOrg(f.orgId, (tx) => closeDrawingMonth(tx, f.admin, { ownerId: id, month: '2026-01-01', on: '2026-02-01' }));
+    await expect(reverse(f, id, entryId)).rejects.toThrow(/2026-01 is closed for this owner/);
+    expect(await reversalRows(f)).toBe(0);
+  });
+
+  it('control: the owner\'s own drawing still reverses and nets out (the existing positive case, again with the new binding)', async () => {
+    const f = await fixture('def873-ok');
+    const id = await owner(f);
+    const entryId = await draw(f, id);
+    await reverse(f, id, entryId);
+    expect((await positionOf(f, id)).drawn).toBe('0.00');
   });
 });
