@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1806` 13. Decision log
-- `1807–1826` 14. Amendment protocol
-- `1827–1831` 15. Engineering standards — the industry practices this project follows
-  - `1832–1837` 15.1 Build order: walking skeleton first
-  - `1838–1849` 15.2 Golden-master testing — the most important practice here
-  - `1850–1858` 15.3 Strangler Fig, not big-bang cutover
-  - `1859–1863` 15.4 No dual-write
-  - `1864–1872` 15.5 Expand/contract migrations
-  - `1873–1881` 15.6 Observability from day zero, not later
-  - `1882–1886` 15.7 CI gates
-  - `1887–1891` 15.8 Backups and a tested restore
-  - `1892–1896` 15.9 Twelve-Factor config
-  - `1897–1904` 15.10 Append-only ledgers — but not event sourcing
-  - `1905–1909` 15.11 Defence in depth
-  - `1910–1938` 15.12 Skills are lenses, not assurance
-  - `1939–1945` 15.13 Reconciliation is a permanent feature
-- `1946–1950` 16. The accounting spine
-  - `1951–1982` 16.0 What we are actually fixing — the diagnosis
-  - `1983–2026` 16.1 The ten invariants — non-negotiable
-  - `2027–2041` 16.2 The oracle: how "correct" is tested
-  - `2042–2063` 16.3 The model — header + lines, not legs
-  - `2064–2083` 16.4 Deliberately simpler than ERPNext
-  - `2084–2153` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2154–2178` 16.6 What v1 already gets right — preserve the intent
-  - `2179–2200` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2201–2215` 16.8 What v1's accounting already gets right
-  - `2216–2259` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2260–2310` 16.10 Posting patterns — one canonical pattern per business event
-  - `2311–2343` 16.11 Inventory's accounting integration
+- `1350–1817` 13. Decision log
+- `1818–1837` 14. Amendment protocol
+- `1838–1842` 15. Engineering standards — the industry practices this project follows
+  - `1843–1848` 15.1 Build order: walking skeleton first
+  - `1849–1860` 15.2 Golden-master testing — the most important practice here
+  - `1861–1869` 15.3 Strangler Fig, not big-bang cutover
+  - `1870–1874` 15.4 No dual-write
+  - `1875–1883` 15.5 Expand/contract migrations
+  - `1884–1892` 15.6 Observability from day zero, not later
+  - `1893–1897` 15.7 CI gates
+  - `1898–1902` 15.8 Backups and a tested restore
+  - `1903–1907` 15.9 Twelve-Factor config
+  - `1908–1915` 15.10 Append-only ledgers — but not event sourcing
+  - `1916–1920` 15.11 Defence in depth
+  - `1921–1949` 15.12 Skills are lenses, not assurance
+  - `1950–1956` 15.13 Reconciliation is a permanent feature
+- `1957–1961` 16. The accounting spine
+  - `1962–1993` 16.0 What we are actually fixing — the diagnosis
+  - `1994–2037` 16.1 The ten invariants — non-negotiable
+  - `2038–2052` 16.2 The oracle: how "correct" is tested
+  - `2053–2074` 16.3 The model — header + lines, not legs
+  - `2075–2094` 16.4 Deliberately simpler than ERPNext
+  - `2095–2164` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2165–2189` 16.6 What v1 already gets right — preserve the intent
+  - `2190–2211` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2212–2226` 16.8 What v1's accounting already gets right
+  - `2227–2270` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2271–2321` 16.10 Posting patterns — one canonical pattern per business event
+  - `2322–2354` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1793,6 +1793,17 @@ just a patch.**
 | 461 | 2026-11-13 | **THE ERP FINANCE SCREENS ARE READ-GATED BY CAPABILITY AND STORE SCOPE.** `/ap`, `/budgets` and `/cash-requests` are added to `ROUTE_CAPABILITY`; the single-record pages `expenses/[id]`, `sales-days/[id]` and `wastage/[id]` refuse a record outside the viewer's store scope. Signed-in alone is never enough to read money. | Ian, 13 Nov, answering audit DEF-834 (any signed-in staff could read them org-wide) | Yes (gates only). DEF-834 |
 | 462 | 2026-11-13 | **A SENIOR/PWD ID USED AGAIN IS WARNED ABOUT, NEVER BLOCKED, AND NEEDS NO MANAGER PIN.** The cashier sees the warning and may continue; the repeat is recorded. 'Again' means the same store on the same business day (Ian, 13 Nov, option a); the window is a store setting so it can change without code. | Ian, 13 Nov, answering audit DEF-843: a real senior may return the same day; blocking would refuse a legal discount (RA 9994 / RA 10754) | Yes. DEF-843 |
 | 463 | 2026-11-13 | **VOIDING A RESERVATION DEPOSIT NEEDS THE MANAGER PIN, AND IS REFUSED ONCE THE DEPOSIT HAS BEEN APPLIED TO A BILL.** Free text alone is never enough. | Ian, 13 Nov, agreeing with audit DEF-844's recommendation: a deposit is customer money held | Yes. DEF-844 |
+| 464 | 2026-11-14 | **T-564 STORE SETTLEMENT CONFIG MERGES ON GREEN. FOLLOW-UPS: SHOW THE WIRING WARNINGS ON SCREEN, AND KEEP THE TYPED TEXT AFTER A REFUSED PANEL SAVE.** | Ian, 14 Nov. Recorded from the coordination board at the 18 Nov wrap-up. The wiring panel itself came off the page on 17 Nov (row 480); the wiring warnings were deleted there because they were wrong. | Yes (a merge order and two follow-ups) |
+| 465 | 2026-11-15 | **BUILD T-533 NOW. POS v2 SOAK #1 MOVES TO SAT 21 NOVEMBER 2026 AT LIPA, IN THE TABLET BROWSER, IN TEST MODE. FALLBACK: SAT 28 NOVEMBER.** Amends row 457 (soak at Lipa on 28 November, 2-4 PM). | Ian, 15 Nov. | Yes (a date) |
+| 466 | 2026-11-15 | **PRINTING (T-532, THE APK AND BLUETOOTH PRINTER) IS A SEPARATE CHECK BEFORE LIVE. POS GO-LIVE IS GATED ON THE SOAK AND ON THE PRINTING CHECK.** The browser soak (row 465) does not prove printing. | Ian, 15 Nov. | Yes (a gate) |
+| 467 | 2026-11-15 | **THE DOCUMENTS PAGE IS BUILT SMALL. ADMINS AND OWN-STORE MANAGERS ISSUE DOCUMENTS. THE WORDING COMES FROM IAN'S OWN FILES. THE QUITCLAIM WAITS FOR A LAWYER.** Ian still owes the Word templates. | Ian, 15 Nov. T-584 Documents (migration 0259). | Yes (scope) |
+| 468 | 2026-11-15 | **ONE SIGNATURE PER PERSON, SAVED IN ONE PLACE AND REUSED APP-WIDE. IT IS ATTACHED TO A DOCUMENT ONLY WHEN ITS OWNER ENTERS THEIR PIN.** | Ian, 15 Nov. Recorded from the coordination board. | Yes |
+| 468b | 2026-11-15 | **EVERY VERSION OF AN ISSUED DOCUMENT IS KEPT. ANY CHANGE NEEDS EVERY SIGNATURE AGAIN.** | Ian, 15 Nov. Builds on row 468 (`issued_document_versions`, T-584). | No: versions are history |
+| 469 | 2026-11-15 | **SETTINGS STUDY: T-585 (RECEIPT IDENTITY) NOW; T-586 (ONE STORE SCREEN) AFTER GO-LIVE. NO REWIRING OF `apps/pos` FIRESTORE OR WEBSITE FUNCTIONS. ONLINE ORDERING AND DELIVERY SETTINGS ARE DESIGNED WITH CUSTOMER/WEBSITE v2.** | Ian, 15 Nov, answering "a" to the settings-study options. | Yes |
+| 470 | 2026-11-15 | **STORE MANAGERS MAY READ ORG-WIDE DOCUMENTS (MEMOS). ISSUING, REVISING AND VOIDING THEM STAYS ADMIN-ONLY.** | Ian, 15 Nov. | Yes (a capability) |
+| 471 | 2026-11-15 | **NOTHING MORE IS BUILT ON `pos2.shareat.net` / `apps/pos`. ALL POS WORK GOES TO ERP2 `/pos` (ROW 430). `apps/pos` GETS ONLY SECURITY FIXES UNTIL T-588 RETIRES IT.** | Ian, 15 Nov: "we are not building anything on pos2.shareat.net from now on." Reason: the terminal linking built earlier for it was time and effort better spent on the POS in the ERP. Task: `docs/tasks/588-retire-pos2.md`. | Yes |
+| 472 | 2026-11-15 | **T-589 UI FIX BATCHES B1 (BUGS), B2 (SAVED VALUES SHOWN IN THE EditableRecord SUMMARY), B3 (PLAIN WORDS, DATES, CONFIRMS) AND B4 (PHONE LAYOUT) ARE ALL APPROVED. MAIN ACTIONS SHOW ICON + WORD (KEEPS ROW 451'S ICONS). STORE-PAGE DATES KEEP THE en-PH LONG FORM.** | Ian, 15 Nov: all 4 batches; "Icon + word". `docs/tasks/589-app-ui-fixes.md` | Yes |
+| 473 | 2026-11-16 | **POS v1 IS NOT TOUCHED WHILE STORES USE IT: NO TILL ROLLOUT, NO RULES RE-DEPLOY. AUDIT B01 AND B16 ARE ACCEPTED RISK UNTIL EACH STORE SWAPS TO v2. v2 IS TRIED ALONGSIDE v1 IN QUIET HOURS FOR A FEW WEEKS (STAFF REPLAY THEIR RECORDS), THEN SWAPPED IN COMPLETELY WITH STARTING-POINT DATA. AUDIT F22 (APK-ONLY) AND R1 ARE CLOSED.** | Ian: "leave v1 alone. its actively being used by stores now we are not touching it. we are building v2 the soons as we can set it up that we can use that. im open trying it out as planed for few weeks while using the v1 still like in quite hours in store i will have my staff try its feature replay their records etc then when v2 is done and can be used i will set it up with starting point data and swap v2 in place of v1 completely." Answers: F22 "App only"; R1 "Accept, close it". | Yes |
 | 474 | 2026-11-17 | **"CUTOVER" BECOMES "OPENING BALANCES" IN EVERY LABEL AND ROUTE (T-591). OLD URLS REDIRECT. INTERNAL CODE KEEPS THE CUTOVER NAMES.** `/cutover/count` and the rest of the cutover screens move to opening-balances routes; the old links redirect permanently (verified on production for `/cutover/count`). Package, table, capability and function names stay as they are: no migration, no number or posting changes. Slice A (labels and routes) and slice B (a better stock-count screen) both merged. | Ian, 16-17 Nov: "update that to be labeled as opening balances (evaluate this since new store to come will not be cutover right) and improve the ui", then "fix the ref to all cutover must be opening balance including the link". BOSS advised against it once (the page is one-time and locks org-wide once the books open; a new store starts at zero) and proposed "Opening stock count"; Ian chose the rename anyway. | Yes (labels and redirects only). `docs/tasks/591-opening-balances-rename.md` |
 | 475 | 2026-11-16 | **BOSS INTERIM RULING: WALK-IN SALES CHANNELS KEEP THE "PLATFORM AND STORE CODE" FORM FOR NOW. SUPERSEDED THE NEXT DAY BY ROW 480.** The T-589 B4b builder had hidden the form on walk-in channels, which broke `t511-s2b-render` (T-511 S2b requires the form on every active channel). BOSS ruled: keep the revert; that rule belongs to the settlement lane, so a UI pass does not change it. | BOSS, 16 Nov, answering the UI UX lane on PR #294 (not Ian's own ruling). Ian's later direction on 17 Nov ("per channel that settle daily like dine in do not add store code") replaced it: see row 480. | Superseded by row 480 |
 | 476 | 2026-11-16 | **THE MERGER'S QUEUE SCRIPT AUTO-CLEANS ONLY ITS OWN `fix-pr*` WORKTREE FOLDERS. ANY OTHER LANE'S WORKTREE IS LEFT ALONE, AND THE MERGER ASKS THE OWNING LANE BEFORE REMOVING IT.** Two slips led here: on 12 Nov the auto-cleanup reached into another lane's tree (only ignored files were lost), and on 16 Nov it removed the clean, merged `wt-till-two-cards` and its local branch before the owner was asked (main tree intact, nothing lost). Same family as the standing rule never to `git worktree remove --force` or `rm -rf` a lane worktree. | BOSS flagged both slips to the merger; the merger changed its script and confirmed on 16 Nov. Reason: a worktree can hold a lane's only copy of uncommitted work, and only its owner knows. | Yes (a script rule) |
