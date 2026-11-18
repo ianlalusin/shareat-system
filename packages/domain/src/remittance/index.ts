@@ -37,6 +37,7 @@ import { add, compare, formatMoney, isZero, money, negate, subtract, ZERO, type 
 import { parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { createMoneyTransfer, voidMoneyTransfer } from '../money-transfers';
 import { recordRemittanceEvent } from './audit';
+import { lockLiveSalesDay } from '../sales-days/live-day';
 import { parseDecimalInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { CASH_POLICY_RULES } from '../field-rules/remittance';
@@ -349,6 +350,13 @@ async function runCreate(
   }));
 
   const result = allocateFifo(days, handedOver);
+  const byDate = new Map(settleable.map((r) => [r.businessDate, r]));
+  // T-594 DEF-904: the days this handover counts against are locked (and re-checked live) before anything is written, so a
+  // void of one of them that is in flight is waited out and refused, instead of this committing against a voided day.
+  await lockHandoverDays(tx, actor.orgId, input.storeId, [
+    ...result.allocations.map((a) => byDate.get(a.salesDayId)?.salesDayId),
+    byDate.get(result.varianceDayId ?? '')?.salesDayId,
+  ]);
 
   const { id } = await remittanceRepo.insertRemittance(tx, {
     orgId: actor.orgId,
@@ -387,7 +395,6 @@ async function runCreate(
     });
   }
 
-  const byDate = new Map(settleable.map((r) => [r.businessDate, r]));
   for (const a of result.allocations) {
     await remittanceRepo.insertAllocation(tx, {
       remittanceId: id,
@@ -425,6 +432,12 @@ async function runCreate(
     variance: isZero(result.variance) ? null : String(result.variance),
     varianceId,
   };
+}
+
+/** T-594 DEF-904: take every distinct sales day a handover (or a charge that closes days) settles, in id order, through the shared live-day door. */
+async function lockHandoverDays(tx: Tx, orgId: string, storeId: string, salesDayIds: (string | null | undefined)[]): Promise<void> {
+  const ids = [...new Set(salesDayIds.filter((d): d is string => !!d))].sort();
+  for (const salesDayId of ids) await lockLiveSalesDay(tx, orgId, { salesDayId, storeId, doing: 'a cash handover' });
 }
 
 /**
@@ -744,6 +757,7 @@ export async function resolveRemittanceVariance(
     // "Charge closes": settle the days the shortage left owing, oldest first.
     const settled = allocateFifo(owedDays, chargeable);
     const byDate = new Map(reports.map((r) => [r.businessDate, r]));
+    await lockHandoverDays(trx, actor.orgId, variance.storeId, settled.allocations.map((a) => byDate.get(a.salesDayId)?.salesDayId));
     for (const a of settled.allocations) {
       await remittanceRepo.insertAllocation(trx, {
         remittanceId: variance.remittanceId,

@@ -159,3 +159,71 @@ describe('T-594 DEF-877 - race: a settlement being recorded against the day, hel
     expect(await dayStatus(f)).toBe('verified');
   });
 });
+
+// =====================================================================================================
+// DEF-904 - the opposite race: a handover or a payout settlement read the day as verified, and a void of the day commits first.
+// The void takes the day row FOR UPDATE; the writer now takes it FOR SHARE through `lockLiveSalesDay` and re-checks, so it parks,
+// then sees the day voided and refuses. MUTANTS: delete the `lockHandoverDays` call in `createRemittance` -> the remittance test
+// goes red (it commits against the voided day); delete the `lockLiveSalesDay` call in `recordChannelSettlement` -> the settlement test.
+// =====================================================================================================
+const voidedSentence = (what: string) =>
+  new RegExp(`^The sales day for .+ has been voided, so ${what} can't be recorded against it\\.$`);
+const sentenceOrOk = (p: Promise<unknown>) => p.then(() => 'ok' as const, (e: unknown) => String((e as { userMessage?: string }).userMessage ?? e));
+
+/** Cash in the till on DATE (a non-transfer document), so the verified day owes something a handover can settle. */
+async function tillTakings(f: Fx, amount: string): Promise<{ till: string; safe: string }> {
+  const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} and starts_on <= ${DATE} and ends_on >= ${DATE} limit 1`;
+  await sql.begin(async (tx) => {
+    const [e] = await tx<{ id: string }[]>`
+      insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+      values (${f.orgId}, ${DATE}, ${period!.id}, 'sale', ${`t594-takings-${f.dayId}`}, 'draft') returning id`;
+    const [cash] = await tx<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1110'`;
+    const [sales] = await tx<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '4100'`;
+    await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit) values (${e!.id}, 1, ${cash!.id}, ${f.storeA}, ${amount}, '0')`;
+    await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit) values (${e!.id}, 2, ${sales!.id}, ${f.storeA}, '0', ${amount})`;
+    await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+  });
+  const [till] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${f.storeA} and instrument = 'cash' and custodian = 'cashier' and is_foundation`;
+  const [safe] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${f.storeA} and instrument = 'cash' and custodian = 'office' and is_foundation`;
+  return { till: till!.id, safe: safe!.id };
+}
+
+describe('T-594 DEF-904 - a writer racing a void of the day', () => {
+  it('remittance: A voids the verified day (held); B hands over cash against it: B parks on the day row, then is refused; no allocation, no remittance', async () => {
+    const f = await world();
+    const { till, safe } = await tillTakings(f, '1000.00');
+    const [a, b] = await heldRace(
+      asOrg,
+      f.orgId,
+      (tx) => D.voidSalesDay(tx, f.admin, f.dayId, 'wrong day'),
+      (tx) => sentenceOrOk(D.createRemittance(tx, f.admin, { storeId: f.storeA, remittedOn: '2026-10-13', lines: [{ fromMoneyAccountId: till, toMoneyAccountId: safe, amount: '1000.00' }] })),
+    );
+    expect(a.reversalEntryId).not.toBeNull();
+    expect(b).toMatch(voidedSentence('a cash handover'));
+    expect(await dayStatus(f)).toBe('voided');
+    expect(Number((await sql<{ n: string }[]>`select count(*)::text as n from remittances where org_id = ${f.orgId}`)[0]!.n), 'a remittance was written').toBe(0);
+    expect(Number((await sql<{ n: string }[]>`select count(*)::text as n from remittance_allocations ra join remittances r on r.id = ra.remittance_id where r.org_id = ${f.orgId}`)[0]!.n)).toBe(0);
+  });
+
+  it('settlement: A voids the verified day (held); B records a payout against it: B parks, then is refused; no settlement row', async () => {
+    const f = await world();
+    const [a, b] = await heldRace(
+      asOrg,
+      f.orgId,
+      (tx) => D.voidSalesDay(tx, f.admin, f.dayId, 'wrong day'),
+      (tx) => sentenceOrOk(D.recordChannelSettlement(tx, f.admin, { storeId: f.storeA, channelId: f.channelId, salesDayId: f.dayId, businessDate: DATE, grossAmount: '10000.00', netDeposited: '10000.00', settledOn: '2026-10-20' })),
+    );
+    expect(a.reversalEntryId).not.toBeNull();
+    expect(b).toMatch(voidedSentence('a payout settlement'));
+    expect(Number((await sql<{ n: string }[]>`select count(*)::text as n from channel_settlements where org_id = ${f.orgId}`)[0]!.n), 'a settlement was written').toBe(0);
+  });
+
+  it('positive: with no void in flight both post against a verified day', async () => {
+    const f = await world();
+    const { till, safe } = await tillTakings(f, '1000.00');
+    await asOrg(f.orgId, (tx) => D.createRemittance(tx, f.admin, { storeId: f.storeA, remittedOn: '2026-10-13', lines: [{ fromMoneyAccountId: till, toMoneyAccountId: safe, amount: '1000.00' }] }));
+    const g = await world();
+    const s = await recordSettlement(g);
+    expect(s.settlementId).toBeTruthy();
+  });
+});
