@@ -129,3 +129,15 @@ wallet (stays on `/channel-settlements`); `/admin/stores` readiness rows.
 ## Build order
 S1 domain + migration + tests (Sonnet). S2 page (Sonnet, impeccable brief). S3 Opus verify + browser screenshots on a
 private port (not 9008/9018/9038), desktop + 375 px. One PR.
+
+## Audit fix (2026-11-18, audit F1 — stacked PR on this branch)
+Finding: the saved-code form posts the hidden platform with a blank code (`platform=foodpanda, code=''`); the action passed
+that through and the domain refused "a platform needs a code", so R3's "blank + save clears" never worked and a coded
+channel could not be emptied before switching it to daily (R1).
+Fix, two files only:
+- `apps/erp/src/app/settings/sales-channels/actions.ts` `setPlatformCodeAction`: a blank (trimmed) code sends
+  `platform: null, code: null`. The domain pair rule, field rules and the admin-only `authorize()` stay unchanged.
+- `apps/erp/tests/integration/t511-s2b-actions.test.ts`: empty and whitespace-only code with the hidden platform clear
+  both columns, then the shared form's daily switch saves. The two old refusal cases for exactly that payload are
+  removed (they encoded the pre-R3 behaviour); every malformed NON-blank case stays refused.
+No migration, no new number (the behaviour is R3's own).
