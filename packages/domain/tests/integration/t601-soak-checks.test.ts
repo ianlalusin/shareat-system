@@ -1,13 +1,13 @@
 /**
  * T-601 S1 - posSoakChecks against a real database. docs/tasks/601-pos-soak-readiness.md S1.
- * The pure decision (every check failing alone) is `src/pos/soak-checks.test.ts`; THIS file proves the extra facts are read right: the manage_stores
+ * The pure decision (every check failing alone) is `src/pos-soak/soak-checks.test.ts`; THIS file proves the extra facts are read right: the manage_stores
  * gate, the active terminal link, the approver (capability AND a live PIN), and that the list writes nothing. Made-up data only.
  */
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { AuthorizationError } from '@shareat/auth';
 import { asOrg, closeAll, fixture, makeStaff, pinOf, sql, uuid, type Fx } from './_fixtures/t525-pos';
-import { posSoakChecks } from '../../src/pos/soak-checks';
+import { posSoakChecks } from '../../src/pos-soak/soak-checks';
 
 afterAll(closeAll);
 

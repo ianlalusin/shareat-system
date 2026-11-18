@@ -109,6 +109,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/payroll': 34,
   'packages/domain/src/people': 0,
   'packages/domain/src/pos': 7,
+  'packages/domain/src/pos-soak': 0, // T-601 S1: new directory, ceiling = count at birth (no throw at all; it only reads)
   'packages/domain/src/prepaid': 17, // T-343 S5.5p: 20 -> 17, writeOffPrepaidItem's negative/no-account/over-refund throws converted to refuse(...)
   'packages/domain/src/production': 7,
   'packages/domain/src/recurring-expenses': 13,

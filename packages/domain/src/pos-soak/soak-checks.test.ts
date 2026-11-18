@@ -3,7 +3,7 @@
  * exactly that code. The database side (the facts read right) is `tests/integration/t601-soak-checks.test.ts`.
  */
 import { describe, expect, it } from 'vitest';
-import type { PreflightItem, PreflightResult } from './preflight';
+import type { PreflightItem, PreflightResult } from '../pos/preflight';
 import { evaluateSoakChecks, type SoakExtra, type SoakMenu } from './soak-checks';
 
 const STORE = '00000000-0000-4000-8000-000000000001';

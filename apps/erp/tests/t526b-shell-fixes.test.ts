@@ -6,14 +6,11 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { initialPosState, pollPosState, reducePosState } from '@/app/pos/_shell/pos-state';
 import { localHHMM, posOfflineBandText, showNeedsInternetOnce } from '@/app/pos/_shell/offline-band';
 import { statusPillShort } from '@/app/pos/_shell/status-pill';
 import { POS_SIGN_IN_BUTTON, POS_TOUCH } from '@/app/pos/_shell/touch';
-import { SlicePlaceholder } from '@/app/pos/_shell/SlicePlaceholder';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const src = (p: string) => readFileSync(resolve(root, p), 'utf8');
@@ -155,20 +152,9 @@ describe('T-526b item 4 - phone width (below sm)', () => {
   });
 });
 
-describe('T-526b item 5 - placeholder cards speak staff words', () => {
-  it.each([
-    ['Orders', 'Orders are coming in the next update.'],
-    ['Kitchen', 'Kitchen is coming in the next update.'],
-    ['Refills', 'Refills are coming in the next update.'],
-    ['Receipts', 'Receipts are not on this screen yet.'],
-    ['Till', 'Till is coming in the next update.'],
-  ])('%s', (title, message) => {
-    const html = renderToStaticMarkup(createElement(SlicePlaceholder, { title, message }));
-    expect(html).toContain(message);
-    expect(html).not.toMatch(/T-\d{3}|slice|frame|built in/i);
-  });
-
-  it('each page passes its own sentence and no page names a task number', () => {
+describe('T-526b item 5 - the POS pages name no task number', () => {
+  // T-601: SlicePlaceholder is gone (every POS tab is a real screen now), so only the source promise is left.
+  it('no page names a task number or says it is not built yet', () => {
     // T-527: the Orders page is the real screen now (no placeholder sentence); it must still name no task number.
     expect(src('app/pos/page.tsx').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')).not.toMatch(/slice=|T-5\d\d/);
     // T-529: Kitchen and Refills are real screens now (no placeholder sentence); they must still name no task number.

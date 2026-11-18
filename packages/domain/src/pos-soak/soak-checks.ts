@@ -8,8 +8,8 @@
 import { can, type Actor } from '@shareat/auth';
 import { accessRepo, businessRulesRepo, organizationsRepo, posPreflightRepo, posV1Repo, posV2Repo, storesRepo, type Tx } from '@shareat/db';
 import { loadStoreMenu } from '../menu/load-store-menu';
-import { posPreflight, type PreflightDeps, type PreflightResult } from './preflight';
-import { receiptIdentityOf, type ReceiptIdentity } from './receipt-identity';
+import { posPreflight, type PreflightDeps, type PreflightResult } from '../pos/preflight';
+import { receiptIdentityOf, type ReceiptIdentity } from '../pos/receipt-identity';
 
 export interface SoakCheck {
   readonly code: string;

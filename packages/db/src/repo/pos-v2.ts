@@ -595,16 +595,6 @@ export async function lastDayCloseEnd(tx: Tx, orgId: string, storeId: string): P
   return row?.windowEnd;
 }
 
-/** Sales receipts of the open Z window (issued at or after `since`; all of them before the first Z), newest first. */
-export async function listReceiptsSince(tx: Tx, orgId: string, storeId: string, since: Date | undefined): Promise<PosSalesReceiptRow[]> {
-  const where = and(
-    eq(posSalesReceipts.orgId, orgId),
-    eq(posSalesReceipts.storeId, storeId),
-    since ? gte(posSalesReceipts.issuedAtDevice, since) : undefined,
-  );
-  return tx.select().from(posSalesReceipts).where(where).orderBy(desc(posSalesReceipts.issuedAtDevice), desc(posSalesReceipts.id));
-}
-
 /** One receipt of the Receipts list: the receipt, its till number, the table it was for and what it was paid by. */
 export interface ReceiptListRow {
   receiptId: string;
@@ -625,7 +615,7 @@ export interface ReceiptListRow {
 }
 
 /**
- * T-601 S2: the same receipts as `listReceiptsSince` (same org, store and `since` filter, newest first) with what the Receipts screen shows - the
+ * T-601 S2: the sales receipts of the open Z window (issued at or after `since`; all of them before the first Z), newest first, with what the Receipts screen shows - the
  * till number, the table and the tenders - in ONE query. Money stays text. `terminalId`'s till row, the session's stand and the payments are
  * joined without multiplying a receipt (payments fold into one `string_agg`).
  */
