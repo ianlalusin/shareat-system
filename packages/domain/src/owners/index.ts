@@ -410,8 +410,12 @@ export async function repayFromOwner(
     if (!owner) throw new Error(`repayFromOwner: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
     const requestId = requireRequestId('repayFromOwner', input.requestId);
+    // DEF-871: lock BEFORE the receivable is read, as recordDrawing does - two concurrent settlements must not both pass the ceiling.
+    await ownersRepo.lockOwnerForUpdate(trx, actor.orgId, owner.id);
     const parsed = parseMoneyInput(input.amount, 'repayFromOwner: the amount', 'The amount settled');
     await assertWithinReceivable(trx, actor.orgId, owner.id, parsed, 'repayFromOwner');
+    // DEF-872: a closed month stays agreed, for settlements as for drawings.
+    await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'repayFromOwner');
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
     if (!account) throw new Error('repayFromOwner: that money account does not exist.');
@@ -484,8 +488,10 @@ export async function recoverFromPay(
     if (!owner) throw new Error(`recoverFromPay: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
     const requestId = requireRequestId('recoverFromPay', input.requestId);
+    await ownersRepo.lockOwnerForUpdate(trx, actor.orgId, owner.id); // DEF-871
     const parsed = parseMoneyInput(input.amount, 'recoverFromPay: the amount', 'The amount settled');
     await assertWithinReceivable(trx, actor.orgId, owner.id, parsed, 'recoverFromPay');
+    await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'recoverFromPay'); // DEF-872
 
     // ⚠️ The best check available until payroll exists: this person must actually work here. It does
     // not prove they are PAID — nothing can, yet — and the screens say so rather than implying it.
@@ -570,6 +576,7 @@ export async function writeOffReceivable(
     // is an approval, and the person who took it should not be the one who forgives it.
     await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
     const requestId = requireRequestId('writeOffReceivable', input.requestId);
+    await ownersRepo.lockOwnerForUpdate(trx, actor.orgId, owner.id); // DEF-871
 
     const reason = input.reason.trim();
     if (!reason) {

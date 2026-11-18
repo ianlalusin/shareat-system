@@ -787,3 +787,142 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     ).rejects.toMatchObject({"name":"RefusalError","message":"owners.contribution.amount: money check failed","userMessage":"The contribution amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 });
+
+// -------------------------------------------------------------------------------------------------
+// T-593 S3 - DEF-871 (the owner lock on settlements) and DEF-872 (the month close on settlements)
+// -------------------------------------------------------------------------------------------------
+
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+type Settled<T> = { status: 'fulfilled'; value: T } | { status: 'rejected'; reason: unknown };
+
+/** Two real transactions at once: A runs its operation and stays OPEN; B starts and queues (if the lock exists) behind A; only then does A commit. */
+async function twoAtOnce<TA, TB>(orgId: string, opA: (tx: Tx) => Promise<TA>, opB: (tx: Tx) => Promise<TB>): Promise<{ a: Settled<TA>; b: Settled<TB>; bWaited: boolean }> {
+  const aReady = deferred<void>();
+  const gate = deferred<void>();
+  let aPid = 0;
+  const a: Promise<Settled<TA>> = asOrg(orgId, async (tx) => {
+    const pidRows = await tx.execute(dsql`select pg_backend_pid() as pid`);
+    aPid = Number((pidRows as unknown as { pid: number }[])[0]?.pid);
+    try {
+      const value = await opA(tx);
+      aReady.resolve();
+      await gate.promise;
+      return value;
+    } catch (err) {
+      aReady.resolve();
+      throw err;
+    }
+  }).then(
+    (value) => ({ status: 'fulfilled', value }) as const,
+    (reason) => ({ status: 'rejected', reason }) as const,
+  );
+  await aReady.promise;
+  const b: Promise<Settled<TB>> = asOrg(orgId, opB).then(
+    (value) => ({ status: 'fulfilled', value }) as const,
+    (reason) => ({ status: 'rejected', reason }) as const,
+  );
+  // Is B waiting on a row lock held by A? Poll the backend list until it is, or B finishes without waiting (no lock).
+  let bWaited = false;
+  const deadline = Date.now() + 5000;
+  const finished = b.then(() => true);
+  while (Date.now() < deadline && !bWaited) {
+    const rows = await sql<{ pid: number }[]>`
+      select pid from pg_stat_activity
+      where datname = current_database() and pid <> ${aPid} and wait_event_type = 'Lock' and wait_event = any(${['transactionid', 'tuple']})`;
+    if (rows.length > 0) bWaited = true;
+    else if (await Promise.race([finished, new Promise<boolean>((r) => setTimeout(() => r(false), 20))])) break;
+  }
+  gate.resolve();
+  const [ar, br] = await Promise.all([a, b]);
+  return { a: ar, b: br, bWaited };
+}
+
+const entryCount = async (f: Fixture, sourceType: string, ownerId: string) =>
+  Number(
+    (await sql<{ n: string }[]>`
+      select count(*)::text as n from journal_entries where org_id = ${f.orgId} and source_type = ${sourceType} and source_id = ${ownerId}
+    `)[0]!.n,
+  );
+const receivable = (f: Fixture, id: string) => asOrg(f.orgId, (tx) => ownersRepo.receivableOf(tx, f.orgId, id));
+
+describe('DEF-871 - one receivable, settled once', () => {
+  it('two concurrent full repayments: one commits, the other is refused "more than the ₱", receivable 0.00 - Mutant: remove the lock in repayFromOwner -> both commit, -1000.00, red', async () => {
+    const f = await fixture('def871-repay');
+    const id = await owner(f);
+    await owesUs(f, id, '1000.00');
+    const op = (tx: Tx) =>
+      repayFromOwner(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '1000.00', intoMoneyAccountId: f.till, on: '2026-01-20' });
+    const { a, b, bWaited } = await twoAtOnce(f.orgId, op, op);
+    expect(bWaited, 'B never waited: no lock').toBe(true);
+    expect([a, b].filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const rejected = [a, b].find((r) => r.status === 'rejected') as { status: 'rejected'; reason: Error };
+    expect(String(rejected.reason.message)).toMatch(/more than the ₱/);
+    expect(await receivable(f, id)).toBe('0.00');
+    expect(await entryCount(f, 'owner_repayment', id)).toBe(1);
+  });
+
+  it('two concurrent write-offs of the full receivable: one commits, the other is refused, receivable 0.00 - Mutant: remove the lock in writeOffReceivable -> both commit, red', async () => {
+    const f = await fixture('def871-writeoff');
+    const id = await owner(f);
+    await owesUs(f, id, '1000.00');
+    const op = (tx: Tx) =>
+      writeOffReceivable(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '1000.00', reason: 'forgiven', on: '2026-01-20' });
+    const { a, b, bWaited } = await twoAtOnce(f.orgId, op, op);
+    expect(bWaited, 'B never waited: no lock').toBe(true);
+    expect([a, b].filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(String(([a, b].find((r) => r.status === 'rejected') as { reason: Error }).reason.message)).toMatch(/more than the ₱/);
+    expect(await receivable(f, id)).toBe('0.00');
+    expect(await entryCount(f, 'owner_writeoff', id)).toBe(1);
+  });
+
+  it('two concurrent pay recoveries of the full receivable: one commits, the other is refused - Mutant: remove the lock in recoverFromPay -> both commit, red', async () => {
+    const f = await fixture('def871-recover');
+    const { id } = await asOrg(f.orgId, (tx) => createOwner(tx, f.admin, { storeId: f.storeId, personId: f.adminId, drawingLimit: null, drawingLimitPeriod: null }));
+    await owesUs(f, id, '1000.00');
+    const op = (tx: Tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '1000.00', on: '2026-01-20' });
+    const { a, b, bWaited } = await twoAtOnce(f.orgId, op, op);
+    expect(bWaited, 'B never waited: no lock').toBe(true);
+    expect([a, b].filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(String(([a, b].find((r) => r.status === 'rejected') as { reason: Error }).reason.message)).toMatch(/more than the ₱/);
+    expect(await receivable(f, id)).toBe('0.00');
+    expect(await entryCount(f, 'owner_pay_recovery', id)).toBe(1);
+  });
+});
+
+describe('DEF-872 - repayment and pay recovery respect the month close', () => {
+  async function closedJanuary(hint: string) {
+    const f = await fixture(hint);
+    // The admin is the owner so the pay-recovery "has an active role" rule is met.
+    const { id } = await asOrg(f.orgId, (tx) => createOwner(tx, f.admin, { storeId: f.storeId, personId: f.adminId, drawingLimit: null, drawingLimitPeriod: null }));
+    await owesUs(f, id, '2000.00', '2026-01-12');
+    await asOrg(f.orgId, (tx) => closeDrawingMonth(tx, f.admin, { ownerId: id, month: '2026-01-01', on: '2026-02-01' }));
+    return { f, id };
+  }
+
+  it('repaying into a closed month is refused and posts nothing; the next month works - Mutant: delete the assertMonthOpen call in repayFromOwner -> red', async () => {
+    const { f, id } = await closedJanuary('def872-repay');
+    await expect(
+      asOrg(f.orgId, (tx) => repayFromOwner(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '500.00', intoMoneyAccountId: f.till, on: '2026-01-20' })),
+    ).rejects.toThrow(/2026-01 is closed for this owner/);
+    expect(await entryCount(f, 'owner_repayment', id)).toBe(0);
+    await asOrg(f.orgId, (tx) => repayFromOwner(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '500.00', intoMoneyAccountId: f.till, on: '2026-02-05' }));
+    expect(await entryCount(f, 'owner_repayment', id)).toBe(1);
+  });
+
+  it('recovering from pay into a closed month is refused and posts nothing; the next month works - Mutant: delete the assertMonthOpen call in recoverFromPay -> red', async () => {
+    const { f, id } = await closedJanuary('def872-recover');
+    await expect(
+      asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '500.00', on: '2026-01-20' })),
+    ).rejects.toThrow(/2026-01 is closed for this owner/);
+    expect(await entryCount(f, 'owner_pay_recovery', id)).toBe(0);
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '500.00', on: '2026-02-06' }));
+    expect(await entryCount(f, 'owner_pay_recovery', id)).toBe(1);
+  });
+});
