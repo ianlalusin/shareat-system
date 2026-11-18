@@ -231,15 +231,36 @@ describe('S6b who may correct - record_ar_collection with the line\'s store scop
   });
 });
 
-describe('S6b receivable code - only 1220 until slice 8 fixes outstandingFor', () => {
+describe('S6b receivable code - only the channel receivable (T-606: by design, not until slice 8)', () => {
   it('a channel whose receivable account is 1250: refused with a plain sentence, nothing written [kills: posting to a receivable the settlement does not clear; a hard-coded 1220 that ignores the channel]', async () => {
     const f = await fx(sql, 'code', { staff: '11000.00', file: '10000.00', receivable: '1250' });
     expect(Number(await netDebit(sql, f.orgId, '1250')), 'control: the day raised 11,000 on 1250').toBe(11000);
     const sentence = await sentenceOf(correct(f, f.admin));
     expect(sentence.length).toBeGreaterThan(10);
     expect(sentence).not.toMatch(UUID_RE);
+    // T-606 S3: the plain sentence says where to fix it, never "yet"
+    expect(sentence).toBe("Foodpanda's sales go to a different receivable account, so they can't be corrected from a platform file. Open Settings \u203a Sales channels and set this channel's receivable account to 1220 Channel receivable.");
     expect(await corrections(sql, f.orgId)).toHaveLength(0);
     expect(Number(await netDebit(sql, f.orgId, '1250'))).toBe(11000);
+  });
+
+  it('T-606 S3: a channel still on 1210 is refused with the same sentence and nothing is written', async () => {
+    const f = await fx(sql, 'code1210', { staff: '10000.00', file: '11000.00', receivable: '1210' });
+    expect(await sentenceOf(correct(f, f.admin))).toMatch(/set this channel's receivable account to 1220 Channel receivable\.$/);
+    expect(await corrections(sql, f.orgId)).toHaveLength(0);
+  });
+
+  it('T-606 S3: a day verified on 1210 BEFORE the channel moved to 1220 is corrected by the difference only: staff 10,000 on 1210, file 11,000 -> one Dr 1220 1,000.00 / Cr 4150 1,000.00, not 11,000 booked again - Mutant: restore the account filter on `old` -> 11,000.00, red', async () => {
+    const f = await fx(sql, 'moved', { staff: '10000.00', file: '11000.00', receivable: '1210' });
+    expect(Number(await netDebit(sql, f.orgId, '1210')), 'control: the day raised 10,000 on 1210').toBe(10000);
+    await sql`update sales_channels set receivable_account_code = '1220' where id = ${f.channelId}`; // the channel moved (a void and re-post would reach the same state)
+    await correct(f, f.admin);
+    const [c] = await corrections(sql, f.orgId);
+    expect(await corrections(sql, f.orgId)).toHaveLength(1);
+    const lines = await linesOf(sql, c!.journal_entry_id);
+    expect(lineText(lines)).toEqual(['Cr 4150 1000.00', 'Dr 1220 1000.00']);
+    expect(Number(await netDebit(sql, f.orgId, '1220'))).toBe(1000);
+    expect(Number(await netDebit(sql, f.orgId, '1210')), 'the old day stays where it was posted').toBe(10000);
   });
 });
 

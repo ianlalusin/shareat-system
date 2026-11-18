@@ -13,7 +13,7 @@
  * open date after it; a period is never reopened. Shaped after `postPosCorrection` (sales-days/correction.ts), which posts the POS delta only: a platform correction
  * stands because that function's `new` never carries platform rows the staff typed differently.
  *
- * Until slice 8 fixes `outstandingFor`, only the standard channel receivable is cleared by a settlement, so another receivable code is refused.
+ * T-606: a settlement clears ONLY the channel receivable (`outstandingFor` reads that one account, by design), so a channel on another receivable code is refused until its receivable is set to it.
  * `approveDay` (settlement-intake/approve.ts) posts the correction first and the settlement second, in one transaction.
  *
  * ⛔ approve is the ONLY caller, and the lock order depends on it: approve takes the channel lock, then the staged line FOR UPDATE, and this function then takes the sales day lock
@@ -102,14 +102,15 @@ export async function correctPlatformSalesOnClock(tx: Tx, actor: Actor, input: C
   if (receivable !== channelSettlementsRepo.CHANNEL_RECEIVABLE_CODE) {
     throw refuse(
       `correctPlatformSales: channel ${channel.id} receivable account is ${receivable ?? 'unset'}, not the standard channel receivable`,
-      `${channel.name} doesn't use the standard channel receivable account, so its sales can't be corrected from a platform file yet.`,
+      `${channel.name}'s sales go to a different receivable account, so they can't be corrected from a platform file. Open Settings › Sales channels and set this channel's receivable account to ${channelSettlementsRepo.CHANNEL_RECEIVABLE_CODE} Channel receivable.`,
     );
   }
 
   // ---- old: what was POSTED for this channel and day -----------------------------------------------------------------
   const priors = (await settlementIntakeRepo.listPlatformCorrectionsForDay(tx, orgId, day.id)).filter((c) => c.channelId === channel.id);
   const rows = await posV1Repo.postedNetForEntries(tx, orgId, [day.journalEntryId, ...priors.map((c) => c.journalEntryId)]);
-  const old = add(ZERO, ...rows.filter((r) => r.accountCode === receivable && r.partyType === 'channel' && r.partyId === channel.id).map((r) => money(r.net)));
+  // T-606: by party only, NOT by account. A day verified on another receivable code before the channel moved to the channel receivable would read old = 0 here and the whole file figure would be booked again as sales.
+  const old = add(ZERO, ...rows.filter((r) => r.partyType === 'channel' && r.partyId === channel.id).map((r) => money(r.net)));
   const file = money(line.orderValue);
   const delta = subtract(file, old);
   if (isZero(delta)) return { corrected: false };
