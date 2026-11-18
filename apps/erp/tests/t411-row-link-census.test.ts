@@ -123,6 +123,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/sales-days/[id]/page.tsx',
   'app/settings/pos-link/page.tsx',
   'app/till/page.tsx',
+  'app/pos/receipts/page.tsx', // T-601 S2: a read-only list of the day's receipts; there is no receipt detail page to open yet (reprint comes after the soak)
 ];
 
 /**

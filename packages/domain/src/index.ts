@@ -124,6 +124,7 @@ export * from './pos/store-link';
 export * from './pos/terminal-link';
 export * from './pos/tenders';
 export * from './pos/preflight';
+export * from './pos-soak/soak-checks';
 export * from './pos/store-mode';
 export { packageCapExcess } from './pos/v1-derive';
 export { normalizePosV1Alias, resolvePosV1Methods, type ResolvedMethods, type ResolverTender } from './pos/v1-methods';

@@ -350,8 +350,6 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — T-529: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll (`refillTables`), only for a person who holds request_pos_refill or confirm_pos_heads; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
   listRefillQueue:
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
-  listTodaysSalesReceipts:
-    'UNWIRED — T-526 on: the till screens list the day receipts through it; no T-525 door serves it. Remove this row when it lands (7 Nov 2026).',
   listPosQuarantine:
     'UNWIRED — T-526 / T-533: T-525 built the quarantine review (docs/tasks/525-pos-v2-apis.md R6) as domain functions only; the quarantine screen for managers is their caller. Remove this row when it lands (7 Nov 2026).',
   replayQuarantinedEvent:
