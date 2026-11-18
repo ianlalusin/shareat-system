@@ -6,7 +6,7 @@
  * Every function takes the caller's transaction first and filters by org AND store; RLS is the backstop. The domain bumps
  * `pos_stores.state_version` (`bumpStateVersion`) once per call that changes anything a screen shows.
  */
-import { and, asc, desc, eq, getTableColumns, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gte, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import {
   posDayCloseTenders,
@@ -600,9 +600,81 @@ export async function listReceiptsSince(tx: Tx, orgId: string, storeId: string, 
   const where = and(
     eq(posSalesReceipts.orgId, orgId),
     eq(posSalesReceipts.storeId, storeId),
-    since ? sql`${posSalesReceipts.issuedAtDevice} >= ${since}` : undefined,
+    since ? gte(posSalesReceipts.issuedAtDevice, since) : undefined,
   );
   return tx.select().from(posSalesReceipts).where(where).orderBy(desc(posSalesReceipts.issuedAtDevice), desc(posSalesReceipts.id));
+}
+
+/** One receipt of the Receipts list: the receipt, its till number, the table it was for and what it was paid by. */
+export interface ReceiptListRow {
+  receiptId: string;
+  sessionId: string;
+  terminalId: string;
+  subtotal: string;
+  discountTotal: string;
+  terminalNo: number;
+  terminalSeq: number;
+  issuedAtDevice: Date;
+  total: string;
+  offline: boolean;
+  mode: 'dine_in' | 'take_out';
+  /** The stand number, or null for take-out. */
+  standNumber: number | null;
+  /** The tender names joined with ' + ' ('Cash + GCash'), or null for a receipt with no payment row. */
+  tenders: string | null;
+}
+
+/**
+ * T-601 S2: the same receipts as `listReceiptsSince` (same org, store and `since` filter, newest first) with what the Receipts screen shows - the
+ * till number, the table and the tenders - in ONE query. Money stays text. `terminalId`'s till row, the session's stand and the payments are
+ * joined without multiplying a receipt (payments fold into one `string_agg`).
+ */
+export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: string, since: Date | undefined): Promise<ReceiptListRow[]> {
+  const rows = await tx
+    .select({
+      receiptId: posSalesReceipts.id,
+      sessionId: posSalesReceipts.tableSessionId,
+      terminalId: posSalesReceipts.terminalId,
+      subtotal: posSalesReceipts.subtotal,
+      discountTotal: posSalesReceipts.discountTotal,
+      terminalNo: posTerminals.terminalNo,
+      terminalSeq: posSalesReceipts.terminalSeq,
+      issuedAtDevice: posSalesReceipts.issuedAtDevice,
+      total: posSalesReceipts.total,
+      offline: posSalesReceipts.offline,
+      mode: tableSessions.mode,
+      standNumber: posStands.number,
+      tenders: sql<string | null>`string_agg(distinct ${tenders.name}, ' + ' order by ${tenders.name})`,
+    })
+    .from(posSalesReceipts)
+    .innerJoin(posTerminals, eq(posTerminals.id, posSalesReceipts.terminalId))
+    .innerJoin(tableSessions, eq(tableSessions.id, posSalesReceipts.tableSessionId))
+    .leftJoin(posStands, eq(posStands.id, tableSessions.standId))
+    .leftJoin(posSalesReceiptPayments, eq(posSalesReceiptPayments.receiptId, posSalesReceipts.id))
+    .leftJoin(tenders, eq(tenders.id, posSalesReceiptPayments.tenderId))
+    .where(
+      and(
+        eq(posSalesReceipts.orgId, orgId),
+        eq(posSalesReceipts.storeId, storeId),
+        since ? gte(posSalesReceipts.issuedAtDevice, since) : undefined,
+      ),
+    )
+    .groupBy(
+      posSalesReceipts.id,
+      posSalesReceipts.tableSessionId,
+      posSalesReceipts.terminalId,
+      posSalesReceipts.subtotal,
+      posSalesReceipts.discountTotal,
+      posTerminals.terminalNo,
+      posSalesReceipts.terminalSeq,
+      posSalesReceipts.issuedAtDevice,
+      posSalesReceipts.total,
+      posSalesReceipts.offline,
+      tableSessions.mode,
+      posStands.number,
+    )
+    .orderBy(desc(posSalesReceipts.issuedAtDevice), desc(posSalesReceipts.id));
+  return rows as ReceiptListRow[];
 }
 
 /** Open sessions with their stand number (the floor view). */
