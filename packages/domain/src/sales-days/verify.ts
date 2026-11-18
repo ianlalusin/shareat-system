@@ -291,34 +291,46 @@ async function runVoid(
       'Reason is required and cannot be empty or whitespace-only.',
     );
 
-  // T-369 S3 / R3: an UNVERIFIED day posted nothing, so there is nothing to reverse - it is just
-  // withdrawn. Refused while something else still hangs off it; that is undone first, on its own screen.
-  if (day.status !== 'verified') {
-    if (!trimmed) throw needReason();
-    const blockers = await salesDaysRepo.withdrawBlockers(tx, actor.orgId, day);
-    if (blockers.usagePull) {
-      throw refuse(
-        `voidSalesDay: sales day ${salesDayId} has a live POS usage pull`,
-        'This day has a POS usage pull. Void it first under Inventory › POS usage.',
-      );
-    }
-    if (blockers.wastage) {
-      throw refuse(
-        `voidSalesDay: sales day ${salesDayId} has order wastage recorded against it`,
-        "Wastage is recorded against this day, so it can't be withdrawn." +
-          (day.source === 'pos_v1_day_feed'
-            ? ' Re-import it from POS instead.'
-            : (await posV1Repo.getLinkByStore(tx, actor.orgId, day.storeId))
-              ? ''
-              : ' Edit its figures instead.'),
-      );
-    }
-    if (blockers.remittance) {
-      throw refuse(
-        `voidSalesDay: sales day ${salesDayId} has a posted remittance counted against it`,
-        'Cash handed over has been counted against this day. Reverse that handover first.',
-      );
-    }
+  // T-369 S3 / R3, T-594 DEF-877: whatever else hangs off the day is undone first, on its own screen, BEFORE anything
+  // here is reversed or marked. An unverified day is just withdrawn; a verified day also reverses its entry, so a payout
+  // settled against it, posted usage or a counted handover would be left pointing at a voided day.
+  const verified = day.status === 'verified';
+  if (!verified && !trimmed) throw needReason();
+  const blockers = await salesDaysRepo.withdrawBlockers(tx, actor.orgId, day);
+  if (verified ? blockers.postedUsagePull : blockers.usagePull) {
+    throw refuse(
+      `voidSalesDay: sales day ${salesDayId} has a ${verified ? 'posted' : 'live'} POS usage pull`,
+      verified
+        ? 'Stock usage was pulled from POS for this day. Void that usage first under Inventory › Usage & wastage.'
+        : 'This day has a POS usage pull. Void it first under Inventory › POS usage.',
+    );
+  }
+  if (blockers.wastage) {
+    throw refuse(
+      `voidSalesDay: sales day ${salesDayId} has order wastage recorded against it`,
+      verified
+        ? "Wastage is recorded against this day, so it can't be voided."
+        : "Wastage is recorded against this day, so it can't be withdrawn." +
+            (day.source === 'pos_v1_day_feed'
+              ? ' Re-import it from POS instead.'
+              : (await posV1Repo.getLinkByStore(tx, actor.orgId, day.storeId))
+                ? ''
+                : ' Edit its figures instead.'),
+    );
+  }
+  if (blockers.remittance) {
+    throw refuse(
+      `voidSalesDay: sales day ${salesDayId} has a posted remittance counted against it`,
+      'Cash handed over has been counted against this day. Reverse that handover first.',
+    );
+  }
+  if (blockers.channelSettlement) {
+    throw refuse(
+      `voidSalesDay: sales day ${salesDayId} has a posted channel settlement`,
+      'A delivery-platform payout has been settled against this day. Void that settlement first under Channel settlements.',
+    );
+  }
+  if (!verified) {
     await salesDaysRepo.markUnverifiedVoided(tx, actor.orgId, salesDayId, {
       voidedBy: actor.personId,
       voidReason: trimmed,

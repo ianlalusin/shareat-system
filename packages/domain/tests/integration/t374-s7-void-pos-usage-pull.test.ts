@@ -699,7 +699,9 @@ describe('T9 - a voided pull frees its day', () => {
   it("leg 2 (T-373 T12's shape): verified D1 with a finalized pull, D1 voided, replacement D2 same date -> refused -> void D1's pull -> builds", async () => {
     const f = await fixture('t9b');
     const p = await pulled(f, 'all', { verify: true });
-    await asOrg(f.orgId, (tx) => D.voidSalesDay(tx, f.manager, p.dayId, 'Entered wrong'));
+    // T-594 (DEF-877): `voidSalesDay` now refuses a verified day whose pull POSTED usage, so the legacy state this leg needs
+    // (a voided day that still carries posted usage - what production holds from before T-594) is made by owner SQL.
+    await sql`update sales_days set status = 'voided', voided_by = ${f.managerId}, voided_at = now(), void_reason = 'fixture: pre-T-594 void' where id = ${p.dayId}`;
     const d2 = await mkDay(f, DAY); // the same business date, freed by the day void
 
     const refused = await plan(f, d2);

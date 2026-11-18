@@ -114,8 +114,10 @@ describe('S7 audit A — a posted handover counted against the date blocks re-en
     const f = await fixture('auditA');
     const { id: first } = await create(f, f.staff);
     await asOrg(f.orgId, (tx) => submitThenVerify(tx, f.manager, first, f.staff));
-    const remittanceId = await postedHandover(f, f.storeId, DATE, first);
+    // T-594 (DEF-877): a verified day with a handover counted against it is no longer voidable, so the day is voided FIRST and the
+    // handover is posted afterwards (the re-entry rule reads store + date, not the day id).
     await withdraw(f, first);
+    const remittanceId = await postedHandover(f, f.storeId, DATE, first);
 
     const refused = await rejection(create(f, f.manager), 'a manager re-entering a date that has a posted handover');
     expect(refused.userMessage, `raw text leaked: ${refused.message}`).toBe(SENTENCE);
