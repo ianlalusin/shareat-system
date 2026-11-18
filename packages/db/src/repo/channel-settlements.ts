@@ -262,6 +262,33 @@ export async function partyBalancesByStore(
   return rows.map((r) => ({ storeId: String(r.store_id), balance: money(r.balance) }));
 }
 
+/**
+ * T-606: what the channel still holds on every account EXCEPT `keepCode` (its current receivable), per account and line store. Computed exactly as `partyBalancesByStore`
+ * (party = the channel, posted entries, drafts excluded); a platform-file correction or period charge is refused while this is not empty.
+ */
+export async function partyBalancesOffAccount(
+  tx: Tx,
+  orgId: string,
+  channelId: string,
+  keepCode: string,
+): Promise<{ accountCode: string; storeId: string; balance: Money }[]> {
+  const rows = (await tx.execute(sql`
+    select a.code as account_code, jl.store_id::text as store_id, sum(jl.debit - jl.credit)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and jl.party_id = ${channelId}
+      and a.code <> ${keepCode}
+      and je.status <> 'draft'
+    group by a.code, jl.store_id
+    having sum(jl.debit - jl.credit) <> 0
+    order by a.code, jl.store_id
+  `)) as unknown as { account_code: string; store_id: string; balance: string }[];
+  return rows.map((r) => ({ accountCode: String(r.account_code), storeId: String(r.store_id), balance: money(r.balance) }));
+}
+
 /** Is there already a POSTED settlement for this channel-day? A second is refused, not duplicated. */
 export async function postedSettlementFor(
   tx: Tx,

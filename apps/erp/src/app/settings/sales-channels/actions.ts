@@ -11,6 +11,7 @@
 import { revalidatePath } from 'next/cache';
 import {
   createSalesChannel,
+  moveChannelToChannelReceivable,
   setSalesChannelActive,
   setSalesChannelPlatformCode,
   updateSalesChannel,
@@ -124,6 +125,27 @@ export async function setSalesChannelActiveAction(fd: FormData): Promise<void> {
       : `"${name}" is retired. It stays on everything already recorded, and anything still open ` +
         'against it can still be resolved.',
   });
+}
+
+/** T-606 S4: the admin-only "Move to Channel receivable" button on a platform channel's card. The request id is minted when the page renders, so a second press is a no-op. */
+export async function moveChannelReceivableAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/sales-channels');
+  const storeId = str(fd, 'storeId');
+  let ok = '';
+  try {
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      moveChannelToChannelReceivable(tx, actor, { channelId: str(fd, 'channelId'), requestId: str(fd, 'requestId') }),
+    );
+    ok = result.moved
+      ? result.entryId
+        ? `Moved. The balance of \u20b1${result.total} is now on Channel receivable and the channel uses it from now on.`
+        : 'Moved. Nothing was owed on the old account, so only the setting changed. The channel uses Channel receivable from now on.'
+      : 'Nothing to do: this channel already uses Channel receivable.';
+  } catch (err) {
+    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath('/settings/sales-channels');
+  return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { ok });
 }
 
 /**

@@ -264,6 +264,15 @@ export async function receivableAccountFor(
   };
 }
 
+/**
+ * T-606 S4: take the channel's row lock (held to commit) and answer its CURRENT row, so a verify or an edit that queued behind us reads what we committed.
+ * `null` when the channel is not in this org.
+ */
+export async function lockChannel(tx: Tx, orgId: string, channelId: string): Promise<(SalesChannelRow & { storeId: string }) | null> {
+  await tx.execute(sql`select 1 from sales_channels where id = ${channelId} and org_id = ${orgId} for update`);
+  return channelById(tx, orgId, channelId);
+}
+
 /** The receivable picker's list — postable, active, and party-bearing (invariant 4). */
 export async function receivableAccountOptions(tx: Tx, orgId: string): Promise<{ code: string; name: string }[]> {
   const rows = (await tx.execute(sql`
@@ -962,6 +971,8 @@ export interface SalesDayChannelRow {
   channelName: string;
   isRemittedDaily: boolean;
   receivableAccountCode: string | null;
+  /** T-606: the delivery platform the channel is, or null (a platform channel must post to the channel receivable). */
+  platform: 'grab' | 'foodpanda' | null;
   amount: string;
   noSales: boolean;
 }
@@ -980,6 +991,7 @@ export async function getChannelsForDay(tx: Tx, salesDayId: string): Promise<Sal
       channelName: salesChannels.name,
       isRemittedDaily: salesChannels.isRemittedDaily,
       receivableAccountCode: salesChannels.receivableAccountCode,
+      platform: salesChannels.platform,
       amount: salesDayChannels.amount,
       noSales: salesDayChannels.noSales,
     })

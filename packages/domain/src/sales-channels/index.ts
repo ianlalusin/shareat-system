@@ -29,10 +29,12 @@
  *   plainly: *"today every channel is `expense`."* Offering the other value would let a manager
  *   pick a posture the ledger cannot honour.
  */
-import { auditLogRepo, channelSettlementsRepo, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, channelSettlementsRepo, fiscalPeriodsRepo, journalRepo, manilaToday, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
 import { authorize, can, type Actor } from '@shareat/auth';
-import { add } from '@shareat/core/money';
+import { add, compare, negate, ZERO } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
+import { postEntry } from '../ledger/post-entry';
+import { requireRequestId } from '../ledger/replay';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { SETTINGS_BANK_HINTS_RULES, SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES } from '../field-rules/settings';
 
@@ -260,9 +262,14 @@ export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSale
     if (balances.length > 0) {
       const total = add(...balances.map((b) => b.balance));
       const oldAccount = await salesDaysRepo.receivableAccountFor(tx, actor.orgId, old);
+      // Never a negative amount on screen: a credit balance is "in its favour".
+      const where = `${old}${oldAccount ? ` ${oldAccount.name}` : ''}`;
+      const held = compare(total, ZERO) < 0 ? `has ₱${negate(total)} in its favour on ${where}` : `still has ₱${total} owed on ${where}`;
       throw refuse(
         `updateSalesChannel: channel ${channel.id} still has ${total} on ${old}; its receivable account cannot change.`,
-        `${channel.name} still has ₱${total} owed on ${old}${oldAccount ? ` ${oldAccount.name}` : ''}. Void and re-post those sales on the normal screens so the balance clears, then change the account.`,
+        channel.platform
+          ? `${channel.name} ${held}. Press "Move to Channel receivable" on this channel's card; it moves the balance and the setting together.`
+          : `${channel.name} ${held}. Void and re-post those sales on the normal screens so the balance clears, then change the account.`,
       );
     }
   }
@@ -273,6 +280,95 @@ export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSale
     receivableAccountCode,
     wastageTypeMode: input.wastageTypeMode,
   });
+}
+
+/**
+ * ⭐ **T-606 S4 - "Move to Channel receivable"** (Ian, 18 Nov: "move the foodpanda and grab sales directly"). A delivery-platform channel whose receivable is another account (Lipa's
+ * Foodpanda and Grab sat on 1210) gets its balance and its setting moved to the channel receivable in ONE transaction, so the books and the screen can never disagree:
+ * `authorize` (`manage_chart_of_accounts`, admin) -> request id -> the channel row LOCKED and re-read -> refuse a channel with no platform -> already on the channel receivable is a no-op
+ * -> the balance per store on the OLD account (as the S2 guard reads it) -> one reclass entry, per store Dr 1220 / Cr old (a credit balance the other way), party = the channel, dated TODAY
+ * (Manila) when today's month is open, else refused, never a closed period -> the channel's receivable set to the channel receivable -> the audit row. Zero balance: it only switches the account.
+ * A second press finds the channel already moved and does nothing. Undoing it is a normal reversal of the entry by an admin (`reverseEntry`); a reversal does not change the setting.
+ */
+export async function moveChannelToChannelReceivable(
+  tx: Tx,
+  actor: Actor,
+  input: { channelId: string; requestId: string },
+  /** Tests only: the Manila business date to date the entry by (the screen never passes it). */
+  today?: string,
+): Promise<{ moved: boolean; entryId: string | null; total: string }> {
+  const seen = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
+  if (!seen) throw refuse(`moveChannelToChannelReceivable: channel ${input.channelId} does not exist in this organisation.`, 'That channel no longer exists.');
+  await authorize(tx, actor, 'manage_chart_of_accounts', {});
+  const requestId = requireRequestId('moveChannelToChannelReceivable', input.requestId);
+  // Under the row lock, so a verify or an edit racing this move reads what it committed; re-read, because a press that queued ahead may already have moved it.
+  const channel = await salesDaysRepo.lockChannel(tx, actor.orgId, seen.id);
+  if (!channel) throw refuse(`moveChannelToChannelReceivable: channel ${seen.id} vanished under the lock.`, 'That channel no longer exists.');
+  if (!channel.platform) {
+    throw refuse(
+      `moveChannelToChannelReceivable: channel ${channel.id} has no delivery platform.`,
+      `${channel.name} is not a delivery platform channel, so there is nothing to move. Only Grab and Foodpanda channels use the channel receivable.`,
+    );
+  }
+  const old = channel.receivableAccountCode;
+  if (old === PLATFORM_RECEIVABLE_CODE) return { moved: false, entryId: null, total: '0.00' };
+
+  const balances = old ? await channelSettlementsRepo.partyBalancesByStore(tx, actor.orgId, channel.id, old) : [];
+  let entryId: string | null = null;
+  let total = ZERO;
+  let entryDate: string | null = null;
+  if (balances.length > 0 && old) {
+    const clock = today ?? (await manilaToday(tx));
+    const open = await fiscalPeriodsRepo.firstOpenDateOnOrAfter(tx, actor.orgId, clock, clock);
+    if (open === null || open.shutBy !== null) {
+      throw refuse(
+        `moveChannelToChannelReceivable: the period of today ${clock} is closed or locked.`,
+        `This month is closed, so the move can't be dated. Ask an admin to open a month first. Nothing was changed.`,
+      );
+    }
+    if (!(await journalRepo.findPeriodForDate(tx, actor.orgId, clock))) {
+      throw refuse(`moveChannelToChannelReceivable: no fiscal period covers ${clock}.`, `There is no fiscal period for today yet. Nothing was changed.`);
+    }
+    entryDate = clock;
+    total = add(...balances.map((b) => b.balance));
+    const memo = `${channel.name} receivable moved from ${old} to ${PLATFORM_RECEIVABLE_CODE}`;
+    const party = { partyType: 'channel' as const, partyId: channel.id };
+    const lines = balances.flatMap((b) => {
+      const owed = compare(b.balance, ZERO) > 0; // a credit balance posts the other way round
+      const amount = String(owed ? b.balance : negate(b.balance));
+      return [
+        { accountCode: PLATFORM_RECEIVABLE_CODE, storeId: b.storeId, debit: owed ? amount : '0', credit: owed ? '0' : amount, ...party, lineMemo: memo },
+        { accountCode: old, storeId: b.storeId, debit: owed ? '0' : amount, credit: owed ? amount : '0', ...party, lineMemo: memo },
+      ];
+    });
+    const posted = await postEntry(tx, {
+      orgId: actor.orgId,
+      entryDate: clock,
+      sourceType: 'channel_receivable_reclass',
+      sourceId: channel.id,
+      idempotencyKey: `channel_receivable_reclass:${channel.id}:${requestId}`,
+      memo,
+      postedBy: actor.personId,
+      lines,
+    });
+    entryId = posted.entryId;
+  }
+  await salesDaysRepo.updateChannel(tx, actor.orgId, channel.id, {
+    name: channel.name,
+    isRemittedDaily: channel.isRemittedDaily,
+    receivableAccountCode: PLATFORM_RECEIVABLE_CODE,
+    wastageTypeMode: channel.wastageTypeMode,
+  });
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'sales_channel.receivable_moved',
+    storeId: channel.storeId,
+    entityId: channel.id,
+    before: { receivableAccountCode: old, balance: String(total) },
+    after: { receivableAccountCode: PLATFORM_RECEIVABLE_CODE, journalEntryId: entryId, entryDate },
+    source: 'web',
+  });
+  return { moved: true, entryId, total: String(total) };
 }
 
 // ---- T-511 S2b: which delivery platform a channel is, and the store code its statements print --------------------------
@@ -450,6 +546,13 @@ export async function setSalesChannelActive(
   await authorize(tx, actor, CAPABILITY, { storeId: channel.storeId });
   if (!input.isActive) await refuseIfLinkedToPos(tx, actor.orgId, input.channelId);
   // T-592 R2: reactivating must not make a second active channel on one platform at the store. The unique index is the authority.
+  // T-606 audit: and a platform channel may not come back on a receivable the platform paths do not read (the same rule the sales-day verify applies).
+  if (input.isActive && channel.platform && channel.receivableAccountCode !== PLATFORM_RECEIVABLE_CODE) {
+    throw refuse(
+      `setSalesChannelActive: channel ${channel.id} is a delivery platform channel on receivable ${channel.receivableAccountCode ?? 'unset'}, not ${PLATFORM_RECEIVABLE_CODE}.`,
+      `${channel.name} is a delivery platform channel but is not set to Channel receivable. Fix it in Settings › Sales channels, then turn it back on.`,
+    );
+  }
   if (input.isActive && channel.platform) {
     const rival = await salesDaysRepo.activeChannelOnPlatformAtStore(tx, actor.orgId, channel.storeId, channel.platform, input.channelId);
     if (rival) throw refuse('setSalesChannelActive: the store already has an active channel on this platform.', storePlatformClash(channel.platform, rival.name));

@@ -18,7 +18,7 @@
  * T-385 (Ian 2026-10-09): verify requires `submitted`. The check sits before routing and posting.
  */
 import { authorize, isStoreManagerOrAbove, type Actor, can } from '@shareat/auth';
-import { accessRepo, auditLogRepo, journalRepo, posV1Repo, salesDaysRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
+import { accessRepo, auditLogRepo, channelSettlementsRepo, journalRepo, posV1Repo, salesDaysRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { buildPeriodFacts, periodRefusal } from '../business-rules';
 import { postEntry } from '../ledger/post-entry';
@@ -177,6 +177,17 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string, options?: Ver
 
   const channels = await salesDaysRepo.getChannelsForDay(tx, salesDayId);
   const tenders = await salesDaysRepo.getTendersForDay(tx, salesDayId);
+
+  // T-606 audit: a delivery-platform channel posts to the channel receivable or not at all. Otherwise its sales would land on an account that settlements, platform files and wastage never
+  // read. Channels with no platform (dine-in, a wholesale buyer, branch sales) are not asked: they keep their own receivable.
+  for (const c of channels) {
+    if (c.platform && !c.isRemittedDaily && !isZero(money(c.amount)) && c.receivableAccountCode !== channelSettlementsRepo.CHANNEL_RECEIVABLE_CODE) {
+      throw refuse(
+        `verifySalesDay: sales day ${salesDayId} channel ${c.channelId} is a delivery platform channel on receivable ${c.receivableAccountCode ?? 'unset'}, not ${channelSettlementsRepo.CHANNEL_RECEIVABLE_CODE}`,
+        `${c.channelName} is a delivery platform channel but is not set to Channel receivable. Fix it in Settings › Sales channels, then verify this day.`,
+      );
+    }
+  }
 
   // T-375 S4 (R8): `routeInputForDay` composes a feed day's platform sales; a typed day routes as it always did.
   const routed = routeSalesDay(routeInputForDay(day, channels, tenders));

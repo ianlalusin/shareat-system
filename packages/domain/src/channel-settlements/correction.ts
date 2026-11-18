@@ -19,6 +19,7 @@
  * ⛔ approve is the ONLY caller, and the lock order depends on it: approve takes the channel lock, then the staged line FOR UPDATE, and this function then takes the sales day lock
  * (line, then sales day). A second caller that locks the sales day first would deadlock against an approve. Add one deliberately (and change the source scan that pins it) or not at all.
  */
+import { refuseStrandedChannelBalance } from './stranded-balance';
 import { auditLogRepo, channelSettlementsRepo, fiscalPeriodsRepo, journalRepo, manilaToday, posV1Repo, salesDaysRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, isZero, money, negate, subtract, ZERO } from '@shareat/core/money';
@@ -109,7 +110,9 @@ export async function correctPlatformSalesOnClock(tx: Tx, actor: Actor, input: C
   // ---- old: what was POSTED for this channel and day -----------------------------------------------------------------
   const priors = (await settlementIntakeRepo.listPlatformCorrectionsForDay(tx, orgId, day.id)).filter((c) => c.channelId === channel.id);
   const rows = await posV1Repo.postedNetForEntries(tx, orgId, [day.journalEntryId, ...priors.map((c) => c.journalEntryId)]);
-  // T-606: by party only, NOT by account. A day verified on another receivable code before the channel moved to the channel receivable would read old = 0 here and the whole file figure would be booked again as sales.
+  // T-606: refuse only while the channel still holds a balance on ANOTHER account. After the move the old day lines stay where they were posted (1210) and the balance is on 1220: the difference is
+  // then booked on 1220, and `old` is read by PARTY, not by account, so those old lines still count (else the whole file figure would be booked again as sales).
+  await refuseStrandedChannelBalance(tx, orgId, channel, receivable, 'correctPlatformSales');
   const old = add(ZERO, ...rows.filter((r) => r.partyType === 'channel' && r.partyId === channel.id).map((r) => money(r.net)));
   const file = money(line.orderValue);
   const delta = subtract(file, old);

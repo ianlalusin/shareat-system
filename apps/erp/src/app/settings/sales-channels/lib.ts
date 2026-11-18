@@ -46,3 +46,8 @@ export async function moneyAccountNames(actor: Actor): Promise<Map<string, strin
 export async function canEditPlatformCode(actor: Actor, storeId: string): Promise<boolean> {
   return withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'edit_platform_store_code', { storeId }));
 }
+
+/** T-606 S4: who is shown "Move to Channel receivable" (admin only; presentation, the domain function is the gate). */
+export async function canMoveChannelReceivable(actor: Actor): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'manage_chart_of_accounts', {}));
+}

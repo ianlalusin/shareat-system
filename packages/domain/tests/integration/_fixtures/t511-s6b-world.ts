@@ -100,9 +100,11 @@ export async function fx(sql: postgres.Sql, hint: string, o: FxOpts) {
   const submitter = await mkSubmitter(sql, orgId, [storeA], 'Submitter');
   const [bank] = await sql<{ id: string }[]>`
     insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian, is_active) values (${orgId}, ${storeA}, ${uid('Bank')}, 'bank', '1140', 'office', true) returning id`;
+  // T-606: a delivery-platform channel on any account but the channel receivable cannot be verified, so a channel meant to sit on another account gets its platform AFTER the day is verified.
+  const platformFirst = (o.receivable ?? '1220') === '1220';
   const [ch] = await sql<{ id: string }[]>`
     insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code, platform, platform_store_code, destination_money_account_id)
-    values (${orgId}, ${storeA}, 'Foodpanda', false, ${o.receivable ?? '1220'}, 'foodpanda', ${uid('FP')}, ${bank!.id}) returning id`;
+    values (${orgId}, ${storeA}, 'Foodpanda', false, ${o.receivable ?? '1220'}, ${platformFirst ? 'foodpanda' : null}, ${platformFirst ? uid('FP') : null}, ${bank!.id}) returning id`;
   const channelId = ch!.id;
 
   const { id: dayId } = await asOrg(orgId, (tx) =>
@@ -112,6 +114,7 @@ export async function fx(sql: postgres.Sql, hint: string, o: FxOpts) {
     }),
   );
   if (o.verified !== false) await asOrg(orgId, (tx) => submitThenVerify(tx, admin, dayId, submitter));
+  if (!platformFirst) await sql`update sales_channels set platform = 'foodpanda', platform_store_code = ${uid('FP')} where id = ${channelId}`;
   const lineId = await rawDayLine(sql, { orgId, storeId: storeA, channelId, platform: 'foodpanda', salesDate: DATE, orderValue: o.file, personId: admin.personId });
   return { orgId, storeA, storeB, channelId, bankId: bank!.id, dayId, lineId, admin, managerA, managerB, submitter, staff: o.staff, file: o.file };
 }

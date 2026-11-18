@@ -740,6 +740,25 @@ describe('T-606 S2 - no switching a channel\'s receivable away from a balance', 
     expect(await codeOf(channelId)).toBe(R);
   });
 
+  it('for a delivery-platform channel the refusal names the "Move to Channel receivable" button (a plain channel is told to void and re-post)', async () => {
+    const f = await fixture('t606-s2-platform');
+    const { channelId } = await make(f, '1210');
+    await sql`update sales_channels set platform = 'foodpanda', platform_store_code = 'FPS2BTN' where id = ${channelId}`;
+    await post(f, channelId, '1210', 'debit', '500.00');
+    const stored = String((await channelRowById(channelId)).name);
+    expect(await sentenceOf(switchTo(f, channelId, R))).toBe(`${stored} still has \u20b1500.00 owed on 1210 Accounts receivable. Press "Move to Channel receivable" on this channel's card; it moves the balance and the setting together.`);
+    expect(await codeOf(channelId)).toBe('1210');
+  });
+
+  it('a credit balance is worded "in its favour", never as a negative amount owed', async () => {
+    const f = await fixture('t606-s2-credit');
+    const { channelId } = await make(f, '1210');
+    await post(f, channelId, '1210', 'credit', '50.00');
+    const stored = String((await channelRowById(channelId)).name);
+    expect(await sentenceOf(switchTo(f, channelId, R))).toBe(`${stored} has \u20b150.00 in its favour on 1210 Accounts receivable. Void and re-post those sales on the normal screens so the balance clears, then change the account.`);
+    expect(await codeOf(channelId)).toBe('1210');
+  });
+
   it('a channel on 1220 with a balance cannot be switched to a daily channel with no receivable either; staying on 1220 is fine', async () => {
     const f = await fixture('t606-s2-daily');
     const { channelId } = await make(f, R);

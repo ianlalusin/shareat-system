@@ -115,4 +115,18 @@ describe('T-606 S1 - the edit action and the platform receivable', () => {
     expect(paramsOf(to).get('error')).toBeNull();
     expect(await receivableOf(id)).toBe('1210');
   });
+
+  it('the "Move to Channel receivable" action switches a platform channel from 1210 and a second press says nothing to do - Mutant: the action ignores the request or the domain call -> red', async () => {
+    const { storeId, actor, orgId, channel } = await world('move');
+    const id = await channel('Foodpanda', '1220');
+    await asOrg(orgId, (tx) => setSalesChannelPlatformCode(tx, actor as never, { channelId: id, platform: 'foodpanda', code: 'FP7777' }));
+    await sql`update sales_channels set receivable_account_code = '1210' where id = ${id}`; // as Lipa's channels are today
+    const { moveChannelReceivableAction } = await import('../../src/app/settings/sales-channels/actions');
+    const press = () => redirectOf(() => moveChannelReceivableAction(form({ storeId, channelId: id, requestId: crypto.randomUUID() })));
+    const first = paramsOf(await press());
+    expect(first.get('error')).toBeNull();
+    expect(first.get('ok')).toMatch(/Moved\./);
+    expect(await receivableOf(id)).toBe('1220');
+    expect(paramsOf(await press()).get('ok')).toMatch(/already uses Channel receivable/);
+  });
 });
