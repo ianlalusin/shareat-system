@@ -1011,3 +1011,36 @@ describe('DEF-873 - reverseOwnerEntry is bound to the owner, the gate and the mo
     expect((await positionOf(f, id)).drawn).toBe('0.00');
   });
 });
+
+// -------------------------------------------------------------------------------------------------
+// T-593 S5 - DEF-874: a retired money account takes no contribution, drawing or repayment
+// -------------------------------------------------------------------------------------------------
+
+describe('DEF-874 - retired accounts', () => {
+  it('an active account posts; once retired, contribution, drawing and repayment are all refused with the sentence and post nothing - Mutant: delete each check -> red', async () => {
+    const f = await fixture('def874');
+    const id = await owner(f);
+    await owesUs(f, id, '500.00');
+    const contribute = () =>
+      asOrg(f.orgId, (tx) => recordContribution(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '100.00', intoMoneyAccountId: f.till, on: '2026-01-15' }));
+    const drawOut = () =>
+      asOrg(f.orgId, (tx) => recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '100.00', fromMoneyAccountId: f.till, on: '2026-01-15' }));
+    const repay = () =>
+      asOrg(f.orgId, (tx) => repayFromOwner(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '100.00', intoMoneyAccountId: f.till, on: '2026-01-15' }));
+
+    // positive: the active account takes all three
+    await contribute();
+    await drawOut();
+    await repay();
+    const count = async () =>
+      Number((await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${f.orgId} and source_id = ${id} and source_type in ('capital_contribution', 'drawing', 'owner_repayment')`)[0]!.n);
+    expect(await count()).toBe(3);
+
+    await sql`update money_accounts set is_active = false where id = ${f.till}`;
+    const sentence = (p: Promise<unknown>) => p.then(() => null, (e: { userMessage?: string }) => e.userMessage ?? null);
+    for (const attempt of [contribute, drawOut, repay]) {
+      expect(String(await sentence(attempt()))).toMatch(/is retired\. Choose an account that is still in use\.$/);
+    }
+    expect(await count()).toBe(3);
+  });
+});

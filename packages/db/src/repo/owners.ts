@@ -12,7 +12,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 // ⛔ T-218 — Manila, never bare current_date (DEF-172).
 import { MANILA_TODAY } from './sql-time';
 // T-370 / DEF-108 — integer centavos for fifoOwnerOutstanding, never Number (bible §6).
-import { fromCentavos, money, toCentavos, type Decimal, type Money } from '@shareat/core/money';
+import { fromCentavos, money, subtract, toCentavos, type Decimal, type Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert, SafeUpdate } from './numeric-input';
 import { owners, type OwnerStatus, type PersonalExpenseTreatment } from '../../schema/owners';
@@ -164,13 +164,14 @@ const POSITION_SELECT = sql`
 
 function toPosition(r: Record<string, string> | undefined): OwnerPosition {
   if (!r) return ZERO;
-  const contributed = Number(r.contributed ?? 0);
-  const drawn = Number(r.drawn ?? 0);
+  // DEF-874: integer centavos via core money, never `Number` / `toFixed` (a float sum can drift a centavo).
+  const contributed = money(r.contributed ?? '0');
+  const drawn = money(r.drawn ?? '0');
   return {
-    contributed: contributed.toFixed(2),
-    drawn: drawn.toFixed(2),
-    net: (contributed - drawn).toFixed(2),
-    receivable: Number(r.receivable ?? 0).toFixed(2),
+    contributed,
+    drawn,
+    net: subtract(contributed, drawn),
+    receivable: money(r.receivable ?? '0'),
   };
 }
 
@@ -559,7 +560,7 @@ export async function receivableOf(tx: Tx, orgId: string, ownerId: string): Prom
       and a.code = ${DUE_FROM_OWNER_CODE}
       and je.status <> 'draft'
   `)) as unknown as Record<string, string>[];
-  return Number(row?.total ?? 0).toFixed(2);
+  return money(row?.total ?? '0');
 }
 
 export interface AgedReceivable {
@@ -604,7 +605,7 @@ export async function agedReceivables(tx: Tx, orgId: string): Promise<AgedReceiv
 
   return rows.map((r) => ({
     ownerId: String(r.owner_id ?? r.ownerId),
-    outstanding: Number(r.outstanding ?? 0).toFixed(2),
+    outstanding: money(r.outstanding ?? '0'),
     oldestOn: String(r.oldest_on ?? r.oldestOn ?? ''),
     daysOutstanding: Number(r.days_outstanding ?? r.daysOutstanding ?? 0),
   }));

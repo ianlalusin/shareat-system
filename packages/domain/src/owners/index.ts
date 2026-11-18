@@ -179,6 +179,13 @@ export async function recordContribution(
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
     if (!account) throw new Error('recordContribution: that money account does not exist.');
+    // DEF-874: a retired account is not offered by any picker; money put there is stranded (transfers refuse it too).
+    if (!account.isActive) {
+      throw refuse(
+        `recordContribution: "${account.name}" is retired and cannot receive a contribution.`,
+        `"${account.name}" is retired. Choose an account that is still in use.`,
+      );
+    }
     // ⛔ Money lands in ONE store, like every other movement here (rows 152–153).
     if (account.storeId !== owner.storeId) {
       throw new Error(
@@ -331,6 +338,13 @@ export async function recordDrawing(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
     if (!account) throw new Error('recordDrawing: that money account does not exist.');
+    // DEF-874: as above - a drawing from a retired account is refused, as transfers refuse one.
+    if (!account.isActive) {
+      throw refuse(
+        `recordDrawing: "${account.name}" is retired and cannot be drawn from.`,
+        `"${account.name}" is retired. Choose an account that is still in use.`,
+      );
+    }
     if (account.storeId !== owner.storeId) {
       throw new Error('recordDrawing: that account belongs to another store.');
     }
@@ -419,6 +433,13 @@ export async function repayFromOwner(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
     if (!account) throw new Error('repayFromOwner: that money account does not exist.');
+    // DEF-874: and cash handed back must not land in a retired account.
+    if (!account.isActive) {
+      throw refuse(
+        `repayFromOwner: "${account.name}" is retired and cannot receive a repayment.`,
+        `"${account.name}" is retired. Choose an account that is still in use.`,
+      );
+    }
     if (account.storeId !== owner.storeId) {
       throw new Error('repayFromOwner: that account belongs to another store.');
     }
