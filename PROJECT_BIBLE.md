@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1796` 13. Decision log
-- `1797–1816` 14. Amendment protocol
-- `1817–1821` 15. Engineering standards — the industry practices this project follows
-  - `1822–1827` 15.1 Build order: walking skeleton first
-  - `1828–1839` 15.2 Golden-master testing — the most important practice here
-  - `1840–1848` 15.3 Strangler Fig, not big-bang cutover
-  - `1849–1853` 15.4 No dual-write
-  - `1854–1862` 15.5 Expand/contract migrations
-  - `1863–1871` 15.6 Observability from day zero, not later
-  - `1872–1876` 15.7 CI gates
-  - `1877–1881` 15.8 Backups and a tested restore
-  - `1882–1886` 15.9 Twelve-Factor config
-  - `1887–1894` 15.10 Append-only ledgers — but not event sourcing
-  - `1895–1899` 15.11 Defence in depth
-  - `1900–1928` 15.12 Skills are lenses, not assurance
-  - `1929–1935` 15.13 Reconciliation is a permanent feature
-- `1936–1940` 16. The accounting spine
-  - `1941–1972` 16.0 What we are actually fixing — the diagnosis
-  - `1973–2016` 16.1 The ten invariants — non-negotiable
-  - `2017–2031` 16.2 The oracle: how "correct" is tested
-  - `2032–2053` 16.3 The model — header + lines, not legs
-  - `2054–2073` 16.4 Deliberately simpler than ERPNext
-  - `2074–2143` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2144–2168` 16.6 What v1 already gets right — preserve the intent
-  - `2169–2190` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2191–2205` 16.8 What v1's accounting already gets right
-  - `2206–2249` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2250–2300` 16.10 Posting patterns — one canonical pattern per business event
-  - `2301–2333` 16.11 Inventory's accounting integration
+- `1350–1806` 13. Decision log
+- `1807–1826` 14. Amendment protocol
+- `1827–1831` 15. Engineering standards — the industry practices this project follows
+  - `1832–1837` 15.1 Build order: walking skeleton first
+  - `1838–1849` 15.2 Golden-master testing — the most important practice here
+  - `1850–1858` 15.3 Strangler Fig, not big-bang cutover
+  - `1859–1863` 15.4 No dual-write
+  - `1864–1872` 15.5 Expand/contract migrations
+  - `1873–1881` 15.6 Observability from day zero, not later
+  - `1882–1886` 15.7 CI gates
+  - `1887–1891` 15.8 Backups and a tested restore
+  - `1892–1896` 15.9 Twelve-Factor config
+  - `1897–1904` 15.10 Append-only ledgers — but not event sourcing
+  - `1905–1909` 15.11 Defence in depth
+  - `1910–1938` 15.12 Skills are lenses, not assurance
+  - `1939–1945` 15.13 Reconciliation is a permanent feature
+- `1946–1950` 16. The accounting spine
+  - `1951–1982` 16.0 What we are actually fixing — the diagnosis
+  - `1983–2026` 16.1 The ten invariants — non-negotiable
+  - `2027–2041` 16.2 The oracle: how "correct" is tested
+  - `2042–2063` 16.3 The model — header + lines, not legs
+  - `2064–2083` 16.4 Deliberately simpler than ERPNext
+  - `2084–2153` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2154–2178` 16.6 What v1 already gets right — preserve the intent
+  - `2179–2200` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2201–2215` 16.8 What v1's accounting already gets right
+  - `2216–2259` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2260–2310` 16.10 Posting patterns — one canonical pattern per business event
+  - `2311–2343` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1793,6 +1793,16 @@ just a patch.**
 | 461 | 2026-11-13 | **THE ERP FINANCE SCREENS ARE READ-GATED BY CAPABILITY AND STORE SCOPE.** `/ap`, `/budgets` and `/cash-requests` are added to `ROUTE_CAPABILITY`; the single-record pages `expenses/[id]`, `sales-days/[id]` and `wastage/[id]` refuse a record outside the viewer's store scope. Signed-in alone is never enough to read money. | Ian, 13 Nov, answering audit DEF-834 (any signed-in staff could read them org-wide) | Yes (gates only). DEF-834 |
 | 462 | 2026-11-13 | **A SENIOR/PWD ID USED AGAIN IS WARNED ABOUT, NEVER BLOCKED, AND NEEDS NO MANAGER PIN.** The cashier sees the warning and may continue; the repeat is recorded. 'Again' means the same store on the same business day (Ian, 13 Nov, option a); the window is a store setting so it can change without code. | Ian, 13 Nov, answering audit DEF-843: a real senior may return the same day; blocking would refuse a legal discount (RA 9994 / RA 10754) | Yes. DEF-843 |
 | 463 | 2026-11-13 | **VOIDING A RESERVATION DEPOSIT NEEDS THE MANAGER PIN, AND IS REFUSED ONCE THE DEPOSIT HAS BEEN APPLIED TO A BILL.** Free text alone is never enough. | Ian, 13 Nov, agreeing with audit DEF-844's recommendation: a deposit is customer money held | Yes. DEF-844 |
+| 474 | 2026-11-17 | **"CUTOVER" BECOMES "OPENING BALANCES" IN EVERY LABEL AND ROUTE (T-591). OLD URLS REDIRECT. INTERNAL CODE KEEPS THE CUTOVER NAMES.** `/cutover/count` and the rest of the cutover screens move to opening-balances routes; the old links redirect permanently (verified on production for `/cutover/count`). Package, table, capability and function names stay as they are: no migration, no number or posting changes. Slice A (labels and routes) and slice B (a better stock-count screen) both merged. | Ian, 16-17 Nov: "update that to be labeled as opening balances (evaluate this since new store to come will not be cutover right) and improve the ui", then "fix the ref to all cutover must be opening balance including the link". BOSS advised against it once (the page is one-time and locks org-wide once the books open; a new store starts at zero) and proposed "Opening stock count"; Ian chose the rename anyway. | Yes (labels and redirects only). `docs/tasks/591-opening-balances-rename.md` |
+| 475 | 2026-11-16 | **BOSS INTERIM RULING: WALK-IN SALES CHANNELS KEEP THE "PLATFORM AND STORE CODE" FORM FOR NOW. SUPERSEDED THE NEXT DAY BY ROW 480.** The T-589 B4b builder had hidden the form on walk-in channels, which broke `t511-s2b-render` (T-511 S2b requires the form on every active channel). BOSS ruled: keep the revert; that rule belongs to the settlement lane, so a UI pass does not change it. | BOSS, 16 Nov, answering the UI UX lane on PR #294 (not Ian's own ruling). Ian's later direction on 17 Nov ("per channel that settle daily like dine in do not add store code") replaced it: see row 480. | Superseded by row 480 |
+| 476 | 2026-11-16 | **THE MERGER'S QUEUE SCRIPT AUTO-CLEANS ONLY ITS OWN `fix-pr*` WORKTREE FOLDERS. ANY OTHER LANE'S WORKTREE IS LEFT ALONE, AND THE MERGER ASKS THE OWNING LANE BEFORE REMOVING IT.** Two slips led here: on 12 Nov the auto-cleanup reached into another lane's tree (only ignored files were lost), and on 16 Nov it removed the clean, merged `wt-till-two-cards` and its local branch before the owner was asked (main tree intact, nothing lost). Same family as the standing rule never to `git worktree remove --force` or `rm -rf` a lane worktree. | BOSS flagged both slips to the merger; the merger changed its script and confirmed on 16 Nov. Reason: a worktree can hold a lane's only copy of uncommitted work, and only its owner knows. | Yes (a script rule) |
+| 477 | 2026-11-15 | **T-587 SETTINGS NAVIGATION: OPTION B, AND THESE RENAMES.** Kitchen setup -> "Kitchen stations"; Clock lane -> "Failed clock punches"; POS link -> "Link to POS store"; Sales channels -> "Sales channels (walk-in, Grab, Foodpanda)"; POS tablet(s) -> "POS tablets and cash registers". "Business rules", "Wastage Monitor" and "Menu hours" keep their names. The "Find a setting" box stays (it also matches old names). The word is "store", never "branch", everywhere except the commissary's "Branch orders". Rows not cards; sections This store / Company / People and access / Devices and connections. Navigation and labels only: no migration, no new setting or capability. | Ian, 15 Nov, answering the T-587 questions: option B; "Clock lane" renamed "Failed clock punches" over UI UX's "Clock punch problems"; "POS tablets and cash registers" kept over UI UX's alternative; search box kept over UI UX's suggestion to drop it; store word: "'Store' everywhere". | Yes (labels). `docs/tasks/587-settings-navigation.md` |
+| 478 | 2026-11-15 | **T-511 S8 SETTLEMENT MONEY RULES.** (1) A payout that settles earlier invoices is BLOCKED until the earlier file is uploaded. (2) A late charge or adjustment (reversals and credit notes included) is booked in its own month if that accounting period is still open; if that month is closed it is booked in the current month (Manila) with the reason on the entry; if the current month is closed too, it is refused in plain words. The amounts, VAT and accounts are identical either way. (3) PandaGO "Delivery Service Fees" rows (original, reversal, re-bill) are booked as a period charge: expense 6400, receivable 1220, 12% VAT included; PandaGO cash-on-delivery rows and any other PandaGO row stay shown-only and are never booked. Item 3 amends the 2 Nov design decision that PandaGO was not booked. | Ian, 15 Nov (binding), on the real Foodpanda file `lipa nov 11.zip`: Foodpanda deducts PandaGO delivery fees from the weekly payout (Appendix C), so unbooked they leave the week unable to match the bank. "Yes, merge it" on the S8 PR. | No: postings follow it. A read-only production count of old PandaGO/Foodpanda charge rows came before the merge. `docs/tasks/511-settlement-upload-s8-spec.md` items 5, 8, 9 |
+| 479 | 2026-11-18 | **FIXTURES AND SEED DATA STAY SYNTHETIC: NEVER SEED REAL COMPANY DATA.** Tests, practice copies, smoke servers and screenshot runs use made-up stores, staff, PINs and amounts in a throwaway local `_test` database. No real staff, customer, bank or settlement data goes into a fixture, a seed file, a scratch DB or a committed screenshot. A real file (for example the Foodpanda invoice zip) may be read by a test that skips when it is absent, but its contents are not copied into the repo. | BOSS standing constraint carried in every lane brief since 2 Nov (practice-copy PR: "no live project, no real company data"); recorded here so it no longer lives only in briefs. Reason: a repo is copied to every machine and every agent. | Yes (a process rule) |
+| 480 | 2026-11-17 | **T-592 SALES CHANNELS: A STORE CODE EXISTS ONLY ON SETTLE-LATER (DELIVERY PLATFORM) CHANNELS. AT MOST ONE ACTIVE FOODPANDA AND ONE ACTIVE GRAB CHANNEL PER STORE. NO PLATFORM DROPDOWN. THE SETTLEMENT WIRING PANEL AND THE BANK-NAMES FORM COME OFF THE PAGE; THE DATABASE DATA IS KEPT, NOT DROPPED.** Daily channels such as dine-in show no code form; the database refuses a code on one (`CHECK platform IS NULL OR NOT is_remitted_daily`) and a second active channel on the same platform in one store (unique index). A Foodpanda or Grab card asks for its code in one box; a settle-later card with no platform yet shows two radio rows. Migration 0261 refuses on bad rows and never moves a code in SQL; production had one dine-in code at Lipa, so Ian moves it on the current screen first. `settlementWiringWarnings` is deleted (it was wrong: matching uses the channel code, never the store key). Replaces row 475. | Ian, 17 Nov: "per channel that settle daily like dine in do not add store code ... for foodpanda card directly ask for store code dont add a dropdown same as to grab ... what is the settlement wiring for if we have already the store code on both foodpanda and grab?". Ian chose "A" (take the wiring off the page) and approved one read-only production count ("A, and you count"). BOSS had first proposed folding the wiring into the delivery cards. | Mostly: 0261 is a CHECK and an index. The wiring tables and columns remain, so it can come back. PR #303, audit fix #304. `docs/tasks/592-sales-channels-store-code.md` |
+| 481 | 2026-11-17 | **THE CODE MAP (GRAPHIFY) IS OWNED BY BOSS. ONLY BOSS, OR A SESSION BOSS STARTS, EDITS, REBUILDS OR REFRESHES IT. EVERY OTHER AGENT USES IT READ-ONLY, AS A REFERENCE.** Main map: `C:\Users\ianla\webapps\shareat-map-src\graphify-out\graph.json`. Usage, limits and the refresh routine are in `C:\Users\ianla\webapps\shareat-system-graph\README.md`. An agent that finds it stale tells BOSS and does not run `graphify update`. The map is a pointer, never the truth: confirm in the real file. Specs query it first. | Ian, 17 Nov: "from now on you own it as the boss you update it and make sure its maintainedd and it must be available to other ai agents as well as referrence but only you or any of your session can edit update it" | Yes |
+| 482 | 2026-11-17 | **T-586: THE BUILDER'S DEVIATIONS FROM THE DEEPSEEK PROMPT ARE ACCEPTED, AND THE SETTINGS-HUB "WHO CAN EDIT" NOTE IS SKIPPED.** Ian had DeepSeek write the T-586 prompt and told BOSS to evaluate it and build according to BOSS's assessment. BOSS corrected four points before building (keep the same-day phone fix in the shared header, re-measure the t348 SW4 count, make any "who can edit" note true, do not touch shared form components). The builder skipped the hub note because the cards already show a "View only" tag to anyone who cannot edit. PR #300 merged. | Ian, 17 Nov: "i askedd that from deepseek . evaluate it build according to your assessment". BOSS accepted the builder's deviations. | Yes |
+| 483 | 2026-11-17 | **TOUCH-TARGET CENSUS: A LINK INSIDE SENTENCE TEXT IS EXEMPT FROM THE 44 PX RULE (WCAG 2.5.8 INLINE EXCEPTION). IT IS COUNTED AS "INLINE-EXEMPT", NOT AS A FAILURE.** Triggered by T-586: two description links moved into the shared page header's `description` prop, where the checker could no longer see them; they sit inside a sentence and were unchanged from main. T-589 B9 teaches the census to resolve links in Page `description` and `crumb` props. Links that stand alone (crumbs, buttons, list links) keep the full 44 px rule. | BOSS, 17 Nov, ruling on the UI UX lane's question (fix to 44 px, or keep them counted): the links are exempt from the tap-size rule under the WCAG 2.5.8 inline exemption. | Yes (a census rule) |
 
 ## 14. Amendment protocol
 
