@@ -85,6 +85,7 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordLoanPayment(tx, actor, {
+        requestId: str(formData, 'requestId'),
         loanId: id,
         amount: str(formData, 'amount'),
         fromMoneyAccountId: str(formData, 'fromMoneyAccountId'),

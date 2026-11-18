@@ -29,6 +29,7 @@ import {
   createLoan,
   disburseLoan,
   recordLoanPayment,
+  reverseEntry,
   reverseLoanEntry,
 } from '@shareat/domain';
 
@@ -187,7 +188,7 @@ describe('the postings', () => {
     // One day later, the scheduled instalment. ₱200,000 × 2%/30 = ₱133.33 interest.
     const r = await asOrg(f.orgId, (tx) =>
       recordLoanPayment(tx, f.admin, {
-        loanId: f.loanId, amount: '2355.56', fromMoneyAccountId: f.safe, on: '2026-05-12',
+        requestId: crypto.randomUUID(), loanId: f.loanId, amount: '2355.56', fromMoneyAccountId: f.safe, on: '2026-05-12',
       }),
     );
     expect(r.split.interest).toBe('133.33');
@@ -212,7 +213,7 @@ describe('the postings', () => {
     // small." ₱100 against ₱133.33 accrued.
     const r = await asOrg(f.orgId, (tx) =>
       recordLoanPayment(tx, f.admin, {
-        loanId: f.loanId, amount: '100.00', fromMoneyAccountId: f.safe, on: '2026-05-12',
+        requestId: crypto.randomUUID(), loanId: f.loanId, amount: '100.00', fromMoneyAccountId: f.safe, on: '2026-05-12',
       }),
     );
     expect(r.split).toMatchObject({ interest: '100.00', principal: '0.00' });
@@ -250,7 +251,7 @@ describe('the refusals', () => {
     await expect(
       asOrg(f.orgId, (tx) =>
         recordLoanPayment(tx, f.admin, {
-          loanId: f.loanId, amount: '5000.00', fromMoneyAccountId: f.safe, on: '2026-05-12',
+          requestId: crypto.randomUUID(), loanId: f.loanId, amount: '5000.00', fromMoneyAccountId: f.safe, on: '2026-05-12',
         }),
       ),
     ).rejects.toThrow(/would be an overpayment/);
@@ -280,7 +281,7 @@ describe('⭐ paid_off is DERIVED, and a reversal re-opens it', () => {
     // Same day, so no interest has accrued — the whole payment retires principal.
     const paid = await asOrg(f.orgId, (tx) =>
       recordLoanPayment(tx, f.admin, {
-        loanId: f.loanId, amount: '1000.00', fromMoneyAccountId: f.safe, on: '2026-05-11',
+        requestId: crypto.randomUUID(), loanId: f.loanId, amount: '1000.00', fromMoneyAccountId: f.safe, on: '2026-05-11',
       }),
     );
     expect(paid.paidOff).toBe(true);
@@ -309,12 +310,12 @@ describe('⭐ paid_off is DERIVED, and a reversal re-opens it', () => {
     );
     const a = await asOrg(f.orgId, (tx) =>
       recordLoanPayment(tx, f.admin, {
-        loanId: f.loanId, amount: '500.00', fromMoneyAccountId: f.safe, on: '2026-05-12',
+        requestId: crypto.randomUUID(), loanId: f.loanId, amount: '500.00', fromMoneyAccountId: f.safe, on: '2026-05-12',
       }),
     );
     await asOrg(f.orgId, (tx) =>
       recordLoanPayment(tx, f.admin, {
-        loanId: f.loanId, amount: '500.00', fromMoneyAccountId: f.safe, on: '2026-05-13',
+        requestId: crypto.randomUUID(), loanId: f.loanId, amount: '500.00', fromMoneyAccountId: f.safe, on: '2026-05-13',
       }),
     );
 
@@ -420,7 +421,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     );
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordLoanPayment(tx, f.admin, { loanId: f.loanId, amount: '0.004', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+        recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '0.004', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
       ),
     ).rejects.toMatchObject({"name":"RefusalError","message":"loans.recordLoanPayment.amount: money check failed","userMessage":"The payment amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
@@ -438,7 +439,7 @@ describe('⛔ T-573: concurrent payments on one loan serialise on the loan row (
     );
     const pay = () =>
       asOrg(f.orgId, (tx) =>
-        recordLoanPayment(tx, f.admin, { loanId: f.loanId, amount: '5000.00', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+        recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '5000.00', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
       );
     const results = await Promise.all([pay(), pay()]);
 
@@ -467,7 +468,7 @@ describe('⛔ T-573: concurrent payments on one loan serialise on the loan row (
     // 1,000 principal + 0.67 interest (1,000 × 2% / 30, one day) clears it. Two of them cannot both be right.
     const clear = () =>
       asOrg(f.orgId, (tx) =>
-        recordLoanPayment(tx, f.admin, { loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+        recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
       );
     const results = await Promise.allSettled([clear(), clear()]);
     expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected']);
@@ -490,7 +491,7 @@ describe('⛔ T-573: concurrent payments on one loan serialise on the loan row (
       disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
     );
     const first = await asOrg(f.orgId, (tx) =>
-      recordLoanPayment(tx, f.admin, { loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+      recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
     );
     expect(first.paidOff).toBe(true);
     const statusNow = async () => (await asOrg(f.orgId, (tx) => loansRepo.getById(tx, f.orgId, small.id)))!.status;
@@ -502,7 +503,7 @@ describe('⛔ T-573: concurrent payments on one loan serialise on the loan row (
     await asOrg(f.orgId, async (tx) => {
       await reverseLoanEntry(tx, f.admin, { loanId: small.id, entryId: first.entryId, reason: 'race test' });
       queued = asOrg(f.orgId, (tx2) =>
-        recordLoanPayment(tx2, f.admin, { loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+        recordLoanPayment(tx2, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
       ).then(() => ({ ok: true }), () => ({ ok: false }));
       await new Promise((r) => setTimeout(r, 500));
     });
@@ -528,18 +529,216 @@ describe('⛔ T-573: concurrent payments on one loan serialise on the loan row (
     );
     // A part-payment: the loan stays active, so reversing it flips no status and takes no row lock as a side effect.
     const part = await asOrg(f.orgId, (tx) =>
-      recordLoanPayment(tx, f.admin, { loanId: small.id, amount: '500.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+      recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '500.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
     );
     let queued: Promise<{ ok: boolean }> | undefined;
     await asOrg(f.orgId, async (tx) => {
       await reverseLoanEntry(tx, f.admin, { loanId: small.id, entryId: part.entryId, reason: 'race test' });
       // 1,000.67 clears the loan only AFTER the reversal; against the un-reversed 500.00 balance it would be an overpayment.
       queued = asOrg(f.orgId, (tx2) =>
-        recordLoanPayment(tx2, f.admin, { loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+        recordLoanPayment(tx2, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
       ).then(() => ({ ok: true }), () => ({ ok: false }));
       await new Promise((r) => setTimeout(r, 500));
     });
     expect(await queued).toEqual({ ok: true });
     expect((await asOrg(f.orgId, (tx) => loansRepo.positionOf(tx, f.orgId, small.id))).outstanding).toBe('0.00');
+  });
+});
+
+describe('DEF-869 - one request id, one payment', () => {
+  // The raw message says "posted"; the sentence a person reads says "recorded".
+  const FIG = (p: Promise<unknown>) => p.then(() => null, (e: { userMessage?: string }) => e.userMessage ?? null);
+  const SENTENCE = 'This payment was already recorded with different figures. Reload the page and try again.';
+  async function drawn(hint: string, amount = '200000.00') {
+    const f = await fixture(hint);
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount, intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    return f;
+  }
+  const paymentEntries = async (f: Fixture, loanId = f.loanId) =>
+    Number(
+      (await sql<{ n: string }[]>`
+        select count(*)::text as n from journal_entries where org_id = ${f.orgId} and source_type = 'loan_payment' and source_id = ${loanId}
+      `)[0]!.n,
+    );
+
+  it('the same payment sent twice posts once and the second answer is the first', async () => {
+    const f = await drawn('def869-twice');
+    const input = { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '2355.56', fromMoneyAccountId: f.safe, on: '2026-05-12' };
+    const a = await asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, input));
+    const b = await asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, input));
+    expect(b.entryId).toBe(a.entryId);
+    expect(b.split).toEqual(a.split);
+    expect(b.outstanding).toBe(a.outstanding);
+    expect(await paymentEntries(f)).toBe(1);
+    expect((await position(f)).outstanding).toBe('197777.77');
+  });
+
+  it('a payment that cleared the loan, sent again, answers paidOff - not "nothing outstanding"', async () => {
+    const f = await drawn('def869-clear');
+    // A 1,000.00 loan (1,000.67 clears it after one day); the safe is funded by the big draw above.
+    const small = await asOrg(f.orgId, (tx) =>
+      createLoan(tx, f.admin, {
+        storeId: f.storeId, lenderName: 'Grab', name: 'Small loan', principalAmount: '1000.00', interestRate: '2',
+        ratePeriod: 'month', interestMethod: 'straight', paymentFrequency: 'daily', termPeriods: 90, startDate: '2026-05-11',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    const input = { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' };
+    const a = await asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, input));
+    expect(a.paidOff).toBe(true);
+    const b = await asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, input));
+    expect(b.entryId).toBe(a.entryId);
+    expect(b.paidOff).toBe(true);
+    expect(await paymentEntries(f, small.id)).toBe(1);
+  });
+
+  it('two genuine payments carry two ids and both post', async () => {
+    const f = await drawn('def869-two');
+    const pay = (on: string) =>
+      asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '500.00', fromMoneyAccountId: f.safe, on }));
+    await pay('2026-05-12');
+    await pay('2026-05-12');
+    expect(await paymentEntries(f)).toBe(2);
+  });
+
+  it('the same id with a different amount, or a different money account, is refused and nothing more posts', async () => {
+    const f = await drawn('def869-diff');
+    const requestId = crypto.randomUUID();
+    const base = { requestId, loanId: f.loanId, amount: '500.00', fromMoneyAccountId: f.safe, on: '2026-05-12' };
+    await asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, base));
+    expect(await FIG(asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, { ...base, amount: '600.00' })))).toBe(SENTENCE);
+    const [till] = await sql<{ id: string }[]>`
+      select id from money_accounts where store_id = ${f.storeId} and instrument = 'cash' and custodian = 'cashier' and is_foundation
+    `;
+    expect(await FIG(asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, { ...base, fromMoneyAccountId: till!.id })))).toBe(SENTENCE);
+    expect(await paymentEntries(f)).toBe(1);
+  });
+
+  it('a missing or non-uuid request id is "out of date" and posts nothing', async () => {
+    const f = await drawn('def869-missing');
+    for (const requestId of ['', 'not-a-uuid']) {
+      await expect(
+        asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, { requestId, loanId: f.loanId, amount: '500.00', fromMoneyAccountId: f.safe, on: '2026-05-12' })),
+      ).rejects.toThrow('requestId is missing or not a uuid');
+    }
+    expect(await paymentEntries(f)).toBe(0);
+  });
+});
+
+describe('DEF-896 - unpaid interest carries', () => {
+  // ₱200,000 at 2%/month straight, started 2026-05-11: one day of interest is 133.33, two days 266.67 (ONE rounding).
+  async function drawn(hint: string) {
+    const f = await fixture(hint);
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    return f;
+  }
+  const pay = (f: Fixture, amount: string, on: string) =>
+    asOrg(f.orgId, (tx) =>
+      recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount, fromMoneyAccountId: f.safe, on }),
+    );
+
+  it('a short payment leaves interest unpaid, and the next payment collects it (266.67 - 100.00 = 166.67)', async () => {
+    const f = await drawn('def896-carry');
+    const first = await pay(f, '100.00', '2026-05-12');
+    expect(first.split.interest).toBe('100.00');
+    expect(first.split.principal).toBe('0.00');
+    const second = await pay(f, '1000.00', '2026-05-13');
+    expect(second.split.interest).toBe('166.67');
+    expect(second.split.principal).toBe('833.33');
+    expect(second.outstanding).toBe('199166.67');
+  });
+
+  it('a reversed short payment paid nothing: the next payment owes the whole run (266.67)', async () => {
+    const f = await drawn('def896-reversed');
+    const first = await pay(f, '100.00', '2026-05-12');
+    // An interest-only payment carries no 2400 line, so `reverseLoanEntry` cannot bind it to the loan; the ledger reversal is
+    // what `interestRunOf` has to see through (status 'reversed' + the reversal entry).
+    await asOrg(f.orgId, (tx) => reverseEntry(tx, { entryId: first.entryId, reason: 'wrong amount', reversedBy: f.adminId }));
+    const second = await pay(f, '1000.00', '2026-05-13');
+    expect(second.split.interest).toBe('266.67');
+    expect(second.split.principal).toBe('733.33');
+  });
+
+  it('after a payment that retired principal, the next one accrues from that date only (unchanged behaviour)', async () => {
+    const f = await drawn('def896-control');
+    const first = await pay(f, '2355.56', '2026-05-12'); // 133.33 interest + 2,222.23 principal
+    expect(first.split.interest).toBe('133.33');
+    const second = await pay(f, '2355.56', '2026-05-13');
+    expect(second.split.interest).toBe('133.33'); // one day from 05-12, nothing carried
+  });
+});
+
+describe('T-593 audit follow-ups - carried interest and the payment replay', () => {
+  async function drawn(hint: string) {
+    const f = await fixture(hint);
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    return f;
+  }
+  const payWith = (f: Fixture, requestId: string, amount: string, on: string, fromMoneyAccountId = f.safe) =>
+    asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, { requestId, loanId: f.loanId, amount, fromMoneyAccountId, on }));
+  const pay = (f: Fixture, amount: string, on: string) => payWith(f, crypto.randomUUID(), amount, on);
+  const sentenceOf = (p: Promise<unknown>) => p.then(() => null, (e: { userMessage?: string }) => e.userMessage ?? null);
+
+  it('a backdated payment does not subtract interest paid AFTER it: 100 on 05-25, then 5,000 on 05-20 charges the full 1,200.00 (9 days), and 05-26 charges what is left, 700.00 - 2,000.00 in all, the 15 days exactly - Mutant: drop the "entry_date <= on" bound -> 1,100.00, red', async () => {
+    const f = await drawn('audit-backdate');
+    const short = await pay(f, '100.00', '2026-05-25');
+    expect(short.split.interest).toBe('100.00'); // all interest, no principal: the run stays open
+    const backdated = await pay(f, '5000.00', '2026-05-20');
+    expect(backdated.split.interest).toBe('1200.00'); // 9 days x 133.33, one rounding; the 05-25 payment had not happened yet as of 05-20
+    expect(backdated.split.principal).toBe('3800.00');
+    const last = await pay(f, '1000.00', '2026-05-26');
+    expect(last.split.interest).toBe('700.00'); // 6 days = 800.00, less the 100.00 paid on 05-25, subtracted ONCE
+    // 100 + 1,200 + 700 = 2,000.00 = 15 days of interest on 200,000 at 2% a month: nothing missed, nothing charged twice
+  });
+
+  it('two short payments in a row are both carried: 100 on 05-12, 100 on 05-13, then 1,000 on 05-14 gives interest 200.00, principal 800.00, outstanding 199,200.00', async () => {
+    const f = await drawn('audit-two-short');
+    expect((await pay(f, '100.00', '2026-05-12')).split.interest).toBe('100.00');
+    expect((await pay(f, '100.00', '2026-05-13')).split.interest).toBe('100.00');
+    const third = await pay(f, '1000.00', '2026-05-14');
+    expect(third.split.interest).toBe('200.00'); // 3 days = 400.00, less 200.00 already paid
+    expect(third.split.principal).toBe('800.00');
+    expect(third.outstanding).toBe('199200.00');
+  });
+
+  it('a payment exactly equal to the interest leaves no rounding behind: 133.33 on 05-12, then 1,000 on 05-13 gives interest 133.34, principal 866.66, outstanding 199,133.34', async () => {
+    const f = await drawn('audit-exact');
+    expect((await pay(f, '133.33', '2026-05-12')).split.interest).toBe('133.33');
+    const next = await pay(f, '1000.00', '2026-05-13');
+    expect(next.split.interest).toBe('133.34'); // 2 days = 266.67 (one rounding), less 133.33
+    expect(next.split.principal).toBe('866.66');
+    expect(next.outstanding).toBe('199133.34');
+  });
+
+  it("a replay that names ANOTHER store's safe (same GL code, same amount) is refused with the different-figures sentence - Mutant: drop the store comparison -> the replay is accepted, red", async () => {
+    const f = await drawn('audit-store');
+    const requestId = crypto.randomUUID();
+    await payWith(f, requestId, '500.00', '2026-05-12');
+    const [other] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${f.orgId}, ${`other-${Date.now()}`}, 'Other store') returning id`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${f.adminId}, ${other!.id})`;
+    const [farSafe] = await sql<{ id: string }[]>`
+      select id from money_accounts where store_id = ${other!.id} and instrument = 'cash' and custodian = 'office' and is_foundation
+    `;
+    expect(await sentenceOf(payWith(f, requestId, '500.00', '2026-05-12', farSafe!.id))).toBe(
+      'This payment was already recorded with different figures. Reload the page and try again.',
+    );
+  });
+
+  it('a replay of a payment that has been reversed is refused with a plain sentence, and nothing new posts - Mutant: drop the status check -> the dead entry is handed back, red', async () => {
+    const f = await drawn('audit-reversed');
+    const requestId = crypto.randomUUID();
+    const first = await payWith(f, requestId, '2355.56', '2026-05-12');
+    await asOrg(f.orgId, (tx) => reverseLoanEntry(tx, f.admin, { loanId: f.loanId, entryId: first.entryId, reason: 'wrong day' }));
+    expect(await sentenceOf(payWith(f, requestId, '2355.56', '2026-05-12'))).toBe('That payment was reversed. Record it again as a new payment.');
+    const [row] = await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${f.orgId} and source_type = 'loan_payment' and source_id = ${f.loanId}`;
+    expect(Number(row!.n)).toBe(2); // the payment and its reversal, nothing more
   });
 });

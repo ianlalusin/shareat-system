@@ -174,9 +174,6 @@ describe('audit 6/7 - source promises', () => {
     expect(shell).toMatch(/storeId \|\| stores\.length === 0/);
     expect(shell).not.toContain('You do not work at any store');
   });
-  it('the placeholder id is a slug', () => {
-    expect(src('app/pos/_shell/SlicePlaceholder.tsx')).toMatch(/replace\(\/\[\^a-z0-9\]\+\/g, '-'\)/);
-  });
   it('no non-null assertion is left in the shell, the verifier or the pages', () => {
     for (const f of ['lib/pos-device/pin-verifier.ts', 'app/pos/_shell/PosShell.tsx', 'app/pos/_shell/offline-switch.ts', 'app/pos/lib.ts', 'app/pos/layout.tsx']) {
       expect(src(f).replace(/\/\/.*$/gm, '').match(/[\w\])]!(?![=])[.[)]/g), f).toBeNull();

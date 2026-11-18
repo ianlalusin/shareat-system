@@ -77,6 +77,15 @@ export function accruedInterest(input: AccruedInput): Money {
   return fromCentavos((2n * numerator + denominator) / (2n * denominator)); // half-up: floor(n/d + 1/2)
 }
 
+/**
+ * DEF-896: the interest actually still OWED = what has built up over the run, less what interest-only part-payments have
+ * already covered in it. Floored at zero (a payment can never leave a negative amount owed). Pure, integer centavos.
+ */
+export function interestDue(accrued: Money, paidSince: Money): Money {
+  const left = subtract(accrued, paidSince);
+  return compare(left, ZERO) < 0 ? money('0') : left;
+}
+
 export interface SplitInput {
   /** What arrived. ⚠️ Rarely the scheduled instalment — see below. */
   payment: Money;
