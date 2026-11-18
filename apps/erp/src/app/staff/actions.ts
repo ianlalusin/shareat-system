@@ -37,8 +37,9 @@ import {
   STAFF_POSITION_RULES,
 } from '@shareat/domain/field-rules';
 import type { EmploymentStatus } from '@shareat/db/schema';
-import { authorize, can, reopenPinSignIn, setPin } from '@shareat/auth';
-import { accessRepo, employmentRepo, refuse, storesRepo, type Tx } from '@shareat/db';
+import { authorize, can, isStoreManagerOrAbove, reopenPinSignIn, setPin, type Actor } from '@shareat/auth';
+import { logger } from '@shareat/core/logger';
+import { accessRepo, auditLogRepo, employmentRepo, refuse, storesRepo, type Tx } from '@shareat/db';
 import { listStores, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
@@ -236,6 +237,27 @@ async function requireSuperForSuperTarget(tx: Tx, actor: { personId: string; org
   if (mine?.role !== 'super_admin') throw refuse(`issuePin: actor ${actor.personId} is not a super_admin and the target ${targetPersonId} is`, SUPER_ONLY);
 }
 
+const MANAGER_PIN_ADMIN_ONLY = 'Only an administrator can set a manager’s PIN. Ask an administrator.';
+
+/** T-603 S1: a refused PIN set, written in a SEPARATE transaction so it survives the rollback. Never throws. No PIN in the payload. */
+async function recordPinSetRefused(actor: Actor, targetPersonId: string, storeId: string, targetRole: string | undefined): Promise<void> {
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      auditLogRepo.append(tx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'credential.pin_set_refused',
+        storeId,
+        entityId: targetPersonId,
+        before: null,
+        after: { targetRole },
+        source: 'web',
+      }),
+    );
+  } catch (err) {
+    logger.error({ kind: 'fault', errorName: err instanceof Error ? err.name : typeof err }, 'staff: could not record a refused PIN set');
+  }
+}
+
 export async function issuePinAction(formData: FormData): Promise<void> {
   const actor = await requireActor('/staff');
   const employmentId = str(formData, 'employmentId');
@@ -249,9 +271,14 @@ export async function issuePinAction(formData: FormData): Promise<void> {
       }
       await authorize(tx, actor, 'enrol_staff', { storeId: employment.storeId });
       assertFieldRules(STAFF_PIN_RULES, formData);
-      // T-412: an administrator's PIN approves destructive actions, so setting it is administrator work: a manager who may
-      // issue ordinary staff PINs must not be able to choose one for an administrator and then use it.
-      if (await accessRepo.personIsActiveAdmin(tx, actor.orgId, employment.personId)) await authorize(tx, actor, 'manage_users', {});
+      // T-412 / T-603 S1: one ladder (`ROLE_RANK`). A manager's or administrator's PIN approves destructive actions, so setting
+      // it is administrator work (`manage_users`), except a manager resetting their own. Runs BEFORE `setPin`: a refusal changes nothing.
+      const targetRole = (await accessRepo.activeRoleForPerson(tx, employment.personId, actor.orgId))?.role;
+      const ownManagerPin = targetRole === 'manager' && employment.personId === actor.personId;
+      if (isStoreManagerOrAbove(targetRole) && !ownManagerPin && !(await can(tx, actor, 'manage_users', {}))) {
+        await recordPinSetRefused(actor, employment.personId, employment.storeId, targetRole);
+        throw refuse(`issuePin: actor ${actor.personId} lacks manage_users for ${targetRole} target ${employment.personId}`, MANAGER_PIN_ADMIN_ONLY);
+      }
       await requireSuperForSuperTarget(tx, actor, employment.personId);
       // ⭐ T-302 — `orgId` from the ACTOR, never from the form (T-231). It is also already known
       // to equal the employment's org: the guard three lines up refused `employment.orgId !==

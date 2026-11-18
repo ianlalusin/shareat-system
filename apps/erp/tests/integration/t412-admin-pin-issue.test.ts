@@ -30,8 +30,9 @@ vi.mock('../../src/lib/session', () => ({
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
 
 import { closeDb } from '@shareat/db';
-import { verifyAdminApproval } from '@shareat/auth';
+import { setPin, verifyAdminApproval } from '@shareat/auth';
 import { captureRedirect, outcomeOf, resetJar } from '../helpers/flash-jar';
+import { withOrgPrincipal } from '../../src/app/expenses/lib';
 
 const sql = postgres(url, { max: 4 });
 let seq = 0;
@@ -68,8 +69,9 @@ async function fixture(hint: string) {
   const admin = await mk('Admin', 'admin');
   const target = await mk('Email-only Admin', 'admin');
   const manager = await mk('Manager', 'manager');
+  const managerB = await mk('Manager B', 'manager');
   const staff = await mk('Staff', 'staff');
-  return { orgId, storeId, admin, target, manager, staff };
+  return { orgId, storeId, admin, target, manager, managerB, staff };
 }
 
 const livePins = async (personId: string) =>
@@ -189,5 +191,55 @@ describe('M5 issuePinAction on an employment whose person is a super_admin', () 
     const ok = await act('issuePinAction', f.superB, { employmentId, pin: '684027' });
     expect(ok.flash.error).toBeUndefined();
     expect(await livePins(f.superA.personId)).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-603 S1 (DEF-909): who may set whose PIN follows the capability matrix - a manager's PIN is administrator work, except a
+// manager resetting their own.
+describe('T-603 S1 (DEF-909) - a manager cannot set a peer manager PIN', () => {
+  async function employed(f: Awaited<ReturnType<typeof fixture>>, personId: string) {
+    const [e] = await sql<{ id: string }[]>`
+      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+      values (${f.orgId}, ${f.storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
+    return e!.id;
+  }
+  const liveCredentialId = async (personId: string) =>
+    (await sql<{ id: string }[]>`select id from person_credentials where person_id = ${personId} and kind = 'pin' and revoked_at is null`)[0]?.id;
+  const auditCount = async (orgId: string, action: string, actorId: string, entityId: string) =>
+    (await sql<{ n: number }[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action = ${action} and actor_person_id = ${actorId} and entity_id = ${entityId}`)[0]!.n;
+  const SENTENCE = 'Only an administrator can set a manager’s PIN. Ask an administrator.';
+
+  it('manager A is refused on manager B: the PIN is unchanged and one refusal row is written', async () => {
+    const f = await fixture('s1a');
+    const employmentId = await employed(f, f.managerB.personId);
+    await withOrgPrincipal(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.managerB.personId, storeId: f.storeId, pin: '135790' }));
+    const before = await liveCredentialId(f.managerB.personId);
+    expect(before).toBeTruthy();
+    const o = await act('issuePinAction', f.manager, { employmentId, pin: '246801' });
+    expect(o.flash.error).toBe(SENTENCE);
+    expect(await liveCredentialId(f.managerB.personId)).toBe(before);
+    expect(await livePins(f.managerB.personId)).toBe(1);
+    expect(await auditCount(f.orgId, 'credential.pin_set_refused', f.manager.personId, f.managerB.personId)).toBe(1);
+    expect(await auditCount(f.orgId, 'credential.pin_set', f.manager.personId, f.managerB.personId)).toBe(0);
+  });
+
+  it('an administrator sets manager B’s PIN: no error, one live PIN, one credential.pin_set', async () => {
+    const f = await fixture('s1b');
+    const employmentId = await employed(f, f.managerB.personId);
+    const o = await act('issuePinAction', f.admin, { employmentId, pin: '246801' });
+    expect(o.flash.error).toBeUndefined();
+    expect(await livePins(f.managerB.personId)).toBe(1);
+    expect(await auditCount(f.orgId, 'credential.pin_set', f.admin.personId, f.managerB.personId)).toBe(1);
+    expect(await auditCount(f.orgId, 'credential.pin_set_refused', f.admin.personId, f.managerB.personId)).toBe(0);
+  });
+
+  it('a manager sets their OWN PIN through their own employment', async () => {
+    const f = await fixture('s1c');
+    const employmentId = await employed(f, f.manager.personId);
+    const o = await act('issuePinAction', f.manager, { employmentId, pin: '246801' });
+    expect(o.flash.error).toBeUndefined();
+    expect(await livePins(f.manager.personId)).toBe(1);
+    expect(await auditCount(f.orgId, 'credential.pin_set_refused', f.manager.personId, f.manager.personId)).toBe(0);
   });
 });
