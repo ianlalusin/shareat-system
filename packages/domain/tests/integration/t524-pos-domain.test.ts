@@ -80,7 +80,7 @@ interface PosApi {
   listOpenStands: W<{ stateVersion: number }>;
   listKitchenQueue: W<{ stateVersion: number }>;
   listRefillQueue: W<{ stateVersion: number }>;
-  listTodaysSalesReceipts: W<{ stateVersion: number }>;
+  listTodaysSalesReceipts: W<{ stateVersion: number; receipts: { receiptId: string; terminalNo: number; receiptNo: string; table: string; tenders: string; total: string }[] }>;
 }
 const POS_MODULE = '../../src/pos';
 let loaded: Record<string, unknown> | null | undefined;
