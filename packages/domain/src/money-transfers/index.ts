@@ -239,10 +239,18 @@ function replayOf(
  * `adminDeleteRecordAction` goes straight to `ref.delete()` with no reversal branch, which is
  * how a ledger ends up holding legs that point at nothing.
  */
+export interface VoidMoneyTransferInput {
+  moneyTransferId: string;
+  reason: string;
+  voidDate?: string;
+  /** DEF-875: set ONLY by `reverseRemittance`, which voids its own legs. Anyone else is refused a remittance leg. */
+  viaRemittanceReversal?: boolean;
+}
+
 export async function voidMoneyTransfer(
   tx: Tx,
   actor: Actor,
-  input: { moneyTransferId: string; reason: string; voidDate?: string },
+  input: VoidMoneyTransferInput,
 ): Promise<{ reversalEntryId: string }> {
   return runVoid(tx, actor, input);
 }
@@ -250,7 +258,7 @@ export async function voidMoneyTransfer(
 async function runVoid(
   tx: Tx,
   actor: Actor,
-  input: { moneyTransferId: string; reason: string; voidDate?: string },
+  input: VoidMoneyTransferInput,
 ): Promise<{ reversalEntryId: string }> {
   const transfer = await moneyTransfersRepo.getById(tx, actor.orgId, input.moneyTransferId);
   if (!transfer) {
@@ -279,7 +287,14 @@ async function runVoid(
   if (!transfer.journalEntryId) {
     throw new Error('voidMoneyTransfer: this transfer has no journal entry to reverse.');
   }
-
+  // ⛔ DEF-875: a remittance leg is undone by reversing the remittance. Voiding it alone returns the cash to the till but
+  // leaves the days "remitted", and `reverseRemittance` then fails forever on the already-voided leg.
+  if (!input.viaRemittanceReversal && (await moneyTransfersRepo.isPostedRemittanceLeg(tx, transfer.id))) {
+    throw refuse(
+      `voidMoneyTransfer: transfer ${transfer.id} is a leg of a posted remittance.`,
+      'This transfer is part of a remittance (a cashier handover). Reverse the remittance instead - that undoes this transfer and reopens its days.',
+    );
+  }
   const reversal = await reverseEntry(tx, {
     entryId: transfer.journalEntryId,
     reason,

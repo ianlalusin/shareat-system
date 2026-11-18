@@ -468,6 +468,7 @@ export async function reverseRemittance(
         moneyTransferId: line.moneyTransferId,
         reason: `Remittance reversed: ${reason}`,
         voidDate: input.reversedOn,
+        viaRemittanceReversal: true,
       });
     }
 

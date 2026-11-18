@@ -331,3 +331,21 @@ describe('I10 Tier R: setItemStatusAction retypes the name the SERVER loads (V8,
     expect(await t.status()).toBe('active');
   });
 });
+
+describe('T-594 DEF-875: the remittance-leg flag cannot be set from the screen', () => {
+  it('voidMoneyTransferAction with the admin PIN and a forged viaRemittanceReversal field is refused with the sentence; transfer and remittance stay posted', async () => {
+    const { f, adminPin } = await approvedFixture('t594-leg');
+    const [safe] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${f.storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
+    const t = await asOrgOn(f.orgId, (tx) =>
+      D.createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(), fromMoneyAccountId: f.drawerId, toMoneyAccountId: safe!.id, amountOut: '500.00', amountIn: '500.00', transferDate: '2026-01-10' }),
+    );
+    const [rem] = await sql<{ id: string }[]>`insert into remittances (org_id, store_id, remitted_on, created_by) values (${f.orgId}, ${f.storeId}, '2026-01-10', ${f.adminId}) returning id`;
+    await sql`insert into remittance_lines (remittance_id, from_money_account_id, to_money_account_id, amount, money_transfer_id) values (${rem!.id}, ${f.drawerId}, ${safe!.id}, '500.00', ${t.id})`;
+
+    const o = await runAction('../../src/app/money-transfers/actions', 'voidMoneyTransferAction',
+      { moneyTransferId: t.id, reason: 'Wrong drawer', adminPin, viaRemittanceReversal: 'true' }, f.manager);
+    expect(o.flash.error).toBe('This transfer is part of a remittance (a cashier handover). Reverse the remittance instead - that undoes this transfer and reopens its days.');
+    expect((await sql<{ status: string }[]>`select status from money_transfers where id = ${t.id}`)[0]!.status).toBe('posted');
+    expect((await sql<{ status: string }[]>`select status from remittances where id = ${rem!.id}`)[0]!.status).toBe('posted');
+  });
+});

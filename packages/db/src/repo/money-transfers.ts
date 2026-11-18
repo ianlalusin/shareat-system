@@ -45,6 +45,8 @@ export interface MoneyTransferListRow extends MoneyTransferRow {
   /** ⭐ T-369 S9 (DEF-557), DERIVED: this movement cleared what the source store owed the destination store - its
    *  entry DEBITS 2150 at the source. An ordinary cross-store transfer credits 2150 at the destination instead. */
   settles: boolean;
+  /** DEF-875, DERIVED: this transfer is a leg of a POSTED remittance, so it is undone by reversing the remittance. */
+  inRemittance: boolean;
 }
 
 const COLUMNS = {
@@ -139,6 +141,10 @@ export async function listMoneyTransfers(
         where jl.entry_id = ${moneyTransfers.journalEntryId} and a.code = '2150'
           and jl.debit > 0 and jl.store_id = ${moneyTransfers.storeId}
       )`,
+      inRemittance: sql<boolean>`exists (
+        select 1 from remittance_lines rl join remittances r on r.id = rl.remittance_id
+        where rl.money_transfer_id = ${moneyTransfers.id} and r.status = 'posted'
+      )`,
     })
     .from(moneyTransfers)
     .innerJoin(
@@ -183,6 +189,15 @@ export async function markVoided(
       'money transfer',
     );
   }
+}
+
+/** DEF-875: is this transfer a leg of a POSTED remittance? (A reversed remittance's legs are already voided.) */
+export async function isPostedRemittanceLeg(tx: Tx, moneyTransferId: string): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select 1 from remittance_lines rl join remittances r on r.id = rl.remittance_id
+    where rl.money_transfer_id = ${moneyTransferId} and r.status = 'posted' limit 1
+  `)) as unknown as unknown[];
+  return rows.length > 0;
 }
 
 /**
