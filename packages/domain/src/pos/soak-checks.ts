@@ -60,10 +60,10 @@ export function evaluateSoakChecks(pre: PreflightResult, x: SoakExtra): SoakChec
   const checks: SoakCheck[] = [];
   const add = (code: string, label: string, ok: boolean, sentence: string, href: string | null) => checks.push({ code, label, ok, sentence, href });
 
-  add('menu_items', 'Dishes on sale', hasItem(x.menu, 'a_la_carte'), 'No dish is on sale at this store. Add the menu in the ERP.', '/menu/items');
-  add('menu_packages', 'A package with a per-head price', hasItem(x.menu, 'package'), 'No package with a per-head price is on sale here.', '/menu/items');
-  add('menu_refills', 'Refills linked to every package', x.menu.items.some((i) => i.itemType === 'refill') && !flagged('packages_without_refills'), 'Refills are missing or not linked to every package.', '/menu/items');
-  add('menu_flavours', 'A package with a flavour choice', x.menu.items.some((i) => i.itemType === 'package' && i.variants.some((v) => v.optionGroups.length > 0)), 'No package offers a flavour choice.', '/menu/items');
+  add('menu_items', 'Dishes on sale', hasItem(x.menu, 'a_la_carte'), 'No dish is on sale at this store. Add the menu in the ERP.', '/menu');
+  add('menu_packages', 'A package with a per-head price', hasItem(x.menu, 'package'), 'No package with a per-head price is on sale here.', '/menu');
+  add('menu_refills', 'Refills linked to every package', x.menu.items.some((i) => i.itemType === 'refill') && !flagged('packages_without_refills'), 'Refills are missing or not linked to every package.', '/menu');
+  add('menu_flavours', 'A package with a flavour choice', x.menu.items.some((i) => i.itemType === 'package' && i.variants.some((v) => v.optionGroups.length > 0)), 'No package offers a flavour choice.', '/menu');
   add('kitchen_stations', 'Kitchen stations and routes', x.menu.stations.length > 0 && !flagged('items_without_station'), 'Some dishes have no kitchen station, or there are no stations.', `/kitchen?store=${id}`);
   add('menu_dayparts', 'Lunch and dinner windows', x.menu.hours !== undefined, 'No lunch/dinner windows are set; one price applies all day.', '/menu/hours');
   add('stands_presets', 'Stands and discount presets', !flagged('no_stands') && !flagged('no_discount_presets'), 'Load the stands and discount presets (pos:load-setup).', null);

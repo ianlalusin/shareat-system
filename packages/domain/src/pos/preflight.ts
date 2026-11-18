@@ -86,7 +86,7 @@ export function evaluatePreflight(f: PreflightFacts): PreflightResult {
     warn('items_without_station', `${plural(f.itemsWithoutStation.length, 'menu item', 'menu items')} on sale here ${f.itemsWithoutStation.length === 1 ? 'has' : 'have'} no kitchen station, so ${f.itemsWithoutStation.length === 1 ? 'it' : 'they'} will not reach the kitchen: ${nameList(f.itemsWithoutStation)}.`, `/kitchen?store=${f.storeId}`);
   }
   if (f.packagesWithoutRefills.length > 0) {
-    warn('packages_without_refills', `${plural(f.packagesWithoutRefills.length, 'package', 'packages')} on sale here ${f.packagesWithoutRefills.length === 1 ? 'has' : 'have'} no refill items, so no refill can be asked for: ${nameList(f.packagesWithoutRefills)}.`, '/menu/items');
+    warn('packages_without_refills', `${plural(f.packagesWithoutRefills.length, 'package', 'packages')} on sale here ${f.packagesWithoutRefills.length === 1 ? 'has' : 'have'} no refill items, so no refill can be asked for: ${nameList(f.packagesWithoutRefills)}.`, '/menu');
   }
   if (f.staffWithoutPin > 0) {
     warn('staff_without_pin', `${plural(f.staffWithoutPin, 'staff member', 'staff')} at this store ${f.staffWithoutPin === 1 ? 'has' : 'have'} no PIN and cannot sign in on the tablet.`, '/staff');
