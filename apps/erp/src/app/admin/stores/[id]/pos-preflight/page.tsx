@@ -3,10 +3,10 @@ import { notFound } from 'next/navigation';
 import { RefusalError } from '@shareat/db';
 import type { PreflightItem } from '@shareat/domain';
 import { requirePageAccess } from '../../../../../lib/page-access';
-import { posPreflightFor, storeDetail } from '../../lib';
+import { posPreflightFor, posSoakChecksFor, storeDetail } from '../../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Banner } from '@/components/ui';
+import { Badge, Banner } from '@/components/ui';
 
 export const metadata = { title: 'POS pre-flight — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -42,6 +42,8 @@ export default async function PosPreflightPage({ params }: { params: Promise<{ i
     if (e instanceof RefusalError) notFound(); // a store of another organisation reads as not found
     throw e;
   });
+  const soak = await posSoakChecksFor(actor, id);
+  const ready = soak.filter((c) => c.ok).length;
   const { store } = detail;
 
   return (
@@ -73,6 +75,34 @@ export default async function PosPreflightPage({ params }: { params: Promise<{ i
           <Items items={result.warnings} />
         </section>
       )}
+
+      {/* T-601 S1: a list BESIDE the pre-flight. It never decides the switch; it says what is still missing for the TEST run. */}
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="text-sm font-medium">Soak checklist (TEST run)</h2>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          {ready} of {soak.length} ready
+        </p>
+        <ul className="space-y-3">
+          {soak.map((c) => (
+            <li key={c.code} className="text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={c.ok ? 'success' : 'danger'} label={c.ok ? 'Pass' : 'Fail'} className="whitespace-nowrap shrink-0" />
+                <span>{c.label}</span>
+              </div>
+              {!c.ok && (
+                <div className="mt-1">
+                  <div>{c.sentence}</div>
+                  {c.href && (
+                    <Link href={c.href} className="inline-flex min-h-11 items-center text-sm underline underline-offset-2">
+                      Fix this →
+                    </Link>
+                  )}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
     </Page>
   );
 }

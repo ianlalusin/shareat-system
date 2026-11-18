@@ -2,7 +2,7 @@
  * T-526 - the two server-side questions the /pos pages and layout ask. Reads only; the write gates stay in the domain (`authorize()`).
  */
 import { heldCapabilities, resolvePosTablet, type Actor, type Capability, type PosTabletIdentity } from '@shareat/auth';
-import { personsRepo, type Tx } from '@shareat/db';
+import { personsRepo, posV2Repo, type Tx } from '@shareat/db';
 // ⛔ From the CHOKEPOINT, not from `@shareat/db` (T-261 B6): the org-principalled transaction.
 import { withOrgPrincipal } from '../expenses/lib';
 import { heldStoresFor } from '@/lib/held-stores';
@@ -15,8 +15,11 @@ export const POS_CAPABILITIES: readonly Capability[] = ['record_sale', 'serve_po
 export const POS_SHELL_CAPABILITIES: readonly Capability[] = [...POS_CAPABILITIES, 'confirm_pos_heads'];
 
 /** What the shell shows beside the tabs: the stores this person works at, and their own name (names, never ids: bible row 229). */
-export async function posShellFacts(tx: Tx, actor: Actor): Promise<{ stores: { id: string; name: string }[]; displayName: string }> {
-  const stores = (await heldStoresFor(tx, actor, POS_CAPABILITIES)).map((s) => ({ id: s.id, name: s.name }));
+export async function posShellFacts(tx: Tx, actor: Actor): Promise<{ stores: { id: string; name: string; mode: 'off' | 'test' | 'live' }[]; displayName: string }> {
+  // T-601 S3: each store's POS mode from the SERVER (not the snapshot), so the kitchen and refills phones, which have no snapshot, show the TEST band too.
+  const stores = await Promise.all(
+    (await heldStoresFor(tx, actor, POS_CAPABILITIES)).map(async (s) => ({ id: s.id, name: s.name, mode: (await posV2Repo.getPosStore(tx, actor.orgId, s.id))?.mode ?? ('off' as const) })),
+  );
   const me = await personsRepo.getPersonById(tx, actor.orgId, actor.personId);
   return { stores, displayName: me?.displayName?.trim() || 'Signed in' };
 }

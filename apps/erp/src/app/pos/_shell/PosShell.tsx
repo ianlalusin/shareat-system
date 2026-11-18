@@ -13,7 +13,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { Badge, Banner, Button } from '@/components/ui';
 import { signOutAction } from '@/app/sign-in/actions';
 import { printerMode } from '@/lib/pos-print/adapter';
-import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHeldSalesMessage, posHttpErrorMessage } from './messages';
+import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHeldSalesMessage, posHttpErrorMessage, testBandText } from './messages';
 import { SwitchCashierDialog } from './SwitchCashierDialog';
 import { posOfflineBandText } from './offline-band';
 import { asStoreMenu, type MenuLike } from '../_orders/menu-filter';
@@ -31,7 +31,7 @@ export interface PosShellProps {
   /** The POS capabilities the signed-in person holds (from the server). Offline, the offline actor's own list replaces them. */
   heldPos: string[];
   /** The stores this person may work at. */
-  stores: { id: string; name: string }[];
+  stores: { id: string; name: string; mode?: 'off' | 'test' | 'live' }[];
   /** The store of this tablet's live pairing; null on a phone or a kitchen browser. */
   pairedStoreId: string | null;
   /** Where the ERP button goes (the person's normal landing); null when they hold no ERP screen. */
@@ -238,6 +238,13 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
             </div>
           </div>
         </header>
+
+        {/* T-601 S3: a TEST store says so on every screen (the mode is the server's, read in the layout). */}
+        {testBandText(store?.mode) ? (
+          <div role="status" className="w-full bg-info-soft px-4 py-2 text-center text-sm font-bold text-info">
+            {testBandText(store?.mode)}
+          </div>
+        ) : null}
 
         {/* T-526b: while offline, one full-width amber band says what still works (orders-offline.png). The time is the first failed poll. */}
         {offline ? (
