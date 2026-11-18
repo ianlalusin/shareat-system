@@ -11,14 +11,13 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { auditLogRepo, journalRepo, loansRepo, moneyAccountsRepo, type Tx } from '@shareat/db';
-import { compare, decimal, money, subtract, ZERO, type Decimal, type Money } from '@shareat/core/money';
+import { add, compare, decimal, money, subtract, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { gone, refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { LOAN_ADD_RULES, LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REPAYMENT_RULES } from '../field-rules/loans';
-import { postEntry } from '../ledger/post-entry';
 import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -208,6 +207,8 @@ export async function recordLoanPayment(
   tx: Tx,
   actor: Actor,
   input: {
+    /** DEF-869: minted once per render by the form, so a double click is a replay of ONE payment. */
+    requestId: string;
     loanId: string;
     amount: string;
     fromMoneyAccountId: string;
@@ -226,6 +227,7 @@ export async function recordLoanPayment(
     if (!loan) throw new Error(`recordLoanPayment: loan ${input.loanId} does not exist.`);
     // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
     assertFieldRules(LOAN_PAYMENT_RULES, { amount: input.amount, fromMoneyAccountId: input.fromMoneyAccountId, on: input.on });
+    const requestId = requireRequestId('recordLoanPayment', input.requestId);
 
     const amount = parseMoneyInput(input.amount, 'recordLoanPayment: the amount', 'The payment amount');
     if (compare(amount, ZERO) <= 0) {
@@ -237,6 +239,43 @@ export async function recordLoanPayment(
     // holding `record_ap_payment` is not enough. Before `positionOf`, so a non-holder reads nothing.
     if (account.storeId !== loan.storeId) {
       await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });
+    }
+
+    // DEF-869: a known request id is answered from the first posting BEFORE `positionOf` - after that payment the balance
+    // has moved, so recomputing would refuse (or re-split) a genuine double click. After the account is loaded and gated.
+    const idempotencyKey = `loan:${loan.id}:payment:${requestId}`;
+    const first = await journalRepo.findEntryByIdempotencyKey(trx, actor.orgId, idempotencyKey);
+    if (first) {
+      const lines = await journalRepo.findLinesForEntryWithAccountCodes(trx, first.id);
+      const debitOf = (code: string) =>
+        lines
+          .filter((l) => l.accountCode === code && (code !== LOAN_LIABILITY_CODE || l.partyId === loan.id))
+          .reduce((sum, l) => add(sum, money(l.debit)), ZERO);
+      const principal = debitOf(LOAN_LIABILITY_CODE);
+      const interest = debitOf(INTEREST_EXPENSE_CODE);
+      const creditedAccount = lines.some(
+        (l) =>
+          l.accountCode === account.glAccountCode &&
+          compare(money(l.credit), amount) === 0 &&
+          (account.glAccountCode !== '1140' || l.partyId === account.id),
+      );
+      if (
+        String(first.entryDate).slice(0, 10) !== input.on.slice(0, 10) ||
+        compare(add(principal, interest), amount) !== 0 ||
+        !creditedAccount
+      ) {
+        throw refuse(
+          `recordLoanPayment: request ${requestId} was already posted with different figures`,
+          'This payment was already recorded with different figures. Reload the page and try again.',
+        );
+      }
+      const now = await loansRepo.positionOf(trx, actor.orgId, loan.id);
+      return {
+        entryId: first.id,
+        split: { principal, interest, overpayment: ZERO },
+        outstanding: now.outstanding,
+        paidOff: compare(money(now.outstanding), ZERO) <= 0,
+      };
     }
 
     const position = await loansRepo.positionOf(trx, actor.orgId, loan.id);
@@ -312,13 +351,12 @@ export async function recordLoanPayment(
       lines: paymentLines,
     });
 
-    const paymentId = crypto.randomUUID();
-    const result = await postEntry(trx, {
+    const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'loan_payment',
       sourceId: loan.id,
-      idempotencyKey: `loan:${loan.id}:payment:${paymentId}`,
+      idempotencyKey,
       memo: input.memo ?? `Loan payment — ${loan.name}`,
       postedBy: actor.personId,
       lines,

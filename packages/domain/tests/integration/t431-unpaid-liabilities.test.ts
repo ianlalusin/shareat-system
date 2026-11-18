@@ -495,13 +495,13 @@ describe('kinds 3 and 4 - register and loans', () => {
     const f = await fixture('c8');
     const { loanId, office } = await loanAt(f, f.stores.A, 'Grab loan', '50000.00');
     const pay = await asOrg(f.orgId, (tx) =>
-      recordLoanPayment(tx, f.admin, { loanId, amount: '5300.00', fromMoneyAccountId: office, on: '2026-05-12' }),
+      recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId, amount: '5300.00', fromMoneyAccountId: office, on: '2026-05-12' }),
     );
     expect(pay.split.principal).toBe('5000.00'); // control: fixture split is as the spec says
     expect(pay.split.interest).toBe('300.00');
     const paid = await loanAt(f, f.stores.A, 'Small loan', '10000.00', '0');
     await asOrg(f.orgId, (tx) =>
-      recordLoanPayment(tx, f.admin, { loanId: paid.loanId, amount: '10000.00', fromMoneyAccountId: paid.office, on: '2026-05-12' }),
+      recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId: paid.loanId, amount: '10000.00', fromMoneyAccountId: paid.office, on: '2026-05-12' }),
     );
     const r = await view(f, f.admin, f.stores.A);
     const k = kindOf(r, 'loans');
@@ -515,7 +515,7 @@ describe('kinds 3 and 4 - register and loans', () => {
     const f = await fixture('c9');
     const { loanId, office } = await loanAt(f, f.stores.A, 'Grab loan', '50000.00');
     const pay = await asOrg(f.orgId, (tx) =>
-      recordLoanPayment(tx, f.admin, { loanId, amount: '5300.00', fromMoneyAccountId: office, on: '2026-05-12' }),
+      recordLoanPayment(tx, f.admin, { requestId: crypto.randomUUID(), loanId, amount: '5300.00', fromMoneyAccountId: office, on: '2026-05-12' }),
     );
     await asOrg(f.orgId, (tx) => reverseLoanEntry(tx, f.admin, { loanId, entryId: pay.entryId, reason: 'Wrong day' }));
     const r = await view(f, f.admin, f.stores.A);

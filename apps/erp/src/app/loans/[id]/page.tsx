@@ -159,6 +159,7 @@ export default async function LoanPage({
           <FormModal trigger="Record a payment" title="Record a payment on this loan" size="md">
             <CheckedForm rules={LOAN_PAYMENT_RULES} action={recordPaymentAction} className="grid gap-4 sm:grid-cols-3">
               <input type="hidden" name="loanId" value={loan.id} />
+              <input type="hidden" name="requestId" value={requestId} />
               <Field label="Amount paid" rule={LOAN_PAYMENT_RULES.amount}>
                 <input
                   {...nativeAttrs(LOAN_PAYMENT_RULES.amount)}
