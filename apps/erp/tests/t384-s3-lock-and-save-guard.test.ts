@@ -56,6 +56,7 @@ const EXEMPT: Record<string, string> = {
 const COMMANDS: Record<string, string> = {
   'Approve and book': 'T-511 S7b (BOSS approved): approves one settlement day and books its payout (money in the books); audited; the uploader rule and the blockers are re-checked in the domain',
   'Book this charge': 'T-511 S7b (BOSS approved): books one platform charge that belongs to no sales day (money out for good); audited; the uploader rule is applied in the domain',
+  'Move to Channel receivable': 'T-606 S4 (Ian, 18 Nov): reclasses a delivery platform channel balance to 1220 Channel receivable and switches the channel (money in the books; admin only; audited sales_channel.receivable_moved)',
   'Issue': 'T-584 (NEEDS BOSS APPROVAL): numbers a document and freezes its wording as version 1; audited; nothing can be edited in place afterwards',
   'Sign': 'T-584 (NEEDS BOSS APPROVAL): attaches the saved signature of the signer to a document version, only after that person types their own Employee ID and PIN; audited, wrong PINs capped',
   'Add cash register': 'T-546 (BOSS approved), T-582 rename: adds a cash register (a till in code; the receipt-number identity of a store); audited',
