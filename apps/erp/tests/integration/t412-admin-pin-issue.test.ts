@@ -197,6 +197,9 @@ describe('M5 issuePinAction on an employment whose person is a super_admin', () 
 // ---------------------------------------------------------------------------------------------------------------------
 // T-603 S1 (DEF-909): who may set whose PIN follows the capability matrix - a manager's PIN is administrator work, except a
 // manager resetting their own.
+//   MUTANT  put the old administrator-only line back          -> the peer-manager case goes red
+//   MUTANT  delete `!ownManagerPin` in issuePinAction         -> the own-PIN case goes red
+// (Moving the check below `setPin` cannot go red: the refusal rolls the whole transaction back, so nothing is saved either way.)
 describe('T-603 S1 (DEF-909) - a manager cannot set a peer manager PIN', () => {
   async function employed(f: Awaited<ReturnType<typeof fixture>>, personId: string) {
     const [e] = await sql<{ id: string }[]>`
@@ -208,7 +211,9 @@ describe('T-603 S1 (DEF-909) - a manager cannot set a peer manager PIN', () => {
     (await sql<{ id: string }[]>`select id from person_credentials where person_id = ${personId} and kind = 'pin' and revoked_at is null`)[0]?.id;
   const auditCount = async (orgId: string, action: string, actorId: string, entityId: string) =>
     (await sql<{ n: number }[]>`select count(*)::int as n from audit_log where org_id = ${orgId} and action = ${action} and actor_person_id = ${actorId} and entity_id = ${entityId}`)[0]!.n;
-  const SENTENCE = 'Only an administrator can set a manager’s PIN. Ask an administrator.';
+  const refusalRows = (orgId: string, entityId: string) =>
+    sql<{ store_id: string | null; after: unknown }[]>`select store_id, after from audit_log where org_id = ${orgId} and action = 'credential.pin_set_refused' and entity_id = ${entityId}`;
+  const SENTENCE = 'Only an administrator can set this person’s PIN. Ask an administrator.';
 
   it('manager A is refused on manager B: the PIN is unchanged and one refusal row is written', async () => {
     const f = await fixture('s1a');
@@ -222,6 +227,42 @@ describe('T-603 S1 (DEF-909) - a manager cannot set a peer manager PIN', () => {
     expect(await livePins(f.managerB.personId)).toBe(1);
     expect(await auditCount(f.orgId, 'credential.pin_set_refused', f.manager.personId, f.managerB.personId)).toBe(1);
     expect(await auditCount(f.orgId, 'credential.pin_set', f.manager.personId, f.managerB.personId)).toBe(0);
+    const rows = await refusalRows(f.orgId, f.managerB.personId);
+    expect(rows[0]!.store_id).toBe(f.storeId);
+    expect(rows[0]!.after).toEqual({ targetRole: 'manager' });
+  });
+
+  it('a manager is refused on an administrator target, and the refusal row says admin', async () => {
+    const f = await fixture('s1d');
+    const employmentId = await employed(f, f.target.personId);
+    const o = await act('issuePinAction', f.manager, { employmentId, pin: '246801' });
+    expect(o.flash.error).toBe(SENTENCE);
+    expect(await livePins(f.target.personId)).toBe(0);
+    const rows = await refusalRows(f.orgId, f.target.personId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.store_id).toBe(f.storeId);
+    expect(rows[0]!.after).toEqual({ targetRole: 'admin' });
+  });
+
+  it('an administrator refused on a super administrator target leaves a refusal row too', async () => {
+    const f = await withSuper('s1e');
+    const employmentId = await employed(f, f.superA.personId);
+    const o = await act('issuePinAction', f.admin, { employmentId, pin: '246801' });
+    expect(o.flash.error).toBeTruthy();
+    expect(await livePins(f.superA.personId)).toBe(0);
+    const rows = await refusalRows(f.orgId, f.superA.personId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.after).toEqual({ targetRole: 'super_admin' });
+  });
+
+  it('once a person’s manager role is revoked, a manager sets their PIN as ordinary staff', async () => {
+    const f = await fixture('s1f');
+    const employmentId = await employed(f, f.managerB.personId);
+    await sql`update person_roles set revoked_at = now() where person_id = ${f.managerB.personId}`;
+    const o = await act('issuePinAction', f.manager, { employmentId, pin: '246801' });
+    expect(o.flash.error).toBeUndefined();
+    expect(await livePins(f.managerB.personId)).toBe(1);
+    expect((await refusalRows(f.orgId, f.managerB.personId)).length).toBe(0);
   });
 
   it('an administrator sets manager B’s PIN: no error, one live PIN, one credential.pin_set', async () => {

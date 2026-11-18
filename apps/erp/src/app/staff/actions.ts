@@ -237,9 +237,9 @@ async function requireSuperForSuperTarget(tx: Tx, actor: { personId: string; org
   if (mine?.role !== 'super_admin') throw refuse(`issuePin: actor ${actor.personId} is not a super_admin and the target ${targetPersonId} is`, SUPER_ONLY);
 }
 
-const MANAGER_PIN_ADMIN_ONLY = 'Only an administrator can set a manager’s PIN. Ask an administrator.';
+const MANAGER_PIN_ADMIN_ONLY = 'Only an administrator can set this person’s PIN. Ask an administrator.';
 
-/** T-603 S1: a refused PIN set, written in a SEPARATE transaction so it survives the rollback. Never throws. No PIN in the payload. */
+/** T-603 S1: a refused PIN set, written in its own transaction after the refused one has ended. Never throws. No PIN in the payload. */
 async function recordPinSetRefused(actor: Actor, targetPersonId: string, storeId: string, targetRole: string | undefined): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
@@ -263,6 +263,8 @@ export async function issuePinAction(formData: FormData): Promise<void> {
   const employmentId = str(formData, 'employmentId');
   const pin = str(formData, 'pin');
 
+  // Set inside the transaction when the PIN rule refuses; the row is written after that transaction has ended.
+  let refused = null as { personId: string; storeId: string; targetRole: string | undefined } | null;
   try {
     await withOrgPrincipal(actor.orgId, async (tx) => {
       const employment = await employmentRepo.getEmployment(tx, employmentId);
@@ -276,10 +278,15 @@ export async function issuePinAction(formData: FormData): Promise<void> {
       const targetRole = (await accessRepo.activeRoleForPerson(tx, employment.personId, actor.orgId))?.role;
       const ownManagerPin = targetRole === 'manager' && employment.personId === actor.personId;
       if (isStoreManagerOrAbove(targetRole) && !ownManagerPin && !(await can(tx, actor, 'manage_users', {}))) {
-        await recordPinSetRefused(actor, employment.personId, employment.storeId, targetRole);
+        refused = { personId: employment.personId, storeId: employment.storeId, targetRole };
         throw refuse(`issuePin: actor ${actor.personId} lacks manage_users for ${targetRole} target ${employment.personId}`, MANAGER_PIN_ADMIN_ONLY);
       }
-      await requireSuperForSuperTarget(tx, actor, employment.personId);
+      try {
+        await requireSuperForSuperTarget(tx, actor, employment.personId);
+      } catch (err) {
+        refused = { personId: employment.personId, storeId: employment.storeId, targetRole };
+        throw err;
+      }
       // ⭐ T-302 — `orgId` from the ACTOR, never from the form (T-231). It is also already known
       // to equal the employment's org: the guard three lines up refused `employment.orgId !==
       // actor.orgId`, so the two cannot disagree here.
@@ -292,6 +299,7 @@ export async function issuePinAction(formData: FormData): Promise<void> {
       });
     });
   } catch (err) {
+    if (refused) await recordPinSetRefused(actor, refused.personId, refused.storeId, refused.targetRole);
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Sign-in PIN issued.' });
