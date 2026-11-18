@@ -270,6 +270,32 @@ export async function interStorePosition(
 }
 
 /**
+ * DEF-876: what the DEBTOR store owes the CREDITOR store IN ONE DIRECTION - its 2150 (due-to) toward the creditor, credits less
+ * debits, every source and its reversals included (transfers, dispatches, settlements). Unlike `interStorePosition` it is NOT
+ * netted against the claims the other way (1250), so two plain transfers in opposite directions do not hide each other.
+ * A settlement the debtor paid shows as a DEBIT here, which is how a void learns it would strand one.
+ */
+export async function interStoreDirectionOwed(tx: Tx, orgId: string, debtorStoreId: string, creditorStoreId: string): Promise<string> {
+  const codes = await storeCodes(tx, orgId, [creditorStoreId]);
+  const creditorCode = codes.get(creditorStoreId);
+  if (!creditorCode) {
+    throw refuse(
+      `interStoreDirectionOwed: store ${creditorStoreId} has no code in org ${orgId}.`,
+      "A store has no code, so what the stores owe each other can't be worked out. Ask the accountant to check the store setup.",
+    );
+  }
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(jl.credit - jl.debit), 0)::numeric(14,2)::text as owed
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId} and je.status <> 'draft' and a.code = '2150' and jl.party_type = 'store'
+      and jl.store_id = ${debtorStoreId} and jl.party_id = ${creditorCode}
+  `)) as unknown as { owed: string }[];
+  return row?.owed ?? '0.00';
+}
+
+/**
  * ⭐ T-369 S9 — every ORDERED pair among `storeIds` where the first owes the second a positive net, per the debtor's
  * books, for the "Settle between stores" panel. A pair that nets to zero (or the reverse) is absent.
  */

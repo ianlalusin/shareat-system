@@ -18,7 +18,8 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { advisoryLocksRepo, moneyAccountsRepo, moneyTransfersRepo, storesRepo, type Tx } from '@shareat/db';
-import { equals, formatMoney, money, toCentavos, type Money } from '@shareat/core/money';
+import { equals, formatMoney, fromCentavos, money, toCentavos, type Money } from '@shareat/core/money';
+import { logger } from '@shareat/core/logger';
 import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { refuse } from '../shared/refusal';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -303,20 +304,33 @@ async function runVoid(
       'This transfer is part of a remittance (a cashier handover). Reverse the remittance instead - that undoes this transfer and reopens its days.',
     );
   }
-  // ⛔ DEF-876: voiding a debt-creating cross-store transfer takes its amount off what the destination store owes the
-  // source (netted: the two stores may owe each other both ways). If part of that was already repaid it would go below
-  // zero, so it is refused. A settlement's void only restores a debt and is never checked. Same reading `settleBetweenStores` uses.
+  // ⛔ DEF-876: voiding a debt-creating cross-store transfer takes its amount off what the destination store (the debtor)
+  // owes the source (the creditor) IN THIS DIRECTION. It is refused only when that would leave the debtor having settled
+  // more than it owes in this direction - read per direction (the debtor's 2150 toward the creditor), never on the net, or two
+  // plain transfers in opposite directions would trap each other. A settlement's own void only restores a debt: never checked.
   if (otherStore && !(await moneyTransfersRepo.entrySettles(tx, transfer.journalEntryId, transfer.storeId))) {
     const position = await moneyTransfersRepo.interStorePosition(tx, actor.orgId, otherStore, transfer.storeId);
-    const owed = money(position.owedPerDebtor);
-    if (toCentavos(owed) - toCentavos(money(transfer.amountIn)) < 0n) {
+    // The same guard `settleBetweenStores` has: if the two stores' books disagree, refuse rather than judge by one side.
+    if (!equals(money(position.owedPerDebtor), money(position.owedPerCreditor))) {
+      logger.warn(
+        { debtorStoreId: otherStore, creditorStoreId: transfer.storeId, owedPerDebtor: position.owedPerDebtor, owedPerCreditor: position.owedPerCreditor },
+        'voidMoneyTransfer: the two stores disagree on what is owed',
+      );
+      throw refuse(
+        `voidMoneyTransfer: the debtor's books say ${position.owedPerDebtor} is owed, the creditor's say ${position.owedPerCreditor}.`,
+        "The two stores' records of what is owed don't match, so this can't be reversed yet. Ask the accountant to check the stores' due-to and due-from balances.",
+      );
+    }
+    const owedInDirection = money(await moneyTransfersRepo.interStoreDirectionOwed(tx, actor.orgId, otherStore, transfer.storeId));
+    const settledOfThis = toCentavos(money(transfer.amountIn)) - toCentavos(owedInDirection);
+    if (settledOfThis > 0n) {
       const [source, dest] = await Promise.all([
         storesRepo.getById(tx, actor.orgId, transfer.storeId),
         storesRepo.getById(tx, actor.orgId, otherStore),
       ]);
       throw refuse(
-        `voidMoneyTransfer: voiding ${transfer.id} (${transfer.amountIn}) would take what ${otherStore} owes ${transfer.storeId} (${position.owedPerDebtor}) below zero.`,
-        `${dest?.name ?? 'The receiving store'} now owes ${source?.name ?? 'the sending store'} only ${formatMoney(owed)}. Voiding ${formatMoney(money(transfer.amountIn))} would turn that into a debt the other way round. Settle between the stores or reverse the settlement first.`,
+        `voidMoneyTransfer: voiding ${transfer.id} (${transfer.amountIn}) would leave ${otherStore} owing ${transfer.storeId} less than it has settled (owes ${owedInDirection} in this direction).`,
+        `${dest?.name ?? 'The receiving store'} has already settled ${formatMoney(fromCentavos(settledOfThis))} of this with ${source?.name ?? 'the sending store'}. Reverse that settlement first, then reverse this transfer.`,
       );
     }
   }

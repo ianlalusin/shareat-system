@@ -529,34 +529,57 @@ describe('T10/T11 — the panel source and the "settles" tag', () => {
 });
 
 // -----------------------------------------------------------------------------------------------
-// T-594 DEF-876 - a cross-store create and a cross-store void take the same store-pair lock a settlement takes, and a
-// void that would take the debt below zero (because part of it was repaid) is refused.
+// T-594 DEF-876 - a cross-store create and a cross-store void take the same store-pair lock a settlement takes, and a void is
+// refused only when it would leave the debtor having SETTLED more than it owes in that transfer's direction (judged per direction,
+// never on the net, so two plain transfers in opposite directions do not trap each other).
 // -----------------------------------------------------------------------------------------------
 describe('T-594 DEF-876 - cross-store void and create against the store-pair lock', () => {
-  const sentence = (owed: string) =>
-    `Lipa now owes Malvar only ${owed}. Voiding ₱650.00 would turn that into a debt the other way round. Settle between the stores or reverse the settlement first.`;
+  const sentence = (settled: string) => `Lipa has already settled ${settled} of this with Malvar. Reverse that settlement first, then reverse this transfer.`;
   const voidIt = (f: Fixture, id: string) => asOrg(f.orgId, (tx) => voidMoneyTransfer(tx, f.admin, { moneyTransferId: id, reason: 'Wrong' }));
   const statusOf = async (id: string) => (await sql<{ status: string }[]>`select status from money_transfers where id = ${id}`)[0]!.status;
 
-  it('refusal: Lipa owes Malvar 650, repays 400, then the 650 transfer cannot be voided - the sentence, owed still 250 on both readings, still posted', async () => {
+  it('one way: Lipa owes Malvar 650, repays 400, then the 650 transfer cannot be voided - the sentence (400 settled), owed still 250 on both readings, still posted', async () => {
     const f = await fixture('t594a');
     const seed = await seedDebt(f);
     await repay(f, '400.00');
     const before = await counts(f.orgId);
     const refused = await rejection(voidIt(f, seed.id), 'voiding a transfer part of which was repaid');
-    expect(refused.userMessage).toBe(sentence('₱250.00'));
+    expect(refused.userMessage).toBe(sentence('₱400.00'));
+    expect(refused.userMessage).not.toMatch(/-/);
     await expectOwed(f, f.lipa.id, f.malvar.id, '250.00', 'after the refused void');
     expect(await statusOf(seed.id)).toBe('posted');
     expect(await counts(f.orgId)).toEqual(before);
   });
 
-  it('refusal when the stores owe each other both ways: the netted position (350) is what is checked', async () => {
-    const f = await fixture('t594b');
+  it('both ways, NO settlement: Malvar sends Lipa 650 and Lipa sends Malvar 300 (net: Lipa owes 350) - voiding the 300 is allowed and leaves Lipa owing 650', async () => {
+    const f = await fixture('t594b1');
+    await seedDebt(f);
+    const back = await transfer(f, f.lipaSafe, f.malvarSafe, '300.00');
+    await expectOwed(f, f.lipa.id, f.malvar.id, '350.00', 'fixture: net');
+    await voidIt(f, back.id);
+    await expectOwed(f, f.lipa.id, f.malvar.id, '650.00', 'after voiding the 300');
+    expect(await statusOf(back.id)).toBe('voided');
+  });
+
+  it('both ways, NO settlement: voiding the 650 is allowed too and leaves Malvar owing Lipa 300', async () => {
+    const f = await fixture('t594b2');
     const seed = await seedDebt(f);
-    await transfer(f, f.lipaSafe, f.malvarSafe, '300.00'); // Malvar now owes Lipa 300, so net Lipa -> Malvar is 350
-    const refused = await rejection(voidIt(f, seed.id), 'voiding while the stores owe each other both ways');
-    expect(refused.userMessage).toBe(sentence('₱350.00'));
+    await transfer(f, f.lipaSafe, f.malvarSafe, '300.00');
+    await voidIt(f, seed.id);
+    await expectOwed(f, f.malvar.id, f.lipa.id, '300.00', 'after voiding the 650');
+    expect(await statusOf(seed.id)).toBe('voided');
+  });
+
+  it('both ways WITH a partial settlement the void would strand: 650 and 300 the other way, Lipa settles 300 (owes 350 in this direction) - voiding the 650 is refused (300 settled); voiding the 300 is still allowed', async () => {
+    const f = await fixture('t594b3');
+    const seed = await seedDebt(f);
+    const back = await transfer(f, f.lipaSafe, f.malvarSafe, '300.00');
+    await repay(f, '300.00');
+    const refused = await rejection(voidIt(f, seed.id), 'voiding the 650 after Lipa settled 300 of it');
+    expect(refused.userMessage).toBe(sentence('₱300.00'));
     expect(await statusOf(seed.id)).toBe('posted');
+    await voidIt(f, back.id); // the other direction's transfer is untouched by that settlement
+    expect(await statusOf(back.id)).toBe('voided');
   });
 
   it('positive: void the settlement first (owed back to 650), then the original transfer - owed 0.00', async () => {
@@ -568,6 +591,25 @@ describe('T-594 DEF-876 - cross-store void and create against the store-pair loc
     await voidIt(f, seed.id);
     await expectOwed(f, f.lipa.id, f.malvar.id, '0.00', 'after voiding the original');
     expect(await statusOf(seed.id)).toBe('voided');
+  });
+
+  it("the two stores' books disagree (a one-sided 2150 credit): the void is refused with the same guard a settlement has, nothing written", async () => {
+    const f = await fixture('t594d0');
+    const seed = await seedDebt(f);
+    await asOrg(f.orgId, (tx) =>
+      postEntry(tx, {
+        orgId: f.orgId, entryDate: '2026-01-10', sourceType: 'manual_journal', sourceId: uid('skew'), idempotencyKey: uid('skew'), memo: 'fixture one-sided due-to', postedBy: f.adminId,
+        lines: [
+          { accountCode: '6870', storeId: f.lipa.id, debit: '100.00' },
+          { accountCode: '2150', storeId: f.lipa.id, credit: '100.00', partyType: 'store', partyId: f.malvar.code },
+        ],
+      }),
+    );
+    const before = await counts(f.orgId);
+    const refused = await rejection(voidIt(f, seed.id), 'voiding against disagreeing books');
+    expect(refused.userMessage).toBe("The two stores' records of what is owed don't match, so this can't be reversed yet. Ask the accountant to check the stores' due-to and due-from balances.");
+    expect(await statusOf(seed.id)).toBe('posted');
+    expect(await counts(f.orgId)).toEqual(before);
   });
 
   it('race, create: a cross-store transfer between OTHER accounts of the pair waits on the pair lock while a settlement holds it; both then post', async () => {
@@ -584,7 +626,7 @@ describe('T-594 DEF-876 - cross-store void and create against the store-pair loc
     expect(bResult.status).toBe('fulfilled');
   });
 
-  it('race, void: B (void the 650) waits while a settlement of 400 holds the pair lock, then is refused; owed stays 250', async () => {
+  it('race, void: B (void the 650) waits while a settlement of 400 holds the pair lock, then is refused (400 settled); owed stays 250', async () => {
     const f = await fixture('t594e');
     const seed = await seedDebt(f);
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
@@ -596,7 +638,7 @@ describe('T-594 DEF-876 - cross-store void and create against the store-pair loc
     expect(bWaited, 'the cross-store void never waited on the pair lock').toBe(true);
     expect(aResult.status).toBe('fulfilled');
     expect(bResult.status).toBe('rejected');
-    expect(String((bResult as { reason: { userMessage?: string } }).reason.userMessage)).toBe(sentence('₱250.00'));
+    expect(String((bResult as { reason: { userMessage?: string } }).reason.userMessage)).toBe(sentence('₱400.00'));
     await expectOwed(f, f.lipa.id, f.malvar.id, '250.00', 'after the race');
     expect(await statusOf(seed.id)).toBe('posted');
   });

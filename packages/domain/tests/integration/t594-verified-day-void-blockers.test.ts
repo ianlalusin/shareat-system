@@ -153,6 +153,8 @@ describe('T-594 DEF-877 - race: a settlement being recorded against the day, hel
       f.orgId,
       (tx) => D.recordChannelSettlement(tx, f.admin, { storeId: f.storeA, channelId: f.channelId, salesDayId: f.dayId, businessDate: DATE, grossAmount: '10000.00', netDeposited: '10000.00', settledOn: '2026-10-20' }),
       (tx) => D.voidSalesDay(tx, f.admin, f.dayId, 'wrong day').then(() => 'voided' as const, (e: unknown) => String((e as { userMessage?: string }).userMessage ?? e)),
+      700,
+      { sql },
     );
     expect(a.settlementId).toBeTruthy();
     expect(b).toBe(S.settlement);
@@ -197,6 +199,8 @@ describe('T-594 DEF-904 - a writer racing a void of the day', () => {
       f.orgId,
       (tx) => D.voidSalesDay(tx, f.admin, f.dayId, 'wrong day'),
       (tx) => sentenceOrOk(D.createRemittance(tx, f.admin, { storeId: f.storeA, remittedOn: '2026-10-13', lines: [{ fromMoneyAccountId: till, toMoneyAccountId: safe, amount: '1000.00' }] })),
+      700,
+      { sql },
     );
     expect(a.reversalEntryId).not.toBeNull();
     expect(b).toMatch(voidedSentence('a cash handover'));
@@ -212,6 +216,8 @@ describe('T-594 DEF-904 - a writer racing a void of the day', () => {
       f.orgId,
       (tx) => D.voidSalesDay(tx, f.admin, f.dayId, 'wrong day'),
       (tx) => sentenceOrOk(D.recordChannelSettlement(tx, f.admin, { storeId: f.storeA, channelId: f.channelId, salesDayId: f.dayId, businessDate: DATE, grossAmount: '10000.00', netDeposited: '10000.00', settledOn: '2026-10-20' })),
+      700,
+      { sql },
     );
     expect(a.reversalEntryId).not.toBeNull();
     expect(b).toMatch(voidedSentence('a payout settlement'));
