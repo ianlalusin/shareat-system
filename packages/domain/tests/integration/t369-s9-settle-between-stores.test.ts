@@ -527,3 +527,77 @@ describe('T10/T11 — the panel source and the "settles" tag', () => {
     expect(rows.find((r) => r.id === seed.id)?.settles, 'the ordinary transfer is tagged').toBe(false);
   });
 });
+
+// -----------------------------------------------------------------------------------------------
+// T-594 DEF-876 - a cross-store create and a cross-store void take the same store-pair lock a settlement takes, and a
+// void that would take the debt below zero (because part of it was repaid) is refused.
+// -----------------------------------------------------------------------------------------------
+describe('T-594 DEF-876 - cross-store void and create against the store-pair lock', () => {
+  const sentence = (owed: string) =>
+    `Lipa now owes Malvar only ${owed}. Voiding ₱650.00 would turn that into a debt the other way round. Settle between the stores or reverse the settlement first.`;
+  const voidIt = (f: Fixture, id: string) => asOrg(f.orgId, (tx) => voidMoneyTransfer(tx, f.admin, { moneyTransferId: id, reason: 'Wrong' }));
+  const statusOf = async (id: string) => (await sql<{ status: string }[]>`select status from money_transfers where id = ${id}`)[0]!.status;
+
+  it('refusal: Lipa owes Malvar 650, repays 400, then the 650 transfer cannot be voided - the sentence, owed still 250 on both readings, still posted', async () => {
+    const f = await fixture('t594a');
+    const seed = await seedDebt(f);
+    await repay(f, '400.00');
+    const before = await counts(f.orgId);
+    const refused = await rejection(voidIt(f, seed.id), 'voiding a transfer part of which was repaid');
+    expect(refused.userMessage).toBe(sentence('₱250.00'));
+    await expectOwed(f, f.lipa.id, f.malvar.id, '250.00', 'after the refused void');
+    expect(await statusOf(seed.id)).toBe('posted');
+    expect(await counts(f.orgId)).toEqual(before);
+  });
+
+  it('refusal when the stores owe each other both ways: the netted position (350) is what is checked', async () => {
+    const f = await fixture('t594b');
+    const seed = await seedDebt(f);
+    await transfer(f, f.lipaSafe, f.malvarSafe, '300.00'); // Malvar now owes Lipa 300, so net Lipa -> Malvar is 350
+    const refused = await rejection(voidIt(f, seed.id), 'voiding while the stores owe each other both ways');
+    expect(refused.userMessage).toBe(sentence('₱350.00'));
+    expect(await statusOf(seed.id)).toBe('posted');
+  });
+
+  it('positive: void the settlement first (owed back to 650), then the original transfer - owed 0.00', async () => {
+    const f = await fixture('t594c');
+    const seed = await seedDebt(f);
+    const settled = await repay(f, '400.00');
+    await voidIt(f, settled.id);
+    await expectOwed(f, f.lipa.id, f.malvar.id, '650.00', 'after voiding the settlement');
+    await voidIt(f, seed.id);
+    await expectOwed(f, f.lipa.id, f.malvar.id, '0.00', 'after voiding the original');
+    expect(await statusOf(seed.id)).toBe('voided');
+  });
+
+  it('race, create: a cross-store transfer between OTHER accounts of the pair waits on the pair lock while a settlement holds it; both then post', async () => {
+    const f = await fixture('t594d');
+    await seedDebt(f);
+    const { aResult, bResult, bWaited } = await runConcurrencyLeg(
+      f.orgId,
+      (tx) => settleIn(tx, f.admin, { from: f.lipaSafe, to: f.malvarSafe, amountOut: '400.00' }),
+      (tx) => createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(), fromMoneyAccountId: f.malvarBank.id, toMoneyAccountId: f.lipaBank.id, amountOut: '100.00', amountIn: '100.00', transferDate: DATE }),
+      ADVISORY,
+    );
+    expect(bWaited, 'the cross-store create never waited on the pair lock').toBe(true);
+    expect(aResult.status).toBe('fulfilled');
+    expect(bResult.status).toBe('fulfilled');
+  });
+
+  it('race, void: B (void the 650) waits while a settlement of 400 holds the pair lock, then is refused; owed stays 250', async () => {
+    const f = await fixture('t594e');
+    const seed = await seedDebt(f);
+    const { aResult, bResult, bWaited } = await runConcurrencyLeg(
+      f.orgId,
+      (tx) => settleIn(tx, f.admin, { from: f.lipaSafe, to: f.malvarSafe, amountOut: '400.00' }),
+      (tx) => voidMoneyTransfer(tx, f.admin, { moneyTransferId: seed.id, reason: 'Wrong' }),
+      ADVISORY,
+    );
+    expect(bWaited, 'the cross-store void never waited on the pair lock').toBe(true);
+    expect(aResult.status).toBe('fulfilled');
+    expect(bResult.status).toBe('rejected');
+    expect(String((bResult as { reason: { userMessage?: string } }).reason.userMessage)).toBe(sentence('₱250.00'));
+    await expectOwed(f, f.lipa.id, f.malvar.id, '250.00', 'after the race');
+    expect(await statusOf(seed.id)).toBe('posted');
+  });
+});

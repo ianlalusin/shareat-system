@@ -17,8 +17,8 @@
  * coherently be barred from moving ₱500 between two drawers.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { moneyAccountsRepo, moneyTransfersRepo, type Tx } from '@shareat/db';
-import { equals, money, type Money } from '@shareat/core/money';
+import { advisoryLocksRepo, moneyAccountsRepo, moneyTransfersRepo, storesRepo, type Tx } from '@shareat/db';
+import { equals, formatMoney, money, toCentavos, type Money } from '@shareat/core/money';
 import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { refuse } from '../shared/refusal';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -83,6 +83,9 @@ async function runCreate(
   const requestId = requireRequestId('createMoneyTransfer', input.requestId);
   // T-369 S9: everything up to the amounts is `prepareTransfer` (prepare.ts), a pure move out of here, in its old order.
   const { from, to, crossStore, amountOut, amountIn, fee, feeAccountCode, memo, lines, ...prepared } = await prepareTransfer(tx, actor, input);
+  // DEF-876: a cross-store transfer moves what the pair owes each other, so it takes the same per-pair lock a settlement
+  // and a void take - first, then the account draw lock (the order `settleBetweenStores` uses).
+  if (crossStore) await advisoryLocksRepo.lockInterStorePair(tx, from.storeId, to.storeId);
 
   // DEF-778: the replay is looked up BEFORE the overdraw rule - after the first call spent the money, judging the same
   // request afresh would refuse a harmless double click (or, worse, warn about it).
@@ -260,7 +263,7 @@ async function runVoid(
   actor: Actor,
   input: VoidMoneyTransferInput,
 ): Promise<{ reversalEntryId: string }> {
-  const transfer = await moneyTransfersRepo.getById(tx, actor.orgId, input.moneyTransferId);
+  let transfer = await moneyTransfersRepo.getById(tx, actor.orgId, input.moneyTransferId);
   if (!transfer) {
     throw new Error(
       `voidMoneyTransfer: money transfer ${input.moneyTransferId} does not exist in this org.`,
@@ -271,8 +274,13 @@ async function runVoid(
   // undoing it - a settlement or an ordinary one - needs both too. Only the source store was asked here, so a manager
   // at the source alone could pull money back out of a store they have no standing in.
   const destination = await moneyAccountsRepo.getById(tx, actor.orgId, transfer.toMoneyAccountId);
-  if (destination && destination.storeId !== transfer.storeId) {
-    await authorize(tx, actor, 'transfer_funds', { storeId: destination.storeId });
+  const otherStore = destination && destination.storeId !== transfer.storeId ? destination.storeId : null;
+  if (otherStore) {
+    await authorize(tx, actor, 'transfer_funds', { storeId: otherStore });
+    // DEF-876: the pair lock a settlement and a cross-store create take. Re-read the row once it is ours - a void that
+    // held the lock first has committed by now, and the status read above would be stale.
+    await advisoryLocksRepo.lockInterStorePair(tx, transfer.storeId, otherStore);
+    transfer = (await moneyTransfersRepo.getById(tx, actor.orgId, transfer.id)) ?? transfer;
   }
 
   const reason = input.reason.trim();
@@ -295,6 +303,24 @@ async function runVoid(
       'This transfer is part of a remittance (a cashier handover). Reverse the remittance instead - that undoes this transfer and reopens its days.',
     );
   }
+  // ⛔ DEF-876: voiding a debt-creating cross-store transfer takes its amount off what the destination store owes the
+  // source (netted: the two stores may owe each other both ways). If part of that was already repaid it would go below
+  // zero, so it is refused. A settlement's void only restores a debt and is never checked. Same reading `settleBetweenStores` uses.
+  if (otherStore && !(await moneyTransfersRepo.entrySettles(tx, transfer.journalEntryId, transfer.storeId))) {
+    const position = await moneyTransfersRepo.interStorePosition(tx, actor.orgId, otherStore, transfer.storeId);
+    const owed = money(position.owedPerDebtor);
+    if (toCentavos(owed) - toCentavos(money(transfer.amountIn)) < 0n) {
+      const [source, dest] = await Promise.all([
+        storesRepo.getById(tx, actor.orgId, transfer.storeId),
+        storesRepo.getById(tx, actor.orgId, otherStore),
+      ]);
+      throw refuse(
+        `voidMoneyTransfer: voiding ${transfer.id} (${transfer.amountIn}) would take what ${otherStore} owes ${transfer.storeId} (${position.owedPerDebtor}) below zero.`,
+        `${dest?.name ?? 'The receiving store'} now owes ${source?.name ?? 'the sending store'} only ${formatMoney(owed)}. Voiding ${formatMoney(money(transfer.amountIn))} would turn that into a debt the other way round. Settle between the stores or reverse the settlement first.`,
+      );
+    }
+  }
+
   const reversal = await reverseEntry(tx, {
     entryId: transfer.journalEntryId,
     reason,

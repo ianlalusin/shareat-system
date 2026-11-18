@@ -200,6 +200,15 @@ export async function isPostedRemittanceLeg(tx: Tx, moneyTransferId: string): Pr
   return rows.length > 0;
 }
 
+/** DEF-876: did this entry CLEAR what the source store owed (a settlement, DR 2150 at the source), not create a debt? Same test as `settles` in the list. */
+export async function entrySettles(tx: Tx, journalEntryId: string, storeId: string): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select 1 from journal_lines jl join accounts a on a.id = jl.account_id
+    where jl.entry_id = ${journalEntryId} and a.code = '2150' and jl.debit > 0 and jl.store_id = ${storeId} limit 1
+  `)) as unknown as unknown[];
+  return rows.length > 0;
+}
+
 /**
  * Store id → store CODE, for the two ends of a cross-store transfer.
  *
