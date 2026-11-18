@@ -175,10 +175,7 @@ describe('T-526b item 5 - placeholder cards speak staff words', () => {
     for (const file of ['kitchen/page', 'refills/page']) expect(src(`app/pos/${file}.tsx`).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ''), file).not.toMatch(/slice=|T-5\d\d/);
     // T-531: the Till page is the real screen now (the reading, Close day, the recent Zs), like Orders: no placeholder sentence, still no task number.
     expect(src('app/pos/till/page.tsx').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')).not.toMatch(/slice=|T-5\d\d/);
-    for (const [file, msg] of [['receipts/page', 'Receipts are not on this screen yet.']] as const) {
-      const page = src(`app/pos/${file}.tsx`).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-      expect(page, file).toContain(`message="${msg}"`);
-      expect(page, file).not.toMatch(/slice=|T-5\d\d/);
-    }
+    // T-601 S2: the Receipts page is the real screen now (the list since the last close), like Till: no placeholder sentence, still no task number.
+    expect(src('app/pos/receipts/page.tsx').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')).not.toMatch(/slice=|message="Receipts are not on this screen yet\.|T-5\d\d/);
   });
 });
