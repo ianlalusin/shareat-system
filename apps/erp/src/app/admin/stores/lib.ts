@@ -6,7 +6,7 @@
  * runs through `packages/domain/src/stores/service.ts`'s own `authorize()` via the actions file.
  */
 import { daypartsRepo, manilaToday, personsRepo, posV2Repo, refuse, storesRepo, stockLocationsRepo, type StoreRow } from '@shareat/db';
-import { assertMaySwitchStorePosMode, listKitchenSetup, posPreflight, storeReadiness, type KitchenSetup, type PreflightResult, type ReadinessCheck } from '@shareat/domain';
+import { assertMaySwitchStorePosMode, listKitchenSetup, posPreflight, posSoakChecks, storeReadiness, type KitchenSetup, type PreflightResult, type ReadinessCheck, type SoakCheck } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { type Actor, can } from '@shareat/auth';
 import type { DaypartView } from '../../menu/lib';
@@ -101,6 +101,11 @@ export const keyFilePresent = (): boolean => Boolean(process.env.POS_FIREBASE_SA
  */
 export async function posPreflightFor(actor: Actor, storeId: string): Promise<PreflightResult> {
   return withOrgPrincipal(actor.orgId, (tx) => posPreflight(tx, actor, { storeId }, { keyFilePresent }));
+}
+
+/** T-601 S1: the soak checklist for one store, beside the pre-flight. `posSoakChecks` authorizes `manage_stores` itself (through the pre-flight it calls first). */
+export async function posSoakChecksFor(actor: Actor, storeId: string): Promise<SoakCheck[]> {
+  return withOrgPrincipal(actor.orgId, (tx) => posSoakChecks(tx, actor, { storeId }, { keyFilePresent }));
 }
 
 export interface PosModeView {

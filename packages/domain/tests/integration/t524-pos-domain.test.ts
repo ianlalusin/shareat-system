@@ -80,7 +80,7 @@ interface PosApi {
   listOpenStands: W<{ stateVersion: number }>;
   listKitchenQueue: W<{ stateVersion: number }>;
   listRefillQueue: W<{ stateVersion: number }>;
-  listTodaysSalesReceipts: W<{ stateVersion: number }>;
+  listTodaysSalesReceipts: W<{ stateVersion: number; receipts: { receiptId: string; terminalNo: number; receiptNo: string; table: string; tenders: string; total: string }[] }>;
 }
 const POS_MODULE = '../../src/pos';
 let loaded: Record<string, unknown> | null | undefined;
@@ -1567,6 +1567,37 @@ describe('R10 - reads for the screens', () => {
     const today = await read((tx) => P.listTodaysSalesReceipts(tx, f.counter, { storeId: f.storeId }));
     expect(today.stateVersion).toBe(await stateVersion(f));
     expect(JSON.stringify(today)).toContain(input.receiptId);
+  });
+
+  it('T-601 S2: the receipts list carries the table, the till number, the tenders and the printed number; a receipt from before the last Z is absent', async () => {
+    const f = await fixture();
+    // an old sale, then a Z that closes after it
+    const oldSession = await porkSession(f);
+    const oldInput = await saleInput(f, oldSession.sessionId, { issuedAtDevice: '2026-11-05T10:00:00+08:00' });
+    await complete(f, oldInput);
+    await sql`insert into pos_day_closes (org_id, store_id, terminal_id, z_no, business_date, window_start, window_end, receipt_count, gross_total, closed_by, approved_by)
+              values (${f.orgId}, ${f.storeId}, ${f.terminalRowId}, 1, '2026-11-05', '2026-11-05T04:00:00+08:00', '2026-11-05T22:00:00+08:00', 1, 500, ${f.counter.personId}, ${f.manager.personId})`;
+    // after the Z: a dine-in sale paid Cash + GCash, and a take-out sale
+    const dine = await porkSession(f);
+    const dineInput = await saleInput(f, dine.sessionId, { payments: [{ tenderId: f.gcash, amount: '300.00', referenceNo: 'GC1234567', toCheck: false }, { tenderId: f.cash, amount: '200.00', toCheck: false }] });
+    await complete(f, dineInput);
+    const take = await open(f, { mode: 'take_out' });
+    await add(f, take.sessionId, [{ item: f.menu.pork, qty: 2 }]);
+    const takeInput = await saleInput(f, take.sessionId);
+    await complete(f, takeInput);
+
+    const { receipts } = await asOrg(f.orgId, (tx) => P.listTodaysSalesReceipts(tx, f.counter, { storeId: f.storeId }));
+    expect(receipts.map((r) => r.receiptId).sort()).toEqual([dineInput.receiptId, takeInput.receiptId].sort());
+    const d = receipts.find((r) => r.receiptId === dineInput.receiptId)!;
+    const t = receipts.find((r) => r.receiptId === takeInput.receiptId)!;
+    expect(d.table).toBe(`Stand ${dine.standNo}`);
+    expect(d.tenders).toBe('Cash + GCash');
+    expect(d.terminalNo).toBe(1);
+    expect(d.receiptNo).toBe(printedNumber(f, dineInput.terminalSeq));
+    expect(d.receiptNo).toMatch(/-\d{2}-\d{6}$/);
+    expect(t.table).toBe('Take-out');
+    expect(t.tenders).toBe('Cash');
+    expect(t.total).toBe('500.00');
   });
 
   it('F7: with no Z yet the sale\'s own device time decides the business day: an offline sale made at 03:30 and replayed at 05:00 belongs to the PREVIOUS day', async () => {

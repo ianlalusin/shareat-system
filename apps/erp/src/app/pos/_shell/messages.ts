@@ -11,3 +11,7 @@ export const POS_STORE_ACCESS_LOST = "You no longer have access to this store's 
 export const posHeldSalesMessage = (n: number): string =>
   `${n} ${n === 1 ? 'sale from another store is' : 'sales from another store are'} waiting on this tablet. Pair it back to that store to send them, or ask a manager.`;
 export const posHttpErrorMessage = (status: number): string => `Something went wrong (HTTP ${status}). Tell a manager.`;
+/** T-601 S3: the band every /pos screen shows while the store is in TEST mode, so nobody mistakes practice for a real sale. */
+export const POS_TEST_BAND = 'TEST MODE — practice only. Nothing here is a real sale.';
+/** The band's sentence for a store's mode: only `test` has one. */
+export const testBandText = (mode: 'off' | 'test' | 'live' | undefined): string | null => (mode === 'test' ? POS_TEST_BAND : null);
