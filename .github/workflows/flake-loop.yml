@@ -1,0 +1,101 @@
+# T-604 S1e: run ONE integration test file many times in CI, to reproduce a rare failure (a flake) and read it from the log.
+# Manual only (`workflow_dispatch`); it never runs on a pull request or a push.
+#   gh workflow run flake-loop.yml -f file=apps/erp/tests/integration/t527b-line-order.test.ts -f runs=200
+name: flake-loop
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: 'Integration test file to repeat (path from the repo root)'
+        required: true
+        type: string
+      runs:
+        description: 'Total runs, split over 4 parts'
+        required: false
+        default: '200'
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  loop:
+    name: loop part ${{ matrix.part }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3, 4]
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shareat_test
+        ports: ['5435:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # CI-only throwaway values, the same as ci.yml.
+      NODE_ENV: test
+      APP_TIMEZONE: Asia/Manila
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5435/shareat_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5435/shareat_test
+      SESSION_SECRET: ci-only-not-a-real-secret-000000000000
+      FIREBASE_PROJECT_ID: ci
+      FIREBASE_SERVICE_ACCOUNT_KEY: '{}'
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Provision restricted test role
+        run: node scripts/provision-test-role.mjs
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      # Some tests run the real pg_dump; it refuses a server newer than itself (the service is postgres:18).
+      - name: PostgreSQL 18 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+          echo "PG_BIN_DIR=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"
+
+      - name: Repeat the test file
+        env:
+          FILE: ${{ inputs.file }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          each=$((RUNS / 4))
+          fails=0
+          for i in $(seq "$each"); do
+            npx vitest run --project integration "$FILE" || fails=$((fails + 1))
+          done
+          echo "::notice::$fails failures in $each runs (part ${{ matrix.part }})"
+          [ "$fails" -eq 0 ]

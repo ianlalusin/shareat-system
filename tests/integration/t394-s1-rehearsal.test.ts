@@ -117,8 +117,15 @@ describe('T-394 S1 I3 - liveness: a second session on the target is found and na
   });
 
   it('3.b with the decoy gone the verdict equals "no other session exists" (own pid excluded)', async () => {
+    // 3.a's decoy backend can outlive decoy.end() by a few ms: wait (DB condition, max 5 s) for it to leave.
+    for (let i = 0; i < 100; i++) {
+      const [{ n: gone }] = await sql<{ n: number }[]>`select count(*)::int as n from pg_stat_activity where datname = current_database() and application_name = 't394-decoy-app'`;
+      if (gone === 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    // Same filter as checkLiveness: autovacuum and other background workers are not "sessions".
     const n = (await sql<{ n: number }[]>`
-      select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid()`)[0]!.n;
+      select count(*)::int as n from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and backend_type = 'client backend'`)[0]!.n;
     const r = await checkLiveness(sql);
     expect(r.ok).toBe(n === 0);
     expect(r.sessions.length).toBe(n);
