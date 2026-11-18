@@ -20,6 +20,7 @@ import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_RECORD_RULES, SETTLEMENT_DIFFERENCE_RULES } from '../field-rules/channel-settlements';
 import { refuse } from '../shared/refusal';
+import { lockLiveSalesDay } from '../sales-days/live-day';
 import { loadRuleBook } from '../business-rules/rules';
 import type { BusinessRuleKey } from '../business-rules/registry';
 import type { RuleBook } from '../business-rules/book';
@@ -735,6 +736,11 @@ export async function recordChannelSettlement(
     // banked far better than the arithmetic error it would otherwise cause.
     const blockers = [...ctx.configBlockers, ...ctx.chargeBlockers, ...c.blockers];
     if (blockers.length > 0) throw new Error(`recordChannelSettlement: ${blockers[0]}`);
+
+    // T-594 DEF-904: lock the sales day and re-check it is not voided BEFORE the first write, so a day void in flight is waited out and
+    // this is refused instead of committing against a voided day. After every config/figure refusal, so those keep their sentences (a
+    // channel of another store is refused as such, not as a day of another store). Lock order: channel advisory, loan rows, day (a void takes the day alone).
+    await lockLiveSalesDay(trx, actor.orgId, { salesDayId: input.salesDayId, storeId: input.storeId, doing: 'a payout settlement' });
 
     const {
       outstandingCleared, variance, settlementGain, loanDeduction, netDeposited,

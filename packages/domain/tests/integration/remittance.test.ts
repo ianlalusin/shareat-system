@@ -28,6 +28,7 @@ import {
   closeDb,
   findingsRepo,
   moneyAccountsRepo,
+  moneyTransfersRepo,
   remittanceRepo,
   storesRepo,
   transaction,
@@ -41,6 +42,7 @@ import {
   resolveRemittanceVariance,
   createMoneyTransfer,
   reverseRemittance,
+  voidMoneyTransfer,
   setStoreCashPolicy,
   setTillFloat,
 } from '@shareat/domain';
@@ -446,6 +448,74 @@ describe('reversal', () => {
     // ⭐ Nothing was repaired: the allocations simply stop counting, because the remittance is no
     // longer `posted`. The day is owed its full amount again.
     expect((await reports(f))[0]!.owed).toBe('10000.00');
+  });
+
+  // ---- T-594 DEF-875: a remittance leg is undone by reversing the remittance, never on its own ----
+  const REMITTANCE_LEG_SENTENCE =
+    'This transfer is part of a remittance (a cashier handover). Reverse the remittance instead - that undoes this transfer and reopens its days.';
+  async function handedOver(hint: string) {
+    const f = await fixture(hint);
+    await verifiedDay(f, '2026-01-01');
+    await tillMovement(f, '2026-01-01', '10000.00');
+    const r = await asOrg(f.orgId, (tx) =>
+      createRemittance(tx, f.admin, {
+        storeId: f.storeId,
+        remittedOn: '2026-01-02',
+        lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '10000.00' }],
+      }),
+    );
+    const [leg] = await sql<{ money_transfer_id: string }[]>`
+      select money_transfer_id from remittance_lines where remittance_id = ${r.id}`;
+    return { f, r, legId: leg!.money_transfer_id };
+  }
+  const statusOf = async (table: 'money_transfers' | 'remittances', id: string) =>
+    (await sql<{ status: string }[]>`select status from ${sql(table)} where id = ${id}`)[0]!.status;
+
+  it('DEF-875 a remittance leg cannot be voided on its own: the sentence, both rows still posted, the days still remitted', async () => {
+    const { f, r, legId } = await handedOver('def875a');
+    let said: { userMessage?: string } | undefined;
+    try {
+      await asOrg(f.orgId, (tx) => voidMoneyTransfer(tx, f.admin, { moneyTransferId: legId, reason: 'Wrong' }));
+    } catch (err) {
+      said = err as { userMessage?: string };
+    }
+    expect(said, 'NOT REFUSED - the leg was voided on its own').toBeDefined();
+    expect(said!.userMessage).toBe(REMITTANCE_LEG_SENTENCE);
+    expect(await statusOf('money_transfers', legId)).toBe('posted');
+    expect(await statusOf('remittances', r.id)).toBe('posted');
+    expect((await reports(f))[0]!.owed).toBe('0.00');
+    // and the right door still works afterwards
+    await asOrg(f.orgId, (tx) => reverseRemittance(tx, f.admin, { remittanceId: r.id, reason: 'Counted wrong' }));
+    expect(await statusOf('remittances', r.id)).toBe('reversed');
+  });
+
+  it('DEF-875 positive: reverseRemittance still voids its own legs', async () => {
+    const { f, r, legId } = await handedOver('def875b');
+    await asOrg(f.orgId, (tx) => reverseRemittance(tx, f.admin, { remittanceId: r.id, reason: 'Counted wrong' }));
+    expect(await statusOf('money_transfers', legId)).toBe('voided');
+    expect((await reports(f))[0]!.owed).toBe('10000.00');
+  });
+
+  it('DEF-875 listMoneyTransfers: the leg is inRemittance, an ordinary transfer is not, and the leg is not once reversed', async () => {
+    const { f, r, legId } = await handedOver('def875c');
+    await officeOpening(f, '2026-01-01', '500.00');
+    const ordinary = await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        requestId: crypto.randomUUID(),
+        fromMoneyAccountId: f.safe,
+        toMoneyAccountId: f.till,
+        amountOut: '100.00',
+        amountIn: '100.00',
+        transferDate: '2026-01-03',
+      }),
+    );
+    const flags = async () => {
+      const rows = await asOrg(f.orgId, (tx) => moneyTransfersRepo.listMoneyTransfers(tx, f.orgId, {}));
+      return Object.fromEntries(rows.map((x) => [x.id, x.inRemittance]));
+    };
+    expect(await flags()).toMatchObject({ [legId]: true, [ordinary.id]: false });
+    await asOrg(f.orgId, (tx) => reverseRemittance(tx, f.admin, { remittanceId: r.id, reason: 'Counted wrong' }));
+    expect((await flags())[legId]).toBe(false);
   });
 });
 

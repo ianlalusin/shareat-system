@@ -924,6 +924,11 @@ export interface WithdrawBlockers {
   wastage: boolean;
   /** A POSTED remittance with an allocation on this day (by id, or by this store's date). */
   remittance: boolean;
+  /** T-594 DEF-877: a non-void pull of this day whose direct or recipe section is finalized, i.e. stock usage was POSTED
+   *  (the definition of `posMappingRepo.findLivePullOnVoidedDayForDate`). A merely planned pull posts nothing. */
+  postedUsagePull: boolean;
+  /** T-594 DEF-877: a POSTED channel settlement against this day (a voided one does not count). */
+  channelSettlement: boolean;
 }
 
 /**
@@ -949,7 +954,12 @@ export async function withdrawBlockers(
      where r.org_id = ${orgId} and r.status = 'posted'
        and (ra.sales_day_id = ${day.id} or (r.store_id = ${day.storeId} and ra.business_date = ${day.businessDate}))
      limit 1`);
-  return { usagePull, wastage, remittance };
+  const postedUsagePull = await exists(sql`
+    select 1 from pos_usage_pulls where org_id = ${orgId} and sales_day_id = ${day.id} and status <> 'void'
+       and (direct_finalized_at is not null or recipe_finalized_at is not null) limit 1`);
+  const channelSettlement = await exists(sql`
+    select 1 from channel_settlements where org_id = ${orgId} and status = 'posted' and sales_day_id = ${day.id} limit 1`);
+  return { usagePull, wastage, remittance, postedUsagePull, channelSettlement };
 }
 
 // -------------------------------------------------------------------------------------

@@ -329,8 +329,11 @@ describe('T2 - wastage on a voided verified day, instant channel', () => {
   it('control: before the void it posts; after the void it is refused and posts nothing', async () => {
     const f = await fixture('t2', { instant: true });
     const id = await mkDay(f, D1, { verify: true });
+    // T-594 (DEF-877): a verified day that carries wastage can no longer be voided, so the "before" wastage posts on a SECOND
+    // verified day, and the day that is voided (D1) carries none.
+    const live = await mkDay(f, D2, { verify: true });
 
-    const before = await wastage(f, id, instant);
+    const before = await wastage(f, live, { ...instant, openedOn: D2 });
     expect(before.journalEntryId, 'control: an instant absorbed wastage on a live day must post').toBeTruthy();
     expect(await wastageEntryRows(f)).toBe(1);
 
@@ -555,6 +558,11 @@ describe('T10 - the capability check comes first', () => {
 // T12 (R7) - one date, one live pull, across a void
 // -----------------------------------------------------------------------------------------------
 describe('T12 - the same date cannot be pulled twice across a void', () => {
+  // T-594 (DEF-877): `voidSalesDay` now refuses a verified day whose pull POSTED usage, so the legacy state these two tests need
+  // (a voided day that still carries posted usage - what production holds from before T-594; T-373 R7 is its backstop) is made
+  // by owner SQL, exactly as the void would have written it.
+  const legacyVoid = (f: Fixture, id: string) =>
+    sql`update sales_days set status = 'voided', voided_by = ${f.managerId}, voided_at = now(), void_reason = 'fixture: pre-T-594 void' where id = ${id}`;
   const r7 = /^Stock usage for (.+) was already pulled against the voided day, so pulling it again would count it twice\.$/;
 
   it('D1 verified + finalized pull, voided; replacement D2 same date -> { ok: false } with the R7 sentence; nothing new written', async () => {
@@ -565,7 +573,7 @@ describe('T12 - the same date cannot be pulled twice across a void', () => {
     if (!built.ok) return;
     const fin = await finalize(f, built.pullId, built.lines.map((l) => l.key));
     expect(fin.ok).toBe(true); // usage posted on D1
-    await voidDay(f, d1);
+    await legacyVoid(f, d1);
     const d2 = await mkUsageDay(f, D1); // 0177 freed the date
 
     const pulls = await pullRows(f);
@@ -607,7 +615,7 @@ describe('T12 - the same date cannot be pulled twice across a void', () => {
     expect((await finalize(f, built.pullId, built.lines.map((l) => l.key))).ok).toBe(true);
     const [p] = await sql<{ status: string }[]>`select status from pos_usage_pulls where id = ${built.pullId}`;
     expect(p!.status).toBe('planned');
-    await voidDay(f, d1);
+    await legacyVoid(f, d1);
     const d2 = await mkUsageDay(f, D1);
     const out = await plan(f, d2);
     expect(out.ok).toBe(false);

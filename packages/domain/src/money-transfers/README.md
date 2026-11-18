@@ -3,7 +3,7 @@
 Moves money between money accounts (cashier or office, any direction) as one balanced ledger entry, and settles inter-store debt. Transfers are manager-level (`transfer_funds`), not admin-only: they record something that happened, unlike opening an account (T-139, bible row 150). Cross-store transfers carry the 1250/2150 due-from/due-to pair so each store's books balance on their own.
 
 ## Interface
-- `index.ts`: `createMoneyTransfer`, `voidMoneyTransfer`, `CreateMoneyTransferInput`, `CreateMoneyTransferResult`; re-exports `settleBetweenStores`, `SettleBetweenStoresInput`, `SettleBetweenStoresResult`
+- `index.ts`: `createMoneyTransfer`, `voidMoneyTransfer`, `VoidMoneyTransferInput`, `CreateMoneyTransferInput`, `CreateMoneyTransferResult`; re-exports `settleBetweenStores`, `SettleBetweenStoresInput`, `SettleBetweenStoresResult`
 - `settle.ts`: `settleBetweenStores`, `SettleBetweenStoresInput`, `SettleBetweenStoresResult`
 - `prepare.ts` (internal; `index.ts` does not re-export it): `prepareTransfer`, `PreparedTransfer`, `DEFAULT_FEE_ACCOUNT_CODE` (`6870`)
 
