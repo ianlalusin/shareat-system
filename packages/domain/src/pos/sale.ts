@@ -434,9 +434,17 @@ export async function listRefillQueue(tx: Tx, actor: Actor, input: { storeId: st
 export async function listTodaysSalesReceipts(tx: Tx, actor: Actor, input: { storeId: string }) {
   await requireStoreScope(tx, actor, input.storeId);
   const since = await posV2Repo.lastDayCloseEnd(tx, actor.orgId, input.storeId);
-  const rows = await posV2Repo.listReceiptsSince(tx, actor.orgId, input.storeId, since);
+  // T-601 S2: one query, every existing field plus the table, the till number and the tenders (additive).
+  const rows = await posV2Repo.listReceiptsSinceForList(tx, actor.orgId, input.storeId, since);
+  const storeCode = (await posV2Repo.getStoreCode(tx, actor.orgId, input.storeId)) ?? '';
   return {
     stateVersion: await stateVersionOf(tx, actor, input.storeId),
-    receipts: rows.map((r) => ({ receiptId: r.id, sessionId: r.tableSessionId, terminalId: r.terminalId, terminalSeq: r.terminalSeq, issuedAtDevice: r.issuedAtDevice, subtotal: r.subtotal, discountTotal: r.discountTotal, total: r.total, offline: r.offline })),
+    receipts: rows.map((r) => ({
+      receiptId: r.receiptId, sessionId: r.sessionId, terminalId: r.terminalId, terminalSeq: r.terminalSeq, issuedAtDevice: r.issuedAtDevice, subtotal: r.subtotal, discountTotal: r.discountTotal, total: r.total, offline: r.offline,
+      terminalNo: r.terminalNo,
+      receiptNo: `${storeCode}-${pad(r.terminalNo, 2)}-${pad(r.terminalSeq, 6)}`,
+      table: r.standNumber === null ? 'Take-out' : `Stand ${r.standNumber}`,
+      tenders: r.tenders ?? '',
+    })),
   };
 }
