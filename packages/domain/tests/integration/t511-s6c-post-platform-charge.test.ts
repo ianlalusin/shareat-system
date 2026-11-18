@@ -295,6 +295,15 @@ describe('S6c what is refused (plain sentence, nothing written)', () => {
   it('a channel whose receivable account is 1250, not the standard 1220 (until slice 8) [kills: crediting a receivable the settlement does not clear; a hard-coded 1220 that ignores the channel]', () =>
     refused('code', (f) => periodCharge(sql, f), { receivable: '1250' }));
 
+  it('T-606: a channel whose setting is 1220 but whose balance is still on 1210 is refused and told to move it - Mutant: drop the check in postPlatformCharge -> the charge posts, red', async () => {
+    const f = await world(sql, 'stranded', { receivable: '1210' });
+    const ol = await periodCharge(sql, f);
+    await sql`update sales_channels set receivable_account_code = '1220' where id = ${f.channelId}`;
+    const before = await entryCount(sql, f.orgId);
+    expect(await sentenceOf(postCharge(f, f.admin, ol))).toBe('Foodpanda still has \u20b110,000.00 on 1210 Accounts receivable. Move it to Channel receivable in Settings \u203a Sales channels, then approve this file.');
+    await untouched(f, before);
+  });
+
   it('a line with no date (line_date NULL): the sentence says the charge has no date, so it cannot be dated or booked (spec ruling 5) [kills: dating a NULL (a crash or a post on the clock); a refusal that does not name the cause]', async () => {
     const f = await world(sql, 'undated');
     const ol = await periodCharge(sql, f, { lineDate: null });

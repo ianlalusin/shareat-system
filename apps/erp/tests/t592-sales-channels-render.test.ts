@@ -9,6 +9,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({
   channels: [] as unknown[],
   canSet: true,
+  canMove: false,
 }));
 
 vi.mock('next/navigation', async () => (await import('./helpers/flash-jar-core')).nextNavigationMock());
@@ -17,13 +18,14 @@ vi.mock('../src/lib/page-access', () => ({ requirePageAccess: async () => ({ act
 vi.mock('../src/app/expenses/lib', () => ({ listStores: async () => [{ id: 'store-1', name: 'Lipa', code: 'LIP' }] }));
 vi.mock('../src/app/settings/sales-channels/actions', () => {
   const noop = async () => {};
-  return { createSalesChannelAction: noop, setPlatformCodeAction: noop, setSalesChannelActiveAction: noop, updateSalesChannelAction: noop };
+  return { createSalesChannelAction: noop, moveChannelReceivableAction: noop, setPlatformCodeAction: noop, setSalesChannelActiveAction: noop, updateSalesChannelAction: noop };
 });
 vi.mock('../src/app/settings/sales-channels/lib', () => ({
   channelsForStore: async () => h.channels,
   receivableOptions: async () => [{ code: '1220', name: 'Platform receivables' }],
   moneyAccountNames: async () => new Map<string, string>(),
   canEditPlatformCode: async () => h.canSet,
+  canMoveChannelReceivable: async () => h.canMove, // T-606 S4
 }));
 
 type Page = (props: never) => Promise<unknown>;
@@ -34,15 +36,16 @@ beforeAll(async () => {
 
 const channel = (over: Record<string, unknown>) => ({
   id: 'c', name: 'Channel', isActive: true, isRemittedDaily: true, receivableAccountCode: null, wastageTypeMode: 'tracked',
-  platform: null, platformStoreCode: null, destinationMoneyAccountId: null, bankHints: [], ...over,
+  platform: null, platformStoreCode: null, destinationMoneyAccountId: null, bankHints: [], offAccountBalance: null, ...over,
 });
 const daily = channel({ id: 'c-walk', name: 'Walk-in Lipa' });
 const foodpanda = channel({ id: 'c-fp', name: 'Foodpanda Lipa', isRemittedDaily: false, receivableAccountCode: '1220', platform: 'foodpanda', platformStoreCode: 'ABC1' });
 const grabNoPlatform = channel({ id: 'c-gr', name: 'Grab Lipa', isRemittedDaily: false, receivableAccountCode: '1220' });
 
-async function render(channels: unknown[], canSet = true) {
+async function render(channels: unknown[], canSet = true, canMove = false) {
   h.channels = channels;
   h.canSet = canSet;
+  h.canMove = canMove;
   return renderToStaticMarkup((await SalesChannelsPage({ searchParams: Promise.resolve({ store: 'store-1' }) } as never)) as never);
 }
 const forms = (html: string) => html.match(/<form\b[\s\S]*?<\/form>/g) ?? [];
@@ -93,5 +96,29 @@ describe('T-592 /settings/sales-channels - the store code is drawn only where it
     expect(html).not.toContain('<details');
     expect(html).not.toContain('Statement matching');
     expect(html).not.toContain('Settlement wiring');
+  });
+});
+
+describe('T-606 /settings/sales-channels - the move button follows what is left off the channel receivable', () => {
+  const moveForms = (html: string) => forms(html).filter((f) => f.includes('Move to Channel receivable'));
+  const leftover = (net: string) => channel({ ...foodpanda, offAccountBalance: net });
+
+  it('a platform channel already on 1220 with nothing elsewhere shows no button', async () => {
+    expect(moveForms(await render([foodpanda], true, true))).toHaveLength(0);
+  });
+
+  it('already on 1220 but a balance sits elsewhere: an admin sees the button and the remaining amount, with the thousands comma', async () => {
+    const html = await render([leftover('10000.00')], true, true);
+    expect(moveForms(html)).toHaveLength(1);
+    expect(html).toContain('The remaining ₱10,000.00 is still on another account');
+  });
+
+  it('a credit left behind reads "in its favour", never a negative amount; a non-admin sees the sentence but no button', async () => {
+    const admin = await render([leftover('-50.00')], true, true);
+    expect(admin).toContain('₱50.00 in its favour is still on another account');
+    expect(admin).not.toContain('-50.00');
+    const manager = await render([leftover('-50.00')], true, false);
+    expect(moveForms(manager)).toHaveLength(0);
+    expect(manager).toContain('An admin can move it to Channel receivable.');
   });
 });

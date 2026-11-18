@@ -14,9 +14,10 @@
  * ⛔ The double-count rule: a LATER payout that nets this charge says so (`settleChargeIds` on `recordChannelSettlement`), so the receivable is credited once and the charge is
  * never expensed a second time as a settlement variance. The accounts are the named constants of the channel-settlement repo (no literal here).
  *
- * Until slice 8 fixes `outstandingFor`, only the standard channel receivable is cleared by a settlement, so another receivable code is refused.
+ * T-606: a settlement clears ONLY the channel receivable (`outstandingFor` reads that one account, by design), so a channel on another receivable code is refused until its receivable is set to it.
  * No caller until slice 7 (approve a settlement upload) posts it.
  */
+import { refuseStrandedChannelBalance } from './stranded-balance';
 import { advisoryLocksRepo, auditLogRepo, channelSettlementsRepo, fiscalPeriodsRepo, journalRepo, manilaToday, salesDaysRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, isZero, money, negate, ZERO } from '@shareat/core/money';
@@ -145,9 +146,12 @@ export async function postPlatformChargeOnClock(tx: Tx, actor: Actor, input: Pos
   if (channel.receivableAccountCode !== R.CHANNEL_RECEIVABLE_CODE) {
     throw refuse(
       `postPlatformCharge: channel ${channel.id} receivable account is ${channel.receivableAccountCode ?? 'unset'}, not the standard channel receivable`,
-      `${channel.name} doesn't use the standard channel receivable account, so its charges can't be booked from a platform file yet.`,
+      `${channel.name}'s sales go to a different receivable account, so its charges can't be booked from a platform file. Open Settings › Sales channels and set this channel's receivable account to ${R.CHANNEL_RECEIVABLE_CODE} Channel receivable.`,
     );
   }
+
+  // T-606: and not while the channel still holds a balance on another account (see `refuseStrandedChannelBalance`).
+  await refuseStrandedChannelBalance(tx, orgId, channel, R.CHANNEL_RECEIVABLE_CODE, 'postPlatformCharge');
 
   // ---- the figures: whole centavos, never a float ---------------------------------------------------------------------
   const net = money(line.amount);

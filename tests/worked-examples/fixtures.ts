@@ -1198,6 +1198,24 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'or the platform aging and the settlement cannot see it. A platform credit note is the same two accounts on the opposite sides, never a negative amount. ' +
       'The staged line is not the document: the posting is recorded once per staged line, so approving the same invoice twice books it once.',
   },
+  // T-606 S4: a delivery-platform channel's balance moves from the customer receivable to the channel receivable, per store, party = the channel.
+  {
+    id: 'channel_receivable.reclass',
+    sourceType: 'channel_receivable_reclass',
+    title: "A platform channel's balance moves from 1210 to 1220 (T-606 S4)",
+    narrative:
+      'v2-only. Lipa Foodpanda was set to 1210 Accounts receivable and is owed ₱12,345.00 there. An admin presses "Move to Channel receivable": Dr 1220 ₱12,345.00 / Cr 1210 ₱12,345.00, ' +
+      'both lines with the channel as party and the store the balance sits at, dated today when the month is open. The setting switches in the same transaction.',
+    input: { channel: 'Foodpanda', fromAccount: '1210', toAccount: '1220', balance: '12345.00' },
+    expect: [
+      D('1220', '12345.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda receivable moved from 1210 to 1220' }),
+      C('1210', '12345.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda receivable moved from 1210 to 1220' }),
+    ],
+    entryDate: '2026-01-15',
+    trap:
+      'Both lines carry the channel as party and the store the balance sits at, one pair per store. A net credit balance posts the opposite sides, never a negative amount. ' +
+      'The old day entries stay on 1210, so a later platform-file correction reads what was posted for the day by party, not by account. A zero balance posts nothing and only switches the setting.',
+  },
   {
     id: 'channel_settlement.nets_period_charge',
     sourceType: 'channel_settlement',

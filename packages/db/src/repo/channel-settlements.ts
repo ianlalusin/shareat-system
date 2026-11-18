@@ -9,7 +9,7 @@ import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 // ⛔ T-218 — Manila, never bare current_date (DEF-172).
 import { MANILA_TODAY } from './sql-time';
 import type { Tx } from '../client';
-import type { Money } from '@shareat/core/money';
+import { money, type Money } from '@shareat/core/money';
 import type { SafeInsert } from './numeric-input';
 import {
   channelSettlementLoanLegs,
@@ -233,6 +233,60 @@ export async function outstandingFor(
       and je.status <> 'draft'
   `)) as unknown as Record<string, string>[];
   return Number(row?.balance ?? 0).toFixed(2);
+}
+
+/**
+ * T-606 S2: what sits on ONE receivable account for a channel, per line store - the balances a change of the channel's receivable would strand.
+ * The same where-clause as `outstandingFor` with the account named by the caller; only a non-zero balance is listed. Money stays exact text.
+ */
+export async function partyBalancesByStore(
+  tx: Tx,
+  orgId: string,
+  channelId: string,
+  accountCode: string,
+): Promise<{ storeId: string; balance: Money }[]> {
+  const rows = (await tx.execute(sql`
+    select jl.store_id::text as store_id, sum(jl.debit - jl.credit)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and jl.party_id = ${channelId}
+      and a.code = ${accountCode}
+      and je.status <> 'draft'
+    group by jl.store_id
+    having sum(jl.debit - jl.credit) <> 0
+    order by jl.store_id
+  `)) as unknown as { store_id: string; balance: string }[];
+  return rows.map((r) => ({ storeId: String(r.store_id), balance: money(r.balance) }));
+}
+
+/**
+ * T-606: what the channel still holds on every account EXCEPT `keepCode` (its current receivable), per account and line store. Computed exactly as `partyBalancesByStore`
+ * (party = the channel, posted entries, drafts excluded); a platform-file correction or period charge is refused while this is not empty.
+ */
+export async function partyBalancesOffAccount(
+  tx: Tx,
+  orgId: string,
+  channelId: string,
+  keepCode: string,
+): Promise<{ accountCode: string; storeId: string; balance: Money }[]> {
+  const rows = (await tx.execute(sql`
+    select a.code as account_code, jl.store_id::text as store_id, sum(jl.debit - jl.credit)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and jl.party_id = ${channelId}
+      and a.code <> ${keepCode}
+      and je.status <> 'draft'
+    group by a.code, jl.store_id
+    having sum(jl.debit - jl.credit) <> 0
+    order by a.code, jl.store_id
+  `)) as unknown as { account_code: string; store_id: string; balance: string }[];
+  return rows.map((r) => ({ accountCode: String(r.account_code), storeId: String(r.store_id), balance: money(r.balance) }));
 }
 
 /** Is there already a POSTED settlement for this channel-day? A second is refused, not duplicated. */

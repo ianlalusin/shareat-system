@@ -50,8 +50,10 @@ function dayLabel(businessDate: string): string {
   }
 }
 
+// T-606: a delivery channel's receivable is netted by the CHANNEL, across accounts. The day's old lines may sit on 1210 (posted before the channel moved to 1220) while the
+// re-routed line uses the channel's CURRENT account; comparing them as one figure posts only a true difference, on the current account. Every other party stays per account.
 const keyOf = (accountCode: string, partyType: string | null | undefined, partyId: string | null | undefined) =>
-  `${accountCode}|${partyType ?? ''}|${partyId ?? ''}`;
+  partyType === 'channel' ? `|channel|${partyId ?? ''}` : `${accountCode}|${partyType ?? ''}|${partyId ?? ''}`;
 
 export async function postPosCorrection(tx: Tx, actor: Actor, input: PostPosCorrectionInput): Promise<PostPosCorrectionResult> {
   const { orgId } = actor;
@@ -135,9 +137,9 @@ export async function postPosCorrection(tx: Tx, actor: Actor, input: PostPosCorr
   const oldRows = await posV1Repo.postedNetForEntries(tx, orgId, [day.journalEntryId, ...priors.map((c) => c.journalEntryId)]);
   const net = new Map<string, { accountCode: string; partyType: string | null; partyId: string | null; amount: Money }>();
   for (const r of oldRows) {
-    net.set(keyOf(r.accountCode, r.partyType, r.partyId), {
-      accountCode: r.accountCode, partyType: r.partyType, partyId: r.partyId, amount: money(r.net),
-    });
+    const k = keyOf(r.accountCode, r.partyType, r.partyId);
+    const prev = net.get(k);
+    net.set(k, { accountCode: r.accountCode, partyType: r.partyType, partyId: r.partyId, amount: prev ? add(prev.amount, money(r.net)) : money(r.net) });
   }
   // `net` starts as OLD in (debit - credit) terms; each new line then adds (credit - debit), so it ends as
   // (new credit-debit) - (old credit-debit) = new - old, in credit-minus-debit terms: positive posts as a credit.
@@ -221,7 +223,8 @@ export async function postPosCorrection(tx: Tx, actor: Actor, input: PostPosCorr
     const k = keyOf(l.accountCode, l.partyType, l.partyId);
     const cur = net.get(k) ?? { accountCode: l.accountCode, partyType: l.partyType ?? null, partyId: l.partyId ?? null, amount: money('0') };
     // a routed credit adds, a routed debit subtracts.
-    net.set(k, { ...cur, amount: l.side === 'credit' ? add(cur.amount, l.amount) : subtract(cur.amount, l.amount) });
+    // A channel's difference posts on the account the routing now uses (`l.accountCode`), whichever account its old lines sat on.
+    net.set(k, { ...cur, accountCode: l.accountCode, amount: l.side === 'credit' ? add(cur.amount, l.amount) : subtract(cur.amount, l.amount) });
   }
   // Each entry is (new - old) in credit-minus-debit terms; the sign picks the side.
   const lines: PostEntryLine[] = [];

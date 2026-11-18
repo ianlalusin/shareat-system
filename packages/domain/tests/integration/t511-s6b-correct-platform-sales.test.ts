@@ -231,15 +231,56 @@ describe('S6b who may correct - record_ar_collection with the line\'s store scop
   });
 });
 
-describe('S6b receivable code - only 1220 until slice 8 fixes outstandingFor', () => {
+describe('S6b receivable code - only the channel receivable (T-606: by design, not until slice 8)', () => {
   it('a channel whose receivable account is 1250: refused with a plain sentence, nothing written [kills: posting to a receivable the settlement does not clear; a hard-coded 1220 that ignores the channel]', async () => {
     const f = await fx(sql, 'code', { staff: '11000.00', file: '10000.00', receivable: '1250' });
     expect(Number(await netDebit(sql, f.orgId, '1250')), 'control: the day raised 11,000 on 1250').toBe(11000);
     const sentence = await sentenceOf(correct(f, f.admin));
     expect(sentence.length).toBeGreaterThan(10);
     expect(sentence).not.toMatch(UUID_RE);
+    // T-606 S3: the plain sentence says where to fix it, never "yet"
+    expect(sentence).toBe("Foodpanda's sales go to a different receivable account, so they can't be corrected from a platform file. Open Settings \u203a Sales channels and set this channel's receivable account to 1220 Channel receivable.");
     expect(await corrections(sql, f.orgId)).toHaveLength(0);
     expect(Number(await netDebit(sql, f.orgId, '1250'))).toBe(11000);
+  });
+
+  it('T-606 S3: a channel still on 1210 is refused with the same sentence and nothing is written', async () => {
+    const f = await fx(sql, 'code1210', { staff: '10000.00', file: '11000.00', receivable: '1210' });
+    expect(await sentenceOf(correct(f, f.admin))).toMatch(/set this channel's receivable account to 1220 Channel receivable\.$/);
+    expect(await corrections(sql, f.orgId)).toHaveLength(0);
+  });
+
+  it("T-606: while the channel still holds its balance on 1210 the correction is refused in words and nothing is written - Mutant: drop the refusal -> only the difference is booked on 1220 and the receivable splits across two accounts, red", async () => {
+    const f = await fx(sql, 'stranded', { staff: '10000.00', file: '11000.00', receivable: '1210' });
+    expect(Number(await netDebit(sql, f.orgId, '1210')), 'control: the day raised 10,000 on 1210').toBe(10000);
+    await sql`update sales_channels set receivable_account_code = '1220' where id = ${f.channelId}`; // the setting changed, the balance did not move
+    expect(await sentenceOf(correct(f, f.admin))).toBe('Foodpanda still has \u20b110,000.00 on 1210 Accounts receivable. Move it to Channel receivable in Settings \u203a Sales channels, then approve this file.');
+    expect(await corrections(sql, f.orgId)).toHaveLength(0);
+    expect(Number(await netDebit(sql, f.orgId, '1210'))).toBe(10000);
+    expect(Number(await netDebit(sql, f.orgId, '1220'))).toBe(0);
+  });
+
+  it("T-606: after the move (the 1210 balance nets to zero) a day originally posted on 1210 is corrected by the difference only, on 1220, and revenue is counted once - Mutant: read `old` by account again -> the whole 11,000 is booked, red", async () => {
+    const f = await fx(sql, 'moved', { staff: '10000.00', file: '11000.00', receivable: '1210' });
+    const moved = await asOrg(f.orgId, (tx) => D.moveChannelToChannelReceivable(tx, f.admin, { channelId: f.channelId, requestId: crypto.randomUUID() }, '2026-11-02'));
+    expect(moved.moved).toBe(true);
+    expect(Number(await netDebit(sql, f.orgId, '1210')), 'the move cleared 1210').toBe(0);
+    expect(Number(await netDebit(sql, f.orgId, '1220')), 'and put the balance on 1220').toBe(10000);
+    await correct(f, f.admin);
+    const [c] = await corrections(sql, f.orgId);
+    expect(await corrections(sql, f.orgId)).toHaveLength(1);
+    expect(lineText(await linesOf(sql, c!.journal_entry_id))).toEqual(['Cr 4150 1000.00', 'Dr 1220 1000.00']);
+    expect(Number(await netDebit(sql, f.orgId, '1220'))).toBe(11000);
+    expect(Number(await netDebit(sql, f.orgId, '1210'))).toBe(0);
+    expect(Number(await netDebit(sql, f.orgId, '4150')), 'revenue once: 10,000 from the day and 1,000 from the correction').toBe(-11000);
+  });
+
+  it('T-606 audit (positive): a day verified on the channel receivable itself is corrected by the difference, as before', async () => {
+    const f = await fx(sql, 'right', { staff: '10000.00', file: '11000.00' });
+    await correct(f, f.admin);
+    const [c] = await corrections(sql, f.orgId);
+    expect(lineText(await linesOf(sql, c!.journal_entry_id))).toEqual(['Cr 4150 1000.00', 'Dr 1220 1000.00']);
+    expect(Number(await netDebit(sql, f.orgId, '1220'))).toBe(11000);
   });
 });
 

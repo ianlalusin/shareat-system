@@ -24,12 +24,16 @@ if (!isTestDatabaseUrl(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { APP_ROLE, closeDb, orderWastageRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
+import { APP_ROLE, channelSettlementsRepo, closeDb, orderWastageRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
+  PLATFORM_RECEIVABLE_CODE,
   createSalesChannel,
   listSalesChannelsForAdmin,
+  platformReceivableOptions,
+  receivableAccountOptions,
   setSalesChannelActive,
+  setSalesChannelPlatformCode,
   updateSalesChannel,
 } from '../../src/sales-channels';
 import { storeReadiness } from '../../src/stores/service';
@@ -625,3 +629,143 @@ async function memoOf(wastageId: string): Promise<string> {
     where w.id = ${wastageId}`;
   return row?.memo ?? '';
 }
+
+// =====================================================================================
+// T-606 (DEF-924) - a delivery-platform channel uses the channel receivable; every other channel keeps its free choice
+// (Ian, 18 Nov: dine-in, a wholesale buyer such as Xlice and branch sales can be sold on credit)
+// =====================================================================================
+
+describe('T-606 S1 - the channel receivable for delivery platforms only', () => {
+  const R = channelSettlementsRepo.CHANNEL_RECEIVABLE_CODE;
+  const make = (f: Fixture, receivableAccountCode: string | null, isRemittedDaily = false) =>
+    asOrg(f.orgId, (tx) => createSalesChannel(tx, f.admin, { storeId: f.storeId, name: uid('ch'), isRemittedDaily, receivableAccountCode }));
+  const edit = (f: Fixture, channelId: string, receivableAccountCode: string | null, over: { name?: string; isRemittedDaily?: boolean } = {}) =>
+    asOrg(f.orgId, (tx) =>
+      updateSalesChannel(tx, f.admin, { channelId, name: over.name ?? 'Edited', isRemittedDaily: over.isRemittedDaily ?? false, receivableAccountCode, wastageTypeMode: 'tracked' }),
+    );
+  const platformOn = (f: Fixture, channelId: string) =>
+    asOrg(f.orgId, (tx) => setSalesChannelPlatformCode(tx, f.admin, { channelId, platform: 'foodpanda', code: uid('FP').replace(/[^A-Za-z0-9]/g, '').slice(0, 12) }));
+  const row = async (id: string) => channelRowById(id);
+
+  it('the constant is the settlement path\'s own, and the platform picker lists only it', async () => {
+    const f = await fixture('t606-const');
+    expect(PLATFORM_RECEIVABLE_CODE).toBe(R);
+    const all = await asOrg(f.orgId, (tx) => receivableAccountOptions(tx, f.admin));
+    expect(all.map((o) => o.code)).toEqual(expect.arrayContaining([R, '1210'])); // nothing narrowed for the other channels
+    expect(platformReceivableOptions(all).map((o) => o.code)).toEqual([R]); // Mutant: return the whole list -> 1210 listed, red
+  });
+
+  it('channels with NO platform keep today\'s behaviour: settle-later or daily on the customer receivable (1210) is accepted, on create and on update', async () => {
+    const f = await fixture('t606-credit');
+    const { channelId: later } = await make(f, '1210');
+    expect(String((await row(later)).receivable_account_code)).toBe('1210');
+    await edit(f, later, '1210', { name: 'Xlice' });
+    expect(String((await row(later)).name)).toBe('Xlice');
+    const { channelId: daily } = await make(f, '1210', true); // a dine-in style channel that also sells on credit
+    expect(String((await row(daily)).receivable_account_code)).toBe('1210');
+  });
+
+  it('a platform channel can only be saved on the channel receivable: 1210 is refused, nothing changes - Mutant: drop the platform rule -> 1210 accepted, red', async () => {
+    const f = await fixture('t606-platform');
+    const { channelId } = await make(f, R);
+    await platformOn(f, channelId);
+    await expect(edit(f, channelId, '1210')).rejects.toThrow(/1220 Channel receivable/);
+    expect(String((await row(channelId)).receivable_account_code)).toBe(R);
+    expect(String((await row(channelId)).name)).not.toBe('Edited');
+    await edit(f, channelId, R); // positive: the one allowed account
+    expect(String((await row(channelId)).name)).toBe('Edited');
+    // the agreement: every code the platform picker lists is accepted, and the one it does not list is not
+    const options = platformReceivableOptions(await asOrg(f.orgId, (tx) => receivableAccountOptions(tx, f.admin)));
+    for (const o of options) await edit(f, channelId, o.code);
+  });
+
+  it('setting a platform on a channel whose receivable is not the channel receivable is refused with a plain sentence; once fixed it works - Mutant: drop the check -> platform set on 1210, red', async () => {
+    const f = await fixture('t606-setplatform');
+    const { channelId } = await make(f, '1210');
+    const sentence = await asOrg(f.orgId, (tx) =>
+      setSalesChannelPlatformCode(tx, f.admin, { channelId, platform: 'foodpanda', code: 'FP4321' }),
+    ).then(() => null, (e: { userMessage?: string }) => e.userMessage ?? null);
+    expect(sentence).toMatch(/must use 1220 Channel receivable, so edit the channel and change its receivable account first, then set the platform\.$/);
+    expect((await row(channelId)).platform).toBeNull();
+    await edit(f, channelId, R); // fix the receivable first ...
+    await platformOn(f, channelId); // ... then the platform
+    expect(String((await row(channelId)).platform)).toBe('foodpanda');
+  });
+});
+
+describe('T-606 S2 - no switching a channel\'s receivable away from a balance', () => {
+  const R = channelSettlementsRepo.CHANNEL_RECEIVABLE_CODE;
+  const make = (f: Fixture, receivableAccountCode: string | null, isRemittedDaily = false) =>
+    asOrg(f.orgId, (tx) => createSalesChannel(tx, f.admin, { storeId: f.storeId, name: uid('ch'), isRemittedDaily, receivableAccountCode }));
+  const switchTo = (f: Fixture, channelId: string, receivableAccountCode: string | null, isRemittedDaily = false) =>
+    asOrg(f.orgId, (tx) => updateSalesChannel(tx, f.admin, { channelId, name: 'Switched', isRemittedDaily, receivableAccountCode, wastageTypeMode: 'tracked' }));
+  const codeOf = async (id: string) => String((await channelRowById(id)).receivable_account_code);
+  /** A posting on the channel's receivable account: Dr (a sale) or Cr (a payout / a void) on `code`, party = the channel. */
+  async function post(f: Fixture, channelId: string, code: string, side: 'debit' | 'credit', amount: string) {
+    const { postEntry } = await import('../../src/ledger/post-entry');
+    await asOrg(f.orgId, (tx) =>
+      postEntry(tx, {
+        orgId: f.orgId,
+        entryDate: '2026-01-10',
+        sourceType: 'sales_day',
+        sourceId: f.salesDayId,
+        idempotencyKey: `t606:${channelId}:${code}:${side}:${amount}:${uid('k')}`,
+        memo: 'Channel day',
+        postedBy: f.managerId,
+        lines: [
+          { accountCode: code, storeId: f.storeId, [side]: amount, partyType: 'channel', partyId: channelId },
+          { accountCode: '4150', storeId: f.storeId, [side === 'debit' ? 'credit' : 'debit']: amount },
+        ],
+      }),
+    );
+  }
+  const sentenceOf = (p: Promise<unknown>) => p.then(() => null, (e: { userMessage?: string }) => e.userMessage ?? null);
+
+  it('with nothing owed on the old account the receivable switches (1210 to 1220)', async () => {
+    const f = await fixture('t606-s2-ok');
+    const { channelId } = await make(f, '1210');
+    await switchTo(f, channelId, R);
+    expect(await codeOf(channelId)).toBe(R);
+  });
+
+  it('while a balance sits on the old account the switch is refused with a sentence naming the amount and what to do, and nothing changes; once the balance is cleared it works - Mutant: delete the guard -> switches anyway, red', async () => {
+    const f = await fixture('t606-s2-balance');
+    const { channelId } = await make(f, '1210');
+    await post(f, channelId, '1210', 'debit', '500.00');
+    const sentence = await sentenceOf(switchTo(f, channelId, R));
+    expect(sentence).toBe('Switched still has \u20b1500.00 owed on 1210 Accounts receivable. Void and re-post those sales on the normal screens so the balance clears, then change the account.'.replace('Switched', String((await channelRowById(channelId)).name)));
+    expect(await codeOf(channelId)).toBe('1210');
+    await post(f, channelId, '1210', 'credit', '500.00'); // voided / paid: the account is back to nothing
+    await switchTo(f, channelId, R);
+    expect(await codeOf(channelId)).toBe(R);
+  });
+
+  it('for a delivery-platform channel the refusal names the "Move to Channel receivable" button (a plain channel is told to void and re-post)', async () => {
+    const f = await fixture('t606-s2-platform');
+    const { channelId } = await make(f, '1210');
+    await sql`update sales_channels set platform = 'foodpanda', platform_store_code = 'FPS2BTN' where id = ${channelId}`;
+    await post(f, channelId, '1210', 'debit', '500.00');
+    const stored = String((await channelRowById(channelId)).name);
+    expect(await sentenceOf(switchTo(f, channelId, R))).toBe(`${stored} still has \u20b1500.00 owed on 1210 Accounts receivable. Press "Move to Channel receivable" on this channel's card; it moves the balance and the setting together.`);
+    expect(await codeOf(channelId)).toBe('1210');
+  });
+
+  it('a credit balance is worded "in its favour", never as a negative amount owed', async () => {
+    const f = await fixture('t606-s2-credit');
+    const { channelId } = await make(f, '1210');
+    await post(f, channelId, '1210', 'credit', '50.00');
+    const stored = String((await channelRowById(channelId)).name);
+    expect(await sentenceOf(switchTo(f, channelId, R))).toBe(`${stored} has \u20b150.00 in its favour on 1210 Accounts receivable. Void and re-post those sales on the normal screens so the balance clears, then change the account.`);
+    expect(await codeOf(channelId)).toBe('1210');
+  });
+
+  it('a channel on 1220 with a balance cannot be switched to a daily channel with no receivable either; staying on 1220 is fine', async () => {
+    const f = await fixture('t606-s2-daily');
+    const { channelId } = await make(f, R);
+    await post(f, channelId, R, 'debit', '250.00');
+    expect(await sentenceOf(switchTo(f, channelId, null, true))).toMatch(/still has \u20b1250\.00 owed on 1220 Channel receivable/);
+    expect(await codeOf(channelId)).toBe(R);
+    await switchTo(f, channelId, R); // the same account: nothing to strand
+    expect(String((await channelRowById(channelId)).name)).toBe('Switched');
+  });
+});

@@ -2,11 +2,12 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { listStores } from '../../expenses/lib';
 import {
   createSalesChannelAction,
+  moveChannelReceivableAction,
   setPlatformCodeAction,
   setSalesChannelActiveAction,
   updateSalesChannelAction,
 } from './actions';
-import { canEditPlatformCode, channelsForStore, moneyAccountNames, receivableOptions, type SalesChannelAdminRow } from './lib';
+import { canEditPlatformCode, canMoveChannelReceivable, channelsForStore, moneyAccountNames, receivableOptions, type SalesChannelAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { NAV_LINK } from '@/components/action-link';
@@ -17,6 +18,15 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { SALES_CHANNEL_EDIT } from './typed-forms';
 import { accountLabel } from '@/lib/account-label';
+import { PLATFORM_RECEIVABLE_CODE, platformReceivableOptions } from '@shareat/domain';
+import { compare, formatMoney, money, negate, ZERO } from '@shareat/core/money';
+
+/** What a channel still holds off the channel receivable, in words; never a negative peso amount. */
+function remainingText(net: string): string {
+  const m = money(net);
+  if (compare(m, ZERO) < 0) return `${formatMoney(negate(m))} in its favour`;
+  return compare(m, ZERO) === 0 ? 'A balance' : `The remaining ${formatMoney(m)}`;
+}
 
 export const metadata = { title: 'Sales channels (walk-in, Grab, Foodpanda) — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -106,12 +116,14 @@ export default async function SalesChannelsSettingsPage({
     );
   }
 
-  const [channels, accounts, walletNames, canSetPlatformCode] = await Promise.all([
+  const moveRequestId = crypto.randomUUID(); // T-606 S4: minted per render, so a second press of "Move to Channel receivable" is a no-op
+  const [channels, accounts, walletNames, canSetPlatformCode, canMoveReceivable] = await Promise.all([
     channelsForStore(actor, storeId),
     receivableOptions(actor),
     moneyAccountNames(actor),
     // T-511 S2b: admin only, at THIS store. Presentation: the domain function is the gate.
     canEditPlatformCode(actor, storeId),
+    canMoveChannelReceivable(actor),
   ]);
 
   const active = channels.filter((c) => c.isActive);
@@ -145,7 +157,7 @@ export default async function SalesChannelsSettingsPage({
       <div className="space-y-8">
         <div className="space-y-4">
           {active.map((c) => (
-            <ChannelBand key={c.id} channel={c} storeId={storeId} accounts={accounts} walletNames={walletNames} sp={sp} actorId={actor.personId} canSetPlatformCode={canSetPlatformCode} />
+            <ChannelBand key={c.id} channel={c} storeId={storeId} accounts={accounts} walletNames={walletNames} sp={sp} actorId={actor.personId} canSetPlatformCode={canSetPlatformCode} canMoveReceivable={canMoveReceivable} moveRequestId={moveRequestId} />
           ))}
         </div>
 
@@ -227,6 +239,8 @@ function ChannelBand({
   sp,
   actorId,
   canSetPlatformCode,
+  canMoveReceivable,
+  moveRequestId,
 }: {
   channel: SalesChannelAdminRow;
   storeId: string;
@@ -235,6 +249,8 @@ function ChannelBand({
   sp: Typed;
   actorId: string;
   canSetPlatformCode: boolean;
+  canMoveReceivable: boolean;
+  moveRequestId: string;
 }) {
   const wallet = channel.destinationMoneyAccountId ? walletNames.get(channel.destinationMoneyAccountId) : null;
   const receivable = accounts.find((a) => a.code === channel.receivableAccountCode);
@@ -255,6 +271,28 @@ function ChannelBand({
           {settlesLater ? (
             <>
               <p>Owed by the platform until it pays out. Receivable account: <strong>{receivable ? `${receivable.code} · ${receivable.name}` : (channel.receivableAccountCode ?? 'not set')}</strong>.</p>
+              {channel.platform && channel.receivableAccountCode !== PLATFORM_RECEIVABLE_CODE && (
+                <p className="text-neutral-600 dark:text-neutral-400">
+                  A delivery platform&apos;s sales must go to {PLATFORM_RECEIVABLE_CODE}, which payouts and platform files read. This channel uses {channel.receivableAccountCode ?? 'no account'}.
+                  {canMoveReceivable ? ' Move it, with whatever is owed on it, to Channel receivable.' : ' An admin can move it to Channel receivable.'}
+                </p>
+              )}
+              {channel.platform && channel.receivableAccountCode === PLATFORM_RECEIVABLE_CODE && channel.offAccountBalance !== null && (
+                <p className="text-neutral-600 dark:text-neutral-400">
+                  {remainingText(channel.offAccountBalance)} is still on another account, so approving a platform file or booking a charge is blocked.
+                  {canMoveReceivable ? ' Move it to Channel receivable.' : ' An admin can move it to Channel receivable.'}
+                </p>
+              )}
+              {channel.platform && (channel.receivableAccountCode !== PLATFORM_RECEIVABLE_CODE || channel.offAccountBalance !== null) && canMoveReceivable && (
+                <form action={moveChannelReceivableAction} className="pt-1">
+                  <input type="hidden" name="storeId" value={storeId} />
+                  <input type="hidden" name="channelId" value={channel.id} />
+                  <input type="hidden" name="requestId" value={moveRequestId} />
+                  <Button type="submit" variant="secondary">
+                    Move to Channel receivable
+                  </Button>
+                </form>
+              )}
               <p className="text-neutral-600 dark:text-neutral-400">
                 Payout wallet:{' '}
                 {wallet ? (
@@ -443,26 +481,39 @@ function ChannelFields({
       </fieldset>
 
       <FormGrid>
-        <Field
-          label={
-            <span className="text-neutral-600 dark:text-neutral-400">
-              Receivable account <span className="text-neutral-600 dark:text-neutral-400">(required when it settles later)</span>
-            </span>
-          }
-        >
-          <Select
-            name="receivableAccountCode"
-            defaultValue={channel?.receivableAccountCode ?? ''}
-            className="mt-1 w-full"
+        {channel?.platform ? (
+          // T-606: a delivery platform's receivable is fixed - shown, not chosen. The hidden value is what the save carries (the domain refuses anything else).
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Receivable account</span>}>
+            <input type="hidden" name="receivableAccountCode" value={PLATFORM_RECEIVABLE_CODE} />
+            <p className="mt-1">
+              <strong>
+                {PLATFORM_RECEIVABLE_CODE} · {platformReceivableOptions(accounts)[0]?.name ?? 'Channel receivable'}
+              </strong>{' '}
+              <span className="text-neutral-600 dark:text-neutral-400">(fixed for a delivery platform)</span>
+            </p>
+          </Field>
+        ) : (
+          <Field
+            label={
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Receivable account <span className="text-neutral-600 dark:text-neutral-400">(required when it settles later)</span>
+              </span>
+            }
           >
-            <option value="">None (only when it reaches the till)</option>
-            {accounts.map((a) => (
-              <option key={a.code} value={a.code}>
-                {a.code} · {a.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+            <Select
+              name="receivableAccountCode"
+              defaultValue={channel?.receivableAccountCode ?? ''}
+              className="mt-1 w-full"
+            >
+              <option value="">None (only when it reaches the till)</option>
+              {accounts.map((a) => (
+                <option key={a.code} value={a.code}>
+                  {a.code} · {a.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </FormGrid>
 
       <fieldset className="space-y-2">

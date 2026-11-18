@@ -170,6 +170,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('platform_sales.corrected', 'money', 'high', 'store', 'sales_day_platform_corrections', 'T-511'),
   // T-511 S6c: a platform charge with no sales day was booked (Dr 6400 fee + VAT / Cr 1220 that channel); entity = the channel_period_charges row (dotted: new).
   def('channel_charge.posted', 'money', 'high', 'store', 'channel_period_charges', 'T-511'),
+  // T-606 S4: an admin moves a delivery-platform channel's balance and setting to the channel receivable (dotted: new).
+  def('sales_channel.receivable_moved', 'money', 'high', 'store', 'sales_channels', 'T-606'),
   // T-512 (T-511 S5c): an admin changed a business rule (value, from-date, reason). Org scope: a rule is the organisation's, never a store's (dotted: new).
   def('business_rule.changed', 'settings', 'high', 'org', 'business_rule_values', 'T-512', ADMIN),
   // T-455 S2: a cashier's moves on the customer lobby line (park a walk-in, call, seat, remove). Payloads carry code, size, stand and session id - never a name or phone.
