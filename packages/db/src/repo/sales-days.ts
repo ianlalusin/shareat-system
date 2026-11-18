@@ -326,6 +326,31 @@ export async function channelByPlatformCode(
   return r ? { id: String(r.id), name: String(r.name), storeId: String(r.store_id), storeName: String(r.store_name), isActive: Boolean(r.is_active) } : null;
 }
 
+/** T-592: another ACTIVE channel at this store already on this platform, only to WORD the refusal. The unique index
+ *  `sales_channels_store_platform_active_key` is the authority, including for a race this read cannot see. */
+export async function activeChannelOnPlatformAtStore(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  platform: 'grab' | 'foodpanda',
+  excludeChannelId: string,
+): Promise<{ id: string; name: string } | null> {
+  const [row] = await tx
+    .select({ id: salesChannels.id, name: salesChannels.name })
+    .from(salesChannels)
+    .where(
+      and(
+        eq(salesChannels.orgId, orgId),
+        eq(salesChannels.storeId, storeId),
+        eq(salesChannels.platform, platform),
+        eq(salesChannels.isActive, true),
+        ne(salesChannels.id, excludeChannelId),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
 /** T-511 S2b: the only writer of `platform` / `platform_store_code`. Both set or both null (the pair CHECK enforces it). */
 export async function setChannelPlatformCode(
   tx: Tx,

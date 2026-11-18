@@ -11,9 +11,7 @@
 import { revalidatePath } from 'next/cache';
 import {
   createSalesChannel,
-  saveStoreChannelSettlement,
   setSalesChannelActive,
-  setSalesChannelBankHints,
   setSalesChannelPlatformCode,
   updateSalesChannel,
 } from '@shareat/domain';
@@ -22,7 +20,7 @@ import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
-import { BANK_HINTS_EDIT, SALES_CHANNEL_EDIT, STORE_SETTLEMENT_EDIT } from './typed-forms';
+import { SALES_CHANNEL_EDIT } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -106,61 +104,6 @@ export async function updateSalesChannelAction(fd: FormData): Promise<void> {
   return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { ok: `Saved. Anything already recorded against this channel is unaffected.` });
 }
 
-function csv(fd: FormData, key: string): string[] {
-  return str(fd, key)
-    .split(',')
-    .map((v) => v.trim())
-    .filter(Boolean);
-}
-
-/**
- * T-564: the store's settlement wiring (store key, labels, file hints, email opt-in). The domain function is the gate, the key rules,
- * the "key cannot change" refusal and the audit row; nothing here re-implements any of it. STORED, not yet read by intake.
- */
-export async function saveStoreSettlementAction(fd: FormData): Promise<void> {
-  const actor = await requireActor('/settings/sales-channels');
-  const storeId = str(fd, 'storeId');
-  let wrote = false;
-  try {
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      saveStoreChannelSettlement(tx, actor, {
-        storeId,
-        storeKey: str(fd, 'storeKey'),
-        matchLabels: csv(fd, 'matchLabels'),
-        fileHints: csv(fd, 'fileHints'),
-        wastageEmailIngestEnabled: str(fd, 'wastageEmailIngestEnabled') === 'true',
-      }),
-    );
-    wrote = result.wrote;
-  } catch (err) {
-    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err), typed: keepTyping(fd, STORE_SETTLEMENT_EDIT, storeId, { actorId: actor.personId }) });
-  }
-  revalidatePath('/settings/sales-channels');
-  revalidatePath('/channel-settlements');
-  return await redirectWithFlash('/settings/sales-channels', { store: storeId }, {
-    ok: wrote ? 'Settlement wiring saved.' : 'Nothing changed: that is already the saved wiring.',
-  });
-}
-
-/** T-564: a channel's bank hints, in their own small form so the shared edit form (and its rules) stay as they were. */
-export async function setBankHintsAction(fd: FormData): Promise<void> {
-  const actor = await requireActor('/settings/sales-channels');
-  const storeId = str(fd, 'storeId');
-  let wrote = false;
-  try {
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      setSalesChannelBankHints(tx, actor, { channelId: str(fd, 'channelId'), bankHints: csv(fd, 'bankHints') }),
-    );
-    wrote = result.wrote;
-  } catch (err) {
-    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err), typed: keepTyping(fd, BANK_HINTS_EDIT, str(fd, 'channelId'), { actorId: actor.personId }) });
-  }
-  revalidatePath('/settings/sales-channels');
-  return await redirectWithFlash('/settings/sales-channels', { store: storeId }, {
-    ok: wrote ? 'Bank hints saved.' : 'Nothing changed: those are already the saved bank hints.',
-  });
-}
-
 export async function setSalesChannelActiveAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/settings/sales-channels');
   const storeId = str(fd, 'storeId');
@@ -184,28 +127,29 @@ export async function setSalesChannelActiveAction(fd: FormData): Promise<void> {
 }
 
 /**
- * T-511 S2b: the separate admin-only "Platform and store code" form. It is not the shared edit form (a manager posts that one),
- * and nothing here reads platform or code from it. A blank platform and a blank code clear the pair; the domain function
- * judges every box after its own gate, so a forged platform value is refused there, not here.
+ * T-511 S2b / T-592: the separate admin-only store-code form. It is not the shared edit form (a manager posts that one),
+ * and nothing here reads platform or code from it. The form sends the platform as a hidden box (known) or a radio pair
+ * (not chosen yet); a blank code with a known platform clears the pair. The domain function judges every box after its
+ * own gate, so a forged platform value, or a code on a daily channel, is refused there, not here.
  */
 export async function setPlatformCodeAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/settings/sales-channels');
   const storeId = str(fd, 'storeId');
+  const code = str(fd, 'code') || null;
+  // T-592 R3: a blank code means "remove", so the hidden platform box is dropped with it (the domain refuses a lone platform).
+  const platform = code ? ((str(fd, 'platform') || null) as 'grab' | 'foodpanda' | null) : null;
   let wrote = false;
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      setSalesChannelPlatformCode(tx, actor, {
-        channelId: str(fd, 'channelId'),
-        platform: (str(fd, 'platform') || null) as 'grab' | 'foodpanda' | null,
-        code: str(fd, 'code') || null,
-      }),
+      setSalesChannelPlatformCode(tx, actor, { channelId: str(fd, 'channelId'), platform, code }),
     );
     wrote = result.wrote;
   } catch (err) {
     return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath('/settings/sales-channels');
+  const saved = platform === 'grab' ? 'Grab store ID saved.' : 'Foodpanda store code saved.';
   return await redirectWithFlash('/settings/sales-channels', { store: storeId }, {
-    ok: wrote ? 'Platform and store code saved.' : 'Nothing changed: that is already the saved platform and code.',
+    ok: wrote ? (code ? saved : 'Store code removed.') : 'Nothing changed: that is already the saved store code.',
   });
 }

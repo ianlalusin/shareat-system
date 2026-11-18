@@ -78,8 +78,8 @@ describe('T-511 S2b - settings/sales-channels/actions.ts: setPlatformCodeAction'
     expect(update).not.toMatch(/platform/i);
     expect(update).not.toMatch(/'code'/);
     const typed = read('app/settings/sales-channels/typed-forms.ts');
-    // T-564 added two typed forms for its own EditableRecords (settlement wiring, bank names); the platform CheckedForm still has none.
-    expect(count(typed, 'defineTypedForm('), 'one typed form for the shared edit + the two T-564 records, none for the platform CheckedForm').toBe(3);
+    // T-592 R4 removed the T-564 wiring and bank-names records; the one typed form left is the shared edit, and the platform CheckedForm has none.
+    expect(count(typed, 'defineTypedForm('), 'one typed form for the shared edit, none for the platform CheckedForm').toBe(1);
     expect(typed).not.toMatch(/platform|'code'/i);
     expect(typed).not.toMatch(/platform|'code'/i);
   });
@@ -94,18 +94,20 @@ describe('T-511 S2b - settings/sales-channels/page.tsx: the Platform and store c
   const text = read('app/settings/sales-channels/page.tsx');
   const pageAndLib = `${text}\n${read('app/settings/sales-channels/lib.ts')}`;
 
-  it('has a section titled "Platform and store code" that is a CheckedForm over SETTINGS_PLATFORM_CODE_RULES posting to setPlatformCodeAction', () => {
-    expect(text).toContain('Platform and store code');
+  it('has a store-code form that is a CheckedForm over SETTINGS_PLATFORM_CODE_RULES posting to setPlatformCodeAction, labelled in the platform words (T-592)', () => {
+    expect(text).toContain('Foodpanda store code');
+    expect(text).toContain('Grab store ID');
     expect(text).toMatch(/<CheckedForm\b[^>]*\brules=\{SETTINGS_PLATFORM_CODE_RULES\}/);
     expect(text).toMatch(/\baction=\{setPlatformCodeAction\}/);
     expect(text).toMatch(/import\s*\{[^}]*SETTINGS_PLATFORM_CODE_RULES[^}]*\}\s*from\s*'@shareat\/domain\/field-rules'/);
   });
 
-  it('its two controls spread nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.platform / .code) inside a Field with the rule (live-check guard G3)', () => {
-    expect(text).toContain('nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.platform)');
+  it('its code box spreads nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.code) inside a Field with the rule (live-check guard G3); the platform is a hidden box or a radio pair, never a select (T-592 R3)', () => {
     expect(text).toContain('nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.code)');
-    expect(text).toMatch(/rule=\{SETTINGS_PLATFORM_CODE_RULES\.platform\}/);
     expect(text).toMatch(/rule=\{SETTINGS_PLATFORM_CODE_RULES\.code\}/);
+    expect(text).toMatch(/<input type="hidden" name="platform"/);
+    expect(text).toMatch(/<Radio field="platform"/);
+    expect(text).not.toMatch(/<Select[^>]*name="platform"|nativeAttrs\(SETTINGS_PLATFORM_CODE_RULES\.platform\)/);
   });
 
   it('is hidden by can(): imports can from @shareat/auth and asks edit_platform_store_code with the channel\'s store', () => {
@@ -113,9 +115,9 @@ describe('T-511 S2b - settings/sales-channels/page.tsx: the Platform and store c
     expect(pageAndLib, 'asks edit_platform_store_code with a store').toMatch(/can\([^)]*'edit_platform_store_code'[^)]*storeId/s);
   });
 
-  it('platform stays out of every EditableRecord: three records now (shared edit form + T-564 settlement wiring + T-564 bank names), none names platform or the code box', () => {
-    // T-564 added two differently-purposed records (store settlement wiring, a channel's bank names); the intent is unchanged: no platform control in any EditableRecord.
-    expect(count(text, '<EditableRecord')).toBe(3);
+  it('platform stays out of every EditableRecord: one record (the shared edit form), which names neither platform nor the code box', () => {
+    // T-592 R4 removed the two T-564 records (settlement wiring, bank names); the intent is unchanged: no platform control in any EditableRecord.
+    expect(count(text, '<EditableRecord')).toBe(1);
     const blocks: string[] = [];
     for (let i = text.indexOf('<EditableRecord'); i !== -1; i = text.indexOf('<EditableRecord', i + 1)) {
       const end = text.indexOf('</EditableRecord>', i);
@@ -124,7 +126,7 @@ describe('T-511 S2b - settings/sales-channels/page.tsx: the Platform and store c
     }
     for (const b of blocks) expect(b).not.toMatch(/SETTINGS_PLATFORM_CODE_RULES|name="platform"|name="code"/);
     const actions = blocks.map((b) => /action=\{(\w+)\}/.exec(b)?.[1]).sort();
-    expect(actions).toEqual(['saveStoreSettlementAction', 'setBankHintsAction', 'updateSalesChannelAction']);
+    expect(actions).toEqual(['updateSalesChannelAction']);
   });
 
   it('keeps the platform inputs out of the add-a-channel form too', () => {

@@ -97,6 +97,11 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   sales_channels_org_id_store_id_name_unique:
     'This store already has a sales channel with that name. Names are compared ignoring case and ' +
     'spacing, so "Foodpanda" and "foodpanda " would be the same channel twice.',
+  // T-592 (0261): the database's last word on a store code. The domain refuses first, in its own sentences.
+  sales_channels_platform_only_settle_later_check:
+    'A channel that reaches the till has no store code. Only a channel that settles later (Foodpanda, Grab) gets one.',
+  sales_channels_store_platform_active_key:
+    'This store already has an active channel on that platform. A store can have only one.',
   // T-378 R1 — no default unit or kind: a blank or foreign value reaches the CHECK, which speaks.
   items_base_unit_check: 'Choose the unit this item is measured in: pcs, kg, g, ltr, ml or roll.',
   item_requests_base_unit_check: 'Choose the unit this item is measured in: pcs, kg, g, ltr, ml or roll.',

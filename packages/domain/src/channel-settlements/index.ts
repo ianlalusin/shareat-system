@@ -20,7 +20,6 @@ import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_RECORD_RULES, SETTLEMENT_DIFFERENCE_RULES } from '../field-rules/channel-settlements';
 import { refuse } from '../shared/refusal';
-import { settlementWiringWarnings } from '../store-channel-settlement';
 import { loadRuleBook } from '../business-rules/rules';
 import type { BusinessRuleKey } from '../business-rules/registry';
 import type { RuleBook } from '../business-rules/book';
@@ -155,9 +154,8 @@ export interface SettlementPreview {
   settlementGain: string;
   tolerance: string;
   destinationAccountName: string | null;
-  /** T-564 — the store's settlement key (null when none saved) and what is missing from its wiring, in plain words. Warnings NEVER block a post and are not in `blockers`. */
+  /** T-564 — the store's settlement key (null when none saved). T-592: the wiring warning is gone; it said a missing key blocked matching, and matching reads the channel's store code. */
   storeKey: string | null;
-  wiringWarnings: string[];
   /**
    * Why this cannot post as entered. **Empty means it will post.** The first entry is the exact
    * sentence `recordChannelSettlement` would throw, because they come from the same function.
@@ -674,7 +672,6 @@ export async function previewChannelSettlement(
       tolerance: c.tolerance,
       destinationAccountName: ctx.destinationName,
       storeKey: wiring?.storeKey ?? null,
-      wiringWarnings: settlementWiringWarnings(wiring),
       blockers: [...ctx.configBlockers, ...ctx.chargeBlockers, ...figureBlockers, ...legBlockers, ...c.blockers],
       needsAcknowledgement: c.needsAcknowledgement,
       difference: c.difference,

@@ -10,7 +10,7 @@ import { sql as dsql } from 'drizzle-orm';
  *
  * Stored, not yet read by intake: store key, match labels, file hints, wastage-email opt-in and per-channel bank hints. What this
  * file pins is the part that can be wrong today: the key is unique and immutable, another org sees nothing, a change leaves an
- * audit row, and the settlement preview carries plain-word wiring warnings WITHOUT ever blocking a post.
+ * audit row, and the settlement preview carries the store key WITHOUT ever blocking a post (T-592 deleted its wrong wiring warnings).
  */
 config({ path: '.env.local' });
 
@@ -328,39 +328,28 @@ describe('two first saves racing for one store cannot record a key that was not 
   });
 });
 
-describe('the settlement preview carries wiring warnings and never blocks on them', () => {
-  it('no wiring row: one plain warning about the missing store key; the post is not blocked', async () => {
+describe('the settlement preview carries the store key and never blocks on wiring', () => {
+  it('no wiring row: no store key, and the post is not blocked on it', async () => {
     const f = await fixture('warn-none');
     const p = await previewOf(f);
     expect(p.storeKey).toBeNull();
-    expect(p.wiringWarnings).toHaveLength(1);
-    expect(p.wiringWarnings[0]).toMatch(/store key/i);
     expect(p.blockers.join(' ')).not.toMatch(/store key/i);
   });
 
-  it('key saved but no labels and no file hints: a different warning, still not a blocker', async () => {
+  it('key saved: the preview shows it (T-592: the old wiring warnings are gone)', async () => {
     const f = await fixture('warn-bare');
     await asOrg(f.orgId, (tx) => saveStoreChannelSettlement(tx, f.manager, { storeId: f.storeId, storeKey: 'malvar' }));
     const p = await previewOf(f);
     expect(p.storeKey).toBe('malvar');
-    expect(p.wiringWarnings).toHaveLength(1);
-    expect(p.wiringWarnings[0]).toMatch(/label|file hint|nothing to match/i);
-    expect(p.wiringWarnings[0]).not.toMatch(/store key/i);
+    expect(p).not.toHaveProperty('wiringWarnings');
   });
 
-  it('fully wired: no warnings', async () => {
-    const f = await fixture('warn-ok');
-    await asOrg(f.orgId, (tx) => saveStoreChannelSettlement(tx, f.manager, { storeId: f.storeId, storeKey: 'malvar', matchLabels: ['Malvar'] }));
-    const p = await previewOf(f);
-    expect(p.wiringWarnings).toEqual([]);
-  });
-
-  it('⭐ nothing but the two new fields differs between an unwired and a wired preview (blockers and every figure identical)', async () => {
+  it('⭐ nothing but the store key differs between an unwired and a wired preview (blockers and every figure identical)', async () => {
     const f = await fixture('unchanged');
     const before = await previewOf(f);
     await asOrg(f.orgId, (tx) => saveStoreChannelSettlement(tx, f.manager, { storeId: f.storeId, storeKey: 'malvar', matchLabels: ['Malvar'] }));
     const after = await previewOf(f);
-    const strip = ({ storeKey: _k, wiringWarnings: _w, ...rest }: typeof before) => rest;
+    const strip = ({ storeKey: _k, ...rest }: typeof before) => rest;
     expect(strip(after)).toEqual(strip(before));
   });
 });
