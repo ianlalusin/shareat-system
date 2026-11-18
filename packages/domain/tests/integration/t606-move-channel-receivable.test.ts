@@ -176,3 +176,59 @@ describe('T-606 S4 - a balance that comes back after the move', () => {
     await expect(move(f, { who: f.managerA, channelId: crypto.randomUUID() })).rejects.toThrow(AuthorizationError);
   });
 });
+
+describe('T-606 S4 - what the move leaves alone and what it adds to', () => {
+  const postRaw = async (f: Fx, lines: { accountCode: string; storeId: string; debit?: string; credit?: string; partyType?: 'channel' | 'customer'; partyId?: string }[]) => {
+    const { postEntry } = await import('../../src/ledger/post-entry');
+    await asOrg(f.orgId, (tx) =>
+      postEntry(tx, { orgId: f.orgId, entryDate: '2026-10-12', sourceType: 'sales_day', sourceId: f.dayId, idempotencyKey: `s4-raw:${uid('k')}`, memo: 'Raw posting (test)', postedBy: f.admin.personId, lines }),
+    );
+  };
+
+  it("a customer's line on 1210 is not moved: only the channel's balance goes, the customer's 700.00 stays on 1210 - Mutant: sweep by account instead of by party -> the customer's balance moves too, red", async () => {
+    const f = await fx(sql, 's4-customer', { staff: '10000.00', file: '10000.00', receivable: '1210' });
+    await postRaw(f, [
+      { accountCode: '1210', storeId: f.storeA, debit: '700.00', partyType: 'customer', partyId: crypto.randomUUID() },
+      { accountCode: '4150', storeId: f.storeA, credit: '700.00' },
+    ]);
+    const r = await move(f);
+    expect(r).toMatchObject({ moved: true, total: '10000.00' });
+    const [e] = await reclassEntries(f);
+    expect(lineText(await linesOf(sql, e!.id))).toEqual(['Cr 1210 10000.00', 'Dr 1220 10000.00']);
+    expect(Number(await netDebit(sql, f.orgId, '1210')), "the customer's debt is untouched").toBe(700);
+    expect(Number(await netDebit(sql, f.orgId, '1220'))).toBe(10000);
+  });
+
+  it('a credit already on 1220 is added to, not overwritten: 1220 ends at the old 1210 balance plus what it already held (10,000.00 - 300.00 = 9,700.00) - Mutant: read 1220 itself as a balance to move -> red', async () => {
+    const f = await fx(sql, 's4-existing', { staff: '10000.00', file: '10000.00', receivable: '1210' });
+    await postRaw(f, [
+      { accountCode: '4150', storeId: f.storeA, debit: '300.00' },
+      { accountCode: '1220', storeId: f.storeA, credit: '300.00', partyType: 'channel', partyId: f.channelId },
+    ]);
+    expect(Number(await netDebit(sql, f.orgId, '1220')), 'control: 1220 already holds a 300.00 credit').toBe(-300);
+    await move(f);
+    const [e] = await reclassEntries(f);
+    expect(lineText(await linesOf(sql, e!.id))).toEqual(['Cr 1210 10000.00', 'Dr 1220 10000.00']);
+    expect(Number(await netDebit(sql, f.orgId, '1220'))).toBe(9700);
+    expect(Number(await netDebit(sql, f.orgId, '1210'))).toBe(0);
+  });
+
+  it('a channel with balances at two stores posts one entry with one balanced Dr 1220 / Cr 1210 pair per store, each carrying its own store - Mutant: use only the first store -> the second store keeps its balance on 1210, red', async () => {
+    const f = await fx(sql, 's4-twostores', { staff: '10000.00', file: '10000.00', receivable: '1210' });
+    await postRaw(f, [
+      { accountCode: '1210', storeId: f.storeB, debit: '2500.00', partyType: 'channel', partyId: f.channelId },
+      { accountCode: '4150', storeId: f.storeB, credit: '2500.00' },
+    ]);
+    const r = await move(f);
+    expect(r.total).toBe('12500.00');
+    const entries = await reclassEntries(f);
+    expect(entries).toHaveLength(1);
+    const lines = await linesOf(sql, entries[0]!.id);
+    expect(lines).toHaveLength(4);
+    for (const [store, amount] of [[f.storeA, '10000.00'], [f.storeB, '2500.00']] as const) {
+      expect(lineText(lines.filter((l) => l.store_id === store))).toEqual([`Cr 1210 ${amount}`, `Dr 1220 ${amount}`]);
+    }
+    expect(Number(await netDebit(sql, f.orgId, '1210'))).toBe(0);
+    expect(Number(await netDebit(sql, f.orgId, '1220'))).toBe(12500);
+  });
+});
