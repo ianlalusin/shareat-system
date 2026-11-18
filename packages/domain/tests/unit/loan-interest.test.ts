@@ -3,6 +3,7 @@ import { money } from '@shareat/core/money';
 import {
   accruedInterest,
   dailyRate,
+  interestDue,
   scheduledInstalment,
   splitPayment,
 } from '../../src/loans/interest';
@@ -260,5 +261,17 @@ describe('accruedInterest — exact (DEF-841)', () => {
     for (const bad of ['', 'abc', '-1', '1e2', '1,5', 'NaN']) {
       expect(() => run({ base: '100.00', rate: bad, period: 'day', days: 1 })).toThrow();
     }
+  });
+});
+
+describe('interestDue (DEF-896) - what is still owed after interest-only part-payments', () => {
+  it('is the accrued figure less what was already paid in the run', () => {
+    expect(interestDue(money('266.67'), money('100.00'))).toBe('166.67');
+    expect(interestDue(money('133.33'), money('0'))).toBe('133.33');
+  });
+
+  it('floors at zero - never a negative amount owed', () => {
+    expect(interestDue(money('100.00'), money('100.00'))).toBe('0.00');
+    expect(interestDue(money('50.00'), money('133.33'))).toBe('0.00');
   });
 });

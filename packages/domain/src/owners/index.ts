@@ -13,7 +13,7 @@
  * stored copy of a subtraction, plus a third copy in `EquityLedgerEntry` (DEF-072). Every figure
  * here is summed from the ledger by party.
  */
-import { moneyAccountsRepo, ownersRepo, type Tx } from '@shareat/db';
+import { journalRepo, moneyAccountsRepo, ownersRepo, type Tx } from '@shareat/db';
 import type { DrawingLimitPeriod, PersonalExpenseTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, compareDecimal, decimal, isZero, money, negate, subtract, ZERO, type Decimal, type Money } from '@shareat/core/money';
@@ -179,6 +179,13 @@ export async function recordContribution(
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
     if (!account) throw new Error('recordContribution: that money account does not exist.');
+    // DEF-874: a retired account is not offered by any picker; money put there is stranded (transfers refuse it too).
+    if (!account.isActive) {
+      throw refuse(
+        `recordContribution: "${account.name}" is retired and cannot receive a contribution.`,
+        `"${account.name}" is retired. Choose an account that is still in use.`,
+      );
+    }
     // ⛔ Money lands in ONE store, like every other movement here (rows 152–153).
     if (account.storeId !== owner.storeId) {
       throw new Error(
@@ -331,6 +338,13 @@ export async function recordDrawing(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
     if (!account) throw new Error('recordDrawing: that money account does not exist.');
+    // DEF-874: as above - a drawing from a retired account is refused, as transfers refuse one.
+    if (!account.isActive) {
+      throw refuse(
+        `recordDrawing: "${account.name}" is retired and cannot be drawn from.`,
+        `"${account.name}" is retired. Choose an account that is still in use.`,
+      );
+    }
     if (account.storeId !== owner.storeId) {
       throw new Error('recordDrawing: that account belongs to another store.');
     }
@@ -410,11 +424,22 @@ export async function repayFromOwner(
     if (!owner) throw new Error(`repayFromOwner: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
     const requestId = requireRequestId('repayFromOwner', input.requestId);
+    // DEF-871: lock BEFORE the receivable is read, as recordDrawing does - two concurrent settlements must not both pass the ceiling.
+    await ownersRepo.lockOwnerForUpdate(trx, actor.orgId, owner.id);
     const parsed = parseMoneyInput(input.amount, 'repayFromOwner: the amount', 'The amount settled');
     await assertWithinReceivable(trx, actor.orgId, owner.id, parsed, 'repayFromOwner');
+    // DEF-872: a closed month stays agreed, for settlements as for drawings.
+    await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'repayFromOwner');
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
     if (!account) throw new Error('repayFromOwner: that money account does not exist.');
+    // DEF-874: and cash handed back must not land in a retired account.
+    if (!account.isActive) {
+      throw refuse(
+        `repayFromOwner: "${account.name}" is retired and cannot receive a repayment.`,
+        `"${account.name}" is retired. Choose an account that is still in use.`,
+      );
+    }
     if (account.storeId !== owner.storeId) {
       throw new Error('repayFromOwner: that account belongs to another store.');
     }
@@ -484,8 +509,10 @@ export async function recoverFromPay(
     if (!owner) throw new Error(`recoverFromPay: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
     const requestId = requireRequestId('recoverFromPay', input.requestId);
+    await ownersRepo.lockOwnerForUpdate(trx, actor.orgId, owner.id); // DEF-871
     const parsed = parseMoneyInput(input.amount, 'recoverFromPay: the amount', 'The amount settled');
     await assertWithinReceivable(trx, actor.orgId, owner.id, parsed, 'recoverFromPay');
+    await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'recoverFromPay'); // DEF-872
 
     // ⚠️ The best check available until payroll exists: this person must actually work here. It does
     // not prove they are PAID — nothing can, yet — and the screens say so rather than implying it.
@@ -570,6 +597,7 @@ export async function writeOffReceivable(
     // is an approval, and the person who took it should not be the one who forgives it.
     await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
     const requestId = requireRequestId('writeOffReceivable', input.requestId);
+    await ownersRepo.lockOwnerForUpdate(trx, actor.orgId, owner.id); // DEF-871
 
     const reason = input.reason.trim();
     if (!reason) {
@@ -787,6 +815,18 @@ export async function closeDrawingMonth(
   return run(tx);
 }
 
+/** The source types an owner posting carries (`sourceId` = the owner) - DEF-873. */
+const OWNER_ENTRY_SOURCE_TYPES = new Set([
+  'capital_contribution',
+  'drawing',
+  'owner_repayment',
+  'owner_pay_recovery',
+  'owner_writeoff',
+  'drawing_close_adjustment',
+]);
+/** The ones whose original write needs `approve_expense` rather than `transfer_funds`. */
+const APPROVAL_ENTRY_SOURCE_TYPES = new Set(['owner_pay_recovery', 'owner_writeoff', 'drawing_close_adjustment']);
+
 /** ⚠️ Reversal, not deletion — the original and its mirror both stay on the ledger. */
 export async function reverseOwnerEntry(
   tx: Tx,
@@ -797,6 +837,26 @@ export async function reverseOwnerEntry(
     const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
     if (!owner) throw new Error(`reverseOwnerEntry: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
+    // DEF-873: `reverseEntry` finds the entry by id alone. Bind it to THIS owner in THIS org (DEF-534's pattern), read only
+    // after the gate, or a holder at this store could reverse any posting in the system by naming its id.
+    const entry = await journalRepo.findEntryById(trx, input.entryId);
+    if (
+      !entry ||
+      entry.orgId !== actor.orgId ||
+      !OWNER_ENTRY_SOURCE_TYPES.has(entry.sourceType) ||
+      entry.sourceId !== owner.id
+    ) {
+      throw refuse(
+        `reverseOwnerEntry: entry ${input.entryId} is not an owner posting for owner ${owner.id}.`,
+        'That entry does not belong to this owner.',
+      );
+    }
+    // Recovering, writing off and closing needed `approve_expense` to post, so reversing one needs it too.
+    if (APPROVAL_ENTRY_SOURCE_TYPES.has(entry.sourceType)) {
+      await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
+    }
+    // The reversal posts on the original's date (no `reversalDate`): a closed month stays agreed, for all six types.
+    await assertMonthOpen(trx, actor.orgId, owner.id, String(entry.entryDate).slice(0, 10), 'reverseOwnerEntry');
     const reason = input.reason.trim();
     if (!reason) throw new Error('reverseOwnerEntry: say why this is being reversed.');
     const result = await reverseEntry(trx, {
