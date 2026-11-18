@@ -246,6 +246,13 @@ export async function recordLoanPayment(
     const idempotencyKey = `loan:${loan.id}:payment:${requestId}`;
     const first = await journalRepo.findEntryByIdempotencyKey(trx, actor.orgId, idempotencyKey);
     if (first) {
+      // T-593 audit: a payment that has since been reversed is not a payment to answer with - say so, never hand back a dead entry as the result.
+      if ((await journalRepo.findEntryById(trx, first.id))?.status !== 'posted') {
+        throw refuse(
+          `recordLoanPayment: request ${requestId} names an entry that no longer stands`,
+          'That payment was reversed. Record it again as a new payment.',
+        );
+      }
       const lines = await journalRepo.findLinesForEntryWithAccountCodes(trx, first.id);
       const debitOf = (code: string) =>
         lines
@@ -256,6 +263,7 @@ export async function recordLoanPayment(
       const creditedAccount = lines.some(
         (l) =>
           l.accountCode === account.glAccountCode &&
+          l.storeId === account.storeId &&
           compare(money(l.credit), amount) === 0 &&
           (account.glAccountCode !== '1140' || l.partyId === account.id),
       );
@@ -286,7 +294,7 @@ export async function recordLoanPayment(
 
     // DEF-896 (Ian, 18 Nov: carry it forward): interest runs from the last payment that retired principal, and what interest-only
     // part-payments already covered in that run comes off it - a short payment no longer wipes the interest it left unpaid.
-    const run = await loansRepo.interestRunOf(trx, actor.orgId, loan.id);
+    const run = await loansRepo.interestRunOf(trx, actor.orgId, loan.id, input.on);
     const since = run.since ?? loan.startDate;
     const accrued = accruedInterest({
       outstanding,

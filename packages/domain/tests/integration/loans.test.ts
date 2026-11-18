@@ -673,3 +673,72 @@ describe('DEF-896 - unpaid interest carries', () => {
     expect(second.split.interest).toBe('133.33'); // one day from 05-12, nothing carried
   });
 });
+
+describe('T-593 audit follow-ups - carried interest and the payment replay', () => {
+  async function drawn(hint: string) {
+    const f = await fixture(hint);
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    return f;
+  }
+  const payWith = (f: Fixture, requestId: string, amount: string, on: string, fromMoneyAccountId = f.safe) =>
+    asOrg(f.orgId, (tx) => recordLoanPayment(tx, f.admin, { requestId, loanId: f.loanId, amount, fromMoneyAccountId, on }));
+  const pay = (f: Fixture, amount: string, on: string) => payWith(f, crypto.randomUUID(), amount, on);
+  const sentenceOf = (p: Promise<unknown>) => p.then(() => null, (e: { userMessage?: string }) => e.userMessage ?? null);
+
+  it('a backdated payment does not subtract interest paid AFTER it: 100 on 05-25, then 5,000 on 05-20 charges the full 1,200.00 (9 days), and 05-26 charges what is left, 700.00 - 2,000.00 in all, the 15 days exactly - Mutant: drop the "entry_date <= on" bound -> 1,100.00, red', async () => {
+    const f = await drawn('audit-backdate');
+    const short = await pay(f, '100.00', '2026-05-25');
+    expect(short.split.interest).toBe('100.00'); // all interest, no principal: the run stays open
+    const backdated = await pay(f, '5000.00', '2026-05-20');
+    expect(backdated.split.interest).toBe('1200.00'); // 9 days x 133.33, one rounding; the 05-25 payment had not happened yet as of 05-20
+    expect(backdated.split.principal).toBe('3800.00');
+    const last = await pay(f, '1000.00', '2026-05-26');
+    expect(last.split.interest).toBe('700.00'); // 6 days = 800.00, less the 100.00 paid on 05-25, subtracted ONCE
+    // 100 + 1,200 + 700 = 2,000.00 = 15 days of interest on 200,000 at 2% a month: nothing missed, nothing charged twice
+  });
+
+  it('two short payments in a row are both carried: 100 on 05-12, 100 on 05-13, then 1,000 on 05-14 gives interest 200.00, principal 800.00, outstanding 199,200.00', async () => {
+    const f = await drawn('audit-two-short');
+    expect((await pay(f, '100.00', '2026-05-12')).split.interest).toBe('100.00');
+    expect((await pay(f, '100.00', '2026-05-13')).split.interest).toBe('100.00');
+    const third = await pay(f, '1000.00', '2026-05-14');
+    expect(third.split.interest).toBe('200.00'); // 3 days = 400.00, less 200.00 already paid
+    expect(third.split.principal).toBe('800.00');
+    expect(third.outstanding).toBe('199200.00');
+  });
+
+  it('a payment exactly equal to the interest leaves no rounding behind: 133.33 on 05-12, then 1,000 on 05-13 gives interest 133.34, principal 866.66, outstanding 199,133.34', async () => {
+    const f = await drawn('audit-exact');
+    expect((await pay(f, '133.33', '2026-05-12')).split.interest).toBe('133.33');
+    const next = await pay(f, '1000.00', '2026-05-13');
+    expect(next.split.interest).toBe('133.34'); // 2 days = 266.67 (one rounding), less 133.33
+    expect(next.split.principal).toBe('866.66');
+    expect(next.outstanding).toBe('199133.34');
+  });
+
+  it("a replay that names ANOTHER store's safe (same GL code, same amount) is refused with the different-figures sentence - Mutant: drop the store comparison -> the replay is accepted, red", async () => {
+    const f = await drawn('audit-store');
+    const requestId = crypto.randomUUID();
+    await payWith(f, requestId, '500.00', '2026-05-12');
+    const [other] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${f.orgId}, ${`other-${Date.now()}`}, 'Other store') returning id`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${f.adminId}, ${other!.id})`;
+    const [farSafe] = await sql<{ id: string }[]>`
+      select id from money_accounts where store_id = ${other!.id} and instrument = 'cash' and custodian = 'office' and is_foundation
+    `;
+    expect(await sentenceOf(payWith(f, requestId, '500.00', '2026-05-12', farSafe!.id))).toBe(
+      'This payment was already recorded with different figures. Reload the page and try again.',
+    );
+  });
+
+  it('a replay of a payment that has been reversed is refused with a plain sentence, and nothing new posts - Mutant: drop the status check -> the dead entry is handed back, red', async () => {
+    const f = await drawn('audit-reversed');
+    const requestId = crypto.randomUUID();
+    const first = await payWith(f, requestId, '2355.56', '2026-05-12');
+    await asOrg(f.orgId, (tx) => reverseLoanEntry(tx, f.admin, { loanId: f.loanId, entryId: first.entryId, reason: 'wrong day' }));
+    expect(await sentenceOf(payWith(f, requestId, '2355.56', '2026-05-12'))).toBe('That payment was reversed. Record it again as a new payment.');
+    const [row] = await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${f.orgId} and source_type = 'loan_payment' and source_id = ${f.loanId}`;
+    expect(Number(row!.n)).toBe(2); // the payment and its reversal, nothing more
+  });
+});

@@ -828,14 +828,15 @@ async function twoAtOnce<TA, TB>(orgId: string, opA: (tx: Tx) => Promise<TA>, op
     (value) => ({ status: 'fulfilled', value }) as const,
     (reason) => ({ status: 'rejected', reason }) as const,
   );
-  // Is B waiting on a row lock held by A? Poll the backend list until it is, or B finishes without waiting (no lock).
+  // Is B waiting on A, on the OWNER row (its `select ... from owners ... for update`)? Not "any waiter in the database": B must be blocked BY A's backend,
+  // and the statement it is stuck in must be the owner lock. Poll until it is, or B finishes without waiting (no lock).
   let bWaited = false;
   const deadline = Date.now() + 5000;
   const finished = b.then(() => true);
   while (Date.now() < deadline && !bWaited) {
     const rows = await sql<{ pid: number }[]>`
       select pid from pg_stat_activity
-      where datname = current_database() and pid <> ${aPid} and wait_event_type = 'Lock' and wait_event = any(${['transactionid', 'tuple']})`;
+      where datname = current_database() and wait_event_type = 'Lock' and ${aPid} = any(pg_blocking_pids(pid)) and query ilike '%from owners%' and query ilike '%for update%'`;
     if (rows.length > 0) bWaited = true;
     else if (await Promise.race([finished, new Promise<boolean>((r) => setTimeout(() => r(false), 20))])) break;
   }

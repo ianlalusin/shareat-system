@@ -314,11 +314,14 @@ export async function lastPaymentDate(
  * own start). `paidSince` is the interest (`7200`) the standing payments dated AFTER that day have already covered - the
  * interest-only part-payments. Derived on read from the ledger: nothing is stored, nothing compounds.
  * A reversed payment (status `reversed`) and a reversal entry paid nothing, so neither counts.
+ * T-593 audit: only interest-only payments dated on or before `on` count - a backdated payment must not subtract one made after it (that ₱ would be taken off twice).
  */
 export async function interestRunOf(
   tx: Tx,
   orgId: string,
   loanId: string,
+  /** The date the interest is being worked out for (a payment's own date, or today on the screen): payments dated after it have not happened yet as of `on`. */
+  on: string,
 ): Promise<{ since: string | null; paidSince: Money }> {
   const standing = sql`je.org_id = ${orgId} and je.source_type = ${PAYMENT_SOURCE} and je.source_id::text = ${loanId}
     and je.status not in ('draft', 'reversed') and je.reversal_of_entry_id is null`;
@@ -337,6 +340,7 @@ export async function interestRunOf(
     join journal_lines jl on jl.entry_id = je.id
     join accounts a on a.id = jl.account_id
     where ${standing} and a.code = ${INTEREST_EXPENSE_CODE}
+      and je.entry_date <= ${on}::date
       ${since === null ? sql`` : sql`and je.entry_date > ${since}::date`}
   `)) as unknown as { paid: string }[];
   return { since, paidSince: money(paidRow?.paid ?? '0') };

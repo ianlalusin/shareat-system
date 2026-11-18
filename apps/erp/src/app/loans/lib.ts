@@ -78,7 +78,7 @@ export async function getDetail(orgId: string, id: string): Promise<LoanDetail |
       loansRepo.positionOf(tx, orgId, id),
       loansRepo.paymentsFor(tx, orgId, id),
       loansRepo.lastPaymentDate(tx, orgId, id),
-      loansRepo.interestRunOf(tx, orgId, id),
+      loansRepo.interestRunOf(tx, orgId, id, toBusinessDate()),
     ]);
 
     const today = toBusinessDate();
