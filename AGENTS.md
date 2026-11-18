@@ -91,6 +91,7 @@ opening it. Read them as *requirements*, not as design (bible section 1.2b).
 | What is already broken? | [`docs/DEFECTS-REGISTER.md`](./docs/DEFECTS-REGISTER.md) |
 | Why is it built this way? | `docs/decisions/` (ADRs) and bible §13 (the decision log) |
 | How do the four apps connect? | [`docs/CROSS-APP-MAP.md`](./docs/CROSS-APP-MAP.md) |
+| Where does X live, what depends on it? (code map) | **Read-only for everyone except BOSS.** Main map `C:\Users\ianla\webapps\shareat-map-src\graphify-out\graph.json`; usage and limits in `C:\Users\ianla\webapps\shareat-system-graph\README.md`. Stale or wrong: tell BOSS, never refresh it yourself. Confirm in the real file (bible row 481) |
 | What am I building next? | `docs/plans/` and `docs/tasks/` |
 | I am starting cold on a new machine | [`HANDOFF.md`](./HANDOFF.md) |
 
