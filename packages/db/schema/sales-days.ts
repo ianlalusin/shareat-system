@@ -358,7 +358,8 @@ export const salesDays = pgTable(
     check('sales_days_pos_day_close_link_check', sql`(${t.source} = 'pos_receipts') = (${t.posDayCloseId} is not null)`),
     check('sales_days_source_feed_id_check', sql`(${t.source} = 'pos_v1_day_feed') = (${t.posV1DayFeedId} is not null)`),
     check('sales_days_feed_source_pos_sourced_check', sql`${t.source} <> 'pos_v1_day_feed' or ${t.posSourced}`),
-    check('sales_days_refunds_only_on_feed_days_check', sql`${t.source} = 'pos_v1_day_feed' or ${t.refunds} = 0`),
+    // T-534 S4 (0266): a POS-derived day ('pos_receipts') carries the refunds its Z collected, so the list widened; a typed day still has none. The constraint name is kept.
+    check('sales_days_refunds_only_on_feed_days_check', sql`${t.source} in ('pos_v1_day_feed', 'pos_receipts') or ${t.refunds} = 0`),
     check('sales_days_refunds_non_negative_check', sql`${t.refunds} >= 0`),
     check('sales_days_refunds_finite_check', sql`${t.refunds} > '-Infinity'::numeric and ${t.refunds} < 'Infinity'::numeric`),
     index('sales_days_pos_v1_day_feed_id_idx').on(t.posV1DayFeedId),
