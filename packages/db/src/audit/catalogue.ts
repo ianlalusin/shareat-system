@@ -157,6 +157,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu_daypart.created', 'settings', 'high', 'store', 'menu_dayparts', 'T-510'),
   def('menu_daypart.edited', 'settings', 'high', 'store', 'menu_dayparts', 'T-510'),
   def('menu_daypart.retired', 'settings', 'high', 'store', 'menu_dayparts', 'T-510'),
+  // T-611 S1: an administrator copied one store's menu hours or prices onto another (one row per target store; payload = kind, source store, counts, approver; no personal data). Dotted: new.
+  def('settings.copied', 'settings', 'high', 'store', 'stores', 'T-611'),
   // T-511 S4: one file ingested into the staging tables (nothing is booked); store-scoped to the MATCHED store.
   def('settlement_upload.ingested', 'data', 'normal', 'store', 'settlement_uploads', 'T-511'),
   // T-511 S5b: the review stage. A day rejected / reopened and an admin's loan re-allocation; entity = the staged day line. Nothing here posts.
