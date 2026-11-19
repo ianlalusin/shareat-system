@@ -437,7 +437,31 @@ export async function listTodaysSalesReceipts(tx: Tx, actor: Actor, input: { sto
   await requireStoreScope(tx, actor, input.storeId);
   const since = await posV2Repo.lastDayCloseEnd(tx, actor.orgId, input.storeId);
   // T-601 S2: one query, every existing field plus the table, the till number and the tenders (additive).
-  const rows = await posV2Repo.listReceiptsSinceForList(tx, actor.orgId, input.storeId, since);
+  return receiptsView(tx, actor, input.storeId, await posV2Repo.listReceiptsSinceForList(tx, actor.orgId, input.storeId, since));
+}
+
+/**
+ * T-613 D4 (DEF-937): "Find a receipt" - one receipt by its printed number (<store code>-<till, 2 digits>-<6 digits>; the store code may be left off), among the store's last
+ * `RECEIPT_LOOKUP_DAYS` days, in the SAME shape as the list so the Refund dialog opens on it unchanged. A number that is not found (or is older) answers an empty list, not an error.
+ * Shortcut: the 30-day limit is a constant, Ian's ruling in the task spec; it has no settings screen yet (standing rule: every business value gets a door).
+ */
+export const RECEIPT_LOOKUP_DAYS = 30;
+export async function findSalesReceiptByNo(tx: Tx, actor: Actor, input: { storeId: string; receiptNo: string; now?: Date }) {
+  await requireStoreScope(tx, actor, input.storeId);
+  const parts = String(input.receiptNo ?? '').trim().toUpperCase().split('-');
+  const seq = /^\d{1,6}$/.test(parts.at(-1) ?? '') ? Number(parts.at(-1)) : null;
+  const till = /^\d{1,2}$/.test(parts.at(-2) ?? '') ? Number(parts.at(-2)) : null;
+  const code = parts.slice(0, -2).join('-');
+  const storeCode = ((await posV2Repo.getStoreCode(tx, actor.orgId, input.storeId)) ?? '').toUpperCase();
+  const since = new Date((input.now ?? new Date()).getTime() - RECEIPT_LOOKUP_DAYS * 86_400_000);
+  const rows = seq === null || till === null || (code !== '' && code !== storeCode)
+    ? []
+    : await posV2Repo.listReceiptsSinceForList(tx, actor.orgId, input.storeId, since, { terminalNo: till, terminalSeq: seq });
+  return receiptsView(tx, actor, input.storeId, rows);
+}
+
+async function receiptsView(tx: Tx, actor: Actor, storeId: string, rows: Awaited<ReturnType<typeof posV2Repo.listReceiptsSinceForList>>) {
+  const input = { storeId };
   const storeCode = (await posV2Repo.getStoreCode(tx, actor.orgId, input.storeId)) ?? '';
   // T-534 S3: what each receipt was REALLY paid by after its wrong-payment-method corrections, and which paid rows can still give some up.
   const ids = rows.map((r) => r.receiptId);

@@ -20,7 +20,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { AuthenticationError, POS_APPROVAL_REFUSED } from '@shareat/auth';
 import { RefusalError, goneSentence } from '@shareat/db';
-import { listTodaysSalesReceipts, recordRefund, verifySalesDay } from '../../src';
+import { findSalesReceiptByNo, listTodaysSalesReceipts, recordRefund, verifySalesDay } from '../../src';
 import { CORRECTION_NEEDS_PIN } from '../../src/pos/tender-correction';
 import { RECORDED_DIFFERENTLY } from '../../src/pos/shared';
 import { recordTenderCorrection, sendV1Bridge } from '../../src/pos';
@@ -396,5 +396,35 @@ describe('T-613 D3 - a Z of only refunds is no longer "nothing to close"', () =>
     const err = await close(w, AT2, await pinOf(w, w.managerId)).then(() => null, (e: unknown) => e);
     expect(err).toBeInstanceOf(RefusalError);
     expect((err as RefusalError).userMessage).toMatch(/^The refunds on .* are bigger than what was taken by the same payment method/);
+  });
+});
+
+describe('T-613 D4 - find a receipt of an earlier day by its number', () => {
+  const find = (w: World, receiptNo: string, now: Date) => asOrg(w.orgId, (tx) => findSalesReceiptByNo(tx, w.counter, { storeId: w.storeId, receiptNo, now }));
+
+  it('a receipt already in a Z is not in the list, is found by its number (store code optional, any case), in the list shape, and refunds through the same dialog data [kills: no lookup]', async () => {
+    const w = await world();
+    const m = await thousand(w, '1000.00');
+    const no = (await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }))).receipts[0]!.receiptNo;
+    await close(w, AT, await pinOf(w, w.managerId));
+    expect((await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }))).receipts).toHaveLength(0);
+    const found = await find(w, no.toLowerCase(), manila(D2, '10:00'));
+    expect(found.receipts).toHaveLength(1);
+    expect(found.receipts[0]).toMatchObject({ receiptId: m.receiptId, receiptNo: no, canCorrect: false, lines: [{ left: 4 }], refundPayments: [{ left: '1000.00' }] });
+    expect((await find(w, no.split('-').slice(-2).join('-'), manila(D2, '10:00'))).receipts).toHaveLength(1);
+    const out = await refund(w, m, { receiptId: found.receipts[0]!.receiptId, lines: [[0, 1]], pays: [[0, '250.00']] });
+    expect(out.wrote).toBe(true);
+  });
+  it('a wrong store code, a malformed number, an unknown number and a receipt older than 30 days answer an empty list [kills: a lookup with no age limit or no store-code check]', async () => {
+    const w = await world();
+    await thousand(w, '1000.00');
+    const no = (await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }))).receipts[0]!.receiptNo;
+    const [, till, seq] = no.split('-').slice(-3).length === 3 ? no.split('-').slice(-3) : ['', '', ''];
+    const soon = manila(D2, '10:00');
+    expect((await find(w, no, soon)).receipts).toHaveLength(1);
+    expect((await find(w, `ZZZ-${till}-${seq}`, soon)).receipts).toHaveLength(0);
+    expect((await find(w, 'hello', soon)).receipts).toHaveLength(0);
+    expect((await find(w, `${till}-999999`, soon)).receipts).toHaveLength(0);
+    expect((await find(w, no, new Date(manila(D1, '12:00').getTime() + 31 * 86_400_000))).receipts).toHaveLength(0);
   });
 });
