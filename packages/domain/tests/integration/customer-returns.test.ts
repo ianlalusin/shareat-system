@@ -34,6 +34,7 @@ import {
   customerReturnableQuantity,
   customerCreditBalance,
   applyCredit,
+  recordCollection,
 } from '@shareat/domain';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
@@ -412,6 +413,33 @@ describe('the credit is spendable — Ian\'s actual requirement', () => {
     await expect(
       asOrg(f.orgId, (tx) => applyCredit(tx, f.manager, { tradeOrderId: s.orderId, amount: '999999.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId })),
     ).resolves.toMatchObject({ ok: false });
+  });
+});
+
+describe('T-595 DEF-880 — return credit is spent only at the store that earned it', () => {
+  it('8b. credit earned at the first store cannot pay a trade order at the OTHER store: applyCredit refuses, nothing posts', async () => {
+    const f = await fixture('b-trade');
+    const s = await aSale(f, { qty: '2', rate: '500' });
+    await asOrg(f.orgId, (tx) => recordCollection(tx, f.manager, {
+      storeId: f.storeId, customerId: s.customerId, collectionDate: '2026-01-12', amount: '1000.00',
+      moneyAccountId: f.cashAccountId, allocations: [{ chargeId: s.arChargeId, amountApplied: '1000.00' }],
+    }));
+    await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '2' }], actor: f.manager }),
+    );
+    expect(await asOrg(f.orgId, (tx) => customerCreditBalance(tx, f.orgId, s.customerId))).toBe('1000.00'); // earned at f.storeId
+
+    // A second order for the same customer, but at the OTHER store.
+    const s2 = await aSale(f, { qty: '1', rate: '600', stockQty: '5' });
+    await sql`update trade_orders set customer_id = ${s.customerId}, store_id = ${f.otherStoreId} where id = ${s2.orderId}`;
+    await sql`update ar_charges set customer_id = ${s.customerId}, store_id = ${f.otherStoreId} where id = ${s2.arChargeId}`;
+    const collectionsBefore = (await sql<{ n: string }[]>`select count(*)::text n from ar_collections where org_id = ${f.orgId}`)[0]!.n;
+
+    await expect(
+      asOrg(f.orgId, (tx) => applyCredit(tx, f.manager, { tradeOrderId: s2.orderId, amount: '600.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId })),
+    ).rejects.toMatchObject({ userMessage: expect.stringMatching(/can only be spent at the store where it was earned/) });
+    expect((await sql<{ n: string }[]>`select count(*)::text n from ar_collections where org_id = ${f.orgId}`)[0]!.n).toBe(collectionsBefore);
+    expect(await asOrg(f.orgId, (tx) => customerCreditBalance(tx, f.orgId, s.customerId))).toBe('1000.00');
   });
 });
 

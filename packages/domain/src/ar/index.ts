@@ -28,6 +28,18 @@ export const CHARGE_HAS_CREDIT_SENTENCE =
 export const AR_CONTROL_CODE = arRepo.AR_CONTROL_CODE;
 export const STORE_CREDIT_CODE = arRepo.STORE_CREDIT_CODE;
 
+/**
+ * DEF-880 (T-595, ruled B by Ian 18 Nov 2026): store credit is spent only at the store that earned it. What `storeId` can spend is the smaller of
+ * the 2140 held at that store and the 2140 held in all (credit spent across stores BEFORE this rule left the earning store's figure too high; the
+ * org figure caps it so nothing is spent twice), never below zero. The one source of truth for the collection, the void and the collection form.
+ */
+export async function spendableStoreCredit(tx: Tx, orgId: string, customerId: string, storeId: string): Promise<Money> {
+  const atStore = money(await arRepo.creditBalanceOf(tx, orgId, customerId, [storeId]));
+  const inAll = money(await arRepo.creditBalanceOf(tx, orgId, customerId));
+  const least = compare(atStore, inAll) < 0 ? atStore : inAll;
+  return compare(least, ZERO) < 0 ? ZERO : least;
+}
+
 // -------------------------------------------------------------------------------------
 // Charges
 // -------------------------------------------------------------------------------------
@@ -495,11 +507,11 @@ export async function recordCollection(
       // DEF-879 (T-595): the customer row lock BEFORE the balance read, so two collections spending one credit (on different charges, which never
       // queue on the charge lock) queue here instead of both reading the same balance. Lock order everywhere: customer row, then charge rows.
       await customersRepo.lockForCredit(trx, actor.orgId, input.customerId);
-      const balance = money(await arRepo.creditBalanceOf(trx, actor.orgId, input.customerId));
-      if (compare(creditApplied, balance) > 0) {
-        throw new Error(
-          `recordCollection: ${customer.name} holds only ₱${balance} of store credit — ` +
-            `₱${input.creditApplied} does not fit.`,
+      const spendable = await spendableStoreCredit(trx, actor.orgId, input.customerId, input.storeId);
+      if (compare(creditApplied, spendable) > 0) {
+        throw refuse(
+          `recordCollection: ${customer.name} has ${spendable} of store credit at store ${input.storeId}; ${creditApplied} does not fit`,
+          `${customer.name} has only ${formatMoney(spendable)} of store credit at this store, so ${formatMoney(creditApplied)} cannot be applied. Store credit can only be spent at the store where it was earned.`,
         );
       }
     }
@@ -753,7 +765,8 @@ export async function voidCollection(
       if (l.accountCode === STORE_CREDIT_CODE && l.partyId === collection.customerId) held = add(held, subtract(money(l.credit), money(l.debit)));
     }
     if (compare(held, ZERO) > 0) {
-      const balance = money(await arRepo.creditBalanceOf(trx, actor.orgId, collection.customerId));
+      // The collection's 2140 lines all sit at its own store (DEF-880), so the credit that can still be taken back is that store's spendable figure.
+      const balance = await spendableStoreCredit(trx, actor.orgId, collection.customerId, collection.storeId);
       if (compare(balance, held) < 0) {
         throw refuse(
           `voidCollection: collection ${collection.id} left ${held} of store credit and only ${balance} is held`,

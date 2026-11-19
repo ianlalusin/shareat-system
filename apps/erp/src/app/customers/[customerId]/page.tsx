@@ -20,6 +20,7 @@ import {
   TREATMENT_LABEL,
   TREATMENT_TONE,
   creditBalance,
+  spendableCreditAt,
   arStoresFor,
   getCustomer,
   getPosition,
@@ -126,12 +127,13 @@ export default async function CustomerDetailPage({
       ? sp.store
       : (storeOptions[0]?.storeId ?? '');
 
-  const [charges, collections, openItems, wallets, owedHere] = await Promise.all([
+  const [charges, collections, openItems, wallets, owedHere, spendableHere] = await Promise.all([
     listCharges(actor, customerId),
     listCollections(actor, customerId),
     storeId ? openItemsFor(actor, customerId, storeId) : Promise.resolve([]),
     storeId ? moneyAccountsFor(actor, storeId) : Promise.resolve([]),
     storeId ? getPosition(actor, customerId, storeId) : Promise.resolve('0.00'),
+    storeId ? spendableCreditAt(actor, customerId, storeId) : Promise.resolve('0.00'),
   ]);
 
   // Photo links only for receipts this viewer can actually open (the same check the route makes).
@@ -261,7 +263,7 @@ export default async function CustomerDetailPage({
             items={openItems}
             wallets={wallets}
             today={now}
-            credit={credit}
+            credit={spendableHere}
           />
           </FormModal>
         </div>

@@ -22,6 +22,7 @@ import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { arRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createCustomer, recordCharge, recordCollection, voidCollection } from '@shareat/domain';
+import { postEntry } from '../../src/ledger/post-entry';
 
 const sql = postgres(url, { max: 6 });
 let seq = 0;
@@ -206,5 +207,71 @@ describe('DEF-879 - two collections cannot spend the same store credit', () => {
     await first;
     await second; // refused (the wording belongs to DEF-880)
     expect(await creditOf(f)).toBe('0.00');
+  });
+});
+
+/** What the code did before DEF-880: a collection at Malvar spent 500 of credit earned at Lipa, booked at Malvar (Dr 2140 Malvar / Cr 1210 Malvar). */
+async function legacyCrossStoreSpend(f: Fixture, amount: string) {
+  await asOrg(f.orgId, (tx) =>
+    postEntry(tx, {
+      orgId: f.orgId, entryDate: '2026-01-21', sourceType: 'manual_journal', sourceId: uid('legacy'), idempotencyKey: uid('legacy'),
+      memo: 'legacy cross-store credit spend', postedBy: f.adminId,
+      lines: [
+        { accountCode: '2140', storeId: f.malvarId, debit: amount, partyType: 'customer', partyId: f.customerId },
+        { accountCode: '1210', storeId: f.malvarId, credit: amount, partyType: 'customer', partyId: f.customerId },
+      ],
+    }),
+  );
+}
+
+describe('DEF-880 (ruled B) - store credit is spent only at the store that earned it', () => {
+  it('B positive: 500 earned at Lipa, 500 spent on a Lipa charge: posts, Lipa 2140 back to 0.00', async () => {
+    const f = await fixture('b-pos');
+    await overpay(f, 500);
+    const next = await charge(f, '500.00');
+    await collect(f, next.chargeId, { amount: '500.00', applied: '500.00', creditApplied: '500.00' });
+    expect(await creditOf(f, [f.lipaId])).toBe('0.00');
+    expect(await creditOf(f)).toBe('0.00');
+  });
+
+  it('B refusal: the same 500 of Lipa credit cannot pay a Malvar charge; no collection row, no entry [kills: dropping [storeId] from the store read]', async () => {
+    const f = await fixture('b-refuse');
+    await overpay(f, 500);
+    const malvarCharge = await charge(f, '500.00', 'malvar');
+    const rowsBefore = await collectionRows(f);
+    const entriesBefore = (await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${f.orgId}`)[0]!.n;
+    const said = await refusal(collect(f, malvarCharge.chargeId, { amount: '500.00', applied: '500.00', creditApplied: '500.00', at: 'malvar' }));
+    expect(said.userMessage).toMatch(/can only be spent at the store where it was earned/);
+    expect(said.userMessage).toMatch(/only ₱0\.00 of store credit at this store/);
+    expect(await collectionRows(f)).toBe(rowsBefore);
+    expect((await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where org_id = ${f.orgId}`)[0]!.n).toBe(entriesBefore);
+    expect(await creditOf(f, [f.lipaId])).toBe('500.00');
+  });
+
+  it('B old cross-store history: credit already spent across stores before this change cannot be spent again at the earning store [kills: dropping the org-wide minimum]', async () => {
+    const f = await fixture('b-legacy');
+    await overpay(f, 500);
+    await legacyCrossStoreSpend(f, '500.00');
+    expect(await creditOf(f, [f.lipaId])).toBe('500.00'); // Lipa still shows what it earned
+    expect(await creditOf(f)).toBe('0.00'); // the customer holds nothing in all
+    const next = await charge(f, '100.00');
+    const said = await refusal(collect(f, next.chargeId, { amount: '1.00', applied: '1.00', creditApplied: '1.00' }));
+    expect(said.userMessage).toMatch(/only ₱0\.00 of store credit at this store/);
+  });
+
+  it('B void: the Lipa collection that earned the credit cannot be voided once the credit was spent elsewhere (old history)', async () => {
+    const f = await fixture('b-void');
+    const col = await overpay(f, 500);
+    await legacyCrossStoreSpend(f, '500.00');
+    const said = await refusal(voidIt(f, col.collectionId));
+    expect(said.userMessage).toMatch(/500\.00 of the store credit this collection created has already been spent/);
+    expect(await status(col.collectionId)).toBe('posted');
+  });
+
+  it('B void positive: the credit is still at Lipa, so a Lipa collection voids', async () => {
+    const f = await fixture('b-void-ok');
+    const col = await overpay(f, 500);
+    await voidIt(f, col.collectionId);
+    expect(await status(col.collectionId)).toBe('voided');
   });
 });
