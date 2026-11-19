@@ -278,3 +278,75 @@ describe('DEF-895 - recordStatutoryPayment', () => {
     expect(await payments(w.orgId)).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-613 A: an expense paid from a retired account is refused at approval. C: a re-sent payment after the account is retired
+// returns the original answer, not the retired refusal.
+// ---------------------------------------------------------------------------------------------------------------------
+describe('T-613 DEF-932 - approving an expense funded from a retired account', () => {
+  async function invoiceFor(f: Fixture, amount: string): Promise<string> {
+    const [file] = await sql<{ id: string }[]>`
+      insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by)
+      values (${f.orgId}, ${f.storeId}, 'receipt_photo', ${`orgs/${f.orgId}/${uid('x')}.jpg`}, 'image/jpeg', 1024, ${uid('sum')}, ${f.staffId}) returning id`;
+    const created = await asPerson(f.orgId, (tx) =>
+      recordInvoice(tx, actorOf(f.orgId, f.staffId), { storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10', totalAmount: amount, receiptFileId: file!.id }),
+    );
+    await asPerson(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id, { supplier: true, invoice: true, items: true, price: true }));
+    return created.id;
+  }
+  const paidFrom = (f: Fixture, invoiceId: string, from: string) =>
+    asPerson(f.orgId, (tx) =>
+      recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
+        storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId,
+        particulars: 'Stock purchase', payments: [{ method: 'cash', amount: '1000.00', moneyAccountId: from }],
+      }),
+    );
+  const postedExpenses = async (orgId: string) =>
+    Number((await sql<{ n: string }[]>`select count(*)::text n from journal_entries where org_id = ${orgId} and source_type = 'expense_payment'`)[0]!.n);
+
+  it('a live funded account pays', async () => {
+    const f = await setup('d932a');
+    await paidFrom(f, await invoiceFor(f, '1000.00'), f.officeSafeId);
+    expect(await postedExpenses(f.orgId)).toBe(1);
+  });
+  it('the same account retired is refused with the sentence; nothing posts', async () => {
+    const f = await setup('d932b');
+    const invoice = await invoiceFor(f, '1000.00');
+    await retire(f.officeSafeId);
+    expect(await messageOf(paidFrom(f, invoice, f.officeSafeId))).toMatch(RETIRED);
+    expect(await postedExpenses(f.orgId)).toBe(0);
+  });
+});
+
+describe('T-613 DEF-934 - a re-sent payment after the account is retired answers with the original', () => {
+  it('payLiability: the same request id replays; a NEW request id is still refused as retired', async () => {
+    const f = await setup('d934a');
+    const created = await asPerson(f.orgId, (tx) => createLiability(tx, f.manager, { storeId: f.storeId, name: 'Accrued rent', category: 'accrued_expenses' }));
+    await asPerson(f.orgId, (tx) => chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId: created.id, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-20' }));
+    const requestId = crypto.randomUUID();
+    const pay = (id: string, amount = '600.00') =>
+      asPerson(f.orgId, (tx) => payLiability(tx, f.manager, { requestId: id, liabilityId: created.id, amount, fromMoneyAccountId: f.officeSafeId, on: '2026-01-25' }));
+    const first = await pay(requestId);
+    await retire(f.officeSafeId);
+    const again = await pay(requestId);
+    expect(again.entryId).toBe(first.entryId);
+    expect(await entriesFor(created.id)).toBe(2); // the charge and ONE payment
+    expect(await messageOf(pay(crypto.randomUUID(), '300.00'))).toMatch(RETIRED);
+  });
+  it('recordPayment (AP): the same request id replays the original after the account is retired', async () => {
+    const f = await setup('d934b');
+    const bill = await apBill(f, '1000.00');
+    const requestId = crypto.randomUUID();
+    const pay = (id: string) =>
+      asPerson(f.orgId, (tx) =>
+        recordPayment(tx, f.manager, {
+          requestId: id, storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15', amount: '1000.00',
+          moneyAccountId: f.officeSafeId, allocations: [{ expenseId: bill, amountApplied: '1000.00' }],
+        }),
+      );
+    const first = await pay(requestId);
+    await retire(f.officeSafeId);
+    const again = await pay(requestId);
+    expect(again.paymentId).toBe(first.paymentId);
+  });
+});

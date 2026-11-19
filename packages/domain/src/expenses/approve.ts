@@ -379,6 +379,13 @@ export function approvalVerdict(facts: ApprovalFacts, options: ApprovalVerdictOp
         sentence: 'A money account on this expense no longer exists. Edit the payment, then approve it.',
       };
     }
+    // DEF-932 (T-613): money is not paid OUT of a retired account - same words as `assertActiveAccount` (T-597).
+    if (!w.account.isActive) {
+      return {
+        raw: `approveExpense: expense ${expenseId} pays from money account "${w.account.name}", which is retired.`,
+        sentence: `"${w.account.name}" is retired. Choose another account to pay from.`,
+      };
+    }
     if (w.crossStore && !w.transferAllowed) {
       return {
         raw: `approveExpense: expense ${expenseId} (store ${expense.storeId}) draws on money account ${w.id} of store ${w.account.storeId}, and the actor may not ${CAPABILITY_LABEL.transfer_funds} there`,

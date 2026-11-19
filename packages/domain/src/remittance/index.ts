@@ -30,6 +30,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { internalFault } from '../shared/refusal-leaf';
 import { gone, refuse } from '../shared/refusal';
 import { postEntry } from '../ledger/post-entry';
+import { assertActiveAccount } from '../money-accounts/overdraft';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { postStaffShortageCharge } from '../shared/staff-shortage-charge';
 import { REMITTANCE_CADENCES, advisoryLocksRepo, moneyAccountsRepo, personsRepo, remittanceRepo, storesRepo, type RemittanceCadence, type Tx } from '@shareat/db';
@@ -144,6 +145,8 @@ async function runCreate(
     const from = await moneyAccountsRepo.getById(tx, actor.orgId, line.fromMoneyAccountId);
     const to = await moneyAccountsRepo.getById(tx, actor.orgId, line.toMoneyAccountId);
     if (!from || !to) throw new Error('createRemittance: a line names an account that does not exist.');
+    assertActiveAccount(from, 'createRemittance');
+    assertActiveAccount(to, 'createRemittance');
     fromAccountNames.set(line.fromMoneyAccountId, from.name);
     if (from.custodian !== 'cashier' || to.custodian !== 'office') {
       throw new Error(
