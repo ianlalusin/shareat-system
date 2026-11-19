@@ -73,7 +73,6 @@ getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
-getRefundByRequestId
 getStoreChannelSettlementConfig
 groupIntoFamilies
 hasFingerprint
@@ -82,9 +81,6 @@ hasUnroutedFloatsForStore
 initiateAnonymousSignIn
 initiateEmailSignIn
 initiateEmailSignUp
-insertRefund
-insertRefundLines
-insertRefundPayments
 installFakeClock
 isConvertibleUnit
 isHeaderCode
@@ -108,8 +104,6 @@ listOrderMessages
 listPayRates
 listPosQuarantine
 listPunchesForDay
-listRefundLines
-listRefundPayments
 listRequestsForStore
 listRoster
 listWriteOffsForCharge

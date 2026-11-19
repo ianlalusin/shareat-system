@@ -568,7 +568,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1686 -> 1687, T-601 S2 (18 Nov 2026): the /pos/receipts placeholder became the Receipts list (+1 census control on the fixture-free source count); measured by runCensus() (the test reported 1687 against 1686).
     // 1687 -> 1688, T-606 S4 (18 Nov 2026): the admin-only "Move to Channel receivable" button on a platform channel's card (+1 census control); measured by runCensus() (the test reported 1688 against 1687).
     // 1688 -> 1699, T-534 (19 Nov 2026): +5 for S2's Convert section on the Till tab (its branch did not bump this) and +6 for S3's Wrong payment method dialog on /pos/receipts (four buttons and the reference and reason boxes: all pass, min-h-12 or taller); FAIL/UNRESOLVED unmoved; re-measured by runCensus() (the test reported 1699 against 1688).
-    expect(results.length).toBe(1699);
+    // 1699 -> 1708, T-534 S4 (19 Nov 2026): +9 for the Refund dialog on /pos/receipts (the Refund button, the item minus and plus, the money-back box, the wallet reference box, the reason box, Print slip again, Done, and the Refund save button; all min-h-12 or taller, so FAIL/UNRESOLVED are unmoved); re-measured by runCensus() (the test reported 1708 against 1699).
+    expect(results.length).toBe(1708);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
