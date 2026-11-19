@@ -39,7 +39,7 @@ export async function listRoleHoldersWithLivePin(tx: Tx, orgId: string): Promise
     select distinct p.id::text as person_id, r.role
       from person_roles r
       join persons p on p.id = r.person_id and p.org_id = r.org_id
-     where r.org_id = ${orgId} and r.revoked_at is null and p.is_active
+     where r.org_id = ${orgId} and r.revoked_at is null and p.account_status = 'active'
        and r.role in ('manager', 'admin', 'super_admin')
        and exists (select 1 from person_credentials c where c.person_id = p.id and c.kind = 'pin' and c.revoked_at is null)
   `)) as unknown as { person_id: string; role: string }[];
