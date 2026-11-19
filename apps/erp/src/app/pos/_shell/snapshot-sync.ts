@@ -61,10 +61,12 @@ export async function refreshSnapshot(deps: { fetch: typeof fetch; nowMs: number
     if (res.status !== 200) return { kind: 'failed' };
     const body: unknown = await res.json();
     if (!isSnapshotBody(body)) return { kind: 'failed' };
+    // T-609: expire FIRST. A delete that fails then fails the refresh before the new etag is saved, so the next refresh gets a 200
+    // again and retries; saving first meant the retry came back 304 and the revoked verifier stayed on the tablet.
+    await expireRevokedVerifiers(body.staff);
     await saveSnapshot({ body, etag: res.headers.get('etag') ?? '', fetchedAtMs: deps.nowMs });
     await resumeAbove({ lastSeq: body.device.lastSeq, lastTerminalSeq: body.device.lastTerminalSeq });
     await bindPairing(body.device.pairingId); // T-563: every event queued from now on is made under this pairing
-    await expireRevokedVerifiers(body.staff);
     return { kind: 'updated' };
   } catch {
     return { kind: 'failed' };

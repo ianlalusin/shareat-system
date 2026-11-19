@@ -37,7 +37,10 @@ describe('T-526 - 401: signed out, not offline', () => {
   it('the shell has a Sign in again button that calls signOutAction, and the drain gate does not look at signedOut (the outbox keeps sending)', () => {
     const shell = readFileSync('apps/erp/src/app/pos/_shell/PosShell.tsx', 'utf8');
     expect(shell).toMatch(/Sign in again/);
-    expect(shell).toMatch(/signedOut[\s\S]{0,400}signOutAction/);
+    // T-532 S4: the button calls signInAgain -> signOut, which purges the saved offline page and then calls signOutAction.
+    expect(shell).toMatch(/signedOut[\s\S]{0,400}signInAgain/);
+    expect(shell).toMatch(/const signInAgain = \(\) => signOut\(\)/);
+    expect(shell).toMatch(/purgePosShell\(\);\s*await signOutAction\(\)/);
     expect(readFileSync('apps/erp/src/app/pos/_shell/use-device-sync.ts', 'utf8')).not.toContain('signedOut');
   });
 });
