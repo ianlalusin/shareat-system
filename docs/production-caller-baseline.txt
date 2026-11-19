@@ -75,7 +75,6 @@ getKitchenTicketContribution
 getNonCentavoCount
 getRefundByRequestId
 getStoreChannelSettlementConfig
-getTenderCorrectionByRequestId
 groupIntoFamilies
 hasFingerprint
 hasOtherActiveAdmin
@@ -86,7 +85,6 @@ initiateEmailSignUp
 insertRefund
 insertRefundLines
 insertRefundPayments
-insertTenderCorrection
 installFakeClock
 isConvertibleUnit
 isHeaderCode

@@ -111,7 +111,7 @@ export interface RecordConversionInput {
 }
 
 /** The store's tender for a Convert: its own, active, and (a wallet) with a money account to book against. */
-function usableTender(tenders: readonly Tender[], id: string): Tender {
+export function usableTender(tenders: readonly Tender[], id: string): Tender {
   const t = tenders.find((x) => x.id === id);
   if (!t || !t.isActive) throw refuse(`pos: convert tender ${id} is not an active tender of the store`, CONVERT_TENDER_NOT_AVAILABLE);
   if (t.kind === 'wallet' && !t.moneyAccountId) {

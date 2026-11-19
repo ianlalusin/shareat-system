@@ -39,6 +39,7 @@ import { routeSalesDay } from '../sales-days/routing';
 import { isUniqueViolation } from './order';
 import { audit, NOT_ON, readRules, requireContext, startHourDate, uuidInput, uuidv5, type PosDeps } from './shared';
 import { convertBlockOf, kindsOf, postConversionsForZ, type ConvertBlock } from './convert';
+import { tenderNetsAfterCorrections } from './tender-correction';
 import { buildV1BridgePayload, v1BridgeDateAllowed, V1_BRIDGE_LAST_DATE, type V1BridgeClose } from './v1-bridge-payload';
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -175,10 +176,15 @@ async function figuresOf(
   if (senior + pwd + other !== discountTotal) throw internalFault(`day close: discounts by kind ${senior + pwd + other} != receipt discounts ${discountTotal} centavos`);
 
   const tenders = new Map((await posV1Repo.listTendersByStore(tx, orgId, storeId)).map((t) => [t.id, t]));
-  const byTender: TenderLine[] = f.byTender
-    .map((p) => {
-      const t = tenders.get(p.tenderId);
-      return { tenderId: p.tenderId, name: t?.name ?? 'Unknown tender', kind: (t?.kind ?? 'wallet') as 'cash' | 'wallet', amount: fromCentavos(toCentavos(money(p.amount)) - toCentavos(money(p.change))) };
+  // T-534 S3: what each method took AFTER the receipts' wrong-payment-method corrections (old method minus, new method plus). The receipts themselves never change.
+  const nets = tenderNetsAfterCorrections(
+    f.byTender.map((p) => ({ tenderId: p.tenderId, net: toCentavos(money(p.amount)) - toCentavos(money(p.change)) })),
+    await posV2Repo.listTenderCorrectionsOfReceipts(tx, orgId, receipts.map((r) => r.id)),
+  );
+  const byTender: TenderLine[] = [...nets.entries()]
+    .map(([tenderId, net]) => {
+      const t = tenders.get(tenderId);
+      return { tenderId, name: t?.name ?? 'Unknown tender', kind: (t?.kind ?? 'wallet') as 'cash' | 'wallet', amount: fromCentavos(net) };
     })
     .sort((a, b) => compare(b.amount, a.amount) || a.name.localeCompare(b.name));
   // T-558 (row 453): a short-paid receipt is the tender side's gap. Σ tenders + Σ gaps = gross, exactly.
@@ -324,6 +330,8 @@ async function writeZ(
   // The one-time column write: only receipts still open are taken; a different count means another close got one first.
   const closed = await posV2Repo.closeReceipts(tx, orgId, c.storeId, z.closeId, z.receipts.map((r) => r.id));
   if (closed !== z.receipts.length) throw refuse(`pos: closed ${closed} of ${z.receipts.length} receipts`, CLOSE_RACE);
+  // T-534 S3: the wrong-payment-method corrections of these receipts are collected into this Z, once (their figures are already inside the reading's tenders).
+  await posV2Repo.closeTenderCorrectionsOfReceipts(tx, orgId, c.storeId, z.closeId, z.receipts.map((r) => r.id));
   const convertsClosed = await posV2Repo.closePaymentConversions(tx, orgId, c.storeId, z.closeId, z.conversions.map((x) => x.id));
   if (convertsClosed !== z.conversions.length) throw refuse(`pos: closed ${convertsClosed} of ${z.conversions.length} converts`, CLOSE_RACE);
   const salesDayId = await deriveSalesDayFromZ(tx, actor, {

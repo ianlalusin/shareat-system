@@ -243,6 +243,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-534 S2: a Convert (GCash cash-in / cash-out) recorded on the till, and one voided before the Z (entity = the pos_payment_conversions row). Payloads carry ids and amounts, never a note's text.
   def('pos.conversion_recorded', 'money', 'normal', 'store', 'pos_payment_conversions', 'T-534'),
   def('pos.conversion_voided', 'money', 'high', 'store', 'pos_payment_conversions', 'T-534'),
+  // T-534 S3: a wrong payment method fixed before the Z (entity = the pos_tender_corrections row). The payload carries ids, the amount and the reason, never a reference number's text.
+  def('pos.tender_corrected', 'money', 'high', 'store', 'pos_tender_corrections', 'T-534'),
   def('pos.day_closed', 'money', 'high', 'store', 'pos_day_closes', 'T-531'),
   def('pos.day_closed_backlog', 'money', 'high', 'store', 'pos_day_closes', 'T-531'),
   def('pos.v1_bridge_sent', 'money', 'normal', 'store', 'stores', 'T-531'),

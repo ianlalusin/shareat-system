@@ -615,6 +615,8 @@ export interface ReceiptListRow {
   receiptId: string;
   sessionId: string;
   terminalId: string;
+  /** Set once the receipt is in a Z (T-534 S3: a wrong payment method can no longer be corrected here). */
+  dayCloseId: string | null;
   subtotal: string;
   discountTotal: string;
   terminalNo: number;
@@ -640,6 +642,7 @@ export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: s
       receiptId: posSalesReceipts.id,
       sessionId: posSalesReceipts.tableSessionId,
       terminalId: posSalesReceipts.terminalId,
+      dayCloseId: posSalesReceipts.dayCloseId,
       subtotal: posSalesReceipts.subtotal,
       discountTotal: posSalesReceipts.discountTotal,
       terminalNo: posTerminals.terminalNo,
@@ -668,6 +671,7 @@ export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: s
       posSalesReceipts.id,
       posSalesReceipts.tableSessionId,
       posSalesReceipts.terminalId,
+      posSalesReceipts.dayCloseId,
       posSalesReceipts.subtotal,
       posSalesReceipts.discountTotal,
       posTerminals.terminalNo,
@@ -1513,4 +1517,53 @@ export async function listRefundLines(tx: Tx, orgId: string, refundId: string): 
 }
 export async function listRefundPayments(tx: Tx, orgId: string, refundId: string): Promise<PosRefundPaymentRow[]> {
   return tx.select().from(posRefundPayments).where(and(eq(posRefundPayments.orgId, orgId), eq(posRefundPayments.refundId, refundId))).orderBy(asc(posRefundPayments.id));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-534 S3 - wrong payment method (tender corrections)
+// ---------------------------------------------------------------------------------------------------------------------
+/** One receipt of the store, locked FOR UPDATE: two corrections of one receipt take turns. Undefined for another store's receipt or one that does not exist. */
+export async function getReceiptForUpdate(tx: Tx, orgId: string, storeId: string, receiptId: string): Promise<PosSalesReceiptRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posSalesReceipts)
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), eq(posSalesReceipts.id, receiptId)))
+    .for('update');
+  return row;
+}
+
+/** The paid rows of some receipts, with their ids and the change given (what a correction moves from). */
+export async function listPaymentRowsOfReceipts(
+  tx: Tx, orgId: string, receiptIds: readonly string[],
+): Promise<{ id: string; receiptId: string; tenderId: string; amount: string; changeGiven: string; referenceNo: string | null }[]> {
+  if (receiptIds.length === 0) return [];
+  return tx
+    .select({
+      id: posSalesReceiptPayments.id, receiptId: posSalesReceiptPayments.receiptId, tenderId: posSalesReceiptPayments.tenderId,
+      amount: posSalesReceiptPayments.amount, changeGiven: posSalesReceiptPayments.changeGiven, referenceNo: posSalesReceiptPayments.referenceNo,
+    })
+    .from(posSalesReceiptPayments)
+    .where(and(eq(posSalesReceiptPayments.orgId, orgId), inArray(posSalesReceiptPayments.receiptId, [...receiptIds])))
+    .orderBy(asc(posSalesReceiptPayments.id));
+}
+
+/** Every correction of some receipts (open or in a Z), oldest first. */
+export async function listTenderCorrectionsOfReceipts(tx: Tx, orgId: string, receiptIds: readonly string[]): Promise<PosTenderCorrectionRow[]> {
+  if (receiptIds.length === 0) return [];
+  return tx
+    .select()
+    .from(posTenderCorrections)
+    .where(and(eq(posTenderCorrections.orgId, orgId), inArray(posTenderCorrections.receiptId, [...receiptIds])))
+    .orderBy(asc(posTenderCorrections.recordedAt), asc(posTenderCorrections.id));
+}
+
+/** Freezes the open corrections of the receipts a Z takes (the one column the guard lets the Z write, NULL -> value once). Returns how many it took. */
+export async function closeTenderCorrectionsOfReceipts(tx: Tx, orgId: string, storeId: string, dayCloseId: string, receiptIds: readonly string[]): Promise<number> {
+  if (receiptIds.length === 0) return 0;
+  const rows = await tx
+    .update(posTenderCorrections)
+    .set({ dayCloseId })
+    .where(and(eq(posTenderCorrections.orgId, orgId), eq(posTenderCorrections.storeId, storeId), inArray(posTenderCorrections.receiptId, [...receiptIds]), isNull(posTenderCorrections.dayCloseId)))
+    .returning({ id: posTenderCorrections.id });
+  return rows.length;
 }

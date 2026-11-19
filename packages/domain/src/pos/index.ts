@@ -53,6 +53,8 @@ export {
 export type { Reading, TenderLine, CloseDayInput, CloseDayResult, CloseBacklogInput, BacklogClose, DayCloseListItem, V1BridgeWriter, V1BridgeStatus, V1HistoryStatus, CloseApproval } from './day-close';
 export { recordConversion, voidConversion, listOpenConversions } from './convert';
 export type { ConvertBlock, OpenConversion, RecordConversionInput, VoidConversionInput } from './convert';
+export { recordTenderCorrection, CORRECTION_CLOSED } from './tender-correction';
+export type { RecordTenderCorrectionInput } from './tender-correction';
 export { buildV1BridgePayload, V1_BRIDGE_LAST_DATE, v1BridgeDateAllowed } from './v1-bridge-payload';
 export type { V1BridgeClose, V1BridgeTender, V1BridgePayload } from './v1-bridge-payload';
 export { exportPosData, POS_EXPORT_MAX_DAYS } from './data-export';
