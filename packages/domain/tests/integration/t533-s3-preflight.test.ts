@@ -136,7 +136,8 @@ describe('R3 posPreflight - each blocking item fires on its own', () => {
     const f = await ready();
     await pinOf(f, f.managerOtherId);
     await sql`update person_credentials set revoked_at = now(), revoke_reason = 'test' where person_id = ${f.managerId} and kind = 'pin'`;
-    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_approver'] });
+    // The manager is on the sign-in list and now has no PIN, so the staff_without_pin warning fires too.
+    expect(await codes(f)).toEqual({ blocking: ['no_approver'], warnings: ['staff_without_pin'] });
     await sql`update person_credentials set revoked_at = null, revoke_reason = null where person_id = ${f.managerId} and kind = 'pin'`;
     expect(await codes(f)).toEqual(NONE);
   });
