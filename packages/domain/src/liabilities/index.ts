@@ -187,13 +187,18 @@ export async function payLiability(
     const amount = parseMoneyInput(input.amount, 'payLiability: the amount', 'The payment amount');
     if (compare(amount, ZERO) <= 0) throw refuse('payLiability: a payment has to be greater than zero.', 'A payment has to be greater than zero.');
 
+    // DEF-934 (T-613): a re-sent form is looked up BEFORE the retired, overpay and cash checks - after the first click committed the
+    // account may be retired or lower, and a double click must get the original answer. `postEntryOnce` below still refuses a reused id with other figures.
+    const idempotencyKey = `liability:${liability.id}:payment:${requestId}`;
+    const replay = !!(await journalRepo.findEntryByIdempotencyKey(trx, actor.orgId, idempotencyKey));
+
     // R4 — the ledger's figure is re-minted, never cast; it is always a 2-place string.
     const before = money(
       (await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id)).outstanding,
     );
     // ⛔ Overpaying would turn a liability into a receivable with nobody deciding to — the same
     // ceiling `assertWithinReceivable` puts on an owner settlement.
-    if (compare(amount, before) > 0) {
+    if (!replay && compare(amount, before) > 0) {
       throw new Error(
         `payLiability: that is more than the ₱${before} still owed on this obligation.`,
       );
@@ -201,18 +206,18 @@ export async function payLiability(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
     if (!account) throw new Error('payLiability: that money account does not exist.');
-    assertActiveAccount(account, 'payLiability'); // DEF-905
+    if (!replay) assertActiveAccount(account, 'payLiability'); // DEF-905
     if (account.storeId !== liability.storeId) {
       throw new Error('payLiability: that account belongs to another store.');
     }
-    const warning = await checkDraw(trx, actor.orgId, account, amount, 'payLiability');
+    const warning = replay ? null : await checkDraw(trx, actor.orgId, account, amount, 'payLiability');
 
     const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'liability_payment',
       sourceId: liability.id,
-      idempotencyKey: `liability:${liability.id}:payment:${requestId}`,
+      idempotencyKey,
       memo: input.memo?.trim() || `Payment — ${liability.name}`,
       postedBy: actor.personId,
       lines: [
