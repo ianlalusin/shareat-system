@@ -24,6 +24,8 @@ import {
 import { loadPricesPage, storesInScope, withOrgPrincipal, type DaypartView, type PricesPageData, type ScheduledOffer } from '../lib';
 import { dayName, time12, windowText } from '../daypart-text';
 import { NAV_LINK } from '@/components/action-link';
+import { CopyFromStoreDialog } from '../../copy-from-store/CopyFromStoreDialog';
+import { copyChoicesFor } from '../../copy-from-store/lib';
 
 export const metadata = { title: 'Menu prices - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -97,15 +99,17 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
     const stores = await storesInScope(tx, actor);
     // A store outside the person's scope is never drawn: an unknown or foreign ?store= falls back to their first store.
     const store = stores.find((s) => s.id === sp.store) ?? stores[0] ?? null;
-    if (!store) return { stores, store: null, data: null, canPrice: false, canPair: false, canHours: false };
+    if (!store) return { stores, store: null, data: null, canPrice: false, canPair: false, canHours: false, copyStores: null };
     const data = await loadPricesPage(tx, actor.orgId, store.id);
     const canPrice = await mayPrice(tx, actor, store.id);
     // T-510 R8, presentation only: the pairing controls (which price belongs to lunch, dinner or all day). The domain gates every write.
     const canPair = canPrice && (await can(tx, actor, 'pair_menu_dayparts', {}));
     const canHours = await can(tx, actor, 'manage_store_settings', { storeId: store.id });
-    return { stores, store, data, canPrice, canPair, canHours };
+    // T-611 S1: the copy button, for an administrator who can price this store (presentation only; the domain and a PIN gate the write).
+    const copyStores = canPrice ? await copyChoicesFor(tx, actor, store.id) : null;
+    return { stores, store, data, canPrice, canPair, canHours, copyStores };
   });
-  const { stores, store, data, canPrice, canPair, canHours } = loaded;
+  const { stores, store, data, canPrice, canPair, canHours, copyStores } = loaded;
 
   return (
     <Page density="table" className="space-y-6">
@@ -150,6 +154,7 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
               Change the menu hours
             </Link>
           )}
+          {copyStores && <CopyFromStoreDialog kind="prices" currentStoreId={store.id} stores={copyStores} />}
           <Grid data={data} storeId={store.id} canPrice={canPrice} canPair={canPair} />
           <OptionPrices data={data} storeId={store.id} canPrice={canPrice} />
         </>
