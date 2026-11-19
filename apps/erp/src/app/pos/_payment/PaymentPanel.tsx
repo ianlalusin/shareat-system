@@ -57,6 +57,8 @@ export interface PaymentPanelProps {
   storeName: string;
   /** T-585: the issuer identity from the snapshot; absent in an old cached one. */
   identity?: unknown;
+  /** T-601 S4: the POS mode of the store from the snapshot; `test` puts TEST - NOT A SALE on the receipt. */
+  storeMode?: string;
   cashierName: string;
   personId: string;
   online: boolean;
@@ -342,7 +344,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
       layout: p.layout,
       copies: p.copies,
       receipt: {
-        header: receiptHeaderOf({ name: p.storeName, vatRegistered: p.vatRegistered, identity: p.identity }),
+        header: receiptHeaderOf({ name: p.storeName, vatRegistered: p.vatRegistered, identity: p.identity, mode: p.storeMode }),
         tableLabel: p.isTakeOut ? null : p.label,
         heads: p.isTakeOut ? null : p.heads,
         cashierName: p.cashierName,

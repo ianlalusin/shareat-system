@@ -4,7 +4,7 @@
  * "has not loaded its price list yet" banner and Pay stays blocked. T-546 adds the till's receipt printer settings to that list.
  */
 export interface SnapshotPaymentPart {
-  store: { storeId: string; name: string; terminalNo: number; vatRegistered: boolean; receiptPaperMm: 58 | 80; receiptCopies: number; /** T-585: the issuer identity; absent in a snapshot cached before it existed (the receipt then prints the store name only). */ identity?: unknown };
+  store: { storeId: string; name: string; terminalNo: number; vatRegistered: boolean; receiptPaperMm: 58 | 80; receiptCopies: number; /** T-585: the issuer identity; absent in a snapshot cached before it existed (the receipt then prints the store name only). */ identity?: unknown; /** T-601 S4: the POS mode of the store at the last fetch; `test` puts TEST - NOT A SALE on the receipt. */ mode?: string };
   tenders: { id: string; name: string; kind: string }[];
   discountPresets: { id: string; name: string; valueType: string; value: string }[];
   rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number };
@@ -29,6 +29,7 @@ export function paymentPartOf(b: Record<string, unknown>): SnapshotPaymentPart |
       receiptPaperMm: store.receiptPaperMm,
       receiptCopies: store.receiptCopies,
       identity: (store as { identity?: unknown }).identity,
+      mode: typeof store.mode === 'string' ? store.mode : undefined,
     },
     tenders: b.tenders as SnapshotPaymentPart['tenders'],
     discountPresets: b.discountPresets as SnapshotPaymentPart['discountPresets'],

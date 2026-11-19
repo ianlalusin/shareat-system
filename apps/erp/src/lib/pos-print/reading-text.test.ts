@@ -230,3 +230,13 @@ describe('T-534 S2 - the Convert lines (GCash cash-in / cash-out), the drawer\'s
     expect(none.some((l) => l.includes('CONVERT'))).toBe(false);
   });
 });
+
+describe('T-601 S4 - TEST - NOT A SALE on the X and Z slips', () => {
+  const withTest = (v: ReturnType<typeof base>, test: boolean) => ({ ...v, header: { ...v.header, test } });
+  it('a TEST store prints the line on the X and on the Z, a real one does not', () => {
+    expect(formatter('formatXSlip')(withTest(base(), true), L48).map((l) => l.trim())).toContain('TEST - NOT A SALE');
+    expect(formatter('formatZSlip')(withTest(zView(), true), L48).map((l) => l.trim())).toContain('TEST - NOT A SALE');
+    expect(formatter('formatXSlip')(withTest(base(), false), L48).join(chr(10))).not.toContain('TEST - NOT A SALE');
+    expect(formatter('formatZSlip')(zView(), L48).join(chr(10))).not.toContain('TEST - NOT A SALE');
+  });
+});

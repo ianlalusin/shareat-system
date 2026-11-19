@@ -240,6 +240,7 @@ export function Orders() {
             terminalNo={payment.store.terminalNo}
             storeName={payment.store.name}
             identity={payment.store.identity}
+            storeMode={payment.store.mode}
             cashierName={pos.personName ?? payment.staff.find((s) => s.personId === personId)?.displayName ?? ''}
             personId={personId}
             online={pos.online}
