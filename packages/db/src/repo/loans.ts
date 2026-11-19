@@ -153,7 +153,7 @@ export interface LoanPosition {
   disbursed: string;
   /** Principal repaid: debits to `2400` on payment entries. */
   principalPaid: string;
-  /** Interest recognised: debits to `7200` on this loan's entries. */
+  /** Interest recognised: debits to `7200` on this loan's manual payments, plus 7200 lines carrying this loan as their party (T-608: the interest part of a platform dock). */
   interestPaid: string;
   /** `disbursed − principalPaid`. ⛔ Never a column. */
   outstanding: string;
@@ -177,9 +177,8 @@ export interface LoanPosition {
  * party-requiring control account, so the loan's own balance on it is the answer, and it counts
  * repayment paths nobody has invented yet.
  *
- * ⚠️ Interest stays keyed on `loan_payment` deliberately: `7200` carries no party, and a platform
- * dock posts no interest at all — it books the whole deduction to principal. That is a real gap in
- * the settlement's model, named in DEF-145 rather than papered over here.
+ * ⭐ Interest (T-608, DEF-931): a manual payment's `7200` line has no party and is found by the entry's `loan_payment` source; a platform dock's `7200` line
+ * carries party `loan` = this loan (migration 0267 lets 7200 take that one party type). Each row is counted ONCE, by either rule, never both.
  *
  * ## ⚠️ Reversed entries are INCLUDED, and that is the correction
  *
@@ -201,8 +200,9 @@ export async function positionOf(tx: Tx, orgId: string, loanId: string): Promise
       coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and jl.party_id = ${loanId}
                          and je.source_type <> ${DISBURSEMENT_SOURCE}
                         then jl.debit - jl.credit else 0 end), 0)::text as principal_paid,
-      coalesce(sum(case when a.code = ${INTEREST_EXPENSE_CODE} and je.source_id = ${loanId}
-                         and je.source_type = ${PAYMENT_SOURCE}
+      coalesce(sum(case when a.code = ${INTEREST_EXPENSE_CODE}
+                         and ((je.source_id = ${loanId} and je.source_type = ${PAYMENT_SOURCE})
+                              or (jl.party_type = ${LOAN_PARTY_TYPE} and jl.party_id = ${loanId}))
                         then jl.debit - jl.credit else 0 end), 0)::text as interest_paid
     from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
@@ -211,7 +211,8 @@ export async function positionOf(tx: Tx, orgId: string, loanId: string): Promise
       and je.status <> 'draft'
       and (
         (a.code = ${LOAN_LIABILITY_CODE} and jl.party_type = ${LOAN_PARTY_TYPE} and jl.party_id = ${loanId})
-        or (a.code = ${INTEREST_EXPENSE_CODE} and je.source_type = ${PAYMENT_SOURCE} and je.source_id = ${loanId})
+        or (a.code = ${INTEREST_EXPENSE_CODE} and ((je.source_type = ${PAYMENT_SOURCE} and je.source_id = ${loanId})
+                                                   or (jl.party_type = ${LOAN_PARTY_TYPE} and jl.party_id = ${loanId})))
       )
   `) as unknown as Record<string, string>[];
 
@@ -425,12 +426,15 @@ async function loanLegs(
         and a.code = ${LOAN_LIABILITY_CODE} and jl.party_type = ${LOAN_PARTY_TYPE} and jl.party_id is not null
         ${tail}
       union all
-      select je.source_id::text, jl.store_id::text, 0, 0, jl.debit - jl.credit
+      -- T-608: a manual payment's 7200 line has no party (the entry's source_id is the loan); a platform dock's 7200 line carries party 'loan' (the entry's source is the settlement).
+      -- One row is counted once: the loan is the party when there is one, else the source id.
+      select coalesce(jl.party_id, je.source_id::text), jl.store_id::text, 0, 0, jl.debit - jl.credit
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id
       join accounts a on a.id = jl.account_id
       where je.org_id = ${orgId} and je.status <> 'draft'
-        and a.code = ${INTEREST_EXPENSE_CODE} and je.source_type = ${PAYMENT_SOURCE}
+        and a.code = ${INTEREST_EXPENSE_CODE}
+        and (je.source_type = ${PAYMENT_SOURCE} or (jl.party_type = ${LOAN_PARTY_TYPE} and jl.party_id is not null))
         ${tail}
     ) legs
     group by loan_id${perStore ? sql`, store_id` : sql``}

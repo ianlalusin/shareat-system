@@ -4,11 +4,12 @@ A deliberately standard loan model (T-126, bible row 158): a debt, money in, mon
 
 ## Interface
 - `index.ts`: `LOAN_LIABILITY_CODE` (`'2400'`), `INTEREST_EXPENSE_CODE` (`'7200'`), `CreateLoanInput`, `createLoan`, `disburseLoan`, `RecordPaymentResult`, `recordLoanPayment`, `reverseLoanEntry`; also re-exports everything in `interest.ts`.
-- `interest.ts`: types `RatePeriod`, `InterestMethod`, `AccruedInput`, `SplitInput`, `PaymentSplit`, `InstalmentInput`; functions `dailyRate`, `accruedInterest`, `splitPayment`, `scheduledInstalment`, `totalOf`, `remainingOf`.
+- `interest.ts`: types `RatePeriod`, `InterestMethod`, `AccruedInput`, `SplitInput`, `PaymentSplit`, `InstalmentInput`, `LoanSchedule`; functions `dailyRate`, `accruedInterest`, `splitPayment`, `scheduledInstalment`, `totalOf`, `remainingOf`, and (T-608) `loanSchedule`, `leftToPay`, `splitSettlementLeg`.
 
 ## Invariants
 - `createLoan` moves no money: a signed, undrawn loan is a commitment, not a debt.
 - Disbursement posts DR money account / CR `2400`; payment posts DR `2400` principal, DR `7200` interest, CR money account. The ledger party of the `2400` line is the LOAN, not the lender.
+- **Platform docks (T-608):** a repayment a platform takes from a payout is posted by `recordChannelSettlement`, not here. On a scheduled loan (repayment amount and term set) it splits principal / interest by the fixed ratio `I/T`, cumulatively (`splitSettlementLeg`); its `7200` line carries party `loan`, and `loansRepo.positionOf` counts it beside manual-payment interest, each line once. `leftToPay(schedule, position)` is `T` less principal and interest paid; it is what the settlement loan check and the loan screen call "left to pay". Manual `recordLoanPayment` is unchanged.
 - The principal/interest split is COMPUTED (`accruedInterest` then `splitPayment`), never accepted from the caller. Interest accrues from the last payment date, or the loan start date if none.
 - A month is 30 days, a year 365 (`dailyRate`); `ratePeriod` is carried on every loan and is NOT NULL.
 - Overpayment and payment against a zero balance are refused, not absorbed. Outstanding is derived from what was disbursed (drawable in stages), not the agreed principal.

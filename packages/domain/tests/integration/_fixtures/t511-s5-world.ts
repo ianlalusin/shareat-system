@@ -62,12 +62,12 @@ export async function world3(sql: postgres.Sql, hint: string, opts: { periods?: 
 export async function mkLoan(
   sql: postgres.Sql,
   w: World,
-  o: { storeId: string; name: string; startDate: string; principal: string; repayment: string | null },
+  o: { storeId: string; name: string; startDate: string; principal: string; repayment: string | null; termPeriods?: number },
 ): Promise<string> {
   const loan = await asOrg(w.orgId, (tx) =>
     createLoan(tx, w.admin, {
       storeId: o.storeId, lenderName: 'Grab', name: o.name, principalAmount: o.principal, interestRate: '2', ratePeriod: 'month',
-      interestMethod: 'straight', paymentFrequency: 'daily', termPeriods: 90, startDate: o.startDate,
+      interestMethod: 'straight', paymentFrequency: 'daily', termPeriods: o.termPeriods ?? 90, startDate: o.startDate,
     }),
   );
   if (o.repayment !== null) await asOrg(w.orgId, (tx) => updateLoanRepaymentAmount(tx, w.admin, { loanId: loan.id, repaymentAmount: o.repayment }));
