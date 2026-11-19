@@ -83,6 +83,10 @@ const scopeRows = (personId: string, storeId?: string) =>
 const activeRole = async (personId: string) =>
   (await sql<{ role: string }[]>`select role from person_roles where person_id = ${personId} and revoked_at is null`)[0]?.role;
 const livePins = (personId: string) => n(sql<{ n: number }[]>`select count(*)::int n from person_credentials where person_id = ${personId} and kind = 'pin' and revoked_at is null`);
+const liveCreds = (personId: string) => n(sql<{ n: number }[]>`select count(*)::int n from person_credentials where person_id = ${personId} and revoked_at is null`);
+const badge = async (orgId: string, storeId: string, employmentId: string, enrolledBy: string, card: string) =>
+  sql`insert into attendance_credentials (org_id, store_id, employment_id, kind, card_id, enrolled_by) values (${orgId}, ${storeId}, ${employmentId}, 'card', ${card}, ${enrolledBy})`;
+const liveBadges = (employmentId: string) => n(sql<{ n: number }[]>`select count(*)::int n from attendance_credentials where employment_id = ${employmentId} and revoked_at is null`);
 const liveSessions = (personId: string) => n(sql<{ n: number }[]>`select count(*)::int n from sessions where person_id = ${personId} and ended_at is null`);
 const accessAudit = async (orgId: string) =>
   sql<{ after: Record<string, unknown>; store_id: string | null }[]>`select after, store_id from audit_log where org_id = ${orgId} and action = 'employment.access_revoked'`;
@@ -95,6 +99,8 @@ describe('1 - a cashier with one job: ending it switches everything off', () => 
     await w.grant(cashier.personId, 'record_wastage'); // a manual extra, not from a position
     await w.manualScope(cashier.personId, w.storeA); // flips the hire's scope row to 'manual'
     await w.pinSession(cashier, w.storeA); // a live session to end
+    await badge(w.orgId, w.storeA, emp.id, w.boot.personId, uid('card')); // a clock badge for this job
+    expect(await liveBadges(emp.id), 'control: the badge is live before the end').toBe(1);
     expect(await liveSessions(cashier.personId)).toBe(1);
     expect(await activeGrants(cashier.personId), 'control: the grant is there before the end').toBeGreaterThan(0);
 
@@ -106,6 +112,10 @@ describe('1 - a cashier with one job: ending it switches everything off', () => 
     expect(await activeGrants(cashier.personId), 'grants').toBe(0);
     expect(await activeRole(cashier.personId), 'role').toBeUndefined();
     expect(await livePins(cashier.personId), 'PIN').toBe(0);
+    // Mutant: revoke only kind = 'pin' - the Firebase credential stays live and this is red.
+    expect(await liveCreds(cashier.personId), 'every credential kind (PIN and Firebase)').toBe(0);
+    // Mutant: skip the attendance-badge loop - red.
+    expect(await liveBadges(emp.id), 'the clock badge').toBe(0);
     expect(await liveSessions(cashier.personId), 'sessions').toBe(0);
     await expect(w.pinSession(cashier, w.storeA)).rejects.toBeInstanceOf(AuthenticationError);
     await expect(signInWithFirebase(null, { verifiedUid: cashier.externalId }), 'the browser sign-in is refused too').rejects.toBeInstanceOf(AuthenticationError);
@@ -113,7 +123,7 @@ describe('1 - a cashier with one job: ending it switches everything off', () => 
     const rows = await accessAudit(w.orgId);
     expect(rows, 'exactly one access_revoked row').toHaveLength(1);
     expect(rows[0]!.store_id).toBe(w.storeA);
-    expect(rows[0]!.after).toMatchObject({ personId: cashier.personId, reach: 'everywhere', storeScopes: 1, roles: 1, pins: 1, sessions: 1 });
+    expect(rows[0]!.after).toMatchObject({ personId: cashier.personId, reach: 'everywhere', storeScopes: 1, roles: 1, credentials: 2, badges: 1, sessions: 1 });
     expect(Number(rows[0]!.after.grants), 'the manual grant (position grants were already revoked by the T-289 step)').toBeGreaterThanOrEqual(1);
     expect(JSON.stringify(rows[0]!.after), 'counts only: no PIN material').not.toMatch(/hash|secret|\b86\d{4}\b/i);
   });
@@ -129,6 +139,9 @@ describe('2 - a two-store person ends the store A job', () => {
     await w.manualScope(p.personId, w.storeB);
     await w.grant(p.personId, 'record_wastage', w.storeA);
     await w.grant(p.personId, 'record_wastage', w.storeB);
+    const empB = (await sql<{ id: string }[]>`select id from employments where person_id = ${p.personId} and store_id = ${w.storeB}`)[0]!.id;
+    await badge(w.orgId, w.storeA, empA.id, w.boot.personId, uid('cardA'));
+    await badge(w.orgId, w.storeB, empB, w.boot.personId, uid('cardB'));
 
     await w.end(w.boss, empA.id);
 
@@ -140,10 +153,13 @@ describe('2 - a two-store person ends the store A job', () => {
     expect(await n(sql<{ n: number }[]>`select count(*)::int n from person_grants where person_id = ${p.personId} and store_id = ${w.storeB} and grant_source = 'grant' and revoked_at is null`), 'B grant kept').toBe(1);
     expect(await activeRole(p.personId), 'role kept').toBe('staff');
     expect(await livePins(p.personId), 'PIN kept').toBe(1);
+    expect(await liveCreds(p.personId), 'PIN and Firebase both kept').toBe(2);
+    expect(await liveBadges(empA.id), 'the ended job\'s badge is revoked').toBe(0);
+    expect(await liveBadges(empB), 'the other job\'s badge stays').toBe(1);
     await expect(w.pinSession(p, w.storeB), 'sign-in at B works').resolves.toBeDefined();
     await expect(w.pinSession(p, w.storeA), 'sign-in at A is refused').rejects.toBeInstanceOf(AuthenticationError);
     const [row] = await accessAudit(w.orgId);
-    expect(row!.after).toMatchObject({ reach: 'this_store', roles: 0, pins: 0 });
+    expect(row!.after).toMatchObject({ reach: 'this_store', roles: 0, credentials: 0, badges: 1 });
   });
 });
 
@@ -225,5 +241,60 @@ describe('7 - re-hire switches access back on, except manual extras and the PIN'
     await expect(w.pinSession(p, w.storeA), 'the old PIN is dead').rejects.toBeInstanceOf(AuthenticationError);
     await withOrgPrincipal(w.orgId, (tx) => setPin(tx, { orgId: w.orgId, personId: p.personId, storeId: w.storeA, pin: '860777' }));
     await expect(w.pinSession({ pin: '860777' }, w.storeA), 'a newly set PIN works').resolves.toBeDefined();
+  });
+});
+
+describe('8 - a closed employment cannot be ended again', () => {
+  it('re-ending E1 is refused; a re-hire at the same store (E2) keeps every bit of its access', async () => {
+    const w = await world('t609-8');
+    const p = await w.person('Back Again');
+    const e1 = await w.hire(p.personId, w.storeA);
+    await w.end(w.boss, e1.id);
+    await w.hire(p.personId, w.storeA); // E2, same store
+    await withOrgPrincipal(w.orgId, (tx) => setPin(tx, { orgId: w.orgId, personId: p.personId, storeId: w.storeA, pin: '860888' }));
+
+    // Mutant: delete the `endedOn` guard - the re-end runs the whole-person revocation on E2's access and this goes red.
+    await expect(w.end(w.boss, e1.id)).rejects.toSatisfy((e: unknown) => e instanceof EmploymentError && /already ended/.test(e.userReason ?? ''));
+    expect(await activeRole(p.personId), 'E2 role kept').toBe('staff');
+    expect(await scopeRows(p.personId, w.storeA), 'E2 scope kept').toBe(1);
+    expect(await livePins(p.personId), 'E2 PIN kept').toBe(1);
+    await expect(w.pinSession({ pin: '860888' }, w.storeA)).resolves.toBeDefined();
+  });
+});
+
+describe('9 - a stale fan_out scope does not survive for someone who is no longer an administrator', () => {
+  it('a demoted ex-admin employed at A and B: ending A removes A access (scope and sign-in); a current admin keeps their own fan_out scope', async () => {
+    const w = await world('t609-9');
+    const ex = await w.person('Ex Admin');
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${ex.personId}, ${w.storeA}, 'fan_out'), (${ex.personId}, ${w.storeB}, 'fan_out')`;
+    const exA = await w.hire(ex.personId, w.storeA);
+    await w.hire(ex.personId, w.storeB);
+    const adm = await w.person('Still Admin', 'admin');
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${adm.personId}, ${w.storeA}, 'fan_out'), (${adm.personId}, ${w.storeB}, 'fan_out')`;
+    const admA = await w.hire(adm.personId, w.storeA);
+    await w.hire(adm.personId, w.storeB);
+
+    await w.end(w.boss, exA.id);
+    await w.end(w.boss, admA.id);
+
+    // Mutant: keepSources always ['fan_out'] - the ex-admin keeps scope at A and can sign in there: red.
+    expect(await scopeRows(ex.personId, w.storeA), 'ex-admin: A scope gone').toBe(0);
+    await expect(w.pinSession(ex, w.storeA), 'ex-admin: sign-in at A refused').rejects.toBeInstanceOf(AuthenticationError);
+    await expect(w.pinSession(ex, w.storeB), 'ex-admin: B still works').resolves.toBeDefined();
+    expect(await scopeRows(adm.personId, w.storeA), 'control: a current admin keeps the role\'s own scope at A').toBe(1);
+  });
+});
+
+describe('10 - nothing revoked, no audit row', () => {
+  it('ending a job for someone who holds nothing writes employment.ended but no access_revoked', async () => {
+    const w = await world('t609-10');
+    const personId = (await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${w.orgId}, 'Bare') returning id`)[0]!.id;
+    const emp = await w.hire(personId, w.storeA);
+    await sql`delete from person_store_scope where person_id = ${personId}`;
+    await sql`update person_roles set revoked_at = now() where person_id = ${personId}`;
+    await w.end(w.boss, emp.id);
+    // Mutant: append unconditionally - one all-zero row appears and this is red.
+    expect(await accessAudit(w.orgId)).toHaveLength(0);
+    expect(await n(sql<{ n: number }[]>`select count(*)::int n from audit_log where org_id = ${w.orgId} and action = 'employment.ended'`)).toBe(1);
   });
 });

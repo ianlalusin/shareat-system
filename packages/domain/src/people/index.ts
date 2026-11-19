@@ -13,6 +13,7 @@ import { authorize, can, holdsSuperAdminAuthority, isAdministrative, isStoreMana
 import {
   accessRepo,
   auditLogRepo,
+  attendanceCredentialsRepo,
   employmentRepo,
   personsRepo,
   sessionsRepo,
@@ -379,7 +380,12 @@ export async function endEmployment(
 
   // T-609: no other open employment in the org means this end switches off the person's whole way in (role, PIN, every
   // scope and grant), so the refusals that protect an organisation's authority run BEFORE anything is written.
-  const lastJob = (await employmentRepo.listOtherOpenBranches(tx, existing.personId, existing.storeId)).length === 0;
+  // Re-read under the lock: ending a job that is already closed must not run the revocation (the person may have been re-hired
+  // at the same store since, and that new job is the one that would lose its access).
+  if ((await employmentRepo.getEmployment(tx, existing.id))?.endedOn) {
+    throw new EmploymentError(`endEmployment: employment ${existing.id} already ended`, 'This employment has already ended.');
+  }
+  const lastJob = (await employmentRepo.countOtherOpenEmployments(tx, existing.personId, existing.orgId, existing.id)) === 0;
   if (lastJob) await refuseIfEndWouldStripAuthority(tx, actor, existing.personId, existing.orgId);
 
   const closed = await employmentRepo.closeEmployment(tx, input);
@@ -393,18 +399,28 @@ export async function endEmployment(
   // Supersedes T-336's "a manual scope survives": ending the person's LAST open employment in the org deletes every scope
   // row and revokes every grant, the role and the PIN; while another job remains, only what is tied to THIS store goes
   // (the scope of any source but the role's own `fan_out` materialisation, and grants honoured at this store).
-  const revoked = { storeScopes: 0, grants: 0, roles: 0, pins: 0, sessions: 0 };
+  const revoked = { storeScopes: 0, grants: 0, roles: 0, credentials: 0, badges: 0, sessions: 0 };
   if (lastJob) {
     revoked.storeScopes = await accessRepo.deleteStoreScopesForPerson(tx, existing.personId);
     revoked.grants = await accessRepo.revokeActiveGrantsForPerson(tx, existing.personId, ACCESS_REVOKED_REASON);
     revoked.roles = (await accessRepo.revokeActiveRole(tx, existing.personId, existing.orgId)) ? 1 : 0;
-    for (const pin of (await sessionsRepo.listLiveForPerson(tx, existing.personId)).filter((c) => c.kind === 'pin')) {
-      await sessionsRepo.revokeCredential(tx, { id: pin.id, by: actor.personId, reason: ACCESS_REVOKED_REASON });
-      revoked.pins += 1;
+    // Every way in: PIN, Firebase (email) and biometric alike.
+    for (const cred of await sessionsRepo.listLiveForPerson(tx, existing.personId)) {
+      await sessionsRepo.revokeCredential(tx, { id: cred.id, by: actor.personId, reason: ACCESS_REVOKED_REASON });
+      revoked.credentials += 1;
     }
   } else {
-    revoked.storeScopes = await accessRepo.deleteStoreScopesForPerson(tx, existing.personId, { storeId: existing.storeId, keepSources: ['fan_out'] });
+    // `fan_out` is the admin role's own materialisation: kept only while the person still holds an administrative role (a demoted
+    // ex-admin's stale row must not keep a way in at the ended store).
+    const stillAdmin = isAdministrative((await accessRepo.activeRoleForPerson(tx, existing.personId, existing.orgId))?.role);
+    revoked.storeScopes = await accessRepo.deleteStoreScopesForPerson(tx, existing.personId, { storeId: existing.storeId, keepSources: stillAdmin ? ['fan_out'] : [] });
     revoked.grants = await accessRepo.revokeActiveGrantsForPerson(tx, existing.personId, ACCESS_REVOKED_REASON, existing.storeId);
+  }
+
+  // The ended job's clock badges (card / fingerprint), whatever the store: the terminals drop them on their next mirror sync.
+  for (const badge of await attendanceCredentialsRepo.listLiveForEmployment(tx, existing.id)) {
+    await attendanceCredentialsRepo.revokeCredential(tx, { id: badge.id, at: new Date(), by: actor.personId, reason: ACCESS_REVOKED_REASON });
+    revoked.badges += 1;
   }
 
   await auditLogRepo.append(tx, actor.orgId, {
@@ -448,15 +464,17 @@ export async function endEmployment(
   // T-609: one row saying what was switched off (counts only; no ids, no PIN material). Built outside the call: the T-402 S1b
   // static guard reads any `storeId:` inside an append call as the row's store.
   const accessAfter = { personId: existing.personId, reach: lastJob ? 'everywhere' : 'this_store', ...revoked };
-  await auditLogRepo.append(tx, actor.orgId, {
-    actorPersonId: actor.personId,
-    action: 'employment.access_revoked',
-    storeId: existing.storeId,
-    entityId: existing.id,
-    before: null,
-    after: accessAfter,
-    source: 'web',
-  });
+  if (Object.values(revoked).some((n) => n > 0)) {
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'employment.access_revoked',
+      storeId: existing.storeId,
+      entityId: existing.id,
+      before: null,
+      after: accessAfter,
+      source: 'web',
+    });
+  }
 
   return closed;
 }
@@ -469,6 +487,8 @@ const ACCESS_REVOKED_REASON = 'Employment ended.';
  * organisation keeps an administrator who can sign in (T-238/T-237's `hasOtherActiveAdminWhoCanSignIn`, under the same org lock).
  */
 async function refuseIfEndWouldStripAuthority(tx: Tx, actor: Actor, personId: string, orgId: string): Promise<void> {
+  // Lock first, then read: the role read and the last-admin read below are one decision (T-237/T-238 race), for every role.
+  await accessRepo.lockOrgAccess(tx, orgId);
   const target = (await accessRepo.activeRoleForPerson(tx, personId, orgId))?.role;
   if (!target || target === 'staff') return;
   const mine = (await accessRepo.activeRoleForPerson(tx, actor.personId, orgId))?.role;
@@ -481,7 +501,6 @@ async function refuseIfEndWouldStripAuthority(tx: Tx, actor: Actor, personId: st
     );
   }
   if (!isAdministrative(target)) return;
-  await accessRepo.lockOrgAccess(tx, orgId);
   if (!(await accessRepo.hasOtherActiveAdminWhoCanSignIn(tx, orgId, personId))) {
     throw new EmploymentError(
       `endEmployment: refusing - person ${personId} is the organisation's last administrator who can sign in`,

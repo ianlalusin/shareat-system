@@ -432,7 +432,7 @@ export default async function EmploymentDetailPage({
             </p>
             {accessOff && (
               <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                Access: off. To switch it back on, hire them again, then set a new PIN. Extra access an administrator gave by hand is not brought back; an administrator grants it again.
+                Access: off. To switch it back on, hire them again, then set a new PIN. A former manager or administrator comes back as staff; an administrator gives the role again. Extra access an administrator gave by hand is not brought back; an administrator grants it again.
               </p>
             )}
           </>
