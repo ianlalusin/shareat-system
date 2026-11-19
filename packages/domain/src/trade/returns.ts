@@ -693,6 +693,8 @@ export async function applyCredit(
     // T-371 — parsed AFTER authorize() (R5), so a typo is refused in a sentence that QUOTES what was typed; it was
     // `Number(input.amount)`, which turned 'abc' into NaN, slipped past both guards and was forwarded as the text "NaN".
     const amount = parseMoneyInput(input.amount, 'applyCredit: the amount', 'The amount');
+    // DEF-879 (T-595): the customer row first - `recordCollection` below takes it when credit is spent - so the order is customer, THEN charge, as in a direct collection.
+    await customersRepo.lockForCredit(trx, orgId, order.customerId);
     // ⛔ T-494 (F27): lock the charge before reading what is owed on it (`recordCollection` below takes the same lock again, in this transaction).
     await arRepo.lockChargesForAllocation(trx, orgId, [order.arChargeId]);
     const outstanding = money(await arRepo.outstandingForCharge(trx, orgId, order.arChargeId));

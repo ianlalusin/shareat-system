@@ -10,7 +10,7 @@
  */
 import { arRepo, auditLogRepo, customersRepo, journalRepo, moneyAccountsRepo, type CustomerRow, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, can } from '@shareat/auth';
-import { add, compare, money, subtract, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, formatMoney, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { postEntry } from '../ledger/post-entry';
@@ -492,6 +492,9 @@ export async function recordCollection(
       await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });
     }
     if (compare(creditApplied, ZERO) > 0) {
+      // DEF-879 (T-595): the customer row lock BEFORE the balance read, so two collections spending one credit (on different charges, which never
+      // queue on the charge lock) queue here instead of both reading the same balance. Lock order everywhere: customer row, then charge rows.
+      await customersRepo.lockForCredit(trx, actor.orgId, input.customerId);
       const balance = money(await arRepo.creditBalanceOf(trx, actor.orgId, input.customerId));
       if (compare(creditApplied, balance) > 0) {
         throw new Error(
@@ -728,16 +731,36 @@ export async function voidCollection(
     // T-369 S9 A1 (DEF-573): reversing a collection that landed in ANOTHER store's account moves that store's money
     // again, so the void needs `transfer_funds` there too. After the uniform-refusal block above (its own refusal
     // keeps its one sentence; this gate must not be wrapped by it) and before any status refusal.
+    // Entry lines are immutable, so reading them before the lock below is safe. DEF-878 reads them again for the store credit this entry left.
+    const entryLines = collection.journalEntryId
+      ? await journalRepo.findLinesForEntryWithAccountCodes(trx, collection.journalEntryId)
+      : [];
     if (collection.journalEntryId) {
-      await authorizeOtherStores(trx, actor, {
-        lines: await journalRepo.findLinesForEntryWithAccountCodes(trx, collection.journalEntryId),
-        documentStoreId: collection.storeId,
-      });
+      await authorizeOtherStores(trx, actor, { lines: entryLines, documentStoreId: collection.storeId });
     }
     if (collection.status !== 'posted') throw new Error(`voidCollection: it is ${collection.status}, not posted.`);
     if (!collection.journalEntryId) throw new Error('voidCollection: posted collection carries no journal entry.');
     const reason = input.reason.trim();
     if (!reason) throw new Error('voidCollection: say why this collection is being voided.');
+
+    // DEF-878 (T-595): what this entry left on 2140 is its overpayment (credited) less any credit it SPENT (debited). Reversing it takes that NET out of
+    // the customer's credit; if the credit is no longer held (spent on a later collection) the void would drive the balance below zero. The customer
+    // row lock comes first, so a spend racing this void queues behind it instead of slipping between the read and the reversal. A collection that
+    // only SPENT credit gives it back: no check. Mirrors `voidPayment` on the AP side (1240).
+    await customersRepo.lockForCredit(trx, actor.orgId, collection.customerId);
+    let held: Money = ZERO;
+    for (const l of entryLines) {
+      if (l.accountCode === STORE_CREDIT_CODE && l.partyId === collection.customerId) held = add(held, subtract(money(l.credit), money(l.debit)));
+    }
+    if (compare(held, ZERO) > 0) {
+      const balance = money(await arRepo.creditBalanceOf(trx, actor.orgId, collection.customerId));
+      if (compare(balance, held) < 0) {
+        throw refuse(
+          `voidCollection: collection ${collection.id} left ${held} of store credit and only ${balance} is held`,
+          `${formatMoney(subtract(held, balance))} of the store credit this collection created has already been spent. Void the collections that used it first.`,
+        );
+      }
+    }
 
     const result = await reverseEntry(trx, {
       entryId: collection.journalEntryId,
