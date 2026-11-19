@@ -9,6 +9,7 @@
 -- WHAT CHANGES. (1) the (payment_id, tender_id) FK is dropped and replaced by the same-org FK on tenders (a tender of this organisation must exist); (2) UNIQUE (refund_id, payment_id) becomes
 -- UNIQUE (refund_id, payment_id, tender_id) so a refund can hold the cash row and the corrected-to row of one paid row; (3) a BEFORE INSERT trigger keeps the rule the FK carried:
 -- the tender is the paid row's own, OR the target of a correction of that very row. The money caps stay in the domain (recordRefund), as before.
+-- The trigger is a validator (it reads other rows' current state), so it stays ORIGIN: no ENABLE ALWAYS (trigger registry rule R1, t354).
 -- NOT CHANGED: no table, no column, no grant; append-only and append-guard triggers; every existing row satisfies the new rules (all carry the paid row's own tender).
 ALTER TABLE "pos_refund_payments" DROP CONSTRAINT "pos_refund_payments_tender_of_payment_fk";
 --> statement-breakpoint
@@ -38,5 +39,3 @@ $fn$;
 REVOKE EXECUTE ON FUNCTION "pos_refund_payment_tender_guard"() FROM PUBLIC;
 --> statement-breakpoint
 CREATE TRIGGER "pos_refund_payment_tender_guard" BEFORE INSERT ON "pos_refund_payments" FOR EACH ROW EXECUTE FUNCTION "pos_refund_payment_tender_guard"();
---> statement-breakpoint
-ALTER TABLE "pos_refund_payments" ENABLE ALWAYS TRIGGER "pos_refund_payment_tender_guard";

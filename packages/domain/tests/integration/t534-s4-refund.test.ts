@@ -379,6 +379,28 @@ describe('T-613 D1 - the refund cap follows an S3 tender correction', () => {
     expect(after.receipts[0]!.refundPayments).toMatchObject([{ left: '0.00' }, { left: '0.00' }]);
     expect(tenderMap(await reading(w, AT))).toEqual({ [w.cash]: '0.00', [w.gcash]: '0.00' });
   });
+  it('money already refunded by the paid row own method cannot also be moved off it by a correction: P1,000 cash, P500 refunded, correcting P600 is refused at correction time [kills: a correction cap that ignores refunds]', async () => {
+    const w = await world();
+    const m = await tenThousand(w);
+    await refundBy(w, m, [{ amount: '500.00' }], 2);
+    await expectRefusal(correct(w, m, '600.00'), 'Only ₱500.00 of this payment can still be moved to another method.');
+    await correct(w, m, '500.00');
+  });
+  it('an omitted method and the paid row own method are one thing: naming both is a duplicate, and a replay with the other spelling is the same refund [kills: comparing raw input]', async () => {
+    const w = await world();
+    const m = await tenThousand(w);
+    await expectRefusal(refundBy(w, m, [{ amount: '100.00' }, { tenderId: w.cash, amount: '150.00' }], 1), 'Each payment can only be used once.');
+    const requestId = uuid();
+    const send = (tenderId?: string) =>
+      asOrg(w.orgId, (tx) =>
+        recordRefund(tx, w.manager, {
+          storeId: w.storeId, pairingId: w.pairingId, requestId, receiptId: m.receiptId, lines: [{ receiptLineId: m.lines[0]!.id, qty: 1 }],
+          payments: [{ paymentId: m.pays[0]!.id, amount: '250.00', ...(tenderId ? { tenderId } : {}) }], reason: 'Customer returned it',
+        }),
+      );
+    expect((await send()).wrote).toBe(true);
+    expect((await send(w.cash)).wrote).toBe(false);
+  });
   it('a method the receipt was neither paid nor corrected to is refused in words', async () => {
     const w = await world();
     const m = await tenThousand(w);

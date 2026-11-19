@@ -193,10 +193,12 @@ export async function recordRefund(tx: Tx, actor: Actor, input: RecordRefundInpu
   for (const l of wantLines) if (!Number.isInteger(l.qty) || l.qty <= 0) throw refuse('pos: refund quantity not a whole number above zero', 'The quantity must be a whole number above zero.');
   if (new Set(wantLines.map((l) => l.lineId)).size !== wantLines.length) throw refuse('pos: refund names a line twice', REFUND_LINE_ONCE);
   if (!Array.isArray(input.payments) || input.payments.length === 0) throw refuse('pos: refund without payments', 'Say how the money goes back.');
+  // An omitted method means the paid row's own; resolved here so "omitted" and "its own" are one thing for the duplicate check and the replay comparison.
+  const ownTender = new Map((await posV2Repo.listPaymentRowsOfReceipts(tx, orgId, [receiptId])).map((r) => [r.id, r.tenderId]));
   const wantPays = input.payments.map((p) => {
     const amount = parseMoneyInput(String(p.amount ?? ''), 'recordRefund: payment amount', 'The amount');
     if (compare(amount, ZERO) <= 0) throw refuse('pos: refund payment not above zero', 'The amount must be above zero.');
-    return { paymentId: uuidInput(p.paymentId, 'The payment'), tenderId: p.tenderId === undefined ? null : uuidInput(p.tenderId, 'The payment method'), cents: toCentavos(amount), amount, referenceNo: p.referenceNo ?? null };
+    return { paymentId: uuidInput(p.paymentId, 'The payment'), tenderId: p.tenderId === undefined ? (ownTender.get(String(p.paymentId)) ?? null) : uuidInput(p.tenderId, 'The payment method'), cents: toCentavos(amount), amount, referenceNo: p.referenceNo ?? null };
   });
   if (new Set(wantPays.map((p) => `${p.paymentId}:${p.tenderId ?? ''}`)).size !== wantPays.length) throw refuse('pos: refund names a payment twice', REFUND_PAYMENT_ONCE);
   const { reason } = assertFieldRules(POS_REASON_RULES, { reason: input.reason });
@@ -208,7 +210,7 @@ export async function recordRefund(tx: Tx, actor: Actor, input: RecordRefundInpu
     const ls = await posV2Repo.listRefundLines(tx, orgId, r.id);
     const ps = await posV2Repo.listRefundPayments(tx, orgId, r.id);
     return ls.length === wantLines.length && ls.every((l) => wantLines.some((w) => w.lineId === l.receiptLineId && w.qty === l.qty))
-      && ps.length === wantPays.length && ps.every((p) => wantPays.some((w) => w.paymentId === p.paymentId && (w.tenderId ?? p.tenderId) === p.tenderId && w.cents === toCentavos(money(p.amount))));
+      && ps.length === wantPays.length && ps.every((p) => wantPays.some((w) => w.paymentId === p.paymentId && w.tenderId === p.tenderId && w.cents === toCentavos(money(p.amount))));
   };
   const replay = async (r: Refund): Promise<RecordRefundResult> => {
     if (!(await same(r))) throw recordedDifferently();

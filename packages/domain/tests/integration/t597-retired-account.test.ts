@@ -332,6 +332,9 @@ describe('T-613 DEF-934 - a re-sent payment after the account is retired answers
     expect(again.entryId).toBe(first.entryId);
     expect(await entriesFor(created.id)).toBe(2); // the charge and ONE payment
     expect(await messageOf(pay(crypto.randomUUID(), '300.00'))).toMatch(RETIRED);
+    // the same request id with a DIFFERENT amount is not a replay: refused, nothing new posted
+    expect(await messageOf(pay(requestId, '300.00'))).toMatch(/already recorded with different figures/);
+    expect(await entriesFor(created.id)).toBe(2);
   });
   it('recordPayment (AP): the same request id replays the original after the account is retired', async () => {
     const f = await setup('d934b');
