@@ -23,7 +23,7 @@ import { RefusalError, goneSentence } from '@shareat/db';
 import { listTodaysSalesReceipts, recordRefund, verifySalesDay } from '../../src';
 import { CORRECTION_NEEDS_PIN } from '../../src/pos/tender-correction';
 import { RECORDED_DIFFERENTLY } from '../../src/pos/shared';
-import { sendV1Bridge } from '../../src/pos';
+import { recordTenderCorrection, sendV1Bridge } from '../../src/pos';
 import { D1, D2, asOrg, auditsOf, close, closeAll, fakeWriter, journalLines, manila, pinOf, reading, salesDaysOf, sell, sql, tenderMap, uuid, world, type World } from './_fixtures/t531-day-close';
 
 afterAll(closeAll);
@@ -346,5 +346,42 @@ describe('T-534 S4 - the December v1 bridge sends the day net of its refunds', (
     expect(res.results).toEqual([{ businessDate: D1, status: 'sent' }]);
     const data = f.calls[0]!.data as { payments: { totalGross: number; byMethod: Record<string, number> } };
     expect(data.payments).toMatchObject({ totalGross: 750, byMethod: { cash: 750 } });
+  });
+});
+
+describe('T-613 D1 - the refund cap follows an S3 tender correction', () => {
+  const tenThousand = (w: World) => made(w, { at: manila(D1, '12:00'), items: [{ item: w.menu.pork, qty: 4 }], expectTotal: '1000.00', pay: [{ tenderId: w.cash, amount: '1000.00' }] });
+  const correct = (w: World, m: Made, amount = '300.00') =>
+    asOrg(w.orgId, (tx) =>
+      recordTenderCorrection(tx, w.manager, {
+        storeId: w.storeId, pairingId: w.pairingId, requestId: uuid(), receiptId: m.receiptId, paymentId: m.pays[0]!.id, toTenderId: w.gcash, amount, referenceNo: 'GC-0001234', reason: 'Customer paid by GCash',
+      }),
+    );
+  const refundBy = (w: World, m: Made, pays: { tenderId?: string; amount: string; ref?: string }[], qty = 4) =>
+    asOrg(w.orgId, (tx) =>
+      recordRefund(tx, w.manager, {
+        storeId: w.storeId, pairingId: w.pairingId, requestId: uuid(), receiptId: m.receiptId, lines: [{ receiptLineId: m.lines[0]!.id, qty }],
+        payments: pays.map((p) => ({ paymentId: m.pays[0]!.id, amount: p.amount, ...(p.tenderId ? { tenderId: p.tenderId } : {}), ...(p.ref ? { referenceNo: p.ref } : {}) })), reason: 'Customer returned it',
+      }),
+    );
+
+  it('P1,000 cash with P300 corrected to GCash: cash can give back at most P700, GCash P300; the list says so; the two refunds net the Z to zero [kills: a cap that ignores corrections, a refund that cannot go to the corrected method]', async () => {
+    const w = await world();
+    const m = await tenThousand(w);
+    await correct(w, m);
+    await expectRefusal(refundBy(w, m, [{ amount: '1000.00' }]), 'Only ₱700.00 can still be refunded to Cash.');
+    await expectRefusal(refundBy(w, m, [{ amount: '700.00' }, { tenderId: w.gcash, amount: '300.01', ref: 'GC-REFUND-9' }]), 'Only ₱300.00 can still be refunded to GCash.');
+    const list = await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }));
+    expect(list.receipts[0]!.refundPayments).toMatchObject([{ tenderId: w.cash, left: '700.00' }, { tenderId: w.gcash, left: '300.00' }]);
+    await refundBy(w, m, [{ amount: '700.00' }, { tenderId: w.gcash, amount: '300.00', ref: 'GC-REFUND-9' }]);
+    expect(await sql`select tender_id, amount::text from pos_refund_payments where org_id = ${w.orgId} order by amount desc`).toEqual([{ tender_id: w.cash, amount: '700.00' }, { tender_id: w.gcash, amount: '300.00' }]);
+    const after = await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }));
+    expect(after.receipts[0]!.refundPayments).toMatchObject([{ left: '0.00' }, { left: '0.00' }]);
+    expect(tenderMap(await reading(w, AT))).toEqual({ [w.cash]: '0.00', [w.gcash]: '0.00' });
+  });
+  it('a method the receipt was neither paid nor corrected to is refused in words', async () => {
+    const w = await world();
+    const m = await tenThousand(w);
+    await expectRefusal(refundBy(w, m, [{ tenderId: w.gcash, amount: '1000.00', ref: 'GC-REFUND-9' }]), 'The money can only go back by the way it was paid.');
   });
 });
