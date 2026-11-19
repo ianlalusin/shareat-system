@@ -88,7 +88,7 @@ describe('T-534 S3 - the Z reads the corrected split; the receipt does not chang
     await correct(w, r, { amount: '1000.00' });
     const x = await reading(w, AT);
     expect(tenderMap(x)).toEqual({ [w.gcash]: '1000.00' });
-    expect(x.byTender.reduce((a, t) => a + Number(t.amount), 0)).toBe(1000);
+    expect((x.byTender as { amount: string }[]).reduce((a, t) => a + Number(t.amount), 0)).toBe(1000);
   });
 
   it('the Receipts list shows the corrected method, says corrected, and offers what is still free to move', async () => {
