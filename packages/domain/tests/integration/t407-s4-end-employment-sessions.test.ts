@@ -219,7 +219,8 @@ describe('Invariant 16 - ended at A, still open at B (R6)', () => {
 describe("Invariant 17 - ended at A but keeps the role's own (fan_out) scope at A and is open at B: nothing ends", () => {
   it('no session ends and no session.ended_all event is written (mutant: end at A unconditionally)', async () => {
     const f = await fixture('inv17');
-    const s = await f.person('Keeper', 'manager');
+    // fan_out is admin-only in production (roles.ts, stores/service.ts); the fixture's Boss is the second admin, so the last-admin guard passes.
+    const s = await f.person('Keeper', 'admin');
     await f.scope(s.personId, f.storeA, 'fan_out'); // the role's own scope: survives while another job remains (T-609 removes a MANUAL one, T-336 no longer keeps it)
     const empA = await f.hire(s.personId, f.storeA);
     await f.hire(s.personId, f.storeB);
@@ -235,6 +236,23 @@ describe("Invariant 17 - ended at A but keeps the role's own (fan_out) scope at 
     await expect(resolveActor(null, pinB.token)).resolves.toBeDefined();
     await expect(resolveActor(null, browser.token)).resolves.toBeDefined();
     expect(await endedAll(f.orgId), 'no event when nothing ended').toHaveLength(0);
+  });
+
+  it('a non-admin (manager) holding a stale fan_out scope at A does NOT keep it: the A PIN session ends, B and the browser survive (mutant: keep fan_out for any role)', async () => {
+    const f = await fixture('inv17-manager');
+    const s = await f.person('Ex Admin', 'manager');
+    await f.scope(s.personId, f.storeA, 'fan_out');
+    const empA = await f.hire(s.personId, f.storeA);
+    await f.hire(s.personId, f.storeB);
+    await f.browserSession(s);
+    await f.pinSession(s, f.storeA);
+    await f.pinSession(s, f.storeB);
+
+    await f.end(f.bossActor, empA);
+
+    expect(await live(s.personId, f.storeA), 'A PIN session ends').toBe(0);
+    expect(await live(s.personId, f.storeB), 'B PIN survives').toBe(1);
+    expect(await live(s.personId, null), 'browser survives (open at B)').toBe(1);
   });
 });
 
