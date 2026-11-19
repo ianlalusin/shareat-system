@@ -76,10 +76,8 @@ describe('1 — termination refuses sign-in and store-scoped authorize at the te
     const adminActor: Actor = { personId: boot.personId, orgId: boot.orgId };
     const employment = await hire(boot.orgId, adminActor, boot.storeId, worker!.id);
     expect(await hasScope(worker!.id, boot.storeId)).toBe(true);
-    // Isolate scope from capability: a MANUAL grant (grantSource='grant'), not a position default
-    // — endEmployment's pre-existing T-289 revocation only touches grantSource='position' rows
-    // (`positionDefaultsRepo.heldPositionGrantsForPersonAtStore`), so this survives termination
-    // and the only thing that can refuse it afterward is the missing store-scope row.
+    // A MANUAL grant (grantSource='grant'), not a position default. T-336 left it standing so the missing store scope was the
+    // only thing that refused it; T-609 (19 Nov 2026) revokes it too when the person's last job ends.
     await withOrgPrincipal(boot.orgId, (tx) =>
       accessRepo.grantCapability(tx, { personId: worker!.id, grantName: 'record_wastage', grantedBy: boot.personId, grantSource: 'grant' }),
     );
@@ -90,8 +88,8 @@ describe('1 — termination refuses sign-in and store-scoped authorize at the te
     const workerActor: Actor = { personId: worker!.id, orgId: boot.orgId };
     await expect(
       withOrgPrincipal(boot.orgId, (tx) => authorize(tx, workerActor, 'record_wastage', { storeId: boot.storeId })),
-      'the manual grant is still held (never revoked) — only the missing store scope can refuse this',
-    ).rejects.toThrow(/no store scope/);
+      'T-609: the manual grant and the role are revoked with the last job, so the refusal comes before scope is even read',
+    ).rejects.toThrow(/no active role/);
   });
 });
 
@@ -166,7 +164,7 @@ describe('4 — an admin/manager with a manual or fan_out row and no employment 
 });
 
 describe('5 — provenance: a manual grant always wins, in either order', () => {
-  it('(a) an admin grant AFTER a hire flips the row to manual, and it survives termination', async () => {
+  it('(a) an admin grant AFTER a hire flips the row to manual (and, since T-609, it goes with the last job)', async () => {
     const boot = await systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('L5A') }));
     const [worker] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${boot.orgId}, 'W5a') returning id`;
     const adminActor: Actor = { personId: boot.personId, orgId: boot.orgId };
@@ -177,7 +175,8 @@ describe('5 — provenance: a manual grant always wins, in either order', () => 
     expect(await scopeSource(worker!.id, boot.storeId), 'a manual grant flips provenance, even over an existing employment row').toBe('manual');
 
     await terminate(boot.orgId, adminActor, employment.id);
-    expect(await hasScope(worker!.id, boot.storeId), 'source is manual, not employment — endEmployment must not delete it').toBe(true);
+    // T-609 (supersedes T-336's "a manual scope survives"): the last job's end deletes every scope row, whatever its source.
+    expect(await hasScope(worker!.id, boot.storeId), 'last job ended: the manual scope goes too').toBe(false);
   });
 
   it('(b) a hire AFTER an admin grant leaves the row manual, untouched', async () => {
@@ -231,8 +230,8 @@ describe('7 — the column is NOT NULL, CHECK-constrained, and defaults to manua
   });
 });
 
-describe('8 — promotion to admin, then termination: scope at the hired store remains', () => {
-  it('hire at A, promote to admin (fan-out), end the employment: scope at A survives', async () => {
+describe('8 — promotion to admin, then termination of the last job (T-609 supersedes "scope survives")', () => {
+  it('hire at A, promote to admin (fan-out), end the employment: the role and the scope are revoked with it', async () => {
     const boot = await systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('L8') }));
     const [worker] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${boot.orgId}, 'W8') returning id`;
     const adminActor: Actor = { personId: boot.personId, orgId: boot.orgId };
@@ -243,10 +242,9 @@ describe('8 — promotion to admin, then termination: scope at the hired store r
 
     await terminate(boot.orgId, adminActor, employment.id);
 
-    expect(
-      await hasScope(worker!.id, boot.storeId),
-      'a promoted admin\'s access should not evaporate when their original hire ends — quoted, not assumed',
-    ).toBe(true);
+    expect(await hasScope(worker!.id, boot.storeId), 'T-609: ending the last job removes every scope row').toBe(false);
+    const [role] = await sql<{ role: string }[]>`select role from person_roles where person_id = ${worker!.id} and revoked_at is null`;
+    expect(role, 'and the role').toBeUndefined();
   });
 });
 

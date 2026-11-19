@@ -216,11 +216,11 @@ describe('Invariant 16 - ended at A, still open at B (R6)', () => {
   });
 });
 
-describe('Invariant 17 - ended at A but keeps manual scope at A and is open at B: nothing ends', () => {
+describe("Invariant 17 - ended at A but keeps the role's own (fan_out) scope at A and is open at B: nothing ends", () => {
   it('no session ends and no session.ended_all event is written (mutant: end at A unconditionally)', async () => {
     const f = await fixture('inv17');
     const s = await f.person('Keeper', 'manager');
-    await f.scope(s.personId, f.storeA, 'manual'); // a deliberate manual grant: survives the end (T-336)
+    await f.scope(s.personId, f.storeA, 'fan_out'); // the role's own scope: survives while another job remains (T-609 removes a MANUAL one, T-336 no longer keeps it)
     const empA = await f.hire(s.personId, f.storeA);
     await f.hire(s.personId, f.storeB);
     const browser = await f.browserSession(s);
@@ -320,8 +320,8 @@ describe('Invariant 19 - the race: a sign-in that read "eligible" cannot slip pa
   }, 30_000);
 });
 
-describe('Invariant 20 - ending the last admin\'s employment never locks the org out (leg b)', () => {
-  it('the only admin ends their own employment: sessions survive, no event, and they can still sign in', async () => {
+describe("Invariant 20 - ending the last admin's employment never locks the org out (leg b)", () => {
+  it('the only admin ends their own employment: T-609 refuses the end, so sessions survive, no event, and they can still sign in', async () => {
     const f = await fixture('inv20');
     const admin = await f.person('Only Admin', 'super_admin');
     await f.scope(admin.personId, f.storeA, 'fan_out');
@@ -329,10 +329,14 @@ describe('Invariant 20 - ending the last admin\'s employment never locks the org
     const browser = await f.browserSession(admin);
     const actor: Actor = { personId: admin.personId, orgId: f.orgId };
 
-    await f.end(actor, empId);
+    // Before T-609 the end went through and leg (b) kept the admin in. Now the end itself is refused (the org keeps an administrator
+    // who can sign in), which keeps the intent: the org is never locked out. The boss fixture admin holds a PIN, so make them unable
+    // to sign in by revoking it first - otherwise this admin would not be "the only one".
+    await sql`update person_credentials set revoked_at = now(), revoke_reason = 'test' where person_id = ${f.boss.personId} and revoked_at is null`;
+    await expect(f.end(actor, empId)).rejects.toThrow(/last administrator who can sign in/);
 
-    expect(await employmentOpen(empId), 'the employment did end').toBe(false);
-    expect(await live(admin.personId), 'mutant: R1 leg (b) requires an employment - the admin\'s session is ended').toBe(1);
+    expect(await employmentOpen(empId), 'the employment stays open').toBe(true);
+    expect(await live(admin.personId), "the admin's session is untouched").toBe(1);
     await expect(resolveActor(null, browser.token)).resolves.toBeDefined();
     expect(await endedAll(f.orgId)).toHaveLength(0);
     expect((await f.browserSession(admin)).personId, 'and a fresh sign-in still works').toBe(admin.personId);
