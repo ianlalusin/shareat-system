@@ -24,6 +24,7 @@ import { closeDb, channelSettlementsRepo, loansRepo, transaction, APP_ROLE, type
 import type { Actor } from '@shareat/auth';
 import { previewChannelSettlement, recordChannelSettlement, voidChannelSettlement } from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
+import { makeSettleableDay } from './_fixtures/sales-day-flow';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -61,6 +62,7 @@ async function fixture(hint: string) {
     insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code, destination_money_account_id)
     values (${orgId}, ${paying.id}, ${`Grab ${uid('c')}`}, false, '1220', ${bank!.id}) returning id`;
   const [day] = await sql<{ id: string }[]>`insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by) values (${orgId}, ${paying.id}, '2026-01-10', 0, 0, 0, ${p!.id}) returning id`;
+  await makeSettleableDay(sql, day!.id, channel!.id, p!.id); // DEF-881: a settlement names a verified day carrying the channel
   return { orgId, paying, other, third, bankId: bank!.id, channelId: channel!.id, salesDayId: day!.id, manager: actor(orgId, p!.id), personId: p!.id };
 }
 type Fx = Awaited<ReturnType<typeof fixture>>;

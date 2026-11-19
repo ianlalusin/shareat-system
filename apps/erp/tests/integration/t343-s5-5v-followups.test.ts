@@ -20,6 +20,7 @@ import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
+import { makeSettleableDay } from '../../../../packages/domain/tests/integration/_fixtures/sales-day-flow';
 import { sql as dsql } from 'drizzle-orm';
 
 config({ path: '.env.local' });
@@ -955,6 +956,7 @@ async function channelFixture(hint: string, configured = true) {
   const [day] = await sql<{ id: string }[]>`
     insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by)
     values (${f.orgId}, ${f.storeId}, '2026-01-10', 0, 0, 0, ${f.admin.personId}) returning id`;
+  await makeSettleableDay(sql, day!.id, channel!.id, f.admin.personId); // DEF-881: a settlement names a verified day carrying the channel
   // Raise the receivable a verified channel-day would have raised — otherwise EVERY settlement
   // attempt hits "nothing outstanding to settle" before gross/net ever matter.
   const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} limit 1`;
