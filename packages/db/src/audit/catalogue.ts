@@ -342,6 +342,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('security.event_store_mismatch', 'security', 'high', 'store', 'stores', 'T-402', { actor: 'either' }),
   def('employment.created', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402'),
+  // T-609: what ending an employment switched off (counts per kind: store scopes, grants, role, PIN, sessions). No ids, no PIN material.
+  def('employment.access_revoked', 'security', 'high', 'store', 'employments', 'T-609'),
   // T-434: a staff photo is changed on an EMPLOYMENT (the store's ID card). Photo VIEWS are deliberately not logged (every card load would flood it).
   def('staff_photo.set', 'staff', 'normal', 'store', 'employments', 'T-434'),
   def('staff_photo.replaced', 'staff', 'normal', 'store', 'employments', 'T-434'),
