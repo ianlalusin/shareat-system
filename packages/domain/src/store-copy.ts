@@ -13,12 +13,12 @@
 import { authorize, can, type Actor, type Capability } from '@shareat/auth';
 import { accessRepo, daypartsRepo, kitchenRepo, menuRepo, posV2Repo, storesRepo, type Tx } from '@shareat/db';
 import type { MenuChannel } from '@shareat/db/schema';
-import { gone, refuse } from '../shared/refusal';
-import { createKitchenStation, setKitchenRoute } from '../kitchen';
-import { upsertPosDiscountPreset } from '../pos/store-setup';
-import { createDaypart, updateDaypart } from './dayparts';
-import { setMenuOffer, setOptionOffer } from './pricing';
-import { audit } from './shared';
+import { gone, refuse } from './shared/refusal';
+import { createKitchenStation, setKitchenRoute } from './kitchen';
+import { upsertPosDiscountPreset } from './pos/store-setup';
+import { createDaypart, updateDaypart } from './menu/dayparts';
+import { setMenuOffer, setOptionOffer } from './menu/pricing';
+import { audit } from './menu/shared';
 
 export type CopyKind = 'hours' | 'prices' | 'kitchen' | 'presets';
 export interface CopyInput {
