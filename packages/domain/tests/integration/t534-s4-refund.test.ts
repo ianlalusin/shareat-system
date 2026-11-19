@@ -392,7 +392,7 @@ describe('T-613 D3 - a Z of only refunds is no longer "nothing to close"', () =>
     const m = await thousand(w, '1000.00');
     await close(w, AT, await pinOf(w, w.managerId));
     await refund(w, m, { lines: [[0, 1]], pays: [[0, '250.00']] });
-    expect((await reading(w, AT2)).refunds.count).toBe(1);
+    expect(((await reading(w, AT2)) as unknown as { refunds: { count: number } }).refunds.count).toBe(1);
     const err = await close(w, AT2, await pinOf(w, w.managerId)).then(() => null, (e: unknown) => e);
     expect(err).toBeInstanceOf(RefusalError);
     expect((err as RefusalError).userMessage).toMatch(/^The refunds on .* are bigger than what was taken by the same payment method/);

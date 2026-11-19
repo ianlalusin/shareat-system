@@ -434,7 +434,7 @@ export async function closeDay(tx: Tx, actor: Actor, input: CloseDayInput, deps?
   if (reading.receiptCount === 0 && reading.refunds.count === 0 && reading.convert.count === 0) throw refuse('pos: nothing to close', NO_SALES_TO_CLOSE);
   // R11 (row 450): from the oldest unclosed receipt's business day to today's, no more than 2 business dates (a Z with no receipts has none to span).
   const today = startHourDate(at, w.hour);
-  if (w.open[0] && daysBetween(startHourDate(w.open[0].issuedAtDevice, w.hour), today) + 1 > 2) throw refuse('pos: the close would span more than 2 business days', MORE_THAN_TWO_DAYS);
+  if (w.open.length > 0 && daysBetween(startHourDate(w.open[0]!.issuedAtDevice, w.hour), today) + 1 > 2) throw refuse('pos: the close would span more than 2 business days', MORE_THAN_TWO_DAYS);
 
   // Ruling 1: a Z is dated with the business day it closes, and after this terminal's last Z.
   const afterLast = w.lastZ ? addDays(parseBusinessDate(w.lastZ.businessDate), 1) : null;
