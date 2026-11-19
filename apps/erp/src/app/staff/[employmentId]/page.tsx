@@ -17,7 +17,7 @@ import { DeductionAgreementsSection } from './DeductionAgreementsSection';
 import { Avatar } from './Avatar';
 import { RefillForm } from './RefillForm';
 import { DocumentsSection } from './DocumentsSection';
-import { deductionAgreementsFor, documentsFor, employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import { accessOffAtStoreFor, deductionAgreementsFor, documentsFor, employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
@@ -68,7 +68,7 @@ export default async function EmploymentDetailPage({
 
   const isEnded = detail.employment.endedOn !== null;
   const roleOnly = detail.role === 'manager' || detail.role === 'admin' || detail.role === 'super_admin';
-  const [positions, livePin, otherBranches, govIds, media, agreements, documents] = await Promise.all([
+  const [positions, livePin, otherBranches, govIds, media, agreements, documents, accessOff] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
     livePinFor(actor, detail.employment.personId),
     // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
@@ -80,6 +80,8 @@ export default async function EmploymentDetailPage({
     deductionAgreementsFor(actor, detail.employment.personId, detail.employment.storeId),
     // T-584: documents issued for this employment; null (hidden) without view_documents at the store.
     documentsFor(actor, employmentId, detail.employment.storeId),
+    // T-609: an ended employment shows whether the person's access is really off here.
+    isEnded ? accessOffAtStoreFor(actor, detail.employment.personId, detail.employment.storeId) : Promise.resolve(false),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
@@ -101,6 +103,7 @@ export default async function EmploymentDetailPage({
         <Badge tone="success" label="Active" />
       )}
       {!isEnded && !livePin && <Badge tone="warning" label="No sign-in PIN" />}
+      {isEnded && accessOff && <Badge tone="closed" label="Access: off" />}
     </>
   );
 
@@ -427,6 +430,11 @@ export default async function EmploymentDetailPage({
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               Ended {formatBusinessDayLong(detail.employment.endedOn!)} as {detail.employment.employmentStatus.replace(/-/g, ' ')}.
             </p>
+            {accessOff && (
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                Access: off. To switch it back on, hire them again, then set a new PIN. Extra access an administrator gave by hand is not brought back; an administrator grants it again.
+              </p>
+            )}
           </>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
@@ -454,10 +462,19 @@ export default async function EmploymentDetailPage({
                     ))}
                   </select>
                 </Field>
+                <p className="basis-full text-sm text-neutral-700 dark:text-neutral-300">
+                  {otherBranches.branches.length + otherBranches.hiddenCount > 0
+                    ? `This signs them out of ${detail.storeName} and removes their access there. Their PIN and access at their other store${otherBranches.branches.length + otherBranches.hiddenCount === 1 ? '' : 's'} stay.`
+                    : `This signs them out everywhere and removes their PIN, role and all access, at ${detail.storeName} and every other store.`}
+                </p>
                 <ConfirmDestructive
                   tier="admin-pin"
                   label="End employment"
-                  consequence="Ends this employment. The record stays visible. An administrator must approve with their own PIN."
+                  consequence={
+                    otherBranches.branches.length + otherBranches.hiddenCount > 0
+                      ? `Ends this employment and removes their access at ${detail.storeName}. The record stays visible. An administrator must approve with their own PIN.`
+                      : 'Ends this employment, signs them out everywhere and removes their PIN, role and all access. The record stays visible. An administrator must approve with their own PIN.'
+                  }
                 />
               </CheckedForm>
             </FormModal>

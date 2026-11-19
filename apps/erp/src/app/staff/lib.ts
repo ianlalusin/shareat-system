@@ -144,6 +144,11 @@ export async function livePinFor(actor: Actor, personId: string): Promise<{ issu
   });
 }
 
+/** T-609: true when this person can no longer sign in at this store - the "Access: off" pill on an ended record. The page's own read gate has already passed. */
+export async function accessOffAtStoreFor(actor: Actor, personId: string, storeId: string): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, async (tx) => !(await accessRepo.personMaySignInAtStore(tx, personId, storeId)));
+}
+
 /** ⭐ T-302 — the other branches this person still works at, for the warning the issue-PIN form
  *  shows BEFORE the button. One PIN per person now means issuing one here changes it there. */
 export async function otherOpenBranchesFor(
