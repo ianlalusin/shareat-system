@@ -1,7 +1,7 @@
 /**
  * T-533 S2 - the store's stands and discount presets, written one at a time and audited. docs/tasks/533-pos-lipa-switch.md R2.
  *
- * Today the one caller is the one-time load from v1 (`packages/etl/src/pos-v2/load-store-setup.ts`); T-535 puts a screen on the presets.
+ * Callers: the one-time load from v1 (`packages/etl/src/pos-v2/load-store-setup.ts`) and T-611 S3 (copy presets from another store, `menu/copy.ts`); T-535 puts a screen on the presets.
  * Every function is `(tx, actor, input)` and calls `authorize` FIRST: `manage_store_settings` (admin, manager) at the STORE.
  * Idempotent: the same input a second time writes nothing, audits nothing and does not bump `pos_stores.state_version`.
  * A stand is never resurrected: a retired number stays retired (retired numbers are never reused, T-523 R2).

@@ -1,6 +1,6 @@
 'use client';
 /**
- * The shared "Copy from another store" window (T-611: hours and prices in S1, kitchen in S2). docs/tasks/611-copy-settings-between-stores.md.
+ * The shared "Copy from another store" window (T-611: hours and prices in S1, kitchen in S2, discount presets in S3). docs/tasks/611-copy-settings-between-stores.md.
  *
  * Choose the store to copy FROM, tick the stores to copy TO, decide whether different values are replaced (off by default), press Preview
  * (the server counts what would happen, nothing is written), then confirm with an administrator PIN. The browser sends choices only: the plan,
@@ -20,6 +20,7 @@ const WORDS = {
     note: ' Prices already in use are never edited: a changed price is a new price from now.',
   },
   kitchen: { title: 'Copy kitchen stations', noun: 'kitchen routes', what: 'the kitchen stations and which station cooks each item', note: ' A station that is missing is created.' },
+  presets: { title: 'Copy discounts', noun: 'discounts', what: 'the named discounts the cashier can pick (not the senior and PWD discounts, which are the same everywhere)', note: '' },
 } as const;
 const MARK = { add: 'Add', same: 'Same', different: 'Different', skip: 'Skipped' } as const;
 
