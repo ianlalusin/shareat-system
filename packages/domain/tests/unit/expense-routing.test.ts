@@ -417,7 +417,7 @@ describe('T-589 B8 - the composed approval refusal never doubles its full stop',
         expense: { id: 'e1', status: 'draft', storeId: 's1', totalAmount: '100.00', supplierId: null, supplierInvoiceId: null, categoryId: 'c1' },
         detail: {
           capacity: null, category: { category: 'Rent', accountCode: '6200' }, payments: [payment],
-          requests: [], wallets: [], drawers: [], owner: null, period: null,
+          requests: [], wallets: [], drawers: [], owner: null, period: null, belowThreshold: false,
         },
       };
       const verdict = approvalVerdict(facts as never, { skipInvoice: true });

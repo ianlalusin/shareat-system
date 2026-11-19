@@ -9,14 +9,15 @@
  * history.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, journalRepo, personsRepo, type Tx } from '@shareat/db';
-import { compare, formatMoney, money, ZERO } from '@shareat/core/money';
+import { advisoryLocksRepo, apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, fixedAssetsRepo, journalRepo, personsRepo, type Tx } from '@shareat/db';
+import { add, compare, formatMoney, money, ZERO, type Money } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { retireAssetFromVoidedExpense } from '../fixed-assets/capitalize';
 import { refuse, gone, internalFault, humanDate } from '../shared/refusal';
 import { capAuditText } from '../shared/audit-text';
 import { authorizeOtherStores } from '../ledger/inter-store';
+import { EXPENSE_FUNDING_ACCOUNTS } from './routing';
 
 export interface VoidExpenseResult {
   reversalEntryId: string;
@@ -104,6 +105,45 @@ async function runVoidExpense(tx: Tx, actor: Actor, expenseId: string, reason: s
       'voidExpense: reason is required and cannot be empty or whitespace-only',
       'Reason is required and cannot be empty or whitespace-only.',
     );
+  }
+
+  // A replay of an already-voided expense stays a no-op, so neither guard below fires on it.
+  if (expense.status !== 'voided') {
+    // DEF-892: disposing the asset already credited 1510 for its cost; this void's reversal would credit it again.
+    // Read WITH the lock `disposeAsset` takes, so a disposal in flight is waited for. Known limit: nothing reverses
+    // a disposal, so such a bill cannot be voided from the app (T-596 R3).
+    const found = await fixedAssetsRepo.findBySourceExpense(tx, actor.orgId, expenseId);
+    const asset = found && (await fixedAssetsRepo.getByIdForUpdate(tx, actor.orgId, found.id));
+    if (asset?.status === 'disposed') {
+      throw refuse(
+        `voidExpense: expense ${expenseId} capitalised asset ${asset.id}, which is already disposed — voiding would credit 1510 twice`,
+        "This asset was already disposed, so this bill can't be voided.",
+      );
+    }
+
+    // DEF-890: a reimbursable expense's 2130 credit may already be paid out. 2130 is pooled per person per store, so
+    // refuse when this expense's credit is more than what is still owed to that person there (the ceiling
+    // `payReimbursement` puts on a payout, read the other way).
+    const owed = new Map<string, { employeeId: string; storeId: string; credit: Money }>();
+    for (const l of await journalRepo.findLinesForEntryWithAccountCodes(tx, expense.journalEntryId)) {
+      if (l.accountCode !== EXPENSE_FUNDING_ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES || l.partyType !== 'employee' || !l.partyId || !l.storeId) continue;
+      const key = `${l.partyId}:${l.storeId}`;
+      const prev = owed.get(key);
+      owed.set(key, { employeeId: l.partyId, storeId: l.storeId, credit: add(prev?.credit ?? ZERO, money(l.credit)) });
+    }
+    // Locks sorted by payee so two voids touching the same people can never take them in opposite orders.
+    const payees = [...new Set([...owed.values()].map((o) => o.employeeId))].sort();
+    for (const employeeId of payees) await advisoryLocksRepo.lockReimbursementPayee(tx, employeeId);
+    for (const { employeeId, storeId, credit } of owed.values()) {
+      const outstanding = money((await expensesRepo.reimbursablePayableOf(tx, actor.orgId, employeeId, storeId)).outstanding);
+      if (compare(outstanding, credit) < 0) {
+        const who = (await personsRepo.getPersonById(tx, actor.orgId, employeeId))?.displayName ?? 'the employee';
+        throw refuse(
+          `voidExpense: expense ${expenseId} credited ${formatMoney(credit)} to 2130 for ${employeeId}, but only ${formatMoney(outstanding)} is still owed — a reimbursement payment already covers it`,
+          `${expensePhrase(expense)} has already been paid back to ${who} as a reimbursement. Void the reimbursement payment first, then void the expense.`,
+        );
+      }
+    }
   }
 
   // ⭐ T-415 (DEF-661, ruling 4): voiding puts float money back on its cash request, so every request this expense drew on
