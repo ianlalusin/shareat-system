@@ -101,7 +101,7 @@ async function setup(hint: string): Promise<Fixture> {
   const storeId = await mkStore('A');
   const otherStoreId = await mkStore('B');
 
-  const person = async (name: string, role: 'staff' | 'manager') => {
+  const person = async (name: string, role: 'staff' | 'manager' | 'admin') => {
     const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, ${name}) returning id`;
     await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${orgId}, ${role})`;
     await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${storeId})`;

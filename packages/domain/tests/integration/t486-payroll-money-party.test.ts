@@ -182,7 +182,8 @@ describe('T-486 - pay run', () => {
     const f = await fixture('pr-fl');
     await workedDay(f, '2026-01-05');
     await expectFloatRefusal(run(f, f.floatId));
-    expect(await count('journal_entries', f.orgId)).toBe(0);
+    // T-597: the fixture's two opening-balance entries (office safe, e-wallet) are the only entries; the refused run added none.
+    expect(await count('journal_entries', f.orgId)).toBe(2);
     expect(await count('pay_runs', f.orgId)).toBe(0);
   });
 
