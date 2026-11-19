@@ -123,13 +123,26 @@ describe('R3 posPreflight - each blocking item fires on its own', () => {
     expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_record_sale_person'] });
   });
 
-  it('no manager or above with a PIN: a revoked PIN, a manager of another store, and a staff PIN do not count; an admin with a PIN does', async () => {
+  it('no tablet registered for approvals (T-601 S6): no active pos_terminal_links row; a revoked one does not count', async () => {
+    const f = await ready();
+    await sql`update pos_terminal_links set revoked_at = now(), revoked_by = ${f.adminId} where store_id = ${f.storeId}`;
+    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_terminal_link'] });
+  });
+
+  it('no approver (T-601 S6): a revoked PIN, a manager of another store, and a staff PIN do not count; a granted admin with a PIN does', async () => {
     const f = await ready();
     await pinOf(f, f.managerOtherId);
     await sql`update person_credentials set revoked_at = now(), revoke_reason = 'test' where person_id = ${f.managerId} and kind = 'pin'`;
-    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_manager_with_pin'] });
+    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_approver'] });
     await pinOf(f, f.adminId);
     expect(await codes(f)).toEqual(NONE);
+  });
+
+  it('no approver (T-601 S6): the only approver is also the only seller, so they cannot approve their own close', async () => {
+    const f = await ready();
+    await sql`update person_credentials set revoked_at = now(), revoke_reason = 'test' where person_id = ${f.managerId} and kind = 'pin'`;
+    await sql`insert into person_grants (person_id, grant_name, granted_by, grant_source, store_id) values (${f.counterId}, 'approve_pos_correction', ${f.adminId}, 'grant', ${f.storeId})`;
+    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_approver'] });
   });
 
   it('the bridge key file not configured, from the injected probe only', async () => {
