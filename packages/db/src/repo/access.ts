@@ -389,31 +389,6 @@ export async function grantStoreScope(
     .onConflictDoNothing({ target: [personStoreScope.personId, personStoreScope.storeId] });
 }
 
-/**
- * T-336 SCOPE LIFECYCLE fix — the other half of `grantStoreScope`. Deletes exactly one
- * `person_store_scope` row, by id, never by (person, store): the caller (`endEmployment`) has
- * already decided this row is safe to remove (`source = 'employment'` and no other open
- * employment at that store) and names it, the same posture as `revokeDefaultById`.
- */
-export async function deleteStoreScopeById(tx: Tx, id: string): Promise<void> {
-  await tx.delete(personStoreScope).where(eq(personStoreScope.id, id));
-}
-
-/** The active scope row for (person, store), if any — what `endEmployment` reads before
- *  deciding whether it may delete it. */
-export async function findStoreScope(
-  tx: Tx,
-  personId: string,
-  storeId: string,
-): Promise<{ id: string; source: string } | undefined> {
-  const [row] = await tx
-    .select({ id: personStoreScope.id, source: personStoreScope.source })
-    .from(personStoreScope)
-    .where(and(eq(personStoreScope.personId, personId), eq(personStoreScope.storeId, storeId)))
-    .limit(1);
-  return row;
-}
-
 /** Removes one store. Ordinary delete — CAPABILITY-MATRIX.md frames store scope as "rows,
  * never a bypass"; the audit question it answers ("who can see Davao right now?") is
  * answered by which rows exist today, not by a revocation history (contrast person_roles

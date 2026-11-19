@@ -7,7 +7,7 @@
  *
  * ⛔ Written against the ruled spec while this is landing in parallel (same posture as the
  * auto-role/store-scope deltas earlier in T-336): as of this write, the schema column and the
- * `accessRepo.grantStoreScope`/`findStoreScope`/`deleteStoreScopeById` primitives exist, but
+ * `accessRepo.grantStoreScope` primitive exists (the find/delete helpers were removed by T-609), but
  * migration `0156` itself is not yet generated/applied to this lane DB, and `endEmployment`
  * (`packages/domain/src/people/index.ts`) does not yet call the deletion decision. Expect RED on
  * "column source does not exist" until the migration lands + this lane DB is remigrated, then RED
