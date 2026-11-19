@@ -21,9 +21,10 @@ import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, formatMoney, money, ZERO, type Money } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { auditLogRepo, cashRequestsRepo, moneyAccountsRepo, personsRepo, storesRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, cashRequestsRepo, journalRepo, moneyAccountsRepo, personsRepo, storesRepo, type Tx } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
+import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { parseMoneyInput } from '../shared/money-input';
 import { gone, refuse } from '../shared/refusal';
 import { capAuditText } from '../shared/audit-text';
@@ -125,7 +126,7 @@ export async function decideCashRequest(
         rejectReason: reason,
         approvedBy: actor.personId,
         decidedOn: on,
-      });
+      }, 'requested');
       // T-402 S3 (C4): the decision's event, same transaction, after its own write.
       await auditLogRepo.append(trx, actor.orgId, {
         actorPersonId: actor.personId,
@@ -150,7 +151,7 @@ export async function decideCashRequest(
       approvedAmount,
       approvedBy: actor.personId,
       decidedOn: on,
-    });
+    }, 'requested');
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'cash_request.approved',
@@ -180,13 +181,16 @@ export async function cancelCashRequest(
   input: { requestId: string; reason?: string },
 ): Promise<void> {
   const run = async (trx: Tx) => {
-    const req = await cashRequestsRepo.getById(trx, actor.orgId, input.requestId);
+    // DEF-887: lock the row, then read the status with the lock ours - a release that is mid-flight is waited for, so a cancel
+    // can no longer overwrite the 'released' it just wrote (cash out of the drawer, request cancelled, float invisible).
+    const [req] = await cashRequestsRepo.lockForSpend(trx, actor.orgId, [input.requestId]);
     if (!req) throw new Error(`cancelCashRequest: request ${input.requestId} does not exist.`);
     await authorize(trx, actor, 'create_expense', { storeId: req.storeId });
 
     if (req.status !== 'requested' && req.status !== 'approved') {
-      throw new Error(
+      throw refuse(
         `cancelCashRequest: this request is ${req.status} — only one that has not been released can be withdrawn.`,
+        'This cash request has already been released, so it cannot be withdrawn. Record what comes back instead.',
       );
     }
     await cashRequestsRepo.update(trx, actor.orgId, req.id, {
@@ -197,7 +201,7 @@ export async function cancelCashRequest(
       approvedBy: null,
       decidedOn: null,
       rejectReason: input.reason?.trim() || null,
-    });
+    }, ['requested', 'approved']);
   };
   return run(tx);
 }
@@ -215,7 +219,8 @@ export async function releaseCashRequest(
   input: { requestId: string; amount: string; fromMoneyAccountId: string; on: string },
 ): Promise<{ entryId: string; warning?: string }> {
   const run = async (trx: Tx) => {
-    const req = await cashRequestsRepo.getById(trx, actor.orgId, input.requestId);
+    // DEF-887: the same row lock cancel takes, so a cancel and a release of one request run one after the other.
+    const [req] = await cashRequestsRepo.lockForSpend(trx, actor.orgId, [input.requestId]);
     if (!req) throw new Error(`releaseCashRequest: request ${input.requestId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: req.storeId });
     // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
@@ -334,7 +339,7 @@ export async function releaseCashRequest(
       releasedFromMoneyAccountId: account.id,
       releasedOn: input.on,
       releasedBy: actor.personId,
-    });
+    }, 'approved');
 
     const allWarnings = [warning, staffWarning].filter((w): w is string => !!w).join(' ');
     return { entryId: result.entryId, ...(allWarnings ? { warning: allWarnings } : {}) };
@@ -369,6 +374,8 @@ export async function settleCashRequest(
     shortReason?: string;
     toMoneyAccountId?: string;
     on: string;
+    /** DEF-885: minted once per render by the form (hidden input). A double click is a replay of ONE settlement; a second identical return is a new id. */
+    settleId: string;
   },
 ): Promise<SettleResult> {
   const run = async (trx: Tx) => {
@@ -379,15 +386,8 @@ export async function settleCashRequest(
     await authorize(trx, actor, 'approve_expense', { storeId: req.storeId });
     // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
     assertFieldRules(CASH_REQUEST_SETTLE_RULES, { returnedAmount: input.returnedAmount, shortAmount: input.shortAmount, on: input.on });
+    const settleId = requireRequestId('settleCashRequest', input.settleId);
     const holder = (await personsRepo.getPersonById(trx, actor.orgId, req.requestedFor))?.displayName ?? 'The holder';
-    if (req.status !== 'released') {
-      throw refuse(
-        `settleCashRequest: this request is ${req.status}, not released.`,
-        `${holder}'s cash request is already ${req.status}, so there is nothing left to settle.`,
-      );
-    }
-
-    const before = await cashRequestsRepo.floatPositionOf(trx, actor.orgId, req.id);
     // T-371: both figures stay branded Money end to end; an absent one is ZERO (it is not a column value — nothing is
     // written for it, its leg is simply not posted).
     const returned: Money =
@@ -398,30 +398,52 @@ export async function settleCashRequest(
       input.shortAmount === undefined
         ? ZERO
         : parseMoneyInput(input.shortAmount, 'settleCashRequest: the short amount', 'The short amount');
-    const held = money(before.outstanding);
-    // T-343 S5.5s / DEF-470 item 6 — before "nothing to settle": a lone negative return used to read
-    // as "nothing to settle", the wrong reason (an order bug, not a missing check).
-    if (compare(returned, ZERO) < 0 || compare(short, ZERO) < 0) {
-      throw refuse(
-        'settleCashRequest: a returned or short amount cannot be negative.',
-        'A returned or short amount cannot be negative.',
-      );
-    }
-    if (compare(returned, ZERO) <= 0 && compare(short, ZERO) <= 0) {
-      throw new Error('settleCashRequest: nothing to settle — give a return, a shortage, or both.');
-    }
-    // ⛔ You cannot account for more than is still held. The rest was spent, and spending is an
-    // expense, not a settlement.
-    // Both sides are (14,2), so the old half-centavo tolerance is exact equality in centavos.
-    const accounted = add(returned, short);
-    if (compare(accounted, held) > 0) {
-      throw refuse(
-        `settleCashRequest: ${accounted} is more than the ${before.outstanding} still held.`,
-        `Only ${formatMoney(held)} is still held on this cash request. Anything spent is recorded as an expense, not settled here.`,
-      );
-    }
-    if (compare(short, ZERO) > 0 && !input.shortReason?.trim()) {
-      throw new Error('settleCashRequest: a shortage needs a reason.');
+    const returnKey = `cash-request:${req.id}:return:${settleId}`;
+    const shortKey = `cash-request:${req.id}:shortage:${settleId}`;
+    // DEF-885 / C1: a replay (double click, back button) is a call whose every requested leg already exists under this settle id.
+    // It skips the status and held checks - the first call changed both. A call that asks for a leg the first one did not post
+    // is NOT a replay: the normal checks run, so it cannot slip a new leg past them.
+    const wantReturn = compare(returned, ZERO) > 0;
+    const wantShort = compare(short, ZERO) > 0;
+    const replay =
+      (wantReturn || wantShort) &&
+      (!wantReturn || !!(await journalRepo.findEntryByIdempotencyKey(trx, actor.orgId, returnKey))) &&
+      (!wantShort || !!(await journalRepo.findEntryByIdempotencyKey(trx, actor.orgId, shortKey)));
+
+    if (!replay) {
+      if (req.status !== 'released') {
+        throw refuse(
+          `settleCashRequest: this request is ${req.status}, not released.`,
+          `${holder}'s cash request is already ${req.status}, so there is nothing left to settle.`,
+        );
+      }
+
+      const before = await cashRequestsRepo.floatPositionOf(trx, actor.orgId, req.id);
+      const held = money(before.outstanding);
+      // T-343 S5.5s / DEF-470 item 6 — before "nothing to settle": a lone negative return used to read
+      // as "nothing to settle", the wrong reason (an order bug, not a missing check).
+      if (compare(returned, ZERO) < 0 || compare(short, ZERO) < 0) {
+        throw refuse(
+          'settleCashRequest: a returned or short amount cannot be negative.',
+          'A returned or short amount cannot be negative.',
+        );
+      }
+      if (!wantReturn && !wantShort) {
+        throw new Error('settleCashRequest: nothing to settle — give a return, a shortage, or both.');
+      }
+      // ⛔ You cannot account for more than is still held. The rest was spent, and spending is an
+      // expense, not a settlement.
+      // Both sides are (14,2), so the old half-centavo tolerance is exact equality in centavos.
+      const accounted = add(returned, short);
+      if (compare(accounted, held) > 0) {
+        throw refuse(
+          `settleCashRequest: ${accounted} is more than the ${before.outstanding} still held.`,
+          `Only ${formatMoney(held)} is still held on this cash request. Anything spent is recorded as an expense, not settled here.`,
+        );
+      }
+      if (wantShort && !input.shortReason?.trim()) {
+        throw new Error('settleCashRequest: a shortage needs a reason.');
+      }
     }
 
     // ⭐ TWO EVENTS, TWO ENTRIES — and the first version got this wrong.
@@ -434,19 +456,19 @@ export async function settleCashRequest(
     // they can happen on different days. One entry each also means either can be reversed alone.
     const entryIds: string[] = [];
 
-    if (compare(returned, ZERO) > 0) {
+    if (wantReturn) {
       if (!input.toMoneyAccountId) {
         throw new Error('settleCashRequest: say which account the money came back into.');
       }
       const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.toMoneyAccountId);
       if (!account) throw new Error('settleCashRequest: that money account does not exist.');
 
-      const r = await postEntry(trx, {
+      const r = await postEntryOnce(trx, {
         orgId: actor.orgId,
         entryDate: input.on,
         sourceType: 'cash_request_return',
         sourceId: req.id,
-        idempotencyKey: `cash-request:${req.id}:return:${input.on}:${returned}`,
+        idempotencyKey: returnKey,
         memo: `Cash request returned — ${req.purpose}`,
         postedBy: actor.personId,
         lines: [
@@ -470,13 +492,13 @@ export async function settleCashRequest(
       entryIds.push(r.entryId);
     }
 
-    if (compare(short, ZERO) > 0) {
-      const r = await postEntry(trx, {
+    if (wantShort) {
+      const r = await postEntryOnce(trx, {
         orgId: actor.orgId,
         entryDate: input.on,
         sourceType: 'cash_request_shortage',
         sourceId: req.id,
-        idempotencyKey: `cash-request:${req.id}:shortage:${input.on}:${short}`,
+        idempotencyKey: shortKey,
         memo: `Cash request shortage — ${req.purpose}`,
         postedBy: actor.personId,
         lines: [
@@ -507,8 +529,8 @@ export async function settleCashRequest(
     // ⭐ Zero closes it, and zero is the LEDGER's answer — the four postings net to nothing when the
     // request is done, which is the whole shape of a float.
     const liquidated = compare(money(after.outstanding), ZERO) <= 0;
-    if (liquidated) {
-      await cashRequestsRepo.update(trx, actor.orgId, req.id, { status: 'liquidated' });
+    if (liquidated && req.status === 'released') {
+      await cashRequestsRepo.update(trx, actor.orgId, req.id, { status: 'liquidated' }, 'released');
     }
 
     return { entryIds, outstanding: after.outstanding, liquidated };
