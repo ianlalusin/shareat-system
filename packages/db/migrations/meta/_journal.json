@@ -1632,6 +1632,13 @@
       "when": 1809055907084,
       "tag": "0266_t534_s4_pos_receipts_day_refunds",
       "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "7",
+      "when": 1809142307084,
+      "tag": "0267_t608_optional_party_type",
+      "breakpoints": true
     }
   ]
 }

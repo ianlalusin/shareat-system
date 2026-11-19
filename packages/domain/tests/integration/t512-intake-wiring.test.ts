@@ -171,7 +171,8 @@ describe('T-512 loan check - the final-payment tolerance is the rule, resolved o
     const pending = await measurePending();
     const w = await world3(sql, hint);
     await stageThreeStores(w);
-    await mkLoan(sql, w, { storeId: w.storeA, name: 'Grab loan 1', startDate: '2026-05-11', principal: money(pending + 59124n), repayment: '591.24' });
+    // termPeriods 1: repayment x term (591.24) is not above the principal, so loan 1 has no interest schedule (T-608) and reads principal outstanding - the principal-only loan this test is about
+    await mkLoan(sql, w, { storeId: w.storeA, name: 'Grab loan 1', startDate: '2026-05-11', principal: money(pending + 59124n), repayment: '591.24', termPeriods: 1 });
     await mkLoan(sql, w, { storeId: w.storeA, name: 'Grab loan 2', startDate: '2026-10-12', principal: '150000.00', repayment: '1771.88' });
     return w;
   }
