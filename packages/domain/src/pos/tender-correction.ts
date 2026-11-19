@@ -67,6 +67,18 @@ export function tenderNetsAfterCorrections(payments: readonly { tenderId: string
   return nets;
 }
 
+/**
+ * The approver of a post-sale document (a correction, a refund): the signed-in person when they may approve here, else a manager's PIN. A wrong PIN is charged in its OWN
+ * committed transaction (NO_TX), so it counts although the calling transaction is refused and rolls back; the tablet's own terminal bucket takes it, never a value the device names.
+ */
+export async function postSaleApprover(tx: Tx, actor: Actor, storeId: string, pin: string | undefined): Promise<string> {
+  if (await can(tx, actor, 'approve_pos_correction', { storeId })) return actor.personId;
+  if (typeof pin !== 'string' || pin === '') throw refuse('pos: correction needs approval', CORRECTION_NEEDS_PIN);
+  const terminalPersonId = await posV2Repo.getActiveTerminalPersonId(tx, actor.orgId, storeId);
+  if (!terminalPersonId) throw refuse('pos: no terminal link for the store', POS_TERMINAL_NOT_REGISTERED);
+  return (await verifyPosManagerApproval(NO_TX, { orgId: actor.orgId, erpStoreId: storeId, pin, terminalPersonId })).approverPersonId;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // recordTenderCorrection
 // ---------------------------------------------------------------------------------------------------------------------
@@ -111,14 +123,7 @@ export async function recordTenderCorrection(tx: Tx, actor: Actor, input: Record
     return { wrote: false, id: prior.id };
   }
 
-  // The approver: the signed-in person when they may approve here, else a manager's PIN (the tablet's own terminal bucket takes a wrong PIN, never a value the device names).
-  let approverId = actor.personId;
-  if (!(await can(tx, actor, 'approve_pos_correction', { storeId }))) {
-    if (typeof input.approval?.pin !== 'string' || input.approval.pin === '') throw refuse('pos: correction needs approval', CORRECTION_NEEDS_PIN);
-    const terminalPersonId = await posV2Repo.getActiveTerminalPersonId(tx, orgId, storeId);
-    if (!terminalPersonId) throw refuse('pos: no terminal link for the store', POS_TERMINAL_NOT_REGISTERED);
-    approverId = (await verifyPosManagerApproval(NO_TX, { orgId, erpStoreId: storeId, pin: input.approval.pin, terminalPersonId })).approverPersonId;
-  }
+  const approverId = await postSaleApprover(tx, actor, storeId, input.approval?.pin);
 
   // The Z's own lock, then the receipt's: the Z never freezes figures a correction is about to change.
   await advisoryLocksRepo.lockPosDayClose(tx, storeId);

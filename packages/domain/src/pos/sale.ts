@@ -14,6 +14,7 @@ import { assertFieldRules } from '../shared/field-rules-assert';
 import { parseMoneyInput } from '../shared/money-input';
 import { POS_PAYMENT_REFERENCE_RULES, POS_REASON_RULES, POS_STATUTORY_HOLDER_RULES } from '../field-rules/pos';
 import { availableByPayment, keptOf, tenderNetsAfterCorrections } from './tender-correction';
+import { refundableByPayment, refundAmountsOfLine, refundNoOf } from './refund';
 import { priceSession, type PricedSession } from './price';
 import { isUniqueViolation, lockOpenSession } from './order';
 import { earlierUsesOfCard } from './senior-repeat';
@@ -445,6 +446,13 @@ export async function listTodaysSalesReceipts(tx: Tx, actor: Actor, input: { sto
   const tenderRows = await posV1Repo.listTendersByStore(tx, actor.orgId, input.storeId);
   const tenderName = new Map(tenderRows.map((t) => [t.id, t.name]));
   const left = availableByPayment(payments, corrections);
+  // T-534 S4: what each receipt still has to refund (items, then the money by paid row) and what was already refunded.
+  const lines = await posV2Repo.listReceiptLines(tx, actor.orgId, ids);
+  const refunds = await posV2Repo.listRefundsOfReceipts(tx, actor.orgId, ids);
+  const refundLines = await posV2Repo.listRefundLinesOfReceipts(tx, actor.orgId, ids);
+  const refundPays = await posV2Repo.listRefundPaymentsOfReceipts(tx, actor.orgId, ids);
+  const refundLeft = refundableByPayment(payments, refundPays);
+  const kindOf = new Map(tenderRows.map((t) => [t.id, t.kind as 'cash' | 'wallet']));
   return {
     stateVersion: await stateVersionOf(tx, actor, input.storeId),
     /** The store's active payment methods: what a correction can move money to. */
@@ -467,6 +475,22 @@ export async function listTodaysSalesReceipts(tx: Tx, actor: Actor, input: { sto
         corrected: mine.length > 0,
         /** Not yet in a Z: a wrong payment method can still be corrected. */
         canCorrect: r.dayCloseId === null,
+        /** T-534 S4: the refunds of this receipt so far (newest last) and their total. */
+        refunds: refunds.filter((x) => x.parentReceiptId === r.receiptId).map((x) => ({ refundNo: refundNoOf(storeCode, x.refundSeq), total: x.total })),
+        refundedTotal: String(fromCentavos(refunds.filter((x) => x.parentReceiptId === r.receiptId).reduce((a, x) => a + toCentavos(money(x.total)), 0n))),
+        /** The items, with how many can still be refunded and what each extra unit gives back (`amounts[q-1]` for q units), worked out here, never by the tablet. */
+        lines: lines
+          .filter((l) => l.receiptId === r.receiptId)
+          .map((l) => {
+            const done = refundLines.filter((x) => x.receiptLineId === l.id);
+            const doneQty = done.reduce((a, x) => a + x.qty, 0);
+            const amounts = refundAmountsOfLine(l, doneQty, done.reduce((a, x) => a + toCentavos(money(x.amount)), 0n));
+            return { lineId: l.id, name: l.name, qty: l.qty, net: l.net, left: l.qty - doneQty, amounts };
+          }),
+        /** The paid rows the money can go back to, in payment order, with what each can still take (a refund goes back the way it was paid). */
+        refundPayments: payments
+          .filter((p) => p.receiptId === r.receiptId)
+          .map((p) => ({ paymentId: p.id, tenderId: p.tenderId, tenderName: tenderName.get(p.tenderId) ?? 'Unknown tender', kind: kindOf.get(p.tenderId) ?? 'wallet', left: String(fromCentavos(refundLeft.get(p.id) ?? 0n)) })),
         payments: payments
           .filter((p) => p.receiptId === r.receiptId)
           .map((p) => ({ paymentId: p.id, tenderId: p.tenderId, tenderName: tenderName.get(p.tenderId) ?? 'Unknown tender', left: String(fromCentavos(left.get(p.id) ?? 0n)) })),
