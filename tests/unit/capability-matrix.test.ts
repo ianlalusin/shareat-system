@@ -235,7 +235,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // 2026-10-09 (t385-q1 = a). ⛔ RED until the builder adds the row: today's document has 100.
     const { rows } = parseCapabilityMatrixDoc();
     // ⭐ 101 -> 108 (T-401 S2): seven menu capabilities (view_menu, add_menu_item, manage_menu, request_menu_item, set_menu_price, set_menu_depletion, switch_usage_source).
-    // ⭐ 111 -> 112 (T-424): `approve_pos_correction` (store, admin yes, manager no: held by grant).
+    // ⭐ 111 -> 112 (T-424): `approve_pos_correction` (store, admin yes; manager became yes on 2026-11-19, ruling D2 - count unchanged).
     // ⭐ 112 -> 113 (T-434): `view_staff_signature` (store, admin yes, manager no: held by position grant). Also joins the derived ELEVATED set.
     // ⭐ 113 -> 114 (T-436): `view_leave_document` (store, admin yes, manager yes, position-grantable).
     // ⭐ 114 -> 115 (T-190): `manage_payroll_rates` (org, admin only: the accountant).
@@ -360,6 +360,14 @@ describe('role hierarchy sanity — authority strictly nests (CAPABILITY-MATRIX.
   });
 });
 
+describe("T-601 D2 (Ian, 2026-11-19) - approve_pos_correction is a manager's right by role", () => {
+  it('manager yes, store-scoped; staff no; the fallback list no longer lends it', () => {
+    expect(CAPABILITY_MATRIX.approve_pos_correction).toEqual({ super_admin: true, admin: true, manager: true, staff: false });
+    expect(CAPABILITY_SCOPE.approve_pos_correction).toBe('store');
+    expect(ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER).not.toContain('approve_pos_correction' satisfies Capability);
+  });
+});
+
 describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', () => {
   it('is exactly the admin-minus-manager delta of the matrix', () => {
     const expected = CAPABILITIES.filter((c) => CAPABILITY_MATRIX[c].admin && !CAPABILITY_MATRIX[c].manager && !ROLE_ONLY_CAPABILITIES.has(c)).sort();
@@ -476,9 +484,8 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         'manage_menu',
         'set_menu_depletion',
         'switch_usage_source',
-        // T-424: admin-yes, manager-no (held by grant: the store-manager positions' defaults), so it JOINS by the derivation. In an org with no
-        // admin the manager serves as admin and may approve a POS refund / correction / void with their PIN.
-        'approve_pos_correction',
+        // T-424 `approve_pos_correction` LEFT this set on 2026-11-19 (Ian's ruling D2, T-601): every store manager may approve a POS correction and the
+        // end-of-day close by role, so there is nothing for the fallback to lend. The ✗ side is pinned in the D2 test below (staff and a diner stay refused).
         // ⭐ T-434: `view_staff_signature` is admin-yes / manager-no (store), so the derived set gains it; with no admin the manager serves as admin.
         'view_staff_signature',
         // ⭐ T-436: `view_leave_document` is admin-yes / manager-no (store), so the derived set gains it; with no admin the manager serves as admin.
