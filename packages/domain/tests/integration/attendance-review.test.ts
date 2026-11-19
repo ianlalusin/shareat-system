@@ -33,7 +33,6 @@ import {
   attendanceDayDetail,
   attendanceReviewQueue,
   attendanceRoster,
-  createEmployment,
   recordAdjustment,
   recordPunch,
   seedAttendanceConfig,
@@ -44,6 +43,8 @@ import {
   sweepStore,
   toShiftDay,
 } from '@shareat/domain';
+// T-612: activate after hire, as a manager would (these fixtures hire people who already work).
+import { createEmployment } from './_fixtures/hire-and-activate';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;

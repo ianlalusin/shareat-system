@@ -27,13 +27,14 @@ if (!isTestDatabaseUrl(url)) {
 import { APP_ROLE, transaction, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
-  createEmployment,
   recordAdjustment,
   recordPunch,
   seedAttendanceConfig,
   seedCanonicalPositions,
   toShiftDay,
 } from '@shareat/domain';
+// T-612: activate after hire, as a manager would (these fixtures hire people who already work).
+import { createEmployment } from './_fixtures/hire-and-activate';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
