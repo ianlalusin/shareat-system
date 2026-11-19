@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1817` 13. Decision log
-- `1818–1837` 14. Amendment protocol
-- `1838–1842` 15. Engineering standards — the industry practices this project follows
-  - `1843–1848` 15.1 Build order: walking skeleton first
-  - `1849–1860` 15.2 Golden-master testing — the most important practice here
-  - `1861–1869` 15.3 Strangler Fig, not big-bang cutover
-  - `1870–1874` 15.4 No dual-write
-  - `1875–1883` 15.5 Expand/contract migrations
-  - `1884–1892` 15.6 Observability from day zero, not later
-  - `1893–1897` 15.7 CI gates
-  - `1898–1902` 15.8 Backups and a tested restore
-  - `1903–1907` 15.9 Twelve-Factor config
-  - `1908–1915` 15.10 Append-only ledgers — but not event sourcing
-  - `1916–1920` 15.11 Defence in depth
-  - `1921–1949` 15.12 Skills are lenses, not assurance
-  - `1950–1956` 15.13 Reconciliation is a permanent feature
-- `1957–1961` 16. The accounting spine
-  - `1962–1993` 16.0 What we are actually fixing — the diagnosis
-  - `1994–2037` 16.1 The ten invariants — non-negotiable
-  - `2038–2052` 16.2 The oracle: how "correct" is tested
-  - `2053–2074` 16.3 The model — header + lines, not legs
-  - `2075–2094` 16.4 Deliberately simpler than ERPNext
-  - `2095–2164` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2165–2189` 16.6 What v1 already gets right — preserve the intent
-  - `2190–2211` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2212–2226` 16.8 What v1's accounting already gets right
-  - `2227–2270` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2271–2321` 16.10 Posting patterns — one canonical pattern per business event
-  - `2322–2354` 16.11 Inventory's accounting integration
+- `1350–1818` 13. Decision log
+- `1819–1838` 14. Amendment protocol
+- `1839–1843` 15. Engineering standards — the industry practices this project follows
+  - `1844–1849` 15.1 Build order: walking skeleton first
+  - `1850–1861` 15.2 Golden-master testing — the most important practice here
+  - `1862–1870` 15.3 Strangler Fig, not big-bang cutover
+  - `1871–1875` 15.4 No dual-write
+  - `1876–1884` 15.5 Expand/contract migrations
+  - `1885–1893` 15.6 Observability from day zero, not later
+  - `1894–1898` 15.7 CI gates
+  - `1899–1903` 15.8 Backups and a tested restore
+  - `1904–1908` 15.9 Twelve-Factor config
+  - `1909–1916` 15.10 Append-only ledgers — but not event sourcing
+  - `1917–1921` 15.11 Defence in depth
+  - `1922–1950` 15.12 Skills are lenses, not assurance
+  - `1951–1957` 15.13 Reconciliation is a permanent feature
+- `1958–1962` 16. The accounting spine
+  - `1963–1994` 16.0 What we are actually fixing — the diagnosis
+  - `1995–2038` 16.1 The ten invariants — non-negotiable
+  - `2039–2053` 16.2 The oracle: how "correct" is tested
+  - `2054–2075` 16.3 The model — header + lines, not legs
+  - `2076–2095` 16.4 Deliberately simpler than ERPNext
+  - `2096–2165` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2166–2190` 16.6 What v1 already gets right — preserve the intent
+  - `2191–2212` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2213–2227` 16.8 What v1's accounting already gets right
+  - `2228–2271` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2272–2322` 16.10 Posting patterns — one canonical pattern per business event
+  - `2323–2355` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1814,6 +1814,7 @@ just a patch.**
 | 481 | 2026-11-17 | **THE CODE MAP (GRAPHIFY) IS OWNED BY BOSS. ONLY BOSS, OR A SESSION BOSS STARTS, EDITS, REBUILDS OR REFRESHES IT. EVERY OTHER AGENT USES IT READ-ONLY, AS A REFERENCE.** Main map: `C:\Users\ianla\webapps\shareat-map-src\graphify-out\graph.json`. Usage, limits and the refresh routine are in `C:\Users\ianla\webapps\shareat-system-graph\README.md`. An agent that finds it stale tells BOSS and does not run `graphify update`. The map is a pointer, never the truth: confirm in the real file. Specs query it first. | Ian, 17 Nov: "from now on you own it as the boss you update it and make sure its maintainedd and it must be available to other ai agents as well as referrence but only you or any of your session can edit update it" | Yes |
 | 482 | 2026-11-17 | **T-586: THE BUILDER'S DEVIATIONS FROM THE DEEPSEEK PROMPT ARE ACCEPTED, AND THE SETTINGS-HUB "WHO CAN EDIT" NOTE IS SKIPPED.** Ian had DeepSeek write the T-586 prompt and told BOSS to evaluate it and build according to BOSS's assessment. BOSS corrected four points before building (keep the same-day phone fix in the shared header, re-measure the t348 SW4 count, make any "who can edit" note true, do not touch shared form components). The builder skipped the hub note because the cards already show a "View only" tag to anyone who cannot edit. PR #300 merged. | Ian, 17 Nov: "i askedd that from deepseek . evaluate it build according to your assessment". BOSS accepted the builder's deviations. | Yes |
 | 483 | 2026-11-17 | **TOUCH-TARGET CENSUS: A LINK INSIDE SENTENCE TEXT IS EXEMPT FROM THE 44 PX RULE (WCAG 2.5.8 INLINE EXCEPTION). IT IS COUNTED AS "INLINE-EXEMPT", NOT AS A FAILURE.** Triggered by T-586: two description links moved into the shared page header's `description` prop, where the checker could no longer see them; they sit inside a sentence and were unchanged from main. T-589 B9 teaches the census to resolve links in Page `description` and `crumb` props. Links that stand alone (crumbs, buttons, list links) keep the full 44 px rule. | BOSS, 17 Nov, ruling on the UI UX lane's question (fix to 44 px, or keep them counted): the links are exempt from the tap-size rule under the WCAG 2.5.8 inline exemption. | Yes (a census rule) |
+| 484 | 2026-11-19 | ⛔ **BUSINESS DOCUMENTS NEVER GO IN THE REPO. FRANCHISE AGREEMENTS, MANUALS, SOPS, MEMOS, POLICIES, TRAINING GUIDES, CONTRACTS AND REVIEWS OF THEM LIVE ONLY IN THE LOCAL, GIT-IGNORED `shareat-knowledge/` FOLDER.** Ian, 19 Nov: "inspect the business docs like franchise agreements manuals and memos inside the repo ... put them on shareat knowledge folder and add that to git ignore", then "add the rule on how to handle similar files onto the bible". **Why:** the GitHub repo is PUBLIC; `knowledge/` (32 files: franchise terms, roles, SOPs, policies) and `docs/operations/inventory-monitoring-responsibilities.docx` were tracked and pushed. **The rule:** (1) every new business document, whatever its format, goes into `shareat-knowledge/<topic>/` at the repo root on the machine that holds it, never under `docs/`, `knowledge/` or anywhere tracked; (2) `.gitignore` refuses `shareat-knowledge/`, `knowledge/`, `*.docx`, `*.doc` and `*.pdf`, so a stray copy is not committed by `git add -A`; (3) code and specs may CITE a business rule (quote the sentence the code enforces, as task specs do) but never copy a whole document; (4) the `knowledge-intake` skill writes to `shareat-knowledge/`; (5) a document found tracked is untracked (`git rm --cached`) in its own PR and moved into `shareat-knowledge/` first, so no checkout loses it on pull; (6) other machines (the DELL builder PC, CI) do not have the folder; a task that needs a business rule puts the rule's words in its spec. **Not done:** removing the old files from the PUBLIC git history needs a history rewrite and force-push, which this project forbids; making the repository private is Ian's open decision and is what actually closes that exposure. Supersedes the `knowledge/` location in the knowledge-intake skill and AGENTS.md. |
 
 ## 14. Amendment protocol
 
