@@ -385,3 +385,16 @@ describe('T-613 D1 - the refund cap follows an S3 tender correction', () => {
     await expectRefusal(refundBy(w, m, [{ tenderId: w.gcash, amount: '1000.00', ref: 'GC-REFUND-9' }]), 'The money can only go back by the way it was paid.');
   });
 });
+
+describe('T-613 D3 - a Z of only refunds is no longer "nothing to close"', () => {
+  it('a refund of an earlier day with no new sales reaches the Z, which now speaks for the refund (bigger than what that method took) instead of "no sales to close" [kills: the receipt-count gate]', async () => {
+    const w = await world();
+    const m = await thousand(w, '1000.00');
+    await close(w, AT, await pinOf(w, w.managerId));
+    await refund(w, m, { lines: [[0, 1]], pays: [[0, '250.00']] });
+    expect((await reading(w, AT2)).refunds.count).toBe(1);
+    const err = await close(w, AT2, await pinOf(w, w.managerId)).then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(RefusalError);
+    expect((err as RefusalError).userMessage).toMatch(/^The refunds on .* are bigger than what was taken by the same payment method/);
+  });
+});
