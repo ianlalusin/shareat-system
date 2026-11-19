@@ -4,7 +4,7 @@
  * (the facts being read right) is `tests/integration/t533-s3-preflight.test.ts`.
  */
 import { describe, expect, it } from 'vitest';
-import { evaluatePreflight, type PreflightFacts } from './preflight';
+import { evaluatePreflight, hasSeparateApprover, type PreflightFacts } from './preflight';
 
 const STORE = '00000000-0000-4000-8000-000000000001';
 const GREEN: PreflightFacts = {
@@ -18,7 +18,8 @@ const GREEN: PreflightFacts = {
   tillsWithLivePairing: 1,
   rulesNotSeeded: [],
   recordSalePeople: 3,
-  managersWithPin: 1,
+  terminalLinked: true,
+  separateApprover: true,
   keyFileConfigured: true,
   itemsWithoutStation: [],
   packagesWithoutRefills: [],
@@ -42,7 +43,8 @@ describe('evaluatePreflight', () => {
     ['no_linked_till', { tillsWithLivePairing: 0 }],
     ['rules_not_seeded', { rulesNotSeeded: ['VAT included in prices (%)'] }],
     ['no_record_sale_person', { recordSalePeople: 0 }],
-    ['no_manager_with_pin', { managersWithPin: 0 }],
+    ['no_terminal_link', { terminalLinked: false }],
+    ['no_approver', { separateApprover: false }],
     ['no_bridge_key_file', { keyFileConfigured: false }],
   ];
   it.each(blocking)('blocking: %s fires on its own, with a plain sentence', (code, patch) => {
@@ -87,4 +89,12 @@ describe('evaluatePreflight', () => {
     expect(JSON.stringify(r)).toContain('POS_FIREBASE_SA_KEY_FILE');
     expect(JSON.stringify(r)).not.toMatch(/\.json|\\\\|C:|\/srv/);
   });
+});
+
+describe('hasSeparateApprover', () => {
+  const set = (...ids: string[]) => new Set(ids);
+  it('nobody approves: no', () => expect(hasSeparateApprover(set(), ['a', 'b'])).toBe(false));
+  it('the only approver is the only seller: no', () => expect(hasSeparateApprover(set('a'), ['a'])).toBe(false));
+  it('one approver and another seller: yes', () => expect(hasSeparateApprover(set('a'), ['a', 'b'])).toBe(true));
+  it('two approvers, nobody else sells: yes', () => expect(hasSeparateApprover(set('a', 'b'), ['a'])).toBe(true));
 });
