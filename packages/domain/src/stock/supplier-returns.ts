@@ -229,7 +229,9 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
       sourceId: returnId,
       createdBy: input.actor.personId,
     });
-    if (!result.ok) return result;
+    // DEF-888: THROWN, not returned. By now earlier lines have already written their stock movements in this transaction, and a
+    // returned `{ok:false}` lets the caller commit them with no return row. The throw rolls the whole return back; same sentence.
+    if (!result.ok) throw refuse(`recordReturn: ${result.reason}`, result.reason);
 
     const creditBasis = await deriveLineCreditBasis(tx, input.deliveryId, line.itemId);
     const unitCost = perBaseUnit(result.totalCost, line.quantity);
@@ -474,6 +476,13 @@ export async function refundSupplierCredit(tx: Tx, input: RefundCreditInput): Pr
   const supplierName = supplier?.name ?? input.supplierId;
   const account = await moneyAccountsRepo.getById(tx, orgId, input.moneyAccountId);
   if (!account) return { ok: false, reason: `money account ${input.moneyAccountId} does not exist` };
+  // DEF-888: the refund lands in one of THIS store's live accounts (the page picks one, but a crafted POST can name any).
+  if (account.storeId !== input.storeId) {
+    return { ok: false, reason: "That money account belongs to another store. Choose one of this store's accounts for the refund." };
+  }
+  if (!account.isActive) {
+    return { ok: false, reason: `"${account.name}" is retired and cannot receive the refund. Choose another account.` };
+  }
 
   const posted = await postEntryOnce(tx, {
     orgId,
