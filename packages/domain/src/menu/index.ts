@@ -3,6 +3,7 @@
  * `project.ts` (the carrier-neutral store-menu projection) is S3 and is exported when it lands.
  */
 export * from './catalog';
+export { copySettingsToStore, previewCopyToStore, type CopyCounts, type CopyInput, type CopyKind, type CopyPreview, type CopyLine, type CopyLineStatus } from './copy';
 export * from './daypart';
 export { createDaypart, retireDaypart, updateDaypart, type DaypartInput } from './dayparts';
 export * from './options';

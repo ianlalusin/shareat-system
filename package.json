@@ -6,6 +6,7 @@
     "packages/*",
     "apps/erp",
     "apps/pos",
+    "apps/pos-shell",
     "apps/customer"
   ],
   "engines": {
