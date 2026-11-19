@@ -362,6 +362,8 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — T-531: `xReading` (the X-reading, route GET /api/pos/x-reading and the Till tab) and `closeDay` / `closeBacklog` (packages/domain/src/pos/day-close.ts) call it after their own capability check; it is exported only so a test can read a window at a chosen time, so it is not a screen action of its own.',
   postConversionsForZ:
     'INTERNAL — T-534 S2: `closeDay` and `closeBacklog` (packages/domain/src/pos/day-close.ts) call it inside the close transaction for each Z of a LIVE store, after the capability check and the manager approval, to book the Converts of the Z; the routes POST /api/pos/day-close and /api/pos/day-close/backlog call those, so it is not a screen action of its own.',
+  postSaleApprover:
+    'INTERNAL — T-534 S4: `recordTenderCorrection` (the wrong-payment-method door, route POST /api/pos/tender-corrections) and `recordRefund` (the refund door, route POST /api/pos/refunds) call it after their own capability check, to resolve who approved: the signed-in holder of approve_pos_correction, or a manager\'s PIN; it is not a screen action of its own.',
   deriveSalesDayFromZ:
     'INTERNAL — T-531: `closeDay` and `closeBacklog` (packages/domain/src/pos/day-close.ts) call it inside the close transaction for each Z, after the capability check and the manager approval; the routes POST /api/pos/day-close and /api/pos/day-close/backlog call those, so it is not a screen action of its own.',
 };
