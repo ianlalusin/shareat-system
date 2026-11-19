@@ -15,12 +15,13 @@
  * Freezing: a paid leave day freezes to the run (`frozen_by_pay_run_id`), exactly as an attendance day does; the payout row freezes in
  * the same transaction, so a second run finds it taken. Voiding the run releases both.
  */
-import { advisoryLocksRepo, journalRepo, leaveRepo, payrollRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, journalRepo, leaveRepo, moneyAccountsRepo, payrollRepo, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { ZERO, add, decimal, money, multiply, type Money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
 import { EXPENSE_FUNDING_ACCOUNTS } from '../expenses/routing';
 import { postEntry } from '../ledger/post-entry';
+import { checkDraw } from '../money-accounts/overdraft';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { audit } from './audit';
 import { computeSilBalance } from './checks';
@@ -202,7 +203,7 @@ export async function settleSilAtSeparation(
   tx: Tx,
   by: Actor,
   input: { storeId: string; employmentId: string; personId: string; separationId: string; separationDate: string; entryDate: string; moneyAccountGlCode: string; moneyAccountId: string },
-): Promise<{ amount: Money } | null> {
+): Promise<{ amount: Money; warning?: string } | null> {
   const year = Number(input.separationDate.slice(0, 4));
   // ⛔ Under the person's leave lock BEFORE the balance is read: a paid SIL approval racing this payout is either seen or queued.
   await advisoryLocksRepo.lockPersonLeave(tx, input.personId);
@@ -219,6 +220,12 @@ export async function settleSilAtSeparation(
   if (!rate) return null;
   const dailyRate = money(rate.amount);
   const amount = multiply(dailyRate, String(balance.remaining));
+
+  // T-613 E (DEF-938): this cash-out is a SECOND draw on the paying account, after the separation's own pay was posted in this transaction, so the balance read here already
+  // holds that one: the two are judged together. A refusal throws and the whole separation rolls back. (A cashier drawer only warns, as everywhere.)
+  const account = await moneyAccountsRepo.getById(tx, by.orgId, input.moneyAccountId);
+  if (!account) throw refuse('settleSilAtSeparation: the paying money account does not exist.', 'That money account does not exist.');
+  const warning = await checkDraw(tx, by.orgId, account, amount, 'postSeparation');
 
   const claimed = await leaveRepo.claimCommutation(tx, {
     orgId: by.orgId,
@@ -259,7 +266,7 @@ export async function settleSilAtSeparation(
     entityId: claimed.id,
     after: { personId: input.personId, year, days: balance.remaining, amount, employmentId: input.employmentId, payer: 'separation' },
   });
-  return { amount };
+  return { amount, ...(warning ? { warning } : {}) };
 }
 
 /** Voiding a separation releases its payout row and reverses the journal entry it posted. */
