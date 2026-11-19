@@ -6,6 +6,12 @@
 -- Backfill: is_active true -> active, false -> suspended; a terminal is always active (the CHECK below). Nobody who works today is locked out on deploy.
 ALTER TABLE "persons" ADD COLUMN "account_status" text DEFAULT 'active' NOT NULL;
 --> statement-breakpoint
+UPDATE "persons" SET "account_status" = CASE WHEN "kind" = 'terminal' OR "is_active" THEN 'active' ELSE 'suspended' END;
+--> statement-breakpoint
+ALTER TABLE "persons" ADD CONSTRAINT "persons_account_status_check" CHECK ("account_status" in ('pending', 'active', 'suspended', 'ended'));
+--> statement-breakpoint
+ALTER TABLE "persons" ADD CONSTRAINT "persons_terminal_always_active_check" CHECK ("kind" <> 'terminal' OR "account_status" = 'active');
+--> statement-breakpoint
 -- 0220's franchise_reader_check refused a person who is not "active" by reading is_active; the same gate now reads the account status (body otherwise
 -- byte-for-byte 0220's; CREATE OR REPLACE keeps its owner and its REVOKEs). v_active_employments (0080/0147) still reads is_active ON PURPOSE: it answers
 -- "who is on the roster / payroll" from the employment, and a pending or suspended employee is still on it.

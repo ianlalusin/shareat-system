@@ -151,10 +151,10 @@ describe('T-612 - migration 0268 backfills the account status', () => {
   it('franchise_reader_check now reads the status; the clock-roster mirror trigger is untouched (still employment / is_active based, by ruling)', async () => {
     const def = async (fn: string) => (await sql<{ d: string }[]>`select pg_get_functiondef(p.oid) as d from pg_proc p where p.proname = ${fn}`)[0]!.d;
     const franchise = await def('franchise_reader_check');
-    expect(franchise).toMatch(/account_status = 'active'/);
+    expect(franchise).toMatch(/"account_status" = 'active'/);
     expect(franchise).not.toMatch(/is_active/);
     const mirror = await def('mirror_enqueue_person_employments');
-    expect(mirror).toMatch(/new\.is_active IS DISTINCT FROM old\.is_active/);
+    expect(mirror).toMatch(/new\.is_active is distinct from old\.is_active/i);
     expect(mirror).not.toMatch(/account_status/);
   });
 
