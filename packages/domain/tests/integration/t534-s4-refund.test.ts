@@ -23,7 +23,8 @@ import { RefusalError, goneSentence } from '@shareat/db';
 import { listTodaysSalesReceipts, recordRefund, verifySalesDay } from '../../src';
 import { CORRECTION_NEEDS_PIN } from '../../src/pos/tender-correction';
 import { RECORDED_DIFFERENTLY } from '../../src/pos/shared';
-import { D1, D2, asOrg, auditsOf, close, closeAll, journalLines, manila, pinOf, reading, salesDaysOf, sell, sql, tenderMap, uuid, world, type World } from './_fixtures/t531-day-close';
+import { sendV1Bridge } from '../../src/pos';
+import { D1, D2, asOrg, auditsOf, close, closeAll, fakeWriter, journalLines, manila, pinOf, reading, salesDaysOf, sell, sql, tenderMap, uuid, world, type World } from './_fixtures/t531-day-close';
 
 afterAll(closeAll);
 
@@ -331,5 +332,19 @@ describe('T-534 S4 - idempotent on request_id, and written in the top-level tran
     await refund(w, m, { lines: [[0, 4]], pays: [[0, '1000.00']] });
     expect((await sql<{ n: number }[]>`select count(*)::int n from pos_refund_lines where org_id = ${w.orgId}`)[0]!.n).toBe(1);
     expect((await sql<{ n: number }[]>`select count(*)::int n from pos_refund_payments where org_id = ${w.orgId}`)[0]!.n).toBe(1);
+  });
+});
+
+describe('T-534 S4 - the December v1 bridge sends the day net of its refunds', () => {
+  it('a Z with a 250.00 cash refund is sent to v1 as total 750.00 and cash 750.00, so v1\'s own methods-vs-total check holds [kills: the bridge keeping the gross]', async () => {
+    const w = await world();
+    const m = await thousand(w, '1000.00');
+    await refund(w, m, { lines: [[0, 1]], pays: [[0, '250.00']] });
+    await close(w, AT, await pinOf(w, w.managerId));
+    const f = fakeWriter();
+    const res = await asOrg(w.orgId, (tx) => sendV1Bridge(tx, w.counter, { storeId: w.storeId, businessDates: [D1] }, { writer: f.writer }));
+    expect(res.results).toEqual([{ businessDate: D1, status: 'sent' }]);
+    const data = f.calls[0]!.data as { payments: { totalGross: number; byMethod: Record<string, number> } };
+    expect(data.payments).toMatchObject({ totalGross: 750, byMethod: { cash: 750 } });
   });
 });

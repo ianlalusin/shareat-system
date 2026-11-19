@@ -635,9 +635,11 @@ async function bridgePayloadFor(tx: Tx, orgId: string, storeId: string, business
   for (const d of days) {
     const receipts = await posV2Repo.listReceiptsOfClose(tx, orgId, storeId, d.close.id);
     const f = await posV2Repo.receiptFigures(tx, orgId, receipts.map((r) => r.id));
+    // T-534 S4: the Z's tender rows are NET of its refunds, and v1 checks its methods against its total, so v1's total is the gross less the refunds the Z collected.
+    const refundsOfZ = (await posV2Repo.listRefundsOfClose(tx, orgId, storeId, d.close.id)).reduce((a, r) => a + toCentavos(money(r.total)), 0n);
     closes.push({
       receiptCount: d.close.receiptCount,
-      grossTotal: d.close.grossTotal,
+      grossTotal: fromCentavos(toCentavos(money(d.close.grossTotal)) - refundsOfZ),
       varianceTotal: fromCentavos((await shortPaid(tx, orgId, receipts)).reduce((a, x) => a + x.gap, 0n)),
       discountTotal: fromCentavos(sumCentavos(receipts.map((r) => r.discountTotal))),
       unliSales: fromCentavos(sumCentavos([f.packageGross])),
