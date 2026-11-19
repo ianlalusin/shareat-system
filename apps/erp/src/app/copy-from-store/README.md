@@ -2,7 +2,7 @@
 
 ## Overview
 
-The shared "Copy from another store" window (T-611 S1): copies a store's menu hours or store prices (with option prices) onto other stores of the same organisation. No route of its own; `/menu/hours` and `/menu/prices` draw the button for an administrator.
+The shared "Copy from another store" window (T-611): copies a store's menu hours, store prices (with option prices) or kitchen stations and routes onto other stores of the same organisation. No route of its own; `/menu/hours`, `/menu/prices` and `/kitchen` draw the button for an administrator.
 
 ## Interface
 
