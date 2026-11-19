@@ -69,3 +69,11 @@ firebase/firestore.rules.real
 
 # T-511: real customer data until redacted; never commit
 docs/discovery/fixtures-staging/
+
+# Bible row 484 (Ian, 19 Nov 2026): business documents (franchise agreements, manuals, SOPs, memos,
+# policies, reviews of them) live ONLY in the local, ignored shareat-knowledge/ folder. The repo is public.
+shareat-knowledge/
+knowledge/
+*.docx
+*.doc
+*.pdf
