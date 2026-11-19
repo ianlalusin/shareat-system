@@ -199,7 +199,7 @@ describe('T-608 - a platform dock on a scheduled loan splits principal / interes
     expect([p.principalPaid, p.interestPaid]).toEqual(['100000.00', '50.00']);
   });
 
-  it('5. the 90th full leg lands interest on exactly I and principal on exactly the principal; the loan check then reads "left to pay", not principal [kills: per-leg rounding drift; the loan check keeps reading principal outstanding]', async () => {
+  it('5. the 90th full leg lands interest on exactly I and principal on exactly the principal; the loan check then reads "left to pay", not principal, and the final tolerance is 1 centavo off that figure [kills: per-leg rounding drift; the loan check keeps reading principal outstanding]', async () => {
     const f = await fixture('last');
     const loan = await loanOf(f, f.paying, '1771.88');
     for (let i = 0; i < 89; i++) await dock(f, loan, '1771.88');
@@ -217,6 +217,16 @@ describe('T-608 - a platform dock on a scheduled loan splits principal / interes
     });
     expect(check.status).toBe('ok');
     expect(check.byLoan[0]!.final).toBe(true);
+    // the tolerance is measured against "left to pay": 1 centavo short still matches (default tolerance 0.01), 2 centavos short does not
+    const short = (amount: string) => checkLoanDay({
+      salesDate: '2026-06-01',
+      loans: [{ loanId: loan, name: 'QuickCash', ownerStoreId: f.paying.id, ownerStoreName: 'Malvar', startDate: '2026-01-01', repaymentAmount: '1771.88' as never, outstandingBefore: left }],
+      rows: [{ key: 'r1', storeId: f.paying.id, amount: amount as never }],
+      storesNeedingFile: [],
+      storesWithFile: new Set(),
+    }).status;
+    expect(short('1771.87')).toBe('ok');
+    expect(short('1771.86')).toBe('mismatch');
 
     await dock(f, loan, '1771.88');
     const p = await position(f, loan);
