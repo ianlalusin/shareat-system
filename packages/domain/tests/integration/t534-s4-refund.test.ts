@@ -234,6 +234,23 @@ describe('T-534 S4 - the Z, the cash count and the sales day', () => {
 });
 
 describe('T-534 S4 - where and who', () => {
+  it('another store of the same org cannot refund this store\'s receipt: the receipt is looked up AT the tablet\'s own store (row 402) [kills: no store filter on the receipt]', async () => {
+    const w = await world();
+    const m = await thousand(w, '1000.00');
+    // store B gets its own live POS switch and a till, so its manager is a legitimate caller there
+    await sql`insert into pos_stores (org_id, store_id, mode, live_from, changed_by) values (${w.orgId}, ${w.store2Id}, 'live', '2026-01-01', ${w.adminId})`;
+    await sql`insert into pos_terminals (org_id, store_id, terminal_no, pairing_id, created_by) values (${w.orgId}, ${w.store2Id}, 1, ${w.pairingBId}, ${w.adminId})`;
+    const err = await asOrg(w.orgId, (tx) =>
+      recordRefund(tx, w.managerOther, {
+        storeId: w.store2Id, pairingId: w.pairingBId, requestId: uuid(), receiptId: m.receiptId,
+        lines: [{ receiptLineId: m.lines[0]!.id, qty: 1 }], payments: [{ paymentId: m.pays[0]!.id, amount: '250.00' }], reason: 'Customer returned it',
+      }),
+    ).then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(RefusalError);
+    expect((err as RefusalError).userMessage).toBe(goneSentence('that receipt'));
+    expect(await rows(w)).toHaveLength(0);
+  });
+
   it('a receipt that is not this store\'s, or does not exist, is refused as unknown (row 402); nothing is written', async () => {
     const w = await world();
     const other = await world();
@@ -282,6 +299,26 @@ describe('T-534 S4 - idempotent on request_id, and written in the top-level tran
     expect(await rows(w)).toHaveLength(1);
     expect(await refundLines(w)).toHaveLength(1);
     await expectRefusal(refund(w, m, { requestId, lines: [[0, 2]], pays: [[0, '500.00']] }), RECORDED_DIFFERENTLY);
+    expect(await rows(w)).toHaveLength(1);
+  });
+
+  it('a replay needs no PIN: the retry of a saved refund answers from the stored rows even for a cashier with no PIN, before approval is asked again [kills: the replay check after the approval]', async () => {
+    const w = await world();
+    const m = await thousand(w, '1000.00');
+    const requestId = uuid();
+    const first = await refund(w, m, { requestId, who: w.counter, pin: await pinOf(w, w.managerId) });
+    const retry = await refund(w, m, { requestId, who: w.counter }); // no PIN this time
+    expect(retry).toMatchObject({ wrote: false, id: first.id });
+    expect(await misses(w)).toBe(0);
+  });
+
+  it('two identical requests at the same moment are ONE refund: the second waits for the store lock, then finds the first [kills: no re-check after the lock]', async () => {
+    const w = await world();
+    const m = await thousand(w, '1000.00');
+    const requestId = uuid();
+    const both = await Promise.all([refund(w, m, { requestId }), refund(w, m, { requestId })]);
+    expect(both.map((r) => r.wrote).sort()).toEqual([false, true]);
+    expect(both[0]!.id).toBe(both[1]!.id);
     expect(await rows(w)).toHaveLength(1);
   });
 

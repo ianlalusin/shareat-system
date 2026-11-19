@@ -1,5 +1,5 @@
-import { posV2Repo } from '@shareat/db';
-import { listTodaysSalesReceipts } from '@shareat/domain';
+import { organizationsRepo, posV2Repo, storesRepo } from '@shareat/db';
+import { listTodaysSalesReceipts, receiptIdentityOf } from '@shareat/domain';
 import { add, money, ZERO } from '@shareat/core/money';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess, StoreNotAvailable } from '@/lib/page-access';
@@ -9,7 +9,9 @@ import { peso } from '@/lib/format';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { missingSeqs } from '../_till/receipt-gaps';
 import { effectiveStore, pairingInOrg, storeRefused } from '../lib';
+import { printSettingsOf } from '../_payment/logic';
 import { CorrectPayment } from './CorrectPayment';
+import { RefundReceipt } from './RefundReceipt';
 
 export const metadata = { title: 'Receipts — Shareat POS' };
 export const dynamic = 'force-dynamic';
@@ -20,6 +22,7 @@ const pad6 = (n: number) => String(n).padStart(6, '0');
  * T-526 R1: /pos/receipts needs `record_sale`. A requested `?storeId` must be a store this person holds it at (a layout cannot read searchParams).
  * T-601 S2: the list of the receipts since the last close (Z), newest first. On a paired tablet only that till's receipts show. Reprinting an old receipt comes after the soak.
  * T-534 S3: a receipt not yet in a Z has "Wrong payment method"; its "Paid by" shows the corrected method with a small "corrected" note.
+ * T-534 S4: every receipt with something left to refund has "Refund" (before or after its Z); a refunded receipt shows "Refunded ₱x" under its status.
  */
 export default async function PosReceiptsPage({ searchParams }: { searchParams: Promise<{ storeId?: string }> }) {
   const { actor, refusal } = await requirePageAccess('/pos/receipts');
@@ -32,9 +35,16 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
     const { storeId } = effectiveStore(pairing, requested);
     if (!storeId) return null;
     const { receipts, tenders, canApprove } = await listTodaysSalesReceipts(tx, actor, { storeId });
-    if (!pairing) return { receipts, tenders, canApprove, paired: false };
+    if (!pairing) return { receipts, tenders, canApprove, paired: false, slip: null };
     const till = await posV2Repo.getTerminalForPairing(tx, actor.orgId, storeId, pairing.pairingId);
-    return { receipts: receipts.filter((r) => r.terminalId === till?.id), tenders, canApprove, paired: true };
+    // T-534 S4: what the refund slip needs: the issuer header (T-585) and the till's paper.
+    const store = await storesRepo.getById(tx, actor.orgId, storeId);
+    const org = await organizationsRepo.identityOf(tx, actor.orgId);
+    const slip = {
+      context: { storeName: store?.name ?? 'Store', vatRegistered: (await posV2Repo.getOrgTaxType(tx, actor.orgId)) === 'vat', identity: org && store ? receiptIdentityOf(org, store) : undefined },
+      layout: printSettingsOf({ receiptPaperMm: till?.receiptPaperMm === 80 ? 80 : 58, receiptCopies: 1 }).layout,
+    };
+    return { receipts: receipts.filter((r) => r.terminalId === till?.id), tenders, canApprove, paired: true, slip };
   });
   if (!data) {
     return (
@@ -44,7 +54,7 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
     );
   }
 
-  const { receipts, tenders, canApprove, paired } = data;
+  const { receipts, tenders, canApprove, paired, slip } = data;
   const gaps = missingSeqs(receipts);
   const total = receipts.reduce((sum, r) => add(sum, money(r.total)), ZERO);
   return (
@@ -82,9 +92,17 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
                   {r.tenders === '' ? '—' : r.tenders}
                   {r.corrected ? <span className="ml-2 text-xs text-muted">corrected</span> : null}
                 </Td>
-                <Td>{r.offline ? 'Sent while offline' : 'Online'}</Td>
+                <Td>
+                  {r.offline ? 'Sent while offline' : 'Online'}
+                  {r.refunds.length > 0 ? <p className="text-xs text-muted">Refunded {peso(money(r.refundedTotal))}</p> : null}
+                </Td>
                 {paired ? (
-                  <Td>{r.canCorrect ? <CorrectPayment receiptId={r.receiptId} receiptNo={r.receiptNo} payments={r.payments} tenders={tenders} canApprove={canApprove} /> : null}</Td>
+                  <Td>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {r.canCorrect ? <CorrectPayment receiptId={r.receiptId} receiptNo={r.receiptNo} payments={r.payments} tenders={tenders} canApprove={canApprove} /> : null}
+                      {slip ? <RefundReceipt receiptId={r.receiptId} receiptNo={r.receiptNo} lines={r.lines} payments={r.refundPayments} canApprove={canApprove} slipContext={slip.context} layout={slip.layout} /> : null}
+                    </div>
+                  </Td>
                 ) : null}
               </tr>
             ))}

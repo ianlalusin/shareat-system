@@ -60,6 +60,7 @@ function pushFigures(out: string[], view: ReadingSlipView, cols: number): void {
     out.push(...justify('CONVERT: CASH IN', printAmount(view.convert.cashIn), cols));
     out.push(...justify('CONVERT: CASH OUT', printAmount(view.convert.cashOut), cols));
   }
+  if (view.refunds && view.refunds.count > 0) out.push(...justify('REFUNDS', `-${printAmount(view.refunds.total)}`, cols));
   if (view.varianceTotal !== undefined && !isZeroAmount(view.varianceTotal)) out.push(...justify('SHORT PAYMENTS', printAmount(view.varianceTotal), cols));
   if ((view.shortfallCount ?? 0) > 0) out.push(...justify('SHORT PAY FINDINGS', String(view.shortfallCount), cols));
   if (view.toCheckCount > 0) out.push(...justify('TO CHECK (wallet)', String(view.toCheckCount), cols));
