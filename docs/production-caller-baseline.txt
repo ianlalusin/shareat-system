@@ -73,7 +73,10 @@ getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
+getPaymentConversionByRequestId
+getRefundByRequestId
 getStoreChannelSettlementConfig
+getTenderCorrectionByRequestId
 groupIntoFamilies
 hasFingerprint
 hasOtherActiveAdmin
@@ -81,6 +84,11 @@ hasUnroutedFloatsForStore
 initiateAnonymousSignIn
 initiateEmailSignIn
 initiateEmailSignUp
+insertPaymentConversion
+insertRefund
+insertRefundLines
+insertRefundPayments
+insertTenderCorrection
 installFakeClock
 isConvertibleUnit
 isHeaderCode
@@ -100,10 +108,13 @@ listDayIdsWithLivePull
 listLiveForStore
 listLobbyEntries
 listMapsForStore
+listOpenPaymentConversions
 listOrderMessages
 listPayRates
 listPosQuarantine
 listPunchesForDay
+listRefundLines
+listRefundPayments
 listRequestsForStore
 listRoster
 listWriteOffsForCharge
