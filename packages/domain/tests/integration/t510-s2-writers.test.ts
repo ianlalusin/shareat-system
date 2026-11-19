@@ -36,6 +36,11 @@ const spareVariant = async (f: Fx) => {
 const DAYS = [0, 1, 2, 3, 4, 5, 6];
 const mk = (f: Fx, a: Actor, storeId: string, name: string, start: string, end: string, days = DAYS) =>
   asOrg(f.c.orgId, (tx) => createDaypart(a, { storeId, name, days, start, end }, tx)).then((r) => r.id);
+/** A daypart as it may already sit in the live data (T-610 stops the writers making an overlap, not the rows already stored): raw SQL, no overlap check. */
+const rawDaypart = async (f: Fx, name: string, start: string, end: string) =>
+  (await sql<{ id: string }[]>`
+    insert into menu_dayparts (org_id, store_id, name, days, start_time, end_time, created_by)
+    values (${f.c.orgId}, ${f.c.storeA}, ${name}, ${DAYS}, ${start}, ${end}, ${f.c.admin.personId}) returning id`)[0]!.id;
 const lunchDinner = async (f: Fx) => ({ lunch: await mk(f, f.c.admin, f.c.storeA, 'Lunch', '08:00', '17:00'), dinner: await mk(f, f.c.admin, f.c.storeA, 'Dinner', '17:00', '08:00') });
 
 const price = (f: Fx, a: Actor, o: { variantId?: string; storeId?: string; daypartId?: string | null; amount?: string }) =>
@@ -240,7 +245,7 @@ describe('setMenuOffer / withdrawMenuOffer with a daypart', () => {
   it('refuses in a sentence an offer whose daypart overlaps another live daypart of the variant', async () => {
     const f = await fx('overlap');
     const { lunch } = await lunchDinner(f);
-    const brunch = await mk(f, f.c.admin, f.c.storeA, 'Brunch', '10:00', '12:00');
+    const brunch = await rawDaypart(f, 'Brunch', '10:00', '12:00'); // overlaps Lunch, so raw: the writers now refuse it (T-610)
     await price(f, f.c.superAdmin, { daypartId: lunch, amount: '338.00' });
     const r = await attempt(() => price(f, f.c.superAdmin, { daypartId: brunch, amount: '350.00' }));
     expectSentence(r, 'overlap');
@@ -290,7 +295,7 @@ describe('pair_menu_dayparts: the pairing structure is super admin only; a plain
 
   it('a manager is refused (authorize, capability pair_menu_dayparts) on every change of structure; nothing is written', async () => {
     const { f, lunch, dinner } = await paired('pair-manager');
-    const brunch = await mk(f, f.c.admin, f.c.storeA, 'Late', '23:00', '23:30'); // inside Dinner: overlap is not what is tested here, authority comes first
+    const brunch = await rawDaypart(f, 'Late', '23:00', '23:30'); // inside Dinner: overlap is not what is tested here, authority comes first
     const v2 = await spareVariant(f);
     await expectCapabilityRefused(f, () => price(f, f.c.manager, { variantId: v2, daypartId: lunch, amount: '1.00' }), 'pair_menu_dayparts', 'manager creating a pairing');
     await expectCapabilityRefused(f, () => price(f, f.c.manager, { daypartId: brunch, amount: '1.00' }), 'pair_menu_dayparts', 'manager pairing a new daypart');
