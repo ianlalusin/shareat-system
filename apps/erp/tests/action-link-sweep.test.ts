@@ -567,7 +567,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1692 -> 1686, T-592 R4 (17 Nov 2026): the Statement matching section left /settings/sales-channels (Settlement wiring EditableRecord, one bank-names EditableRecord per settle-later channel, their fields and the email checkbox): -6 census controls on the fixture-free source count; measured by runCensus() before (1692) and after (1686).
     // 1686 -> 1687, T-601 S2 (18 Nov 2026): the /pos/receipts placeholder became the Receipts list (+1 census control on the fixture-free source count); measured by runCensus() (the test reported 1687 against 1686).
     // 1687 -> 1688, T-606 S4 (18 Nov 2026): the admin-only "Move to Channel receivable" button on a platform channel's card (+1 census control); measured by runCensus() (the test reported 1688 against 1687).
-    expect(results.length).toBe(1688);
+    // 1688 -> 1699, T-534 (19 Nov 2026): +5 for S2's Convert section on the Till tab (its branch did not bump this) and +6 for S3's Wrong payment method dialog on /pos/receipts (four buttons and the reference and reason boxes: all pass, min-h-12 or taller); FAIL/UNRESOLVED unmoved; re-measured by runCensus() (the test reported 1699 against 1688).
+    expect(results.length).toBe(1699);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
