@@ -73,7 +73,6 @@ getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
-getPaymentConversionByRequestId
 getRefundByRequestId
 getStoreChannelSettlementConfig
 getTenderCorrectionByRequestId
@@ -84,7 +83,6 @@ hasUnroutedFloatsForStore
 initiateAnonymousSignIn
 initiateEmailSignIn
 initiateEmailSignUp
-insertPaymentConversion
 insertRefund
 insertRefundLines
 insertRefundPayments
@@ -108,7 +106,6 @@ listDayIdsWithLivePull
 listLiveForStore
 listLobbyEntries
 listMapsForStore
-listOpenPaymentConversions
 listOrderMessages
 listPayRates
 listPosQuarantine
