@@ -364,7 +364,7 @@ describe('DEF-893 - a paid-down charge cannot be reversed', () => {
     asOrg(f.orgId, (tx) => reverseLiabilityEntry(tx, actor(f.orgId, f.managerId), { liabilityId, entryId, reason: 'T-596' }));
   const outstanding = (f: Fixture, id: string) => asOrg(f.orgId, (tx) => liabilitiesRepo.positionOf(tx, f.orgId, id)).then((p) => p.outstanding);
 
-  it('charge 1,000, pay 600, reverse the charge -> refused, still owing 400 - Mutant: delete the guard -> outstanding -600.00, red', async () => {
+  it('charge 1,000, pay 600, reverse the charge -> refused, still owing 400 - Mutant: delete the guard -> the reversal goes through and outstanding is -600.00, red', async () => {
     const f = await setup('d893');
     const id = await newLiability(f, 'Loan from landlord');
     const c = await charge(f, id, '1000.00');
@@ -404,7 +404,7 @@ describe('DEF-893 - a paid-down charge cannot be reversed', () => {
 // =========================================================================================
 
 describe('DEF-890 - voiding an expense already paid back to the person', () => {
-  it('800 reimbursable, 800 paid -> void refused, nothing reversed - Mutant: delete the guard -> 2130 goes to -800.00, red', async () => {
+  it('800 reimbursable, 800 paid -> void refused, nothing reversed - Mutant: delete the guard -> the void goes through and 2130 is -800.00, red', async () => {
     const f = await setup('d890');
     const e = await expenseWithInvoice(f, '800.00', { categoryName: 'Utilities', reimbursable: true });
     await approve(f, e);
@@ -462,7 +462,7 @@ describe('DEF-890 - voiding an expense already paid back to the person', () => {
 // =========================================================================================
 
 describe('DEF-892 - a bill for a disposed asset cannot be voided', () => {
-  it('refused, and 1510 is not credited twice - Mutant: delete the guard -> 1510 for the bill nets -90000.00, red', async () => {
+  it('refused, and 1510 is not credited twice - Mutant: delete the guard -> the void goes through, red', async () => {
     const f = await setup('d892');
     const e = await expenseWithInvoice(f, '45000.00');
     const posted = await approve(f, e);
