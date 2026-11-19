@@ -94,7 +94,7 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
                 </Td>
                 <Td>
                   {r.offline ? 'Sent while offline' : 'Online'}
-                  {r.refunds.length > 0 ? <p className="text-xs text-muted">Refunded {peso(money(r.refundedTotal))}</p> : null}
+                  {r.refunds.length > 0 ? <p className="text-xs text-muted">Refunded {peso(r.refundedTotal)}</p> : null}
                 </Td>
                 {paired ? (
                   <Td>
