@@ -31,6 +31,7 @@ vi.mock('../src/app/admin/pos-tablets/lib', async (orig) => {
   return {
     ...actual,
     loadPosTablets: vi.fn(async () => ({ active: null, revoked: [], terminals: [] })),
+    loadCopyStores: vi.fn(async () => null), // T-611 S3
     loadTills: vi.fn(async () => {
       H.calls += 1;
       return H.tills;

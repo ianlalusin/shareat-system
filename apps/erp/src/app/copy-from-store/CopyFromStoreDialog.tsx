@@ -1,6 +1,6 @@
 'use client';
 /**
- * The shared "Copy from another store" window (T-611 S1; reused by the kitchen and discount slices). docs/tasks/611-copy-settings-between-stores.md.
+ * The shared "Copy from another store" window (T-611: hours and prices in S1, kitchen in S2, discount presets in S3). docs/tasks/611-copy-settings-between-stores.md.
  *
  * Choose the store to copy FROM, tick the stores to copy TO, decide whether different values are replaced (off by default), press Preview
  * (the server counts what would happen, nothing is written), then confirm with an administrator PIN. The browser sends choices only: the plan,
@@ -8,16 +8,23 @@
  */
 import { useState, useTransition } from 'react';
 import { Banner, Button, Checkbox, ConfirmDestructive, Field, FormGrid, FormModal, Select } from '@/components/ui';
-import { copyFromStoreAction, previewCopyAction, type CopyPreviewResult } from './actions';
+import { copyFromStoreAction, previewCopyAction, type CopyKindName, type CopyPreviewResult } from './actions';
 import type { CopyStoreChoice } from './lib';
 
 const WORDS = {
-  hours: { title: 'Copy menu hours', noun: 'menu hours', what: 'the menu hours' },
-  prices: { title: 'Copy prices', noun: 'prices', what: 'the store prices and option prices' },
+  hours: { title: 'Copy menu hours', noun: 'menu hours', what: 'the menu hours', note: '' },
+  prices: {
+    title: 'Copy prices',
+    noun: 'prices',
+    what: 'the store prices and option prices',
+    note: ' Prices already in use are never edited: a changed price is a new price from now.',
+  },
+  kitchen: { title: 'Copy kitchen stations', noun: 'kitchen routes', what: 'the kitchen stations and which station cooks each item', note: ' A station that is missing is created.' },
+  presets: { title: 'Copy discounts', noun: 'discounts', what: 'the named discounts the cashier can pick (not the senior and PWD discounts, which are the same everywhere)', note: '' },
 } as const;
 const MARK = { add: 'Add', same: 'Same', different: 'Different', skip: 'Skipped' } as const;
 
-export function CopyFromStoreDialog({ kind, currentStoreId, stores }: { kind: 'hours' | 'prices'; currentStoreId: string; stores: CopyStoreChoice[] }) {
+export function CopyFromStoreDialog({ kind, currentStoreId, stores }: { kind: CopyKindName; currentStoreId: string; stores: CopyStoreChoice[] }) {
   const w = WORDS[kind];
   const [source, setSource] = useState(currentStoreId);
   const [targets, setTargets] = useState<string[]>([]);
@@ -117,7 +124,7 @@ export function CopyFromStoreDialog({ kind, currentStoreId, stores }: { kind: 'h
                 tier="admin-pin"
                 label="Copy to stores"
                 quiet
-                consequence={`This changes ${w.noun} at the stores you ticked, as listed above. Prices already in use are never edited: a changed price is a new price from now. Nothing is removed. An administrator confirms with their own PIN.`}
+                consequence={`This changes ${w.noun} at the stores you ticked, as listed above.${w.note} Nothing is removed. An administrator confirms with their own PIN.`}
               />
             ) : (
               <p className="text-muted">There is nothing to copy with these choices.</p>

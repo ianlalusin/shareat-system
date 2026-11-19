@@ -5,6 +5,9 @@ import { staffStoresFor } from '../staff/lib';
 import { kitchenForStore } from '../admin/stores/lib';
 import { KITCHEN_ROUTING, KITCHEN_STATION_EDIT } from '../admin/stores/typed-forms';
 import { KitchenSections } from './KitchenSections';
+import { CopyFromStoreDialog } from '../copy-from-store/CopyFromStoreDialog';
+import { copyChoicesFor } from '../copy-from-store/lib';
+import { withOrgPrincipal } from '../menu/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
@@ -36,6 +39,8 @@ export default async function KitchenPage({ searchParams }: { searchParams: Prom
   if (!store) return <StoreNotAvailable />;
   const setup = await kitchenForStore(actor, store.id);
   if (!setup) return <StoreNotAvailable />;
+  // T-611 S2: the copy button, for an administrator only (the domain and a PIN gate the write; this is presentation).
+  const copyStores = await withOrgPrincipal(actor.orgId, (tx) => copyChoicesFor(tx, actor, store.id));
 
   return (
     <Page density="table">
@@ -62,6 +67,8 @@ export default async function KitchenPage({ searchParams }: { searchParams: Prom
           </label>
         </FilterRow>
       )}
+
+      {copyStores && <CopyFromStoreDialog kind="kitchen" currentStoreId={store.id} stores={copyStores} />}
 
       <KitchenSections
         storeId={store.id}
