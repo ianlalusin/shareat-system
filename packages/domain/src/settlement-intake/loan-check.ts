@@ -301,10 +301,10 @@ export async function loadLoanCheckContext(tx: Tx, orgId: string, throughDate: s
   const loans = await loansRepo.listLoans(tx, orgId, { status: 'active' });
   const positions = await loansRepo.positionsByLoan(tx, orgId);
   // T-608: a scheduled loan's last payment carries its interest too, so what it "has left" is principal + interest still to pay; any other loan, the principal outstanding.
-  const outstanding = new Map(loans.map((l) => {
+  const outstanding = new Map(loans.map((l): [string, Money] => {
     const pos = positions.get(l.id) ?? { disbursed: '0', principalPaid: '0', interestPaid: '0', outstanding: '0' };
     const schedule = loanSchedule(l);
-    return [l.id, schedule ? fromCentavos(leftToPay(schedule, pos)) : money(pos.outstanding)] as const;
+    return [l.id, schedule ? fromCentavos(leftToPay(schedule, pos)) : money(pos.outstanding)];
   }));
   const storeNames = new Map((await storesRepo.listForOrg(tx, orgId)).map((s) => [s.id, s.name]));
   const rows = await settlementIntakeRepo.activeDeductionRows(tx, orgId, throughDate);

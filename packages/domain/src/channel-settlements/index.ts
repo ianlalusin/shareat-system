@@ -851,7 +851,7 @@ export async function recordChannelSettlement(
       // from the ledger (loans/interest.ts). Any other loan stays all principal. The loan row is locked above, so this position cannot move under us.
       // The 7200 line carries the loan as its party (migration 0267) so the loan's position counts it. A part of zero gets no line.
       const loan = await loansRepo.getById(trx, actor.orgId, leg.loanId);
-      if (!loan) throw new Error('recordChannelSettlement: a docked loan no longer exists.');
+      if (!loan) throw refuse('recordChannelSettlement: a docked loan no longer exists.', 'One of the loans docked from this payout could not be found. Pick the loan again from the list.');
       const before = await loansRepo.positionOf(trx, actor.orgId, leg.loanId);
       const split = splitSettlementLeg(
         loanSchedule(loan), toCentavos(legAmount),
