@@ -923,9 +923,9 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // the seller, so withdrawing a statutory record is a supervisory act - same shape as
   // void_sales_day directly above.
   void_statutory_discount: { super_admin: true, admin: true, manager: true, staff: false },
-  // T-424. ⭐ Manager is FALSE on purpose: approving a refund / tender correction / void with a PIN is held by GRANT (the store-manager
-  // positions' access defaults, or a hand grant at the store) - a franchise-owner role alone does not approve. Admins hold it implicitly.
-  approve_pos_correction: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-424, then DECIDED - Ian 2026-11-19 (ruling D2, T-601): every store manager may approve POS corrections and the end-of-day close, by ROLE. Store-scoped like the
+  // other manager rights (a manager of another store is refused); staff and cashiers still need a grant at the store. Replaces T-424's "held by grant, manager false".
+  approve_pos_correction: { super_admin: true, admin: true, manager: true, staff: false },
   // T-524 (docs/tasks/524-pos-v2-domain.md R2): the floor's three everyday acts. Manager and up by role; staff only by position grant (row 211).
   request_pos_refill: { super_admin: true, admin: true, manager: true, staff: false },
   serve_pos_ticket: { super_admin: true, admin: true, manager: true, staff: false },

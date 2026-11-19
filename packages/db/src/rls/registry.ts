@@ -1334,6 +1334,26 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-523 R13: a discount on a frozen line of an org’s own sales receipt; carries its own org_id, never the holder’s name or ID.',
   },
+  pos_payment_conversions: {
+    scope: 'org_column',
+    reason: 'T-534 S1: an org’s own Convert (GCash cash-in / cash-out) records at its own store; org isolation is the point.',
+  },
+  pos_tender_corrections: {
+    scope: 'org_column',
+    reason: 'T-534 S1: an org’s own wrong-payment-method corrections on its own sales receipts.',
+  },
+  pos_refunds: {
+    scope: 'org_column',
+    reason: 'T-534 S1: an org’s own refunds of its own sales receipts; org isolation is the point.',
+  },
+  pos_refund_lines: {
+    scope: 'org_column',
+    reason: 'T-534 S1: the lines of an org’s own refund; carries its own org_id (no store_id), the store follows from the parent refund.',
+  },
+  pos_refund_payments: {
+    scope: 'org_column',
+    reason: 'T-534 S1: the money-back lines of an org’s own refund; carries its own org_id.',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {
