@@ -61,6 +61,11 @@ export async function lockDaypartForUpdate(tx: Tx, orgId: string, id: string): P
   return row;
 }
 
+/** T-610: the per-store advisory lock (`menu_lock_key`, the one the menu guards use, keyed by the store id) that a check of one store's hours against each other runs under, so two saves cannot both pass it. */
+export async function lockStoreHours(tx: Tx, storeId: string): Promise<void> {
+  await tx.execute(sql`select menu_lock_key(${storeId}::uuid)`);
+}
+
 /** T-565 (0253): the window version 1 is opened by the menu_dayparts_version_sync trigger, not here. */
 export async function insertDaypart(tx: Tx, input: InsertDaypartInput): Promise<MenuDaypartRow> {
   const [row] = await tx.insert(menuDayparts).values(input).returning();
