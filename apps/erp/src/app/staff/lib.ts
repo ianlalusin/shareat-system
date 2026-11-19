@@ -101,7 +101,7 @@ export async function employmentDetail(actor: Actor, employmentId: string): Prom
     const positionRows = await employmentRepo.listEmploymentPositions(tx, employmentId);
     const role = await accessRepo.activeRoleForPerson(tx, employment.personId, orgId);
     const staffTarget = !role || role.role === 'staff';
-    const canManageAccount = staffTarget ? await can(tx, actor, 'enrol_staff', { storeId: employment.storeId }) : await can(tx, actor, 'manage_users', {});
+    const canManageAccount = employment.endedOn === null && (staffTarget ? await can(tx, actor, 'enrol_staff', { storeId: employment.storeId }) : await can(tx, actor, 'manage_users', {}));
     return {
       role: role?.role ?? null,
       accountStatus: person?.accountStatus ?? 'ended',

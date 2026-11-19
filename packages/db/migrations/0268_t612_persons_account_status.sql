@@ -8,6 +8,15 @@ ALTER TABLE "persons" ADD COLUMN "account_status" text DEFAULT 'active' NOT NULL
 --> statement-breakpoint
 UPDATE "persons" SET "account_status" = CASE WHEN "kind" = 'terminal' OR "is_active" THEN 'active' ELSE 'suspended' END;
 --> statement-breakpoint
+-- Pre-T-609 leavers kept a role-less, job-less 'active' row: a person with no open employment is 'ended', except the shapes personMaySignInToOrg itself admits
+-- (an active admin / super_admin, and an active manager with no employment row EVER - the franchise owner). So a later re-hire starts 'pending'.
+UPDATE "persons" p SET "account_status" = 'ended'
+WHERE p."kind" = 'person'
+  AND NOT EXISTS (SELECT 1 FROM "employments" e WHERE e."person_id" = p."id" AND e."ended_on" IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM "person_roles" r WHERE r."person_id" = p."id" AND r."revoked_at" IS NULL AND r."role" IN ('admin', 'super_admin'))
+  AND NOT (EXISTS (SELECT 1 FROM "person_roles" r WHERE r."person_id" = p."id" AND r."revoked_at" IS NULL AND r."role" = 'manager')
+           AND NOT EXISTS (SELECT 1 FROM "employments" e WHERE e."person_id" = p."id"));
+--> statement-breakpoint
 ALTER TABLE "persons" ADD CONSTRAINT "persons_account_status_check" CHECK ("account_status" in ('pending', 'active', 'suspended', 'ended'));
 --> statement-breakpoint
 ALTER TABLE "persons" ADD CONSTRAINT "persons_terminal_always_active_check" CHECK ("kind" <> 'terminal' OR "account_status" = 'active');

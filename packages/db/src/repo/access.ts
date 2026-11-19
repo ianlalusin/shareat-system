@@ -605,11 +605,13 @@ export async function activeAdminPersonIds(tx: Tx, orgId: string): Promise<strin
   const rows = await tx
     .select({ personId: personRoles.personId })
     .from(personRoles)
+    .innerJoin(persons, eq(persons.id, personRoles.personId))
     .where(
       and(
         eq(personRoles.orgId, orgId),
         eq(personRoles.role, 'admin'),
         isNull(personRoles.revokedAt),
+        eq(persons.accountStatus, 'active'), // T-612 audit: a pending / suspended / ended administrator is not fanned a new store's scope
       ),
     );
   return [...new Set(rows.map((r) => r.personId))];

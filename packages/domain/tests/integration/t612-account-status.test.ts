@@ -12,7 +12,7 @@ import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
-import { closeDb, systemTransaction, withOrgPrincipal, accessRepo, sessionsRepo } from '@shareat/db';
+import { closeDb, systemTransaction, withOrgPrincipal, accessRepo, sessionsRepo, storeReadinessRepo } from '@shareat/db';
 import { AuthenticationError, AuthorizationError, authorize, hashPin, newSessionToken, pinLookupHash, sessionTokenHash, setPin, signInWithPin, type Actor } from '@shareat/auth';
 import { bootstrapOrganization } from '../../src/organizations';
 import { createStore } from '../../src/stores/service';
@@ -74,6 +74,8 @@ async function world(hint: string) {
     const employmentId = storeId
       ? (await asOrg((tx) => createEmployment(tx, boss, { storeId, personId, employmentStatus: 'regular', startedOn: '2026-01-01' }))).id
       : null;
+    // A hire of a person with no open job starts `pending` (audit 2b) unless they are an administrator; these fixtures are people who already work.
+    if (employmentId && role !== 'admin' && role !== 'super_admin') await activate(boss, employmentId);
     const pin = opts.pin === false ? null : await issuePin(personId);
     return { personId, employmentId, pin, displayName: name, actor: { personId, orgId } as Actor };
   };
@@ -147,7 +149,7 @@ describe('2 - activate', () => {
     expect(await status(h.personId)).toBe('active');
     const signed = await w.pinAt(h.pin, w.storeA);
     expect(signed.personId).toBe(h.personId);
-    const [row] = await audit(w.orgId, 'account.activated');
+    const row = (await audit(w.orgId, 'account.activated')).find((r) => r.entity_id === h.personId);
     expect(row).toMatchObject({ entity_id: h.personId, store_id: w.storeA, actor_person_id: mgr.personId, before: { accountStatus: 'pending' }, after: { accountStatus: 'active' } });
   });
 
@@ -477,4 +479,84 @@ describe('9 - a racing sign-in and a suspend serialise', () => {
     expect(rows[0]!.ended_reason).toBe('revoked');
     expect(await status(m.personId)).toBe('suspended');
   }, 30_000);
+});
+
+describe('audit 1 - an ENDED employment record cannot be used to change the person account', () => {
+  it('a manager at store A cannot suspend or activate through the ended store A record of someone who now works at B', async () => {
+    const w = await world('t612-a1');
+    const mgrA = await w.rawHire('Manager A', 'manager', w.storeA);
+    const p = await w.hireNew(w.storeA, 'Moved');
+    const atB = await w.asOrg((tx) => createEmployment(tx, w.boss, { storeId: w.storeB, personId: p.personId, employmentStatus: 'regular', startedOn: '2026-01-01' }));
+    await w.activate(w.boss, p.employmentId);
+    await w.end(w.boss, p.employmentId); // the store A job ends; the person still works at B
+    expect(await status(p.personId), 'control: still active through the B job').toBe('active');
+    // Mutant: the endedOn guard removed from changeStatus -> the manager (enrol_staff at A) suspends them and this is red.
+    const e = await refusalOf(w.suspend(mgrA.actor, p.employmentId));
+    expect(e).toBeInstanceOf(EmploymentError);
+    expect(e!.userReason).toMatch(/has ended/);
+    expect(await status(p.personId)).toBe('active');
+    const e2 = await refusalOf(w.activate(mgrA.actor, p.employmentId));
+    expect(e2).toBeInstanceOf(EmploymentError);
+    // Control: the current job's record works.
+    await w.suspend(w.boss, atB.id);
+    expect(await status(p.personId)).toBe('suspended');
+  });
+});
+
+describe('audit 2b - a hire of a person with no open job always starts pending (administrators excepted)', () => {
+  it('a pre-T-609 leaver left active, a suspended person and an ended person come back pending; a person with another open job and an administrator do not', async () => {
+    const w = await world('t612-a2');
+    const mkRaw = async (name: string, role: 'admin' | null, ended: boolean) => {
+      const personId = (await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${w.orgId}, ${name}) returning id`)[0]!.id;
+      if (role) await sql`insert into person_roles (person_id, org_id, role) values (${personId}, ${w.orgId}, ${role})`;
+      if (ended) {
+        await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, ended_on)
+          values (${w.orgId}, ${w.storeB}, ${personId}, ${`SE-${Date.now()}${++seq}`}, 'resigned', '2025-01-01', '2025-06-01')`;
+      }
+      return personId;
+    };
+    const hire = (personId: string) => w.asOrg((tx) => createEmployment(tx, w.boss, { storeId: w.storeA, personId, employmentStatus: 'regular', startedOn: '2026-07-01' }));
+    const leaver = await mkRaw('Old Leaver', null, true); // status 'active': the migration never ended it
+    expect(await status(leaver), 'control: the legacy leaver is active before the hire').toBe('active');
+    await hire(leaver);
+    // Mutant: the re-hire only handles status 'ended' (the old rule) -> the leaver stays active and this is red.
+    expect(await status(leaver), 'leaver').toBe('pending');
+    const susp = await mkRaw('Suspended Rehire', null, true);
+    await sql`update persons set account_status = 'suspended' where id = ${susp}`;
+    await hire(susp);
+    expect(await status(susp), 'suspended with no open job').toBe('pending');
+    const admin = await mkRaw('Admin Hire', 'admin', false);
+    await hire(admin);
+    // Mutant: the administrator exception removed -> the administrator is put on hold and this is red.
+    expect(await status(admin), 'an administrator is never put on hold by a hire').toBe('active');
+    const two = await w.rawHire('Has Job', null, w.storeB);
+    await hire(two.personId);
+    expect(await status(two.personId), 'a person with another open job keeps their status').toBe('active');
+  });
+});
+
+describe('audit 5 - readiness counts and the admin fan-out count only ACTIVE accounts', () => {
+  it('a pending or suspended employee / manager is not counted; a suspended administrator is not fanned a new store', async () => {
+    const w = await world('t612-a5');
+    const mgr = await w.rawHire('Store Manager', 'manager', w.storeA);
+    const staff = await w.hireNew(w.storeA, 'Pendingstaff');
+    const facts = () => w.asOrg((tx) => storeReadinessRepo.storeFacts(tx, w.orgId, w.storeA));
+    const names = (xs: { personId: string }[]) => xs.map((x) => x.personId);
+    let f = await facts();
+    // Mutant: no account_status filter in the employees query -> the pending hire is counted and this is red.
+    expect(names(f.employees), 'pending staff is not an employee for readiness').not.toContain(staff.personId);
+    expect(names(f.employees)).toContain(mgr.personId);
+    expect(names(f.managers)).toContain(mgr.personId);
+    await w.suspend(w.boss, mgr.employmentId!);
+    f = await facts();
+    expect(names(f.employees)).not.toContain(mgr.personId);
+    // Mutant: no filter in the managers query -> the suspended manager (role + scope kept) still counts and this is red.
+    expect(names(f.managers), 'a suspended manager does not manage the store').not.toContain(mgr.personId);
+
+    const admin = await w.rawHire('Second Admin', 'admin', w.storeA, { pin: false });
+    expect(await w.asOrg((tx) => accessRepo.activeAdminPersonIds(tx, w.orgId))).toContain(admin.personId);
+    await sql`update persons set account_status = 'suspended' where id = ${admin.personId}`;
+    // Mutant: no status join in activeAdminPersonIds -> the suspended administrator is still fanned and this is red.
+    expect(await w.asOrg((tx) => accessRepo.activeAdminPersonIds(tx, w.orgId))).not.toContain(admin.personId);
+  });
 });

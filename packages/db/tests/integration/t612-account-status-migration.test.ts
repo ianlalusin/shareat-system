@@ -117,10 +117,33 @@ describe('T-612 - migration 0268 backfills the account status', () => {
         insert into persons (org_id, display_name, is_active, kind) values (${orgId}, ${key}, ${isActive}, ${kind}) returning id`;
       ids[key] = p!.id;
     };
+    const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${orgId}, 'S1', 'Store', true) returning id`;
+    let code = 0;
+    const employ = async (key: string, endedOn: string | null) => {
+      await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, ended_on)
+        values (${orgId}, ${store!.id}, ${ids[key]!}, ${`SE-${String(++code).padStart(3, "0")}`}, ${endedOn ? 'resigned' : 'regular'}, '2025-01-01', ${endedOn})`;
+    };
+    const role = (key: string, r: string) => sql`insert into person_roles (person_id, org_id, role) values (${ids[key]!}, ${orgId}, ${r})`;
     await mk('working', true, 'person');
+    await employ('working', null);
     await mk('switched-off', false, 'person');
+    await employ('switched-off', null);
     await mk('live-terminal', true, 'terminal');
     await mk('retired-terminal', false, 'terminal'); // the usage system author is exactly this shape
+    // Audit 2a: pre-T-609 leavers kept 'active' (is_active true) with no open job.
+    await mk('leaver', true, 'person');
+    await employ('leaver', '2025-06-01');
+    await mk('never-employed-no-role', true, 'person');
+    await mk('ex-manager', true, 'person');
+    await role('ex-manager', 'manager');
+    await employ('ex-manager', '2025-06-01');
+    // ... except the shapes personMaySignInToOrg admits with no open job.
+    await mk('admin-no-job', true, 'person');
+    await role('admin-no-job', 'admin');
+    await mk('super-no-job', true, 'person');
+    await role('super-no-job', 'super_admin');
+    await mk('franchise-owner', true, 'person');
+    await role('franchise-owner', 'manager');
   });
 
   afterAll(async () => {
@@ -140,6 +163,18 @@ describe('T-612 - migration 0268 backfills the account status', () => {
     expect(await status('switched-off')).toBe('suspended');
     expect(await status('live-terminal')).toBe('active');
     expect(await status('retired-terminal'), 'a terminal can only be active (CHECK), whatever is_active said').toBe('active');
+  });
+
+  it('audit 2a: a person with no open job is ended, except an administrator and a manager who was never employed', async () => {
+    // Mutant: no second UPDATE (or one that spares leavers) -> the leaver stays active and this is red.
+    expect(await status('leaver'), 'ended job, no role').toBe('ended');
+    expect(await status('never-employed-no-role')).toBe('ended');
+    expect(await status('ex-manager'), 'an employed manager whose job ended').toBe('ended');
+    // Mutant: no exceptions in the WHERE -> an administrator with no job is ended and this is red.
+    expect(await status('admin-no-job')).toBe('active');
+    expect(await status('super-no-job')).toBe('active');
+    expect(await status('franchise-owner'), 'a manager with no employment EVER').toBe('active');
+    expect(await status('working'), 'an open job keeps its status').toBe('active');
   });
 
   it('a person written by older code (no status given) is active; the vocabulary CHECK refuses anything else', async () => {

@@ -125,12 +125,6 @@ export async function createEmployment(
     createdBy: actor.personId,
   });
 
-  // T-612: a person whose account ENDED (T-609) and who has no other open job is re-hired as `pending` - a manager activates them again.
-  // A person with another open job keeps their status; a brand-new person is already `pending` (createPerson).
-  if (statusBefore === 'ended' && (await employmentRepo.countOtherOpenEmployments(tx, input.personId, actor.orgId, employment.id)) === 0) {
-    await personsRepo.setAccountStatus(tx, actor.orgId, input.personId, ['ended'], 'pending');
-  }
-
   const { positionIds, primaryPositionId } = await resolvePositions(tx, actor, input);
   await employmentRepo.replaceEmploymentPositions(tx, {
     employmentId: employment.id,
@@ -179,6 +173,14 @@ export async function createEmployment(
     grantedBy: actor.personId,
     source: 'employment',
   });
+
+  // T-612 (audit 2b): a person with NO open job before this hire starts again as `pending` whatever their status was (an `ended` re-hire, a pre-T-609 leaver
+  // whose status was never ended, a suspended person): a manager activates them. A person with another open job keeps their status, and an administrator
+  // (admin / super_admin) is never put on hold by a hire - the organisation must keep somebody who can sign in. A brand-new person is already `pending` (createPerson).
+  if (statusBefore !== undefined && statusBefore !== 'pending' && (await employmentRepo.countOtherOpenEmployments(tx, input.personId, actor.orgId, employment.id)) === 0) {
+    const roleNow = (await accessRepo.activeRoleForPerson(tx, input.personId, actor.orgId))?.role;
+    if (!isAdministrative(roleNow)) await personsRepo.setAccountStatus(tx, actor.orgId, input.personId, ['active', 'suspended', 'ended'], 'pending');
+  }
 
   // T-289 moment 3 — a hire applies whatever position defaults the assigned positions carry.
   await reconcilePositionGrants(tx, actor, { personId: input.personId, storeId: input.storeId });

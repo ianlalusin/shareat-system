@@ -40,6 +40,10 @@ function wrongState(move: Move, status: AccountStatus): EmploymentError {
 async function changeStatus(tx: Tx, actor: Actor, input: { employmentId: string; reason?: string }, move: Move): Promise<EmploymentRow> {
   const existing = await employmentRepo.getEmployment(tx, input.employmentId);
   if (!existing || existing.orgId !== actor.orgId) throw new EmploymentError(`No employment ${input.employmentId}`);
+  // T-612 audit: an old, ended record says nothing about the person's account today (they may work at another store now); change it from their current job.
+  if (existing.endedOn) {
+    throw new EmploymentError(`${move}: employment ${existing.id} has ended`, 'This employment has ended. Open the person’s current job to change their account.');
+  }
   const { personId, orgId } = existing;
   const spec = MOVES[move];
 
