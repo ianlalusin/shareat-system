@@ -14,6 +14,9 @@ import type { PrintLayout, ReceiptView } from './types';
  * up. A receipt that silently corrected a figure would be a worse receipt than a wrong one.
  */
 
+/** T-601 S4: printed under the header of every slip of a store in TEST mode. */
+export const TEST_LINE = 'TEST - NOT A SALE';
+
 /** Append `text` wrapped at the print width, with every line indented. */
 function pushWrapped(out: string[], text: string, cols: number, indent = 0): void {
   const width = Math.max(1, cols - indent);
@@ -48,6 +51,7 @@ export function formatReceipt(view: ReceiptView, layout: PrintLayout): string[] 
 
   // 2. Blank line, then the two flags. They are the first thing a cashier's eye should catch.
   out.push('');
+  if (view.header.test) pushCentered(out, TEST_LINE, cols);
   if (view.reprint) pushCentered(out, 'REPRINT', cols);
   if (view.offline) pushCentered(out, 'OFFLINE SALE - TO SYNC', cols);
 
