@@ -204,7 +204,7 @@ export interface LoanSchedule {
  * A loan with no schedule keeps the old behaviour (a platform dock is all principal).
  */
 export function loanSchedule(loan: { principalAmount: string; repaymentAmount: string | null; termPeriods: number }): LoanSchedule | null {
-  if (loan.repaymentAmount === null || !(loan.termPeriods > 0)) return null;
+  if (loan.repaymentAmount === null || !Number.isInteger(loan.termPeriods) || loan.termPeriods < 1) return null;
   const total = toCentavos(money(loan.repaymentAmount)) * BigInt(loan.termPeriods);
   const interest = total - toCentavos(money(loan.principalAmount));
   return interest > 0n ? { total, interest } : null;
