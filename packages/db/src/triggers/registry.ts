@@ -1617,6 +1617,55 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'No discount is added to a line of a sales receipt written by an earlier transaction (reads the receipt of the PARENT line, by xmin) (0240, T-524 R11).',
   },
+  // T-534 S1 (0265) - the post-sale documents: eight history guards, all ENABLE ALWAYS (ALWAYS 62 -> 70). Raise 23001 restrict_violation.
+  pos_payment_conversions_frozen: {
+    table: 'pos_payment_conversions',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A Convert record is frozen at insert; only day_close_id and the void triple (voided_by, voided_at, void_reason) may go NULL -> a value once; never deleted (0265, T-534 S1). Decides only from OLD/NEW.',
+  },
+  pos_payment_conversions_void_before_close: {
+    table: 'pos_payment_conversions',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A Convert is voided only while it has no Z: refused once day_close_id is set, or in the same write that sets it, so a closed Z never changes (0265, T-534 S1). Decides only from OLD/NEW.',
+  },
+  pos_tender_corrections_frozen: {
+    table: 'pos_tender_corrections',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A payment-method correction is frozen at insert; only day_close_id may go NULL -> a value once; never deleted (0265, T-534 S1). Decides only from OLD/NEW.',
+  },
+  pos_refunds_frozen: {
+    table: 'pos_refunds',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A refund is frozen at insert; only day_close_id may go NULL -> a value once; never deleted (0265, T-534 S1). Decides only from OLD/NEW.',
+  },
+  pos_refund_lines_append_only: {
+    table: 'pos_refund_lines',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A refund line is append-only: UPDATE and DELETE refused (0265, T-534 S1). Decides only from TG_OP.',
+  },
+  pos_refund_payments_append_only: {
+    table: 'pos_refund_payments',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A refund money-back line is append-only: UPDATE and DELETE refused (0265, T-534 S1). Decides only from TG_OP.',
+  },
+  pos_refund_lines_append_guard: {
+    table: 'pos_refund_lines',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No line is added to a refund written by an earlier transaction (reads the PARENT refund xmin, the 0240 pattern) (0265, T-534 S1).',
+  },
+  pos_refund_payments_append_guard: {
+    table: 'pos_refund_payments',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No money-back line is added to a refund written by an earlier transaction (reads the PARENT refund xmin, the 0240 pattern) (0265, T-534 S1).',
+  },
   issued_document_versions_sequence: {
     table: 'issued_document_versions',
     mode: 'origin',

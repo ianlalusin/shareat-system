@@ -75,7 +75,8 @@ const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation',
 // T-472 S1 (0216): +5 pos_bridge external keys (pos_store_id x2, firestore_doc_id, parent_doc_id, pos_item_id). 25 -> 30; +pos_bridge_receipts.raw jsonb. 9 -> 10.
 // T-398 S6 (K12): +franchise_access_log.session_id (kind snapshot: sessions is purged, so a kept log row must not point at it by FK). 30 -> 31.
 // T-557 (0249): +2 option_value_ids columns (snapshot). 31 -> 33.
-const NO_FK_PIN = { count: 33, sha256: '2da266d840985c770afa546da19d4f3bd1a10b42bb9542e68ad68f024eb74bf7' } as const;
+// T-534 S1 (0265): +3 request_id idempotency keys (pos_payment_conversions, pos_tender_corrections, pos_refunds). 33 -> 36.
+const NO_FK_PIN = { count: 36, sha256: '9d20bd2d63f66e67243a7f63042162a89efa1383d4971a0b8d0dee1972749a97' } as const;
 // T-523 (0238): +pos_events.payload (snapshot). 10 -> 11.
 // T-584 (0259): +issued_document_versions.letterhead (snapshot). 11 -> 12.
 // T-511 S8b (0260): +settlement_uploads.prior_items (snapshot). 12 -> 13.
