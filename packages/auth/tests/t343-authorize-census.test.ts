@@ -36,6 +36,7 @@ const REFUSAL_TEXT_FUNCTIONS = [
   'otherOrg',
   'storeRequired',
   'closePeriodNeedsWholeOrg',
+  'accountNotActive', // T-612: a pending / suspended / ended account
 ];
 
 describe('T5 — authorize.ts throws zero raw Errors; every AuthorizationError carries a refusal-text call', () => {
