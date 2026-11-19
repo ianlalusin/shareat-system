@@ -491,6 +491,8 @@ export const posSalesReceipts = pgTable(
     check('pos_sales_receipts_total_finite_check', sql`${t.total} > '-Infinity'::numeric and ${t.total} < 'Infinity'::numeric`),
     check('pos_sales_receipts_device_total_finite_check', sql`${t.deviceTotal} > '-Infinity'::numeric and ${t.deviceTotal} < 'Infinity'::numeric`),
     unique('pos_sales_receipts_org_id_id_unique').on(t.orgId, t.id),
+    // NOTE: pos_sales_receipts_store_id_id_unique UNIQUE (store_id, id) - hand-added in migration 0265 (T-534); the target of the (store_id, receipt_id) composites on the correction and refund tables, so they cannot name another store's receipt.
+    unique('pos_sales_receipts_store_id_id_unique').on(t.storeId, t.id),
     unique('pos_sales_receipts_terminal_seq_unique').on(t.terminalId, t.terminalSeq),
     unique('pos_sales_receipts_table_session_unique').on(t.tableSessionId),
     // NOTE: the trigger pos_sales_receipts_session_guard (INSERT for a voided session refused, 23001) is hand-added in migration 0238, ENABLE ALWAYS.
@@ -540,6 +542,8 @@ export const posSalesReceiptLines = pgTable(
     check('pos_sales_receipt_lines_net_finite_check', sql`${t.net} > '-Infinity'::numeric and ${t.net} < 'Infinity'::numeric`),
     unique('pos_sales_receipt_lines_org_id_id_unique').on(t.orgId, t.id),
     unique('pos_sales_receipt_lines_receipt_line_no_unique').on(t.receiptId, t.lineNo),
+    // NOTE: pos_sales_receipt_lines_receipt_id_id_unique UNIQUE (receipt_id, id) - hand-added in migration 0265 (T-534); the target of pos_refund_lines' (receipt_id, receipt_line_id) composite.
+    unique('pos_sales_receipt_lines_receipt_id_id_unique').on(t.receiptId, t.id),
     // NOTE: the trigger pos_sales_receipt_lines_append_only (UPDATE / DELETE refused, 23001) is hand-added in migration 0238, ENABLE ALWAYS.
     check('pos_sales_receipt_lines_kind_check', sql`${t.kind} in ('package','item','refill')`),
     check('pos_sales_receipt_lines_qty_check', sql`${t.qty} > 0`),
@@ -580,6 +584,9 @@ export const posSalesReceiptPayments = pgTable(
   (t) => [
     check('pos_sales_receipt_payments_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
     check('pos_sales_receipt_payments_change_given_finite_check', sql`${t.changeGiven} > '-Infinity'::numeric and ${t.changeGiven} < 'Infinity'::numeric`),
+    // NOTE: the two uniques below are hand-added in migration 0265 (T-534): (receipt_id, id) is the target of the correction and refund-payment composites, (id, tender_id) of the ones that carry the payment's tender.
+    unique('pos_sales_receipt_payments_receipt_id_id_unique').on(t.receiptId, t.id),
+    unique('pos_sales_receipt_payments_id_tender_id_unique').on(t.id, t.tenderId),
     // NOTE: pos_sales_receipt_payments_receipt_idx (receipt_id) - hand-added in migration 0238.
     index('pos_sales_receipt_payments_receipt_idx').on(t.receiptId),
     // NOTE: the trigger pos_sales_receipt_payments_frozen (frozen except checked_by / checked_at, once; DELETE refused; 23001) is hand-added in migration 0238, ENABLE ALWAYS.
@@ -697,6 +704,236 @@ export const posSalesReceiptLineDiscounts = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------------------------------------------------
+// T-534 S1 (migration 0265) - the three post-sale documents. A sales receipt is frozen (0238, 0240), so Convert, a wrong-payment-method fix and a refund
+// are each a NEW row, dated when it happens, collected into the next Z through `day_close_id` (set once), idempotent on `request_id` (unique per org).
+// docs/tasks/534-pos-convert-correction-refund.md. purge (pilot data, like the receipts they point at). NOTHING writes them until S2-S4.
+// What the DATABASE keeps: the shapes and signs below, the freeze (only `day_close_id` once; a conversion's void triple once and only before the Z; no DELETE),
+// the refund's lines and payments written only in the transaction that wrote the refund, and that every receipt / line / payment named here belongs to the
+// refund's or correction's own receipt and store. What it does NOT keep (S2-S4, under a row lock on the parent receipt): quantity and money caps, that a tender is
+// of the store, the closed-day refusal, the approval.
+// ---------------------------------------------------------------------------------------------------------------------
+export const posPaymentConversions = pgTable(
+  'pos_payment_conversions',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: orgIdCol(),
+    storeId: storeIdCol(),
+    /** Composite FK (store_id, terminal_id) -> pos_terminals, hand-added in migration 0265. */
+    terminalId: uuid('terminal_id').notNull(),
+    /** The money that leaves the till (cash out of the drawer, or the wallet that sent). */
+    fromTenderId: uuid('from_tender_id')
+      .notNull()
+      .references(() => tenders.id, { onDelete: 'restrict' }),
+    /** The money that comes in. Never the same tender as `from_tender_id` (CHECK). */
+    toTenderId: uuid('to_tender_id')
+      .notNull()
+      .references(() => tenders.id, { onDelete: 'restrict' }),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    note: text('note'),
+    recordedBy: personCol('recorded_by').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+    /** The idempotency key: unique per org, so a retried POST is one row. */
+    requestId: uuid('request_id').notNull(),
+    voidedBy: personCol('voided_by'),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidReason: text('void_reason'),
+    /** Composite FK (store_id, day_close_id) -> pos_day_closes, hand-added in migration 0265 (no single-column FK). Set once, by the Z. */
+    dayCloseId: uuid('day_close_id'),
+  },
+  (t) => [
+    check('pos_payment_conversions_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    unique('pos_payment_conversions_org_id_id_unique').on(t.orgId, t.id),
+    unique('pos_payment_conversions_org_request_unique').on(t.orgId, t.requestId),
+    // NOTE: pos_payment_conversions_open_idx, a partial index (store_id) WHERE day_close_id IS NULL (the Z's and the Till list's read) - hand-added in migration 0265.
+    index('pos_payment_conversions_open_idx')
+      .on(t.storeId)
+      .where(sql`${t.dayCloseId} is null`),
+    // NOTE: the trigger pos_payment_conversions_frozen (frozen except day_close_id and the void triple, each once; DELETE refused; 23001) and
+    // pos_payment_conversions_void_before_close (a void after the row has a Z, or in the same write as one, refused; 23001) are hand-added in migration 0265, ENABLE ALWAYS.
+    check('pos_payment_conversions_amount_check', sql`${t.amount} > 0`),
+    check('pos_payment_conversions_tenders_differ_check', sql`${t.fromTenderId} <> ${t.toTenderId}`),
+    check('pos_payment_conversions_note_check', sql`${t.note} is null or length(btrim(${t.note})) > 0`),
+    check(
+      'pos_payment_conversions_void_shape_check',
+      sql`(${t.voidedAt} is null) = (${t.voidedBy} is null) and (${t.voidedAt} is null) = (${t.voidReason} is null)`,
+    ),
+    check('pos_payment_conversions_void_reason_check', sql`${t.voidReason} is null or length(btrim(${t.voidReason})) > 0`),
+    foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_payment_conversions_store_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.terminalId], foreignColumns: [posTerminals.storeId, posTerminals.id], name: 'pos_payment_conversions_terminal_same_store_fk' }).onDelete('restrict'),
+    twin('pos_payment_conversions_from_tender_id_same_org_fk', t.orgId, t.fromTenderId, tenders.orgId, tenders.id),
+    twin('pos_payment_conversions_to_tender_id_same_org_fk', t.orgId, t.toTenderId, tenders.orgId, tenders.id),
+    twin('pos_payment_conversions_recorded_by_same_org_fk', t.orgId, t.recordedBy, persons.orgId, persons.id),
+    twin('pos_payment_conversions_voided_by_same_org_fk', t.orgId, t.voidedBy, persons.orgId, persons.id),
+    foreignKey({ columns: [t.storeId, t.dayCloseId], foreignColumns: [posDayCloses.storeId, posDayCloses.id], name: 'pos_payment_conversions_day_close_same_store_fk' }).onDelete('restrict'),
+  ],
+);
+
+export const posTenderCorrections = pgTable(
+  'pos_tender_corrections',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: orgIdCol(),
+    storeId: storeIdCol(),
+    /** Composite FK (store_id, receipt_id) -> pos_sales_receipts: the receipt is of this store. */
+    receiptId: uuid('receipt_id').notNull(),
+    /** Composite FK (receipt_id, payment_id) -> pos_sales_receipt_payments: the paid row being moved belongs to that receipt. */
+    paymentId: uuid('payment_id').notNull(),
+    /** The payment's own tender, carried so "to is not from" is a CHECK. Composite FK (payment_id, from_tender_id) -> pos_sales_receipt_payments(id, tender_id). */
+    fromTenderId: uuid('from_tender_id').notNull(),
+    toTenderId: uuid('to_tender_id')
+      .notNull()
+      .references(() => tenders.id, { onDelete: 'restrict' }),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    /** Required by S3 when the new method is a wallet, as at payment. */
+    referenceNo: text('reference_no'),
+    reason: text('reason').notNull(),
+    approvedBy: personCol('approved_by').notNull(),
+    recordedBy: personCol('recorded_by').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+    requestId: uuid('request_id').notNull(),
+    /** Composite FK (store_id, day_close_id) -> pos_day_closes, hand-added in migration 0265 (no single-column FK). Set once, by the Z. */
+    dayCloseId: uuid('day_close_id'),
+  },
+  (t) => [
+    check('pos_tender_corrections_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    unique('pos_tender_corrections_org_id_id_unique').on(t.orgId, t.id),
+    unique('pos_tender_corrections_org_request_unique').on(t.orgId, t.requestId),
+    // NOTE: pos_tender_corrections_payment_idx (payment_id) and pos_tender_corrections_open_idx (store_id) WHERE day_close_id IS NULL - hand-added in migration 0265.
+    index('pos_tender_corrections_payment_idx').on(t.paymentId),
+    index('pos_tender_corrections_open_idx')
+      .on(t.storeId)
+      .where(sql`${t.dayCloseId} is null`),
+    // NOTE: the trigger pos_tender_corrections_frozen (frozen except day_close_id, once; DELETE refused; 23001) is hand-added in migration 0265, ENABLE ALWAYS.
+    check('pos_tender_corrections_amount_check', sql`${t.amount} > 0`),
+    check('pos_tender_corrections_tenders_differ_check', sql`${t.fromTenderId} <> ${t.toTenderId}`),
+    check('pos_tender_corrections_reference_no_check', sql`length(${t.referenceNo}) between 4 and 40`),
+    check('pos_tender_corrections_reason_check', sql`length(btrim(${t.reason})) > 0`),
+    foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_tender_corrections_store_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.receiptId], foreignColumns: [posSalesReceipts.storeId, posSalesReceipts.id], name: 'pos_tender_corrections_receipt_same_store_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.receiptId, t.paymentId], foreignColumns: [posSalesReceiptPayments.receiptId, posSalesReceiptPayments.id], name: 'pos_tender_corrections_payment_of_receipt_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.paymentId, t.fromTenderId], foreignColumns: [posSalesReceiptPayments.id, posSalesReceiptPayments.tenderId], name: 'pos_tender_corrections_from_tender_of_payment_fk' }).onDelete('restrict'),
+    twin('pos_tender_corrections_to_tender_id_same_org_fk', t.orgId, t.toTenderId, tenders.orgId, tenders.id),
+    twin('pos_tender_corrections_approved_by_same_org_fk', t.orgId, t.approvedBy, persons.orgId, persons.id),
+    twin('pos_tender_corrections_recorded_by_same_org_fk', t.orgId, t.recordedBy, persons.orgId, persons.id),
+    foreignKey({ columns: [t.storeId, t.dayCloseId], foreignColumns: [posDayCloses.storeId, posDayCloses.id], name: 'pos_tender_corrections_day_close_same_store_fk' }).onDelete('restrict'),
+  ],
+);
+
+export const posRefunds = pgTable(
+  'pos_refunds',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: orgIdCol(),
+    storeId: storeIdCol(),
+    /** Composite FK (store_id, terminal_id) -> pos_terminals, hand-added in migration 0265. */
+    terminalId: uuid('terminal_id').notNull(),
+    /** Composite FK (store_id, parent_receipt_id) -> pos_sales_receipts: a refund is at the receipt's own store (row 402). */
+    parentReceiptId: uuid('parent_receipt_id').notNull(),
+    /** Per store, from 1, never reset. The printed refund no is <store code>-R-<refund_seq 6 digits>, formatted by the app, never stored (as the receipt number). */
+    refundSeq: integer('refund_seq').notNull(),
+    total: numeric('total', { precision: 14, scale: 2 }).notNull(),
+    reason: text('reason').notNull(),
+    approvedBy: personCol('approved_by').notNull(),
+    recordedBy: personCol('recorded_by').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+    requestId: uuid('request_id').notNull(),
+    /** Composite FK (store_id, day_close_id) -> pos_day_closes, hand-added in migration 0265 (no single-column FK). Set once, by the Z. */
+    dayCloseId: uuid('day_close_id'),
+  },
+  (t) => [
+    check('pos_refunds_total_finite_check', sql`${t.total} > '-Infinity'::numeric and ${t.total} < 'Infinity'::numeric`),
+    unique('pos_refunds_org_id_id_unique').on(t.orgId, t.id),
+    unique('pos_refunds_org_request_unique').on(t.orgId, t.requestId),
+    unique('pos_refunds_store_refund_seq_unique').on(t.storeId, t.refundSeq),
+    // NOTE: pos_refunds_id_parent_receipt_unique UNIQUE (id, parent_receipt_id) - the target of the (refund_id, receipt_id) composites on the refund lines and payments (trivially true, id is unique).
+    unique('pos_refunds_id_parent_receipt_unique').on(t.id, t.parentReceiptId),
+    // NOTE: pos_refunds_parent_receipt_idx (parent_receipt_id) and pos_refunds_open_idx (store_id) WHERE day_close_id IS NULL - hand-added in migration 0265.
+    index('pos_refunds_parent_receipt_idx').on(t.parentReceiptId),
+    index('pos_refunds_open_idx')
+      .on(t.storeId)
+      .where(sql`${t.dayCloseId} is null`),
+    // NOTE: the trigger pos_refunds_frozen (frozen except day_close_id, once; DELETE refused; 23001) is hand-added in migration 0265, ENABLE ALWAYS.
+    check('pos_refunds_refund_seq_check', sql`${t.refundSeq} > 0`),
+    check('pos_refunds_total_check', sql`${t.total} > 0`),
+    check('pos_refunds_reason_check', sql`length(btrim(${t.reason})) > 0`),
+    foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_refunds_store_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.terminalId], foreignColumns: [posTerminals.storeId, posTerminals.id], name: 'pos_refunds_terminal_same_store_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.parentReceiptId], foreignColumns: [posSalesReceipts.storeId, posSalesReceipts.id], name: 'pos_refunds_parent_receipt_same_store_fk' }).onDelete('restrict'),
+    twin('pos_refunds_approved_by_same_org_fk', t.orgId, t.approvedBy, persons.orgId, persons.id),
+    twin('pos_refunds_recorded_by_same_org_fk', t.orgId, t.recordedBy, persons.orgId, persons.id),
+    foreignKey({ columns: [t.storeId, t.dayCloseId], foreignColumns: [posDayCloses.storeId, posDayCloses.id], name: 'pos_refunds_day_close_same_store_fk' }).onDelete('restrict'),
+  ],
+);
+
+export const posRefundLines = pgTable(
+  'pos_refund_lines',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: orgIdCol(),
+    refundId: uuid('refund_id')
+      .notNull()
+      .references(() => posRefunds.id, { onDelete: 'restrict' }),
+    /** The refund's parent receipt, carried so the next two composites can prove the line is of THAT receipt. Composite FK (refund_id, receipt_id) -> pos_refunds(id, parent_receipt_id). */
+    receiptId: uuid('receipt_id').notNull(),
+    /** Composite FK (receipt_id, receipt_line_id) -> pos_sales_receipt_lines(receipt_id, id). */
+    receiptLineId: uuid('receipt_line_id').notNull(),
+    qty: integer('qty').notNull(),
+    /** This line's share of what the customer actually paid (S4 computes it, after discounts). */
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+  },
+  (t) => [
+    check('pos_refund_lines_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    unique('pos_refund_lines_refund_line_unique').on(t.refundId, t.receiptLineId),
+    // NOTE: pos_refund_lines_receipt_line_idx (receipt_line_id) - hand-added in migration 0265 (the cap read: refunded qty per sold line).
+    index('pos_refund_lines_receipt_line_idx').on(t.receiptLineId),
+    // NOTE: the triggers pos_refund_lines_append_only (UPDATE / DELETE refused, 23001) and pos_refund_lines_append_guard (a line is inserted only in the transaction that wrote its refund, 23001) are hand-added in migration 0265, ENABLE ALWAYS.
+    check('pos_refund_lines_qty_check', sql`${t.qty} > 0`),
+    check('pos_refund_lines_amount_check', sql`${t.amount} > 0`),
+    twin('pos_refund_lines_refund_id_same_org_fk', t.orgId, t.refundId, posRefunds.orgId, posRefunds.id),
+    foreignKey({ columns: [t.refundId, t.receiptId], foreignColumns: [posRefunds.id, posRefunds.parentReceiptId], name: 'pos_refund_lines_refund_receipt_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.receiptId, t.receiptLineId], foreignColumns: [posSalesReceiptLines.receiptId, posSalesReceiptLines.id], name: 'pos_refund_lines_line_of_receipt_fk' }).onDelete('restrict'),
+  ],
+);
+
+export const posRefundPayments = pgTable(
+  'pos_refund_payments',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: orgIdCol(),
+    refundId: uuid('refund_id')
+      .notNull()
+      .references(() => posRefunds.id, { onDelete: 'restrict' }),
+    /** The refund's parent receipt (see pos_refund_lines.receipt_id). */
+    receiptId: uuid('receipt_id').notNull(),
+    /** The original paid row the money goes back to. Composite FK (receipt_id, payment_id) -> pos_sales_receipt_payments(receipt_id, id). */
+    paymentId: uuid('payment_id').notNull(),
+    /** Equals that payment's tender: composite FK (payment_id, tender_id) -> pos_sales_receipt_payments(id, tender_id). A refund goes back the way it was paid (ruling 2A). */
+    tenderId: uuid('tender_id').notNull(),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    /** For a wallet, the reference of the money sent back. */
+    referenceNo: text('reference_no'),
+  },
+  (t) => [
+    check('pos_refund_payments_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    unique('pos_refund_payments_refund_payment_unique').on(t.refundId, t.paymentId),
+    // NOTE: pos_refund_payments_payment_idx (payment_id) - hand-added in migration 0265 (the cap read: refunded money per original payment).
+    index('pos_refund_payments_payment_idx').on(t.paymentId),
+    // NOTE: the triggers pos_refund_payments_append_only (UPDATE / DELETE refused, 23001) and pos_refund_payments_append_guard (a payment is inserted only in the transaction that wrote its refund, 23001) are hand-added in migration 0265, ENABLE ALWAYS.
+    check('pos_refund_payments_amount_check', sql`${t.amount} > 0`),
+    check('pos_refund_payments_reference_no_check', sql`length(${t.referenceNo}) between 4 and 40`),
+    twin('pos_refund_payments_refund_id_same_org_fk', t.orgId, t.refundId, posRefunds.orgId, posRefunds.id),
+    foreignKey({ columns: [t.refundId, t.receiptId], foreignColumns: [posRefunds.id, posRefunds.parentReceiptId], name: 'pos_refund_payments_refund_receipt_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.receiptId, t.paymentId], foreignColumns: [posSalesReceiptPayments.receiptId, posSalesReceiptPayments.id], name: 'pos_refund_payments_payment_of_receipt_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.paymentId, t.tenderId], foreignColumns: [posSalesReceiptPayments.id, posSalesReceiptPayments.tenderId], name: 'pos_refund_payments_tender_of_payment_fk' }).onDelete('restrict'),
+  ],
+);
+
+export type PosPaymentConversionRow = typeof posPaymentConversions.$inferSelect;
+export type PosTenderCorrectionRow = typeof posTenderCorrections.$inferSelect;
+export type PosRefundRow = typeof posRefunds.$inferSelect;
+export type PosRefundLineRow = typeof posRefundLines.$inferSelect;
+export type PosRefundPaymentRow = typeof posRefundPayments.$inferSelect;
 export type PosStoreRow = typeof posStores.$inferSelect;
 export type PosStandRow = typeof posStands.$inferSelect;
 export type PosTerminalRow = typeof posTerminals.$inferSelect;
