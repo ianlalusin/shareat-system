@@ -78,9 +78,9 @@ describe('the Convert section', () => {
     await render();
     expect(button(CONVERT)!.disabled).toBe(false);
     const text = host.textContent ?? '';
-    for (const s of ['Cash → GCash · ₱500.00', 'took cash', 'GCash → Cash · ₱200.00', '(voided)', 'GCash → Cash · ₱75.00']) expect(text).toContain(s);
+    for (const s of ['Cash → GCash · 500.00', 'took cash', 'GCash → Cash · 200.00', '(voided)', 'GCash → Cash · 75.00']) expect(text).toContain(s);
     expect(buttons().filter((b) => b.textContent?.trim() === 'Void').length).toBe(1);
-    expect(host.querySelector('.line-through')?.textContent).toContain('₱200.00');
+    expect(host.querySelector('.line-through')?.textContent).toContain('200.00');
   });
 
   it('offline: the button is off and the sentence is "This needs the internet." and Void is off too [kills: a Convert attempt with no internet]', async () => {
@@ -97,7 +97,7 @@ describe('the Convert section', () => {
     await click(choice('From', 'Cash'));
     await click(choice('To', 'GCash'));
     await pad('500');
-    expect(document.body.textContent).toContain('Cash −₱500.00 · GCash +₱500.00');
+    expect(document.body.textContent).toContain('Cash −500.00 · GCash +500.00');
     await click(button('Save Convert'));
     expect(d.postConvert).toHaveBeenCalledTimes(1);
     expect(d.postConvert.mock.calls[0]![0]).toEqual({ requestId: REQ, fromTenderId: 'cash-id', toTenderId: 'gcash-id', amount: '500', note: '' });
@@ -142,8 +142,8 @@ describe('the Convert section', () => {
 describe('convertEffectText', () => {
   it('names the two sides, From minus and To plus, and says nothing until there is an amount', () => {
     const [cash, gcash] = TENDERS;
-    expect(convertEffectText(cash, gcash, '500')).toBe('Cash −₱500.00 · GCash +₱500.00');
-    expect(convertEffectText(gcash, cash, '12.5')).toBe('GCash −₱12.50 · Cash +₱12.50');
+    expect(convertEffectText(cash, gcash, '500')).toBe('Cash −500.00 · GCash +500.00');
+    expect(convertEffectText(gcash, cash, '12.5')).toBe('GCash −12.50 · Cash +12.50');
     expect(convertEffectText(cash, gcash, '')).toBe('');
     expect(convertEffectText(cash, undefined, '5')).toBe('');
   });

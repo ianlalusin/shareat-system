@@ -79,7 +79,7 @@ export function netMovesOf(conversions: readonly Pick<Row, 'fromTenderId' | 'toT
   const net = new Map<string, { lo: string; hi: string; loToHi: bigint }>();
   for (const c of conversions) {
     if (c.voidedAt) continue;
-    const [lo, hi] = c.fromTenderId < c.toTenderId ? [c.fromTenderId, c.toTenderId] : [c.toTenderId, c.fromTenderId];
+    const [lo, hi] = [c.fromTenderId, c.toTenderId].sort();
     const key = `${lo}:${hi}`;
     const cur = net.get(key) ?? { lo, hi, loToHi: 0n };
     cur.loToHi += (c.fromTenderId === lo ? 1n : -1n) * toCentavos(money(c.amount));
