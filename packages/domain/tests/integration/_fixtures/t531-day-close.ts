@@ -70,6 +70,8 @@ export interface Reading {
   byTender: TenderLine[] | Record<string, string>;
   /** T-558 (R3): Sum of the receipts' short payments (gaps > 0), and how many of them are above the tolerance (findings). */
   varianceTotal?: string; shortfallCount?: number;
+  /** T-534 S2: the Convert block (cash in / out of the drawer by GCash conversions). */
+  convert: { cashIn: string; cashOut: string; net: string; count: number };
   toCheckCount: number; heads: number; packageSessions: number; lateCount: number; spansTwoDates: boolean;
 }
 export interface CloseResult { wrote: boolean; dayCloseId: string; zNo: number; reading: Reading; salesDayId: string | null }

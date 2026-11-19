@@ -1,6 +1,6 @@
 import { can, isStoreManagerOrAbove } from '@shareat/auth';
-import { accessRepo, organizationsRepo, personsRepo, posV2Repo, storesRepo } from '@shareat/db';
-import { listDayCloses, receiptIdentityOf, xReading } from '@shareat/domain';
+import { accessRepo, organizationsRepo, personsRepo, posV1Repo, posV2Repo, storesRepo } from '@shareat/db';
+import { listDayCloses, listOpenConversions, receiptIdentityOf, xReading } from '@shareat/domain';
 import { requirePageAccess, StoreNotAvailable } from '@/lib/page-access';
 import { formatZSlip } from '@/lib/pos-print';
 import { Banner } from '@/components/ui';
@@ -32,6 +32,8 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
     const at = { storeId };
     const reading = await xReading(tx, actor, { storeId, pairingId: pairing.pairingId });
     const { closes } = await listDayCloses(tx, actor, at);
+    const { conversions } = await listOpenConversions(tx, actor, at); // T-534 S2
+    const tenders = (await posV1Repo.listTendersByStore(tx, actor.orgId, storeId)).filter((t) => t.isActive).map((t) => ({ id: t.id, name: t.name, kind: t.kind as 'cash' | 'wallet' }));
     const store = await storesRepo.getById(tx, actor.orgId, storeId);
     const me = await personsRepo.getPersonById(tx, actor.orgId, actor.personId);
     const isManager = isStoreManagerOrAbove((await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId))?.role) && (await can(tx, actor, 'approve_pos_correction', at));
@@ -39,7 +41,7 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
     const org = await organizationsRepo.identityOf(tx, actor.orgId);
     const identity = org && store ? receiptIdentityOf(org, store) : undefined; // T-585: the issuer on every slip, read once per page load
     const till = await posV2Repo.getTerminalForPairing(tx, actor.orgId, storeId, pairing.pairingId);
-    return { storeId, reading, closes, receiptPaperMm: till?.receiptPaperMm === 80 ? (80 as const) : (58 as const), receiptCopies: till?.receiptCopies ?? 1, storeName: store?.name ?? 'Store', vatRegistered: taxType === 'vat', identity, cashierName: me?.displayName?.trim() || 'Signed in', isManager };
+    return { storeId, reading, closes, conversions, tenders, receiptPaperMm: till?.receiptPaperMm === 80 ? (80 as const) : (58 as const), receiptCopies: till?.receiptCopies ?? 1, storeName: store?.name ?? 'Store', vatRegistered: taxType === 'vat', identity, cashierName: me?.displayName?.trim() || 'Signed in', isManager };
   });
   if (!data) {
     return (
@@ -69,6 +71,8 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
         store={{ name: data.storeName, vatRegistered: data.vatRegistered, identity: data.identity, receiptPaperMm: data.receiptPaperMm, receiptCopies: data.receiptCopies }}
         cashierName={data.cashierName}
         tillCountsHref={`/till?store=${encodeURIComponent(data.storeId)}`}
+        tenders={data.tenders}
+        conversions={data.conversions}
       />
     </Page>
   );

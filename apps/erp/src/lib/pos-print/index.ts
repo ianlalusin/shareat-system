@@ -8,6 +8,7 @@ export { center, columnsFor, justify, printAmount, rule, wrap } from './layout';
 export { formatReceipt } from './receipt-text';
 export { formatKitchenTicket, formatRefillSlip } from './kitchen-text';
 export { formatXSlip, formatZSlip } from './reading-text';
+export { formatRefundSlip } from './refund-text';
 export { receiptHeaderOf } from './header';
 export type {
   FontMode,
@@ -20,6 +21,7 @@ export type {
   ReceiptLineDiscount,
   ReceiptTender,
   ReceiptView,
+  RefundSlipView,
   ReadingSlipView,
   RefillSlipView,
   ZSlipView,
