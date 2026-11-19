@@ -148,14 +148,14 @@ describe('T-612 - migration 0268 backfills the account status', () => {
     await expect(sql`update persons set account_status = 'paused' where id = ${ids['working']!}`).rejects.toThrow(/persons_account_status_check/);
   });
 
-  it('the two SQL functions that read the old flag now read the status: the roster-mirror trigger and the franchise reader gate', async () => {
+  it('franchise_reader_check now reads the status; the clock-roster mirror trigger is untouched (still employment / is_active based, by ruling)', async () => {
     const def = async (fn: string) => (await sql<{ d: string }[]>`select pg_get_functiondef(p.oid) as d from pg_proc p where p.proname = ${fn}`)[0]!.d;
-    const mirror = await def('mirror_enqueue_person_employments');
-    expect(mirror).toMatch(/new\.account_status IS DISTINCT FROM old\.account_status/);
-    expect(mirror).not.toMatch(/is_active/);
     const franchise = await def('franchise_reader_check');
-    expect(franchise).toMatch(/"account_status" = 'active'|account_status = 'active'/);
+    expect(franchise).toMatch(/account_status = 'active'/);
     expect(franchise).not.toMatch(/is_active/);
+    const mirror = await def('mirror_enqueue_person_employments');
+    expect(mirror).toMatch(/new\.is_active IS DISTINCT FROM old\.is_active/);
+    expect(mirror).not.toMatch(/account_status/);
   });
 
   it('the terminal CHECK refuses a non-active terminal, and a person may still be pending, suspended or ended', async () => {

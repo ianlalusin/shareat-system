@@ -43,7 +43,9 @@ export const persons = pgTable(
      * ⭐ T-612 (migration 0268; supersedes bible row 340): the person's ERP/POS account status. `pending` = hired, waiting for a manager to
      * activate; `active` = may sign in; `suspended` = rights KEPT but paused (sign-in refused, sessions ended); `ended` = T-609 ended the last
      * job. Every sign-in gate and `authorize()` read THIS, never `is_active`. The domain keeps it in step with employment.
-     * The DB default is 'active' (legacy writers and fixtures); `createPerson` / re-hire set 'pending' explicitly.
+     * ⭐ WHY THE DEFAULT IS 'active', NOT 'pending' (BOSS ruling, 20 Nov 2026): hundreds of existing writers and test fixtures insert persons raw and expect them
+     * to work, and every row written before 0268 was a working person. Safety does not rest on the default: the hire path (`createPerson`) and the re-hire of an
+     * `ended` person (`createEmployment`) set 'pending' explicitly, and a test proves both. A NEW writer that forgets a status gets 'active', exactly as before.
      */
     accountStatus: text('account_status', { enum: ACCOUNT_STATUSES }).notNull().default('active'),
     /**

@@ -118,7 +118,7 @@ async function buildDocument(tx: Tx, row: OutboxRow): Promise<MirrorDocument | n
     const path = `mirror/${row.storeId}/roster/${row.entityId}`;
     const found = (await tx.execute(sql`
       select e.id, e.staff_code as "staffCode", e.employment_status as "employmentStatus",
-             p.display_name as "displayName", e.ended_on as "endedOn", (p.account_status = 'active') as "personActive",
+             p.display_name as "displayName", e.ended_on as "endedOn", p.is_active as "personActive",
              coalesce(
                (select pos.name from employment_positions ep
                  join positions pos on pos.id = ep.position_id
