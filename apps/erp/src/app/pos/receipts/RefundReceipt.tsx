@@ -13,7 +13,8 @@ import { Banner, Dialog } from '@/components/ui';
 import { formatRefundSlip, printAmount, type PrintLayout } from '@/lib/pos-print';
 import { printLines, type PrintResult } from '@/lib/pos-print/adapter';
 import { money } from '@shareat/core/money';
-import { amountCents } from '../_payment/logic';
+import { AmountPad } from '../_payment/AmountPad';
+import { amountCents, appendAmountKey } from '../_payment/logic';
 import { LineApprovalField } from '../_shell/LineApprovalField';
 import { usePos } from '../_shell/pos-context';
 import { autoSplit, centsToText, refundOrder, refundTotalCents, splitProblem, type RefundLineChoice, type RefundPaymentChoice } from './refund-logic';
@@ -36,6 +37,8 @@ export type PostRefund = (body: {
 const PRIMARY = 'min-h-16 inline-flex w-full items-center justify-center rounded-full border border-transparent bg-brand px-6 text-base font-semibold text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
 const SECONDARY = 'min-h-12 min-w-12 inline-flex items-center justify-center gap-2 rounded-full border border-surface-border bg-surface px-4 text-base font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
 const STEP = 'min-h-12 min-w-12 inline-flex items-center justify-center rounded-full border border-field-border bg-surface px-4 text-xl font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
+const ROW = 'min-h-12 flex w-full items-center justify-between gap-3 rounded-2xl border border-field-border bg-field px-4 text-left text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
+const ROW_ACTIVE = 'min-h-12 flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-brand bg-field px-4 text-left text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
 const FIELD = 'min-h-12 flex w-full items-center rounded-2xl border border-field-border bg-field px-4 text-base text-ink placeholder:text-muted';
 
 const peso = (text: string): string => printAmount(money(text));
@@ -63,6 +66,7 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
   const [qtys, setQtys] = useState<Record<string, number>>({});
   const [split, setSplit] = useState<Record<string, string>>({});
   const [edited, setEdited] = useState(false);
+  const [activeId, setActiveId] = useState('');
   const [references, setReferences] = useState<Record<string, string>>({});
   const [reason, setReason] = useState('');
   const [pin, setPin] = useState('');
@@ -71,6 +75,13 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
   const [saved, setSaved] = useState<{ refundNo: string; slip: RefundSlipJson; printed: PrintResult | null } | null>(null);
   const requestId = useRef<string | null>(null);
 
+  // The pad types into one money-back row at a time: the one tapped, else the first (cash first).
+  const active = order.find((p) => p.paymentId === activeId)?.paymentId ?? order[0]?.paymentId ?? '';
+  const typeInto = (next: (v: string) => string) => {
+    if (active === '') return;
+    setEdited(true);
+    setSplit((cur) => ({ ...cur, [active]: next(cur[active] ?? '') }));
+  };
   const totalCents = refundTotalCents(lines, qtys);
   const reasonText = reason.trim();
   const splitText = splitProblem(payments, split, references, totalCents);
@@ -96,6 +107,7 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
     setQtys({});
     setSplit({});
     setEdited(false);
+    setActiveId('');
     setReferences({});
     setReason('');
     setPin('');
@@ -196,23 +208,21 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
               <p className="text-base font-semibold text-ink">Money back</p>
               {order.map((p) => (
                 <div key={p.paymentId} className="space-y-2">
-                  <label className="block space-y-1">
+                  <button
+                    type="button"
+                    data-erp-size="free"
+                    className={p.paymentId === active ? ROW_ACTIVE : ROW}
+                    aria-label={`${p.tenderName} money back`}
+                    aria-pressed={p.paymentId === active}
+                    data-amount={split[p.paymentId] ?? ''}
+                    disabled={busy}
+                    onClick={() => setActiveId(p.paymentId)}
+                  >
                     <span className="text-sm text-muted">
                       {p.tenderName} <span className="text-muted">(up to {peso(p.left)})</span>
                     </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      data-erp-size="free"
-                      className={FIELD}
-                      aria-label={`${p.tenderName} money back`}
-                      value={split[p.paymentId] ?? ''}
-                      onChange={(e) => {
-                        setEdited(true);
-                        setSplit({ ...split, [p.paymentId]: e.target.value.replace(/[^0-9.]/g, '') });
-                      }}
-                    />
-                  </label>
+                    <span className="text-xl font-semibold tabular-nums">{(split[p.paymentId] ?? '') === '' ? '₱0.00' : `₱${split[p.paymentId]}`}</span>
+                  </button>
                   {p.kind === 'wallet' && amountCents(split[p.paymentId]) > 0n ? (
                     <label className="block space-y-1">
                       <span className="text-sm text-muted">Reference number of the money sent back</span>
@@ -222,6 +232,7 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
                 </div>
               ))}
             </div>
+            <AmountPad onKey={(k) => typeInto((v) => appendAmountKey(v, k))} onBack={() => typeInto((v) => v.slice(0, -1))} onClear={() => typeInto(() => '')} disabled={busy} label="Money back keypad" />
             <label className="block space-y-2">
               <span className="text-base font-semibold text-ink">Reason</span>
               <input type="text" data-erp-size="free" className={FIELD} value={reason} onChange={(e) => setReason(e.target.value.slice(0, REASON_MAX))} />

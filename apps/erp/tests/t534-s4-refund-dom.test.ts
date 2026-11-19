@@ -66,7 +66,15 @@ const setInput = async (input: HTMLInputElement | null | undefined, value: strin
   });
 };
 const byLabel = (label: string) => Array.from(document.querySelectorAll('label')).find((l) => (l.textContent ?? '').includes(label))?.querySelector('input') as HTMLInputElement | undefined;
-const moneyBack = (name: string) => document.querySelector(`input[aria-label="${name} money back"]`) as HTMLInputElement | null;
+const moneyRow = (name: string) => document.querySelector(`button[aria-label="${name} money back"]`) as HTMLButtonElement | null;
+const moneyBack = (name: string) => moneyRow(name)?.getAttribute('data-amount');
+const key = (k: string) => click(Array.from(document.querySelectorAll('[aria-label="Money back keypad"] button')).find((b) => (b.getAttribute('aria-label') ?? b.textContent) === (k === '.' ? 'Decimal point' : k)));
+/** Tap a row, clear it, and tap the digits (the pad is the only way money is entered). */
+const typeMoney = async (name: string, amount: string) => {
+  await click(moneyRow(name)!);
+  await click(button('Clear amount'));
+  for (const c of amount) await key(c);
+};
 
 describe('T-534 S4 - Refund (the Receipts row)', () => {
   it('offline the button is off and says "This needs the internet."; online it opens the dialog [kills: the button open offline]', async () => {
@@ -96,8 +104,8 @@ describe('T-534 S4 - Refund (the Receipts row)', () => {
     await click(button('One more Pork belly'));
     await click(button('One more Pork belly'));
     expect(document.body.textContent).toContain('Refund total 500.00');
-    expect(moneyBack('Cash')!.value).toBe('300.00');
-    expect(moneyBack('GCash')!.value).toBe('200.00');
+    expect(moneyBack('Cash')).toBe('300.00');
+    expect(moneyBack('GCash')).toBe('200.00');
     // the wallet row asks for the reference of the money sent back
     expect(document.body.textContent).toContain('Reference number of the money sent back');
   });
@@ -115,12 +123,12 @@ describe('T-534 S4 - Refund (the Receipts row)', () => {
     await setInput(byLabel('Manager PIN'), '123456');
     expect(button('Refund 500.00')!.disabled).toBe(false);
     // cash cannot take more than its 300
-    await setInput(moneyBack('Cash'), '400');
+    await typeMoney('Cash', '400');
     expect(document.body.textContent).toContain('Cash can only take back ₱300.00.');
     expect(button('Refund 500.00')!.disabled).toBe(true);
-    await setInput(moneyBack('Cash'), '100');
+    await typeMoney('Cash', '100');
     expect(document.body.textContent).toContain('must equal the refund');
-    await setInput(moneyBack('GCash'), '400');
+    await typeMoney('GCash', '400');
     expect(button('Refund 500.00')!.disabled).toBe(false);
     await click(button('One more Pork belly')); // 3 units = 750: the hand-made split is kept, so it no longer adds up
     expect(button('Refund 750.00')!.disabled).toBe(true);
@@ -154,6 +162,30 @@ describe('T-534 S4 - Refund (the Receipts row)', () => {
     expect(lines.join('\n')).toContain('SL-R-000001');
     expect(lines.join('\n')).toContain('SL-01-000007');
     expect(lines.join('\n')).toContain('Manny Manager');
+  });
+});
+
+describe('T-534 S4 - the money-back pad', () => {
+  it('the pad types into the tapped row (the first, cash, by default); Del and Clear work; a row is capped at two decimals [kills: pad bound to the wrong row]', async () => {
+    await render();
+    await click(button('Refund'));
+    await click(button('One more Pork belly'));
+    expect(moneyBack('Cash')).toBe('250.00');
+    await click(button('Clear amount'));
+    expect(moneyBack('Cash'), 'default active row is cash, the first').toBe('');
+    await key('7');
+    await key('.');
+    await key('5');
+    await key('0');
+    await key('9');
+    expect(moneyBack('Cash')).toBe('7.50');
+    await click(button('Delete last digit'));
+    expect(moneyBack('Cash')).toBe('7.5');
+    expect(moneyBack('GCash'), 'GCash untouched').toBe('');
+    await click(moneyRow('GCash')!);
+    await key('4');
+    expect(moneyBack('GCash')).toBe('4');
+    expect(moneyBack('Cash')).toBe('7.5');
   });
 });
 
