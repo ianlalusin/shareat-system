@@ -310,3 +310,54 @@ describe('DEF-887 - the repo update refuses a row that moved on', () => {
     expect(await requestStatus(req)).toBe('cancelled');
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// DEF-886: settle and release only use this store's live accounts
+// ---------------------------------------------------------------------------------------------------------------------
+const retire = (id: string) => sql`update money_accounts set is_active = false where id = ${id}`;
+
+describe('DEF-886 - the returned cash goes into this store account, and a live one', () => {
+  it("another store's account is refused; no entry; the float is unchanged", async () => {
+    const f = await setup('d886a');
+    const req = await releasedFloat(f, '1000.00');
+    const msg = await messageOf(settleWith(f, req, { returnedAmount: '400.00', toMoneyAccountId: f.otherOfficeSafeId }));
+    expect(msg).toBe("That money account belongs to another store. Choose one of this store's accounts for the returned cash.");
+    expect(await entriesOf(req, 'cash_request_return')).toBe(0);
+    expect(await outstandingOf(f, req)).toBe('1000.00');
+  });
+
+  it('a retired account is refused; the same account live takes the cash', async () => {
+    const f = await setup('d886b');
+    const req = await releasedFloat(f, '1000.00');
+    await retire(f.drawerId);
+    const msg = await messageOf(settleWith(f, req, { returnedAmount: '400.00', toMoneyAccountId: f.drawerId }));
+    expect(msg).toMatch(/^".+" is retired and cannot take the returned cash\. Choose another account\.$/);
+    expect(await entriesOf(req, 'cash_request_return')).toBe(0);
+    // positive: an active same-store account posts
+    const ok = await settleWith(f, req, { returnedAmount: '400.00', toMoneyAccountId: f.officeSafeId });
+    expect(ok.entryIds).toHaveLength(1);
+    expect(await outstandingOf(f, req)).toBe('600.00');
+  });
+
+  it('a replay still succeeds after the account was retired (the first call passed the check)', async () => {
+    const f = await setup('d886c');
+    const req = await releasedFloat(f, '1000.00');
+    const settleId = crypto.randomUUID();
+    const first = await settleWith(f, req, { settleId, returnedAmount: '400.00', toMoneyAccountId: f.drawerId });
+    await retire(f.drawerId);
+    const again = await settleWith(f, req, { settleId, returnedAmount: '400.00', toMoneyAccountId: f.drawerId });
+    expect(again.entryIds).toEqual(first.entryIds);
+  });
+
+  it('a release from a retired account is refused; no entry; still approved', async () => {
+    const f = await setup('d886d');
+    const req = await approvedRequest(f, '1000.00');
+    await retire(f.drawerId);
+    const msg = await messageOf(
+      asPerson(f.orgId, (tx) => releaseCashRequest(tx, f.manager, { requestId: req, amount: '1000.00', fromMoneyAccountId: f.drawerId, on: '2026-01-05' })),
+    );
+    expect(msg).toMatch(/^".+" is retired\. Choose another account to release from\.$/);
+    expect(await requestStatus(req)).toBe('approved');
+    expect(await entriesOf(req, 'cash_request_release')).toBe(0);
+  });
+});

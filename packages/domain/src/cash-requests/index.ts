@@ -269,6 +269,13 @@ export async function releaseCashRequest(
           'record what one store owes the other, and that is its own slice.',
       );
     }
+    // DEF-886: a retired account is not a place to take money out of (the picker already hides it; this closes a crafted POST).
+    if (!account.isActive) {
+      throw refuse(
+        `releaseCashRequest: money account ${account.id} is retired.`,
+        `"${account.name}" is retired. Choose another account to release from.`,
+      );
+    }
 
     // T-139's rule: a cashier account warns, an office account refuses (row 154).
     const warning = await checkDraw(
@@ -462,6 +469,22 @@ export async function settleCashRequest(
       }
       const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.toMoneyAccountId);
       if (!account) throw new Error('settleCashRequest: that money account does not exist.');
+      // DEF-886: the returned cash goes into one of THIS store's live accounts. A replay skips both checks - the first call passed
+      // them, and the account may have been retired since.
+      if (!replay) {
+        if (account.storeId !== req.storeId) {
+          throw refuse(
+            `settleCashRequest: money account ${account.id} belongs to another store.`,
+            "That money account belongs to another store. Choose one of this store's accounts for the returned cash.",
+          );
+        }
+        if (!account.isActive) {
+          throw refuse(
+            `settleCashRequest: money account ${account.id} is retired.`,
+            `"${account.name}" is retired and cannot take the returned cash. Choose another account.`,
+          );
+        }
+      }
 
       const r = await postEntryOnce(trx, {
         orgId: actor.orgId,
