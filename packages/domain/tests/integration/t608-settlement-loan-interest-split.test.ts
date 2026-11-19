@@ -25,6 +25,7 @@ import { closeDb, loansRepo, transaction, APP_ROLE, type Tx } from '@shareat/db'
 import type { Actor } from '@shareat/auth';
 import { recordChannelSettlement, voidChannelSettlement } from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
+import { makeSettleableDay } from './_fixtures/sales-day-flow';
 import { checkLoanDay, loadLoanCheckContext } from '../../src/settlement-intake/loan-check';
 
 const sql = postgres(url, { max: 5 });
@@ -95,6 +96,7 @@ async function dock(f: Fx, loanId: string, leg: string, ownerStoreId?: string) {
   const d = new Date(Date.UTC(2026, 0, 15 + ++dayNo)).toISOString().slice(0, 10);
   // one settlement per channel per sales day: every payout gets a day of its own
   const [day] = await sql<{ id: string }[]>`insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by) values (${f.orgId}, ${f.paying.id}, ${d}, 0, 0, 0, ${f.personId}) returning id`;
+  await makeSettleableDay(sql, day!.id, f.channelId, f.personId); // DEF-881: a settlement names a verified day carrying the channel
   const salesDayId = day!.id;
   await asOrg(f.orgId, (tx) =>
     postEntry(tx, {

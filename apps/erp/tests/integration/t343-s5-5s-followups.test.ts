@@ -3,6 +3,7 @@ import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
+import { makeSettleableDay } from '../../../../packages/domain/tests/integration/_fixtures/sales-day-flow';
 import { sql as dsql } from 'drizzle-orm';
 
 /**
@@ -597,6 +598,7 @@ async function channelSettlementFixture(hint: string) {
   const [day] = await sql<{ id: string }[]>`
     insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by)
     values (${f.orgId}, ${f.storeId}, '2026-01-10', 0, 0, 0, ${manager!.id}) returning id`;
+  await makeSettleableDay(sql, day!.id, channel!.id, manager!.id); // DEF-881: a settlement names a verified day carrying the channel
   const manager_ = actor(f.orgId, manager!.id);
   return { ...f, manager: manager_, channelId: channel!.id, salesDayId: day!.id, bankId: bank!.id };
 }

@@ -31,22 +31,6 @@ export async function personIdsWithLivePin(tx: Tx, orgId: string, personIds: rea
 }
 
 /**
- * Active people of the org with an active role above staff (manager, admin, super_admin) and a live PIN. The caller keeps those who may sign in at the
- * store (`accessRepo.personMaySignInAtStore`) and applies the ladder (`isStoreManagerOrAbove`); the role comes back so it can.
- */
-export async function listRoleHoldersWithLivePin(tx: Tx, orgId: string): Promise<{ personId: string; role: string }[]> {
-  const rows = (await tx.execute(sql`
-    select distinct p.id::text as person_id, r.role
-      from person_roles r
-      join persons p on p.id = r.person_id and p.org_id = r.org_id
-     where r.org_id = ${orgId} and r.revoked_at is null and p.is_active
-       and r.role in ('manager', 'admin', 'super_admin')
-       and exists (select 1 from person_credentials c where c.person_id = p.id and c.kind = 'pin' and c.revoked_at is null)
-  `)) as unknown as { person_id: string; role: string }[];
-  return rows.map((r) => ({ personId: r.person_id, role: r.role }));
-}
-
-/**
  * Package variants on sale NOW at the store (a store-channel offer in force, not withdrawn, active item and variant) that name no active refill item.
  * The same "on sale now" test as `kitchenRepo.offeredItemsWithRoute`. Returns display names, in name order.
  */
