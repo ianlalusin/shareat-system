@@ -238,6 +238,7 @@ export function Orders() {
             rules={payment.rules}
             vatRegistered={payment.store.vatRegistered}
             terminalNo={payment.store.terminalNo}
+            storeCode={payment.store.code}
             storeName={payment.store.name}
             identity={payment.store.identity}
             storeMode={payment.store.mode}

@@ -54,6 +54,8 @@ export interface PaymentPanelProps {
   rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number };
   vatRegistered: boolean;
   terminalNo: number;
+  /** T-601 S5: the store code of the receipt number, from the snapshot; absent in an old cached one. */
+  storeCode?: string;
   storeName: string;
   /** T-585: the issuer identity from the snapshot; absent in an old cached one. */
   identity?: unknown;
@@ -334,6 +336,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
       personId: p.personId,
       sessionId: p.sessionId,
       online: p.online,
+      storeCode: p.storeCode,
       terminalNo: p.terminalNo,
       now,
       priced,

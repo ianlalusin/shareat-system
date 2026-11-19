@@ -40,4 +40,14 @@ describe('T-601 S4 - callers pass the store mode', () => {
     expect(paymentPartOf(body({ mode: 'test' }))?.store.mode).toBe('test');
     expect(paymentPartOf(body({}))?.store.mode).toBeUndefined();
   });
+
+  it('T-601 S5: the cached snapshot keeps the store code for the receipt number, and an old one without it still loads', () => {
+    const body = (store: Record<string, unknown>): Record<string, unknown> => ({
+      store: { storeId: 's', name: 'Acme Lipa', terminalNo: 1, vatRegistered: true, receiptPaperMm: 58, receiptCopies: 1, ...store },
+      rules: { vatPercentBasisPoints: 1200, scPwdPercentBasisPoints: 2000 }, tenders: [], discountPresets: [], staff: [],
+    });
+    expect(paymentPartOf(body({ code: 'LIP' }))?.store.code).toBe('LIP');
+    expect(paymentPartOf(body({}))?.store.code).toBeUndefined();
+    expect(paymentPartOf(body({ code: '' }))?.store.code).toBeUndefined();
+  });
 });
