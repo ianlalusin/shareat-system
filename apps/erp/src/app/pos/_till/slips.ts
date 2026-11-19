@@ -25,6 +25,8 @@ export interface ReadingJson {
   heads?: number;
   packageSessions?: number;
   seniorPwdDiners?: number;
+  /** T-534 S2: absent from older callers. */
+  convert?: { cashIn: string; cashOut: string; net: string; count: number };
   windowStart?: string;
   windowEnd?: string;
 }
@@ -65,6 +67,7 @@ export function readingSlipView(reading: ReadingJson, ctx: SlipContext): Reading
     packageSessions: reading.packageSessions ?? 0,
     seniorPwdDiners: reading.seniorPwdDiners ?? 0,
     tenders: reading.byTender.map((t) => ({ name: t.name, amount: amountOf(t.amount) })),
+    ...(reading.convert ? { convert: { cashIn: amountOf(reading.convert.cashIn), cashOut: amountOf(reading.convert.cashOut), count: reading.convert.count } } : {}),
     varianceTotal: amountOf(reading.varianceTotal),
     shortfallCount: reading.shortfallCount ?? 0,
     toCheckCount: reading.toCheckCount,

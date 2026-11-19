@@ -148,6 +148,8 @@ export interface ReadingSlipView {
   varianceTotal?: Money;
   /** T-558: receipts short by more than the tolerance (findings); printed only above zero. */
   shortfallCount?: number;
+  /** T-534 S2: Convert (GCash cash-in / cash-out) of the window, in its own lines under the tenders; printed only when something was converted. Cash in/out are the DRAWER's. */
+  convert?: { cashIn: Money; cashOut: Money; count: number };
   /** Offline wallet payments still to check; printed only above zero. */
   toCheckCount: number;
   /** Receipts recorded after their window opened; printed only above zero. */
