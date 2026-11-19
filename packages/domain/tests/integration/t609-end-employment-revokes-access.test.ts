@@ -136,8 +136,8 @@ describe('2 - a two-store person ends the store A job', () => {
     // manual scope or the grants (A's manual rows survive) - each is red here.
     expect(await scopeRows(p.personId, w.storeA), 'A scope (manual) gone').toBe(0);
     expect(await scopeRows(p.personId, w.storeB), 'B scope kept').toBe(1);
-    expect(await n(sql<{ n: number }[]>`select count(*)::int n from person_grants where person_id = ${p.personId} and store_id = ${w.storeA} and revoked_at is null`), 'A grant gone').toBe(0);
-    expect(await n(sql<{ n: number }[]>`select count(*)::int n from person_grants where person_id = ${p.personId} and store_id = ${w.storeB} and revoked_at is null`), 'B grant kept').toBe(1);
+    expect(await n(sql<{ n: number }[]>`select count(*)::int n from person_grants where person_id = ${p.personId} and store_id = ${w.storeA} and grant_source = 'grant' and revoked_at is null`), 'A grant gone').toBe(0);
+    expect(await n(sql<{ n: number }[]>`select count(*)::int n from person_grants where person_id = ${p.personId} and store_id = ${w.storeB} and grant_source = 'grant' and revoked_at is null`), 'B grant kept').toBe(1);
     expect(await activeRole(p.personId), 'role kept').toBe('staff');
     expect(await livePins(p.personId), 'PIN kept').toBe(1);
     await expect(w.pinSession(p, w.storeB), 'sign-in at B works').resolves.toBeDefined();
@@ -223,7 +223,7 @@ describe('7 - re-hire switches access back on, except manual extras and the PIN'
     expect(await n(sql<{ n: number }[]>`select count(*)::int n from person_grants where person_id = ${p.personId} and revoked_at is null and grant_source = 'position'`), 'position grants back').toBe(positionGrants);
     expect(await n(sql<{ n: number }[]>`select count(*)::int n from person_grants where person_id = ${p.personId} and revoked_at is null and grant_source = 'grant'`), 'the manual extra is NOT back').toBe(0);
     await expect(w.pinSession(p, w.storeA), 'the old PIN is dead').rejects.toBeInstanceOf(AuthenticationError);
-    await setPin(null, { orgId: w.orgId, personId: p.personId, storeId: w.storeA, pin: '860777' });
+    await withOrgPrincipal(w.orgId, (tx) => setPin(tx, { orgId: w.orgId, personId: p.personId, storeId: w.storeA, pin: '860777' }));
     await expect(w.pinSession({ pin: '860777' }, w.storeA), 'a newly set PIN works').resolves.toBeDefined();
   });
 });
