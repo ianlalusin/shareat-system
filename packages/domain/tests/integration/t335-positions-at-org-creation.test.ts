@@ -15,9 +15,7 @@ import { CANONICAL_POSITIONS } from '@shareat/db/schema';
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { bootstrapOrganization, createOrganization } from '../../src/organizations';
 import { createStore } from '../../src/stores/service';
-import { setPositionDefault } from '../../src/people';
-// T-612: activate after hire, as a manager would (these fixtures hire people who already work).
-import { createEmployment } from './_fixtures/hire-and-activate';
+import { createEmployment, setPositionDefault } from '../../src/people';
 
 /** Dynamic on purpose: this module does not exist until the builder creates it (§4). A static
  *  top-level import would fail the WHOLE FILE, hiding T1-T6/T6b's own specific red reasons behind

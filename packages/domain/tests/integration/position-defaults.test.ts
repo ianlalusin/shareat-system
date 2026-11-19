@@ -36,6 +36,7 @@ import { APP_ROLE, accessRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
 import { assignRole, grantCapabilityAsActor } from '@shareat/auth';
 import {
+  createEmployment,
   endEmployment,
   retireStorePosition,
   seedCanonicalPositions,
@@ -43,8 +44,6 @@ import {
   setPositionDefault,
   upsertStorePosition,
 } from '@shareat/domain';
-// T-612: activate after hire, as a manager would (these fixtures hire people who already work).
-import { createEmployment } from './_fixtures/hire-and-activate';
 // ⛔ NOT exported from `@shareat/domain` — T-289 §C11's closed importer list is the guard that
 // keeps `reconcilePositionGrants` unreachable from a screen. This file is one of its four named
 // importers, used directly below to prove the self-skip primitive in isolation (case 10).

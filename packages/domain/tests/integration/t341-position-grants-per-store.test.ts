@@ -27,9 +27,7 @@ if (!isTestDatabaseUrl(url)) {
 import { APP_ROLE, accessRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
 import { grantCapabilityAsActor } from '@shareat/auth';
-import { seedCanonicalPositions, setPositionDefault, upsertStorePosition } from '@shareat/domain';
-// T-612: activate after hire, as a manager would (these fixtures hire people who already work).
-import { createEmployment } from './_fixtures/hire-and-activate';
+import { createEmployment, seedCanonicalPositions, setPositionDefault, upsertStorePosition } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
