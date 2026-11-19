@@ -184,6 +184,20 @@ describe('DEF-878 - a collection that left store credit cannot be voided once th
   });
 });
 
+describe('T-595 audit LOW - two voids of one collection', () => {
+  it('queue on the customer lock: one voids it, the other is refused as not posted, and exactly one reversal exists [kills: status read before the lock]', async () => {
+    const f = await fixture('v-double');
+    const col = await overpay(f, 500);
+    const before = await reversalsOf(f);
+    const results = await Promise.allSettled([voidIt(f, col.collectionId), voidIt(f, col.collectionId)]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const lost = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect(String(lost.reason.message)).toMatch(/not posted/);
+    expect(await status(col.collectionId)).toBe('voided');
+    expect(Number(await reversalsOf(f)) - Number(before)).toBe(1);
+  });
+});
+
 describe('DEF-879 - two collections cannot spend the same store credit', () => {
   it('RACE: 500 credit, two charges, both collections spend 500 at once: the second is refused and the credit ends at 0.00, not -500.00 [kills: no customer lock in recordCollection]', async () => {
     const f = await fixture('s-race');

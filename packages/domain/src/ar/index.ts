@@ -750,7 +750,11 @@ export async function voidCollection(
     if (collection.journalEntryId) {
       await authorizeOtherStores(trx, actor, { lines: entryLines, documentStoreId: collection.storeId });
     }
-    if (collection.status !== 'posted') throw new Error(`voidCollection: it is ${collection.status}, not posted.`);
+    // LOW (T-595 audit): the customer lock BEFORE the status check, and the collection re-read under it, so two voids of one collection queue and the
+    // second sees the first's committed status instead of both passing a stale 'posted'. Lock order: customer row only (a void takes no charge lock).
+    await customersRepo.lockForCredit(trx, actor.orgId, collection.customerId);
+    const locked = await arRepo.getCollectionById(trx, actor.orgId, input.collectionId);
+    if (!locked || locked.status !== 'posted') throw new Error(`voidCollection: it is ${locked?.status ?? 'gone'}, not posted.`);
     if (!collection.journalEntryId) throw new Error('voidCollection: posted collection carries no journal entry.');
     const reason = input.reason.trim();
     if (!reason) throw new Error('voidCollection: say why this collection is being voided.');
@@ -759,7 +763,6 @@ export async function voidCollection(
     // the customer's credit; if the credit is no longer held (spent on a later collection) the void would drive the balance below zero. The customer
     // row lock comes first, so a spend racing this void queues behind it instead of slipping between the read and the reversal. A collection that
     // only SPENT credit gives it back: no check. Mirrors `voidPayment` on the AP side (1240).
-    await customersRepo.lockForCredit(trx, actor.orgId, collection.customerId);
     let held: Money = ZERO;
     for (const l of entryLines) {
       if (l.accountCode === STORE_CREDIT_CODE && l.partyId === collection.customerId) held = add(held, subtract(money(l.credit), money(l.debit)));

@@ -40,7 +40,7 @@ import { consume, reverseConsumption } from '../stock/consume';
 import { postWastage } from '../stock/consumption-posting';
 import type { ConsumedLine } from '../stock/layers';
 import { compareQuantity, isPositiveQuantity, quantity, subtractQuantity, type Quantity } from '../stock/quantity';
-import { recordCollection } from '../ar';
+import { recordCollection, spendableStoreCredit } from '../ar';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { RETURN_RECORD_RULES } from '../field-rules/trade';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
@@ -565,7 +565,11 @@ export async function voidCustomerReturn(
     const ret = await customerReturnsRepo.getReturn(trx, returnId);
     if (!ret) return { ok: false, reason: `return ${returnId} does not exist.` };
     await authorize(trx, actor, 'void_customer_return', { storeId: ret.storeId });
-    if (ret.status === 'void') return { ok: false, reason: 'this return is already void.' };
+    // DEF-880 (T-595 audit): the customer row lock first (same order as applyCredit and recordCollection: customer, then the rest), and the return re-read
+    // under it, so a concurrent spend of this return's credit or a second void queues instead of reading a stale balance.
+    await customersRepo.lockForCredit(trx, ret.orgId, ret.customerId);
+    const current = (await customerReturnsRepo.getReturn(trx, returnId)) ?? ret;
+    if (current.status === 'void') return { ok: false, reason: 'this return is already void.' };
 
     const trimmed = reason.trim();
     if (!trimmed) return { ok: false, reason: 'say why this return is being voided.' };
@@ -580,7 +584,8 @@ export async function voidCustomerReturn(
 
     if (ret.settlement === 'store_credit' || ret.settlement === 'mixed') {
       // T-371 R4/C4 — both sides minted from the database and compared in scaled bigint.
-      const balance = money(await arRepo.creditBalanceOf(trx, ret.orgId, ret.customerId));
+      // Credit is spent only where it was earned (DEF-880): this return's 2140 sits at ITS store, so that is the figure that must still cover it.
+      const balance = await spendableStoreCredit(trx, ret.orgId, ret.customerId, ret.storeId);
       const lines = await customerReturnsRepo.getReturnLines(trx, returnId);
       const contribution = add(...lines.map((l) => money(l.amount)));
       // ⚠️ A rough but honest check, matching T-170's own: if the live balance is already below

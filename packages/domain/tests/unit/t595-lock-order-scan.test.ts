@@ -34,6 +34,22 @@ describe('T-595 lock order: customer row before charge rows', () => {
     expect(lock).toBeGreaterThan(-1);
     expect(read).toBeGreaterThan(lock);
   });
+  it('voidCustomerReturn takes lockForCredit( before it reads the credit (spendableStoreCredit() and before reverseEntry( [kills: a return void reading credit org-wide with no lock]', () => {
+    const body = bodyOf(code('packages/domain/src/trade/returns.ts'), 'voidCustomerReturn');
+    const lock = body.search(/lockForCredit\(/);
+    const read = body.search(/spendableStoreCredit\(/);
+    const reverse = body.search(/reverseEntry\(/);
+    expect(lock).toBeGreaterThan(-1);
+    expect(read).toBeGreaterThan(lock);
+    expect(reverse).toBeGreaterThan(lock);
+  });
+  it('voidCollection takes lockForCredit( before the status check [kills: two voids both passing a stale posted]', () => {
+    const body = bodyOf(code('packages/domain/src/ar/index.ts'), 'voidCollection');
+    const lock = body.search(/lockForCredit\(/);
+    const status = body.search(/not posted/);
+    expect(lock).toBeGreaterThan(-1);
+    expect(status).toBeGreaterThan(lock);
+  });
   it('voidCollection takes lockForCredit( before reverseEntry( [kills: a void racing a spend of the credit it created]', () => {
     const body = bodyOf(code('packages/domain/src/ar/index.ts'), 'voidCollection');
     const lock = body.search(/lockForCredit\(/);
