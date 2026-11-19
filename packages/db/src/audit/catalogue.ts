@@ -240,6 +240,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('pos.store_mode_set', 'settings', 'high', 'store', 'pos_stores', 'T-533'),
   // T-531: the day close (the Z; entity = the pos_day_closes row, or the run id for the backlog), the ERP sales day it derives, and the December bridge to v1 (entity = the store).
   // Server-only: the tablet never sends them. A Z is money, so the 10-year class; a failed bridge is `high` (a day v1 does not have yet).
+  // T-534 S2: a Convert (GCash cash-in / cash-out) recorded on the till, and one voided before the Z (entity = the pos_payment_conversions row). Payloads carry ids and amounts, never a note's text.
+  def('pos.conversion_recorded', 'money', 'normal', 'store', 'pos_payment_conversions', 'T-534'),
+  def('pos.conversion_voided', 'money', 'high', 'store', 'pos_payment_conversions', 'T-534'),
   def('pos.day_closed', 'money', 'high', 'store', 'pos_day_closes', 'T-531'),
   def('pos.day_closed_backlog', 'money', 'high', 'store', 'pos_day_closes', 'T-531'),
   def('pos.v1_bridge_sent', 'money', 'normal', 'store', 'stores', 'T-531'),

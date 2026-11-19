@@ -38,6 +38,7 @@ import { gone, internalFault, refuse } from '../shared/refusal';
 import { routeSalesDay } from '../sales-days/routing';
 import { isUniqueViolation } from './order';
 import { audit, NOT_ON, readRules, requireContext, startHourDate, uuidInput, uuidv5, type PosDeps } from './shared';
+import { convertBlockOf, kindsOf, postConversionsForZ, type ConvertBlock } from './convert';
 import { buildV1BridgePayload, v1BridgeDateAllowed, V1_BRIDGE_LAST_DATE, type V1BridgeClose } from './v1-bridge-payload';
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -89,12 +90,15 @@ export interface Reading {
   toCheckCount: number;
   heads: number;
   packageSessions: number;
+  /** T-534 S2: Convert (GCash cash-in / cash-out) of the window: its OWN block, never mixed into sales. `net` is what moves the expected drawer cash (row 391). */
+  convert: ConvertBlock;
   /** Receipts issued before the window opened but recorded after the last Z: counted here, flagged, never lost. */
   lateCount: number;
   spansTwoDates: boolean;
 }
 
 type Receipt = posV2Repo.PosSalesReceiptRow;
+type Conversion = posV2Repo.PosPaymentConversionRow;
 const sumCentavos = (xs: readonly string[]): bigint => xs.reduce((a, x) => a + toCentavos(money(x)), 0n);
 const daysBetween = (a: string, b: string): number => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 /** The instant a business day starts: its Manila midnight plus the start hour. */
@@ -133,6 +137,11 @@ async function openWindow(tx: Tx, orgId: string, storeId: string, terminalId: st
   return { store, open, hour, lastZ, start: dayStart(dates[0] ?? startHourDate(at, hour), hour) };
 }
 
+/** T-534 S2: the terminal's Converts not yet in a Z (voided ones too: a Z freezes those as well, the figures skip them), oldest first; `before` (a backlog day's end) leaves out later ones. */
+async function openConversions(tx: Tx, orgId: string, storeId: string, terminalId: string, before?: Date): Promise<Conversion[]> {
+  return (await posV2Repo.listOpenPaymentConversions(tx, orgId, storeId)).filter((c) => c.terminalId === terminalId && (before === undefined || c.recordedAt.getTime() < before.getTime()));
+}
+
 /** T-558: the receipts paid short (total above the sum tendered), with the gap in centavos. A receipt paid in full or over (change) is never listed: change never offsets a gap. */
 async function shortPaid(tx: Tx, orgId: string, receipts: readonly Receipt[]): Promise<{ receipt: Receipt; gap: bigint }[]> {
   const paid = await posV2Repo.receiptPaidSums(tx, orgId, receipts.map((r) => r.id));
@@ -151,6 +160,7 @@ async function figuresOf(
   window: { start: Date; end: Date },
   hour: number,
   deps: PosDeps | undefined,
+  conversions: readonly Conversion[] = [],
 ): Promise<Reading> {
   const f = await posV2Repo.receiptFigures(tx, orgId, receipts.map((r) => r.id));
   const subtotal = sumCentavos(receipts.map((r) => r.subtotal));
@@ -204,6 +214,7 @@ async function figuresOf(
     toCheckCount: f.byTender.reduce((a, p) => a + p.toCheck, 0),
     heads: f.heads,
     packageSessions: f.packageSessions,
+    convert: convertBlockOf(conversions, kindsOf([...tenders.values()])),
     lateCount: receipts.filter((r) => r.issuedAtDevice.getTime() < window.start.getTime()).length,
     spansTwoDates: startHourDate(window.start, hour) !== startHourDate(new Date(lastMs), hour),
   };
@@ -212,7 +223,7 @@ async function figuresOf(
 /** The open window of one terminal as figures. Pure apart from reads; no capability check (its callers have done theirs). */
 export async function readingFor(tx: Tx, actor: Actor, input: { storeId: string; terminalId: string; at: Date }, deps?: PosDeps): Promise<Reading> {
   const w = await openWindow(tx, actor.orgId, input.storeId, input.terminalId, input.at, deps);
-  return figuresOf(tx, actor.orgId, input.storeId, input.terminalId, w.open, { start: w.start, end: input.at }, w.hour, deps);
+  return figuresOf(tx, actor.orgId, input.storeId, input.terminalId, w.open, { start: w.start, end: input.at }, w.hour, deps, await openConversions(tx, actor.orgId, input.storeId, input.terminalId));
 }
 
 /** The X reading: the open window of the paired tablet's till, written nowhere. `record_sale`. */
@@ -233,7 +244,7 @@ export async function xReading(tx: Tx, actor: Actor, input: { storeId: string; t
 async function readingOfClose(tx: Tx, orgId: string, close: posV2Repo.PosDayCloseRow, deps: PosDeps | undefined): Promise<Reading> {
   const receipts = await posV2Repo.listReceiptsOfClose(tx, orgId, close.storeId, close.id);
   const { businessDayStartHour: hour } = await readRules(tx, orgId, close.businessDate, deps);
-  return figuresOf(tx, orgId, close.storeId, close.terminalId, receipts, { start: close.windowStart, end: close.windowEnd }, hour, deps);
+  return figuresOf(tx, orgId, close.storeId, close.terminalId, receipts, { start: close.windowStart, end: close.windowEnd }, hour, deps, await posV2Repo.listPaymentConversionsOfClose(tx, orgId, close.storeId, close.id));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -287,6 +298,8 @@ interface ZPlan {
   windowStart: Date;
   windowEnd: Date;
   receipts: readonly Receipt[];
+  /** T-534 S2: every open Convert the Z takes (voided ones too); the reading's Convert block counts only the live ones. */
+  conversions: readonly Conversion[];
   reading: Reading;
 }
 
@@ -311,14 +324,21 @@ async function writeZ(
   // The one-time column write: only receipts still open are taken; a different count means another close got one first.
   const closed = await posV2Repo.closeReceipts(tx, orgId, c.storeId, z.closeId, z.receipts.map((r) => r.id));
   if (closed !== z.receipts.length) throw refuse(`pos: closed ${closed} of ${z.receipts.length} receipts`, CLOSE_RACE);
+  const convertsClosed = await posV2Repo.closePaymentConversions(tx, orgId, c.storeId, z.closeId, z.conversions.map((x) => x.id));
+  if (convertsClosed !== z.conversions.length) throw refuse(`pos: closed ${convertsClosed} of ${z.conversions.length} converts`, CLOSE_RACE);
   const salesDayId = await deriveSalesDayFromZ(tx, actor, {
     storeId: c.storeId, pairingId: c.pairingId, close: { id: z.closeId, businessDate: z.businessDate }, reading: z.reading, at: c.at,
   });
+  // T-534 S2: the Converts of the Z reach the books beside the sales day: a LIVE store only (test mode never books).
+  const convertEntries = (await posV2Repo.getPosStore(tx, orgId, c.storeId))?.mode === 'live'
+    ? await postConversionsForZ(tx, actor, { storeId: c.storeId, closeId: z.closeId, businessDate: z.businessDate, conversions: z.conversions, tenders: await posV1Repo.listTendersByStore(tx, orgId, c.storeId) })
+    : [];
   await audit(tx, actor, 'pos.day_closed', {
     storeId: c.storeId, entityId: z.closeId, pairingId: c.pairingId, at: c.at, before: null,
     after: {
       zNo: z.zNo, businessDate: z.businessDate, windowStart: z.windowStart.toISOString(), windowEnd: z.windowEnd.toISOString(), receiptCount: z.reading.receiptCount,
       grossTotal: z.reading.grossTotal, byTender: z.reading.byTender.map((t) => ({ tenderId: t.tenderId, amount: t.amount })), approvedBy: c.approverId, salesDayId,
+      convert: { cashIn: z.reading.convert.cashIn, cashOut: z.reading.convert.cashOut, count: z.reading.convert.count, entries: convertEntries },
     },
   });
   return { salesDayId };
@@ -373,7 +393,8 @@ export async function closeDay(tx: Tx, actor: Actor, input: CloseDayInput, deps?
   const at = nowOf(deps);
   const w = await openWindow(tx, orgId, storeId, till.terminalId, at, deps);
   if (!w.store || w.store.mode === 'off') throw refuse('pos: store switched off', NOT_ON);
-  const reading = await figuresOf(tx, orgId, storeId, till.terminalId, w.open, { start: w.start, end: at }, w.hour, deps);
+  const conversions = await openConversions(tx, orgId, storeId, till.terminalId);
+  const reading = await figuresOf(tx, orgId, storeId, till.terminalId, w.open, { start: w.start, end: at }, w.hour, deps, conversions);
   if (reading.receiptCount === 0) throw refuse('pos: nothing to close', NO_SALES_TO_CLOSE);
   // R11 (row 450): from the oldest unclosed receipt's business day to today's, no more than 2 business dates.
   const today = startHourDate(at, w.hour);
@@ -383,7 +404,7 @@ export async function closeDay(tx: Tx, actor: Actor, input: CloseDayInput, deps?
   const afterLast = w.lastZ ? addDays(parseBusinessDate(w.lastZ.businessDate), 1) : null;
   const businessDate = afterLast !== null && afterLast > today ? afterLast : today;
   const { salesDayId } = await writeZ(tx, actor, { storeId, terminalId: till.terminalId, pairingId: till.pairingId, approverId, at }, {
-    closeId, zNo: (w.lastZ?.zNo ?? 0) + 1, businessDate, windowStart: w.start, windowEnd: at, receipts: w.open, reading,
+    closeId, zNo: (w.lastZ?.zNo ?? 0) + 1, businessDate, windowStart: w.start, windowEnd: at, receipts: w.open, conversions, reading,
   });
   await posV2Repo.bumpStateVersion(tx, orgId, storeId);
   const names = await posV2Repo.listPersonNames(tx, orgId, [actor.personId, approverId]);
@@ -456,10 +477,12 @@ export async function closeBacklog(tx: Tx, actor: Actor, input: CloseBacklogInpu
   for (const day of days) {
     const receipts = groups.get(day)!;
     const end = dayStart(addDays(parseBusinessDate(day), 1), w.hour);
-    const reading = await figuresOf(tx, orgId, storeId, till.terminalId, receipts, { start, end }, w.hour, deps);
+    // Converts recorded before this day's end that no earlier Z of this run took (each Z collects its own as it is written, so the next read no longer sees them).
+    const conversions = await openConversions(tx, orgId, storeId, till.terminalId, end);
+    const reading = await figuresOf(tx, orgId, storeId, till.terminalId, receipts, { start, end }, w.hour, deps, conversions);
     zNo += 1;
     const closeId = uuidv5(day, runId);
-    const { salesDayId } = await writeZ(tx, actor, ctx, { closeId, zNo, businessDate: day, windowStart: start, windowEnd: end, receipts, reading });
+    const { salesDayId } = await writeZ(tx, actor, ctx, { closeId, zNo, businessDate: day, windowStart: start, windowEnd: end, receipts, conversions, reading });
     closes.push({ dayCloseId: closeId, zNo, businessDate: day, salesDayId, grossTotal: reading.grossTotal });
     start = end;
   }

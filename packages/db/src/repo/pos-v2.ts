@@ -1432,9 +1432,10 @@ export interface NewRefundPayment {
   referenceNo: string | null;
 }
 
-export async function insertPaymentConversion(tx: Tx, r: NewPaymentConversion): Promise<PosPaymentConversionRow> {
-  const [row] = await tx.insert(posPaymentConversions).values(r).returning();
-  return row!;
+/** Undefined when the (org, request id) already has a row: a retried or racing POST wrote it first (the caller reads it back). */
+export async function insertPaymentConversion(tx: Tx, r: NewPaymentConversion): Promise<PosPaymentConversionRow | undefined> {
+  const [row] = await tx.insert(posPaymentConversions).values(r).onConflictDoNothing({ target: [posPaymentConversions.orgId, posPaymentConversions.requestId] }).returning();
+  return row;
 }
 export async function insertTenderCorrection(tx: Tx, r: NewTenderCorrection): Promise<PosTenderCorrectionRow> {
   const [row] = await tx.insert(posTenderCorrections).values(r).returning();
@@ -1465,6 +1466,38 @@ export async function listOpenPaymentConversions(tx: Tx, orgId: string, storeId:
 export async function getPaymentConversionByRequestId(tx: Tx, orgId: string, requestId: string): Promise<PosPaymentConversionRow | undefined> {
   const [row] = await tx.select().from(posPaymentConversions).where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.requestId, requestId)));
   return row;
+}
+/** One conversion of the store, or undefined. */
+export async function getPaymentConversion(tx: Tx, orgId: string, storeId: string, id: string): Promise<PosPaymentConversionRow | undefined> {
+  const [row] = await tx.select().from(posPaymentConversions).where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.storeId, storeId), eq(posPaymentConversions.id, id)));
+  return row;
+}
+/** The conversions frozen to one Z (voided ones included: the caller filters), oldest first. */
+export async function listPaymentConversionsOfClose(tx: Tx, orgId: string, storeId: string, dayCloseId: string): Promise<PosPaymentConversionRow[]> {
+  return tx
+    .select()
+    .from(posPaymentConversions)
+    .where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.storeId, storeId), eq(posPaymentConversions.dayCloseId, dayCloseId)))
+    .orderBy(asc(posPaymentConversions.recordedAt), asc(posPaymentConversions.id));
+}
+/** Freezes conversions to the Z (the one column the guard lets the Z write, NULL -> value once). Returns how many were taken; the caller compares with what it read. */
+export async function closePaymentConversions(tx: Tx, orgId: string, storeId: string, dayCloseId: string, ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const rows = await tx
+    .update(posPaymentConversions)
+    .set({ dayCloseId })
+    .where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.storeId, storeId), inArray(posPaymentConversions.id, ids), isNull(posPaymentConversions.dayCloseId)))
+    .returning({ id: posPaymentConversions.id });
+  return rows.length;
+}
+/** Voids one open conversion (the void triple, once, before the Z). Returns 0 when it was already voided or already in a Z. */
+export async function voidPaymentConversion(tx: Tx, orgId: string, storeId: string, id: string, v: { by: string; at: Date; reason: string }): Promise<number> {
+  const rows = await tx
+    .update(posPaymentConversions)
+    .set({ voidedBy: v.by, voidedAt: v.at, voidReason: v.reason })
+    .where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.storeId, storeId), eq(posPaymentConversions.id, id), isNull(posPaymentConversions.dayCloseId), isNull(posPaymentConversions.voidedAt)))
+    .returning({ id: posPaymentConversions.id });
+  return rows.length;
 }
 export async function getTenderCorrectionByRequestId(tx: Tx, orgId: string, requestId: string): Promise<PosTenderCorrectionRow | undefined> {
   const [row] = await tx.select().from(posTenderCorrections).where(and(eq(posTenderCorrections.orgId, orgId), eq(posTenderCorrections.requestId, requestId)));
