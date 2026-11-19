@@ -724,6 +724,33 @@ export async function recordChannelSettlement(
     // T-511 S7a (audit): the channel lock approve takes, taken here too (re-entrant inside approve), BEFORE the balance is read, so a hand-recorded settlement and an approve
     // of the same channel cannot both clear the same balance.
     await advisoryLocksRepo.lockSettlementChannel(trx, input.channelId);
+    // DEF-881 (T-595): the named day must be this org's, store's and channel's, on the date being settled, and verified (the page queue lists exactly
+    // these). After the channel lock, before any balance read; an unreadable id is "not found", never a database cast error. A VOIDED day is named as
+    // voided by lockLiveSalesDay (T-594), so a settlement that waited on a day void is refused with that sentence, not "nothing outstanding".
+    const day = UUID_TEXT.test(rawInput.salesDayId)
+      ? await R.salesDayForSettlement(trx, actor.orgId, rawInput.salesDayId, input.channelId)
+      : undefined;
+    if (!day || day.storeId !== input.storeId || !day.hasChannel) {
+      throw refuse(
+        'recordChannelSettlement: the sales day is not this store and channel',
+        'That sales day could not be found for this store and channel. Choose the day from the list of days waiting to be settled.',
+      );
+    }
+    if (day.businessDate !== input.businessDate) {
+      throw refuse(
+        'recordChannelSettlement: the sales day date differs from the business date',
+        `That sales day is ${day.businessDate}, not ${input.businessDate}. A settlement clears the one day it names.`,
+      );
+    }
+    if (day.status === 'voided') {
+      await lockLiveSalesDay(trx, actor.orgId, { salesDayId: input.salesDayId, storeId: input.storeId, doing: 'a payout settlement' });
+    }
+    if (day.status !== 'verified') {
+      throw refuse(
+        'recordChannelSettlement: the sales day is not verified',
+        'That sales day is not verified yet, so it has raised no receivable to settle. Verify the day first.',
+      );
+    }
     const ctx = await gatherSettlementContext(trx, actor, input, true);
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const legBlockers = await loanLegBlockers(trx, actor.orgId, figures.loanLegs);
