@@ -159,7 +159,7 @@ describe('T-534 S4 - how the money goes back', () => {
     const m = await thousand(w, '1000.00');
     const first = await refund(w, m, { lines: [[0, 1]], pays: [[0, '250.00']] });
     const second = await refund(w, m, { lines: [[0, 1]], pays: [[0, '250.00']] });
-    const [{ code }] = await sql<{ code: string }[]>`select code from stores where id = ${w.storeId}`;
+    const code = (await sql<{ code: string }[]>`select code from stores where id = ${w.storeId}`)[0]!.code;
     expect([first.refundNo, second.refundNo]).toEqual([`${code}-R-000001`, `${code}-R-000002`]);
     expect((await rows(w)).map((r) => r.refund_seq)).toEqual([1, 2]);
     const list = await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }));
@@ -218,7 +218,7 @@ describe('T-534 S4 - the Z, the cash count and the sales day', () => {
     expect(tenderMap(z.reading)).toEqual({ [w.cash]: '300.00', [w.gcash]: '200.00' });
     const [day] = await salesDaysOf(w);
     expect(day).toMatchObject({ source: 'pos_receipts', total_sales: '1000.00', cash_collected: '300.00', online_collected: '200.00' });
-    const [{ refunds }] = await sql<{ refunds: string }[]>`select refunds::text from sales_days where id = ${day!.id}`;
+    const refunds = (await sql<{ refunds: string }[]>`select refunds::text from sales_days where id = ${day!.id}`)[0]!.refunds;
     expect(refunds).toBe((z.reading as unknown as { refunds: { total: string } }).refunds.total);
     expect(refunds).toBe('500.00');
     const res = await asOrg(w.orgId, (tx) => verifySalesDay(tx, w.manager, day!.id));
