@@ -141,7 +141,7 @@ describe('T-565 - an order is judged by the window in force when it was taken', 
     const plate = await dish('Lunch plate', lunch, '338.00');
     await dish('Soda', null, '80.00'); // real work between the lunch offer and the new daypart, so the two instants are far apart
     await afterOffers(f);
-    const { id: dinner } = await mkDaypart('Dinner', win(pivot, -90, 90));
+    const { id: dinner } = await mkDaypart('Dinner', win(pivot, 60, 120));
     await dish('Dinner plate', dinner, '358.00');
     const [dinnerV1] = await versionsOf(dinner);
     const taken = before(dinnerV1!.valid_from, MS);
