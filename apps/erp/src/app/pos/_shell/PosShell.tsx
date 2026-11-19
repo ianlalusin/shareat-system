@@ -13,6 +13,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { Badge, Banner, Button } from '@/components/ui';
 import { signOutAction } from '@/app/sign-in/actions';
 import { printerMode } from '@/lib/pos-print/adapter';
+import { installPrinterBridge } from '@/lib/pos-print/native';
 import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHeldSalesMessage, posHttpErrorMessage, testBandText } from './messages';
 import { SwitchCashierDialog } from './SwitchCashierDialog';
 import { posOfflineBandText } from './offline-band';
@@ -68,7 +69,10 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   const signingOut = useRef(false);
   // The real printer path, read once the page is in the browser (the APK plugin is a window object): never a guess.
   const [printer, setPrinter] = useState<'plugin' | 'browser' | null>(null);
-  useEffect(() => setPrinter(printerMode()), []);
+  useEffect(() => {
+    installPrinterBridge(); // T-532 S1: defines window.ShareatPrinter inside the Android shell; a no-op in a browser
+    setPrinter(printerMode());
+  }, []);
   const bodiesRef = useRef<Record<string, SessionBody | undefined>>({});
   const [notices, setNotices] = useState<string[]>([]);
 
@@ -172,7 +176,11 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
             {store ? <span className="min-w-0 truncate rounded-full bg-closed-soft px-3 py-1 text-sm font-semibold text-closed">{store.name}</span> : null}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-            {printer ? <Badge tone={printer === 'plugin' ? 'success' : 'info'} label={printer === 'plugin' ? 'Printer ready' : 'Browser print'} className="hidden sm:inline-flex" /> : null}
+            {printer ? (
+              <Link href="/pos/printer" className="hidden min-h-12 items-center sm:inline-flex" aria-label="Printer settings">
+                <Badge tone={printer === 'plugin' ? 'success' : 'info'} label={printer === 'plugin' ? 'Printer ready' : 'Browser print'} />
+              </Link>
+            ) : null}
             <Badge tone={pillTone} label={pillShort} className="sm:hidden" />
             <Badge tone={pillTone} label={pill} className="hidden sm:inline-flex" />
             {/* 401: the session ended. The outbox keeps sending (events ride the device cookie); only a person can sign in again. */}
