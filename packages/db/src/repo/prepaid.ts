@@ -359,7 +359,8 @@ export async function entriesForPeriod(
     .where(
       and(
         eq(journalEntries.orgId, orgId),
-        sql`${journalEntries.idempotencyKey} = ${base} or ${journalEntries.idempotencyKey} like ${base + '#%'}`,
+        // DEF-894: bracketed — `and()` brackets the list once, so a bare `a or b` would let the LIKE arm skip org_id.
+        sql`(${journalEntries.idempotencyKey} = ${base} or ${journalEntries.idempotencyKey} like ${base + '#%'})`,
       ),
     )
     .orderBy(asc(journalEntries.createdAt));
@@ -379,6 +380,32 @@ export function nextRevisionKey(
   existing: { status: string }[],
 ): string {
   const base = `prepaid:${itemId}:amortisation:${period}`;
+  return existing.length === 0 ? base : `${base}#${existing.length + 1}`;
+}
+
+/** DEF-882: every write-off entry ever posted for an item, reversed ones included, oldest first. */
+export async function writeOffEntries(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+): Promise<{ id: string; status: string; key: string }[]> {
+  const base = `prepaid:${itemId}:write-off`;
+  const rows = await tx
+    .select({ id: journalEntries.id, status: journalEntries.status, key: journalEntries.idempotencyKey })
+    .from(journalEntries)
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        sql`(${journalEntries.idempotencyKey} = ${base} or ${journalEntries.idempotencyKey} like ${base + '#%'})`,
+      ),
+    )
+    .orderBy(asc(journalEntries.createdAt));
+  return rows.map((r) => ({ id: r.id, status: r.status, key: r.key ?? '' }));
+}
+
+/** DEF-882: the first write-off keeps the plain key; a re-write-off after an undo gets `#2`, `#3`, ... */
+export function nextWriteOffKey(itemId: string, existing: { status: string }[]): string {
+  const base = `prepaid:${itemId}:write-off`;
   return existing.length === 0 ? base : `${base}#${existing.length + 1}`;
 }
 
