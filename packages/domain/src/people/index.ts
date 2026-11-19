@@ -48,6 +48,8 @@ export { formatDisplayName, nameKey, normaliseNamePart, normaliseName, type Name
 
 // T-434: staff photo and signature (upload / replace / remove / guarded view).
 export * from './staff-media';
+// T-612: activate / suspend / reinstate a person's account.
+export * from './account-status';
 
 export class EmploymentError extends Error {
   /** A sentence a person at the screen (or Ian at the terminal) can act on. Set where the refusal is about their input. */
@@ -97,6 +99,9 @@ export async function createEmployment(
     );
   }
 
+  // T-612: the person row first (lock order persons -> employments -> org lock, shared with sign-in and endEmployment).
+  const statusBefore = await personsRepo.lockAccountStatus(tx, actor.orgId, input.personId);
+
   // ⛔ Checked here for a comprehensible message, and enforced by a partial unique index regardless
   // (bible §16.4's principle: the database enforces the rule, the service explains it).
   const open = await employmentRepo.findOpenEmployment(tx, input.personId, input.storeId);
@@ -119,6 +124,12 @@ export async function createEmployment(
     notes: input.notes ?? null,
     createdBy: actor.personId,
   });
+
+  // T-612: a person whose account ENDED (T-609) and who has no other open job is re-hired as `pending` - a manager activates them again.
+  // A person with another open job keeps their status; a brand-new person is already `pending` (createPerson).
+  if (statusBefore === 'ended' && (await employmentRepo.countOtherOpenEmployments(tx, input.personId, actor.orgId, employment.id)) === 0) {
+    await personsRepo.setAccountStatus(tx, actor.orgId, input.personId, ['ended'], 'pending');
+  }
 
   const { positionIds, primaryPositionId } = await resolvePositions(tx, actor, input);
   await employmentRepo.replaceEmploymentPositions(tx, {
@@ -214,7 +225,7 @@ export async function createPerson(tx: Tx, actor: Actor, input: CreatePersonInpu
   if (input.name === undefined) {
     const displayName = (input.displayName ?? '').trim();
     if (!displayName) throw new EmploymentError('A person needs a name.');
-    return personsRepo.insertPerson(tx, { orgId: actor.orgId, displayName });
+    return personsRepo.insertPerson(tx, { orgId: actor.orgId, displayName, accountStatus: 'pending' }); // T-612: a hire starts pending
   }
 
   const name = normaliseName(input.name);
@@ -243,7 +254,7 @@ export async function createPerson(tx: Tx, actor: Actor, input: CreatePersonInpu
     const reason = `${who} is already in the system. Search for them and pick them, or tick 'This is a different person with the same name'.`;
     throw new EmploymentError(reason, reason);
   }
-  const person = await personsRepo.insertPerson(tx, { orgId: actor.orgId, name });
+  const person = await personsRepo.insertPerson(tx, { orgId: actor.orgId, name, accountStatus: 'pending' }); // T-612: a hire starts pending
   if (match) {
     await auditLogRepo.append(tx, actor.orgId, {
       actorPersonId: actor.personId,
@@ -375,6 +386,8 @@ export async function endEmployment(
     );
   }
 
+  // T-612: the person row first (a racing sign-in holds it `for share`; lock order persons -> employments -> org lock).
+  await personsRepo.lockAccountStatus(tx, existing.orgId, existing.personId);
   // T-407 Inv 21: serialise concurrent ends for the same person BEFORE writing (no lock-order deadlock).
   await employmentRepo.lockPersonEmployments(tx, existing.personId, existing.orgId);
 
@@ -389,6 +402,8 @@ export async function endEmployment(
   if (lastJob) await refuseIfEndWouldStripAuthority(tx, actor, existing.personId, existing.orgId);
 
   const closed = await employmentRepo.closeEmployment(tx, input);
+  // T-612: ending the person's LAST open job ends the account in the same transaction (employment and status can never disagree).
+  if (lastJob) await personsRepo.setAccountStatus(tx, existing.orgId, existing.personId, ['pending', 'active', 'suspended'], 'ended');
 
   // T-289 moment 5 — ending the employment leaves no open employment at this store, so
   // `wanted` computes empty and every position-sourced row for THIS store is revoked; other

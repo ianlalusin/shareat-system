@@ -244,7 +244,7 @@ describe('T-181 invariant 6 — a delete is a TOMBSTONE', () => {
     const f = await fixture('person-off');
     const e = await hire(f);
     await sql`delete from mirror_outbox where org_id = ${f.orgId}`;
-    await sql`update persons set is_active = false where id = ${f.workerId}`;
+    await sql`update persons set account_status = 'suspended' where id = ${f.workerId}`;
     const { driver, written } = fakeDriver();
     await drain(f, driver);
     const last = written.filter((d) => d.path.includes(e.id)).pop();

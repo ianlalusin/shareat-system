@@ -307,7 +307,7 @@ describe('T-154 invariant 7 — "on the roster" is DERIVED, never a stored boole
   it('a deactivated PERSON drops off the roster even with a live employment', async () => {
     const f = await fixture('person-inactive');
     const e = await hire(f);
-    await sql`update persons set is_active = false where id = ${f.workerId}`;
+    await sql`update persons set account_status = 'suspended' where id = ${f.workerId}`;
     expect((await asOrg(f.orgId, (tx) => listRoster(tx, { storeId: f.storeId }))).map((r) => r.id)).not.toContain(e.id);
   });
 });
