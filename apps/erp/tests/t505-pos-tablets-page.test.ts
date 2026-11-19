@@ -31,7 +31,7 @@ vi.mock('../src/app/staff/lib', async () => ({ staffStoresFor: vi.fn(async () =>
 vi.mock('../src/app/admin/pos-tablets/actions', () => ({ registerTabletAction: vi.fn(), revokeTabletAction: vi.fn(), clearLockAction: vi.fn(), createTillAction: vi.fn(), linkTillAction: vi.fn(), setTillPrinterAction: vi.fn() }));
 vi.mock('../src/app/admin/pos-tablets/lib', async (orig) => {
   const actual = await orig<typeof import('../src/app/admin/pos-tablets/lib')>();
-  return { ...actual, loadPosTablets: vi.fn(async () => H.view), loadTills: vi.fn(async () => ({ terminals: [], freePairings: [] })) }; // T-546: the Tills section has its own reader
+  return { ...actual, loadPosTablets: vi.fn(async () => H.view), loadTills: vi.fn(async () => ({ terminals: [], freePairings: [] })), loadCopyStores: vi.fn(async () => null) }; // T-546: the Tills section has its own reader
 });
 
 beforeAll(async () => {

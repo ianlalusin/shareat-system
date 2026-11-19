@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * Server actions behind the shared "Copy from another store" window (T-611 S1). docs/tasks/611-copy-settings-between-stores.md.
+ * Server actions behind the shared "Copy from another store" window (T-611). docs/tasks/611-copy-settings-between-stores.md.
  *
  * `previewCopyAction` is read-only: per target, what a copy would add, leave and keep. `copyFromStoreAction` is Tier P (T-412): an administrator's
  * PIN, verified here against the target store, BEFORE the domain call; then ONE transaction per target (its approval row and its copy), so one
@@ -15,9 +15,12 @@ import { requireActor } from '../../lib/session';
 import { isUuid, menuErrorMessage, str, withOrgPrincipal } from '../menu/lib';
 import { copyStoreChoices } from './lib';
 
-const PATH: Record<CopyKind, string> = { hours: '/menu/hours', prices: '/menu/prices' };
-const CAPABILITY: Record<CopyKind, Capability> = { hours: 'manage_store_settings', prices: 'set_menu_price' };
-const isKind = (v: unknown): v is CopyKind => v === 'hours' || v === 'prices';
+/** The kinds of copy, for the browser window (a type only: the client file must not import the domain barrel). */
+export type CopyKindName = CopyKind;
+
+const PATH: Record<CopyKind, string> = { hours: '/menu/hours', prices: '/menu/prices', kitchen: '/kitchen', presets: '/admin/pos-tablets' };
+const CAPABILITY: Record<CopyKind, Capability> = { hours: 'manage_store_settings', prices: 'set_menu_price', kitchen: 'manage_store_settings', presets: 'manage_store_settings' };
+const isKind = (v: unknown): v is CopyKind => v === 'hours' || v === 'prices' || v === 'kitchen' || v === 'presets';
 
 export type CopyPreviewResult =
   | { storeId: string; ok: true; name: string; counts: CopyCounts; lines: CopyLine[] }
