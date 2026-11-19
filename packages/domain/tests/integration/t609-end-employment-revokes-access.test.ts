@@ -16,7 +16,7 @@ import { closeDb, systemTransaction, withOrgPrincipal, accessRepo } from '@share
 import { AuthenticationError, hashPin, pinLookupHash, setPin, signInWithFirebase, signInWithPin, type Actor } from '@shareat/auth';
 import { bootstrapOrganization } from '../../src/organizations';
 import { createStore } from '../../src/stores/service';
-import { createEmployment, endEmployment, EmploymentError } from '../../src/people';
+import { activateAccount, createEmployment, endEmployment, EmploymentError } from '../../src/people';
 
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
@@ -233,7 +233,9 @@ describe('7 - re-hire switches access back on, except manual extras and the PIN'
     await w.end(w.boss, emp.id);
     expect(await activeGrants(p.personId)).toBe(0);
 
-    await hireCashier();
+    const rehired = await hireCashier();
+    expect(await n(sql<{ n: number }[]>`select count(*)::int n from persons where id = ${p.personId} and account_status = 'pending'`), 'T-612: a re-hire is pending until a manager activates it').toBe(1);
+    await withOrgPrincipal(w.orgId, (tx) => activateAccount(tx, w.boss, { employmentId: rehired.id }));
     expect(await activeRole(p.personId), 'staff role back').toBe('staff');
     expect(await scopeRows(p.personId, w.storeA), 'employment scope back').toBe(1);
     expect(await n(sql<{ n: number }[]>`select count(*)::int n from person_grants where person_id = ${p.personId} and revoked_at is null and grant_source = 'position'`), 'position grants back').toBe(positionGrants);
@@ -250,7 +252,8 @@ describe('8 - a closed employment cannot be ended again', () => {
     const p = await w.person('Back Again');
     const e1 = await w.hire(p.personId, w.storeA);
     await w.end(w.boss, e1.id);
-    await w.hire(p.personId, w.storeA); // E2, same store
+    const e2 = await w.hire(p.personId, w.storeA); // E2, same store
+    await withOrgPrincipal(w.orgId, (tx) => activateAccount(tx, w.boss, { employmentId: e2.id })); // T-612: a re-hire is pending until activated
     await withOrgPrincipal(w.orgId, (tx) => setPin(tx, { orgId: w.orgId, personId: p.personId, storeId: w.storeA, pin: '860888' }));
 
     // Mutant: delete the `endedOn` guard - the re-end runs the whole-person revocation on E2's access and this goes red.

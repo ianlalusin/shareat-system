@@ -148,6 +148,16 @@ describe('T-612 - migration 0268 backfills the account status', () => {
     await expect(sql`update persons set account_status = 'paused' where id = ${ids['working']!}`).rejects.toThrow(/persons_account_status_check/);
   });
 
+  it('the two SQL functions that read the old flag now read the status: the roster-mirror trigger and the franchise reader gate', async () => {
+    const def = async (fn: string) => (await sql<{ d: string }[]>`select pg_get_functiondef(p.oid) as d from pg_proc p where p.proname = ${fn}`)[0]!.d;
+    const mirror = await def('mirror_enqueue_person_employments');
+    expect(mirror).toMatch(/new\.account_status IS DISTINCT FROM old\.account_status/);
+    expect(mirror).not.toMatch(/is_active/);
+    const franchise = await def('franchise_reader_check');
+    expect(franchise).toMatch(/"account_status" = 'active'|account_status = 'active'/);
+    expect(franchise).not.toMatch(/is_active/);
+  });
+
   it('the terminal CHECK refuses a non-active terminal, and a person may still be pending, suspended or ended', async () => {
     await expect(sql`update persons set account_status = 'suspended' where id = ${ids['live-terminal']!}`).rejects.toThrow(/persons_terminal_always_active_check/);
     for (const s of ['pending', 'suspended', 'ended', 'active']) {

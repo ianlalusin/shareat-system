@@ -5,8 +5,65 @@
 -- Backfill: is_active true -> active, false -> suspended; a terminal is always active (the CHECK below). Nobody who works today is locked out on deploy.
 ALTER TABLE "persons" ADD COLUMN "account_status" text DEFAULT 'active' NOT NULL;
 --> statement-breakpoint
+-- The clock terminals' roster mirror (0088) re-publishes a person's open employments when the person's ACTIVE flag changes; that flag is now the account
+-- status. Replaced BEFORE the backfill below, so a person whose status becomes 'suspended' there is tombstoned from the terminals' roster as well.
+CREATE OR REPLACE FUNCTION mirror_enqueue_person_employments() RETURNS trigger AS $$
+BEGIN
+  IF (new.display_name IS DISTINCT FROM old.display_name)
+     OR (new.account_status IS DISTINCT FROM old.account_status) THEN
+    INSERT INTO mirror_outbox (org_id, store_id, entity, entity_id, op, src_version)
+    SELECT e.org_id, e.store_id, 'roster', e.id, 'upsert', nextval('mirror_version_seq')
+    FROM employments e
+    WHERE e.person_id = new.id AND e.ended_on IS NULL;
+  END IF;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql;
+--> statement-breakpoint
 UPDATE "persons" SET "account_status" = CASE WHEN "kind" = 'terminal' OR "is_active" THEN 'active' ELSE 'suspended' END;
 --> statement-breakpoint
 ALTER TABLE "persons" ADD CONSTRAINT "persons_account_status_check" CHECK ("account_status" in ('pending', 'active', 'suspended', 'ended'));
 --> statement-breakpoint
 ALTER TABLE "persons" ADD CONSTRAINT "persons_terminal_always_active_check" CHECK ("kind" <> 'terminal' OR "account_status" = 'active');
+--> statement-breakpoint
+-- 0220's franchise_reader_check refused a person who is not "active" by reading is_active; the same gate now reads the account status (body otherwise
+-- byte-for-byte 0220's; CREATE OR REPLACE keeps its owner and its REVOKEs). v_active_employments (0080/0147) still reads is_active ON PURPOSE: it answers
+-- "who is on the roster / payroll" from the employment, and a pending or suspended employee is still on it.
+CREATE OR REPLACE FUNCTION "franchise_reader_check"("p_franchisee_org" uuid) RETURNS "franchise_agreements"
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+	v_org uuid := app_current_org();
+	v_person uuid;
+	a "franchise_agreements"%ROWTYPE;
+BEGIN
+	IF v_org IS NULL THEN
+		RAISE EXCEPTION 'Looking at a franchise needs a signed-in organisation.' USING ERRCODE = '42501';
+	END IF;
+	v_person := nullif(current_setting('app.person_id', true), '')::uuid;
+	IF v_person IS NULL THEN
+		RAISE EXCEPTION 'Looking at a franchise needs a signed-in person.' USING ERRCODE = '42501';
+	END IF;
+	IF NOT EXISTS (SELECT 1 FROM "persons" p WHERE p."id" = v_person AND p."org_id" = v_org AND p."account_status" = 'active') THEN
+		RAISE EXCEPTION 'The signed-in person is not an active person of this organisation.' USING ERRCODE = '42501';
+	END IF;
+	IF NOT EXISTS (SELECT 1 FROM "person_roles" r WHERE r."person_id" = v_person AND r."org_id" = v_org AND r."role" = 'super_admin' AND r."revoked_at" IS NULL)
+		AND NOT EXISTS (SELECT 1 FROM "person_grants" g WHERE g."person_id" = v_person AND g."grant_name" = 'view_franchise_sales' AND g."revoked_at" IS NULL AND g."store_id" IS NULL) THEN
+		RAISE EXCEPTION 'This person does not hold the right to view franchise sales and stock.' USING ERRCODE = '42501';
+	END IF;
+	-- A NULL franchisee asks only for the person check (the franchisee picker list).
+	IF p_franchisee_org IS NULL THEN
+		RETURN NULL;
+	END IF;
+	SELECT f.* INTO a FROM "franchise_agreements" f WHERE f."org_id" = p_franchisee_org AND f."franchisor_org_id" = v_org;
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'Your organisation has no franchise agreement with that organisation.' USING ERRCODE = '42501';
+	END IF;
+	IF a."ended_on" IS NOT NULL AND a."ended_on" <= (now() AT TIME ZONE 'Asia/Manila')::date THEN
+		RAISE EXCEPTION 'The franchise agreement with that organisation ended on %.', a."ended_on" USING ERRCODE = '42501';
+	END IF;
+	RETURN a;
+END;
+$$;
