@@ -109,7 +109,7 @@ Integration tests run against a **real** Postgres test database, never a mock (b
    anything under `inactive projects`. Read them freely.
 6. ⛔ **Never hard-code a business value** (a price, a limit, a rate, a name). It belongs in the
    database with an ERP screen (Ian, 5 Nov). Only file formats are constants.
-7. ⛔ **Never edit `PROJECT_BIBLE.md`, `docs/DEFECTS-REGISTER.md` decisions, or `knowledge/`.** Report
+7. ⛔ **Never edit `PROJECT_BIBLE.md`, `docs/DEFECTS-REGISTER.md` decisions, or `shareat-knowledge/` (local only, never committed, bible row 484).** Report
    findings in the PR body instead; the planner records them.
 8. ⛔ **Never touch a production server.** No SSH, no deploy, no build on either droplet.
 
