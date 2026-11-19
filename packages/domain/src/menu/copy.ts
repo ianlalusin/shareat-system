@@ -26,9 +26,9 @@ export interface CopyInput {
   /** Off by default: a target value that differs from the source is kept. On: it is replaced (prices: by a new row effective now). */
   replace: boolean;
 }
-export type PlanStatus = 'add' | 'same' | 'different' | 'skip';
-export interface PlanLine {
-  status: PlanStatus;
+export type CopyLineStatus = 'add' | 'same' | 'different' | 'skip';
+export interface CopyLine {
+  status: CopyLineStatus;
   what: string;
   /** Why it is skipped, or what the target has instead. */
   note?: string;
@@ -48,7 +48,7 @@ export interface CopyPreview {
   targetStoreId: string;
   targetName: string;
   counts: CopyCounts;
-  lines: PlanLine[];
+  lines: CopyLine[];
 }
 
 type Op =
@@ -88,11 +88,11 @@ async function requireCopyRight(trx: Tx, actor: Actor, input: CopyInput): Promis
   return target.name;
 }
 
-async function planHours(trx: Tx, orgId: string, source: string, target: string, replace: boolean): Promise<{ ops: Op[]; lines: PlanLine[] }> {
+async function planHours(trx: Tx, orgId: string, source: string, target: string, replace: boolean): Promise<{ ops: Op[]; lines: CopyLine[] }> {
   const active = (rows: daypartsRepo.MenuDaypartRow[]) => rows.filter((d) => d.status === 'active');
   const theirs = new Map(active(await daypartsRepo.listDaypartsOfStore(trx, orgId, target)).map((d) => [key(d.name), d]));
   const ops: Op[] = [];
-  const lines: PlanLine[] = [];
+  const lines: CopyLine[] = [];
   for (const s of active(await daypartsRepo.listDaypartsOfStore(trx, orgId, source))) {
     const w = { days: [...s.days].sort((a, b) => a - b), start: hhmm(s.startTime), end: hhmm(s.endTime) };
     const t = theirs.get(key(s.name));
@@ -110,7 +110,7 @@ async function planHours(trx: Tx, orgId: string, source: string, target: string,
   return { ops, lines };
 }
 
-async function planPrices(trx: Tx, actor: Actor, source: string, target: string, targetName: string, replace: boolean): Promise<{ ops: Op[]; lines: PlanLine[] }> {
+async function planPrices(trx: Tx, actor: Actor, source: string, target: string, targetName: string, replace: boolean): Promise<{ ops: Op[]; lines: CopyLine[] }> {
   const orgId = actor.orgId;
   const now = await menuRepo.dbNow(trx);
   const cat = await menuRepo.catalogOfOrg(trx, orgId);
@@ -139,7 +139,7 @@ async function planPrices(trx: Tx, actor: Actor, source: string, target: string,
   const canPair = await can(trx, actor, 'pair_menu_dayparts', {});
 
   const ops: Op[] = [];
-  const lines: PlanLine[] = [];
+  const lines: CopyLine[] = [];
   for (const o of (await menuRepo.offersInForce(trx, source, now)).filter((x) => !x.withdrawn)) {
     const label = variantLabel(o.variantId);
     if (!label) continue;
@@ -196,8 +196,8 @@ async function planPrices(trx: Tx, actor: Actor, source: string, target: string,
   return { ops, lines };
 }
 
-function countsOf(lines: PlanLine[], replace: boolean): CopyCounts {
-  const n = (s: PlanStatus) => lines.filter((l) => l.status === s).length;
+function countsOf(lines: CopyLine[], replace: boolean): CopyCounts {
+  const n = (s: CopyLineStatus) => lines.filter((l) => l.status === s).length;
   const different = n('different');
   return {
     added: n('add'),

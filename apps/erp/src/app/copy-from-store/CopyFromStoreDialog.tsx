@@ -7,7 +7,7 @@
  * the gate and the PIN check are all the server's.
  */
 import { useState, useTransition } from 'react';
-import { Banner, Button, Checkbox, ConfirmDestructive, FormModal, Select } from '@/components/ui';
+import { Banner, Button, Checkbox, ConfirmDestructive, Field, FormGrid, FormModal, Select } from '@/components/ui';
 import { copyFromStoreAction, previewCopyAction, type CopyPreviewResult } from './actions';
 import type { CopyStoreChoice } from './lib';
 
@@ -45,16 +45,17 @@ export function CopyFromStoreDialog({ kind, currentStoreId, stores }: { kind: 'h
           Copies {w.what} from one store to the stores you tick. Nothing is removed from them, and what they already have is kept unless you ask to
           replace it.
         </p>
-        <label className="block">
-          <span className="block text-muted">Copy from</span>
-          <Select name="sourceStoreId" value={source} onChange={(e) => changed(() => setSource(e.target.value))}>
-            {stores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.code})
-              </option>
-            ))}
-          </Select>
-        </label>
+        <FormGrid>
+          <Field label="Copy from">
+            <Select name="sourceStoreId" value={source} onChange={(e) => changed(() => setSource(e.target.value))} className="mt-1 w-full">
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.code})
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </FormGrid>
         <fieldset>
           <legend className="text-muted">Copy to</legend>
           <div className="flex flex-col">

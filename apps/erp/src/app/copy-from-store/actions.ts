@@ -7,7 +7,7 @@
  * PIN, verified here against the target store, BEFORE the domain call; then ONE transaction per target (its approval row and its copy), so one
  * target's refusal never undoes another's. The gate (admin role, the edit right at each target, same organisation) is the domain's.
  */
-import { copySettingsToStore, previewCopyToStore, type CopyCounts, type CopyKind, type PlanLine } from '@shareat/domain';
+import { copySettingsToStore, previewCopyToStore, type CopyCounts, type CopyKind, type CopyLine } from '@shareat/domain';
 import { verifyAdminApproval, type Capability } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 import { redirectWithFlash } from '@/lib/flash';
@@ -20,7 +20,7 @@ const CAPABILITY: Record<CopyKind, Capability> = { hours: 'manage_store_settings
 const isKind = (v: unknown): v is CopyKind => v === 'hours' || v === 'prices';
 
 export type CopyPreviewResult =
-  | { storeId: string; ok: true; name: string; counts: CopyCounts; lines: PlanLine[] }
+  | { storeId: string; ok: true; name: string; counts: CopyCounts; lines: CopyLine[] }
   | { storeId: string; ok: false; error: string };
 
 /** What a copy would do at each target. The browser sends ids and choices only; the plan is computed here from the database. */
