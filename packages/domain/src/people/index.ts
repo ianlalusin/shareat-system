@@ -174,13 +174,10 @@ export async function createEmployment(
     source: 'employment',
   });
 
-  // T-612 (audit 2b): a person with NO open job before this hire starts again as `pending` whatever their status was (an `ended` re-hire, a pre-T-609 leaver
-  // whose status was never ended, a suspended person): a manager activates them. A person with another open job keeps their status, and an administrator
-  // (admin / super_admin) is never put on hold by a hire - the organisation must keep somebody who can sign in. A brand-new person is already `pending` (createPerson).
-  if (statusBefore !== undefined && statusBefore !== 'pending' && (await employmentRepo.countOtherOpenEmployments(tx, input.personId, actor.orgId, employment.id)) === 0) {
-    const roleNow = (await accessRepo.activeRoleForPerson(tx, input.personId, actor.orgId))?.role;
-    if (!isAdministrative(roleNow)) await personsRepo.setAccountStatus(tx, actor.orgId, input.personId, ['active', 'suspended', 'ended'], 'pending');
-  }
+  // T-612 (BOSS ruling 20 Nov): ONLY a person whose account ENDED (T-609, or the 0268 backfill of pre-T-609 leavers) is re-hired as `pending` - a manager activates
+  // them again. Anyone else keeps their status: `active` stays active (a franchise owner / manager with no job ever, an administrator, a person with another job) and a
+  // `suspended` person stays suspended. A brand-new person is already `pending` (createPerson).
+  if (statusBefore === 'ended') await personsRepo.setAccountStatus(tx, actor.orgId, input.personId, ['ended'], 'pending');
 
   // T-289 moment 3 — a hire applies whatever position defaults the assigned positions carry.
   await reconcilePositionGrants(tx, actor, { personId: input.personId, storeId: input.storeId });
