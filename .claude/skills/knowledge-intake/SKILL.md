@@ -2,7 +2,7 @@
 name: knowledge-intake
 description: >
   Use when Ian feeds plain-language (English or Taglish) information about how Shareat operates —
-  customer journey, staff SOPs, store rules, policies, roles — to be stored in the knowledge/
+  customer journey, staff SOPs, store rules, policies, roles — to be stored in the shareat-knowledge/
   folder, the central knowledge base a future staff/customer AI will read. Also use when he says a
   rule changed, asks "where is X documented", or asks to update the knowledge base. Clarifies,
   chunks, labels, maps to the index, updates every affected page, and never writes before his OK.
@@ -10,11 +10,13 @@ description: >
 
 # Knowledge intake
 
-`knowledge/` is the single source of truth about how Shareat **operates** (not how the code works —
+⛔ **Local only (bible row 484):** `shareat-knowledge/` is git-ignored and never committed; the repo is public.
+
+`shareat-knowledge/` is the single source of truth about how Shareat **operates** (not how the code works —
 that is `docs/`). A future AI will answer staff and customers from it, so a wrong or vague page
 becomes a wrong answer to a real person. Ian, 2026-10-23.
 
-**Read `knowledge/INDEX.md` before anything else.** It is the map; never search the folder blind.
+**Read `shareat-knowledge/INDEX.md` before anything else.** It is the map; never search the folder blind.
 
 ## The five steps — in order, every time
 
@@ -76,7 +78,7 @@ Show Ian, in one short message:
 **Wait for his explicit OK.** Then:
 1. Write the pages — **overwrite** old content; git keeps history. No "replaced on" notes.
 2. Update `related` on every page touched, in both directions.
-3. Update `knowledge/INDEX.md` (rules below).
+3. Update `shareat-knowledge/INDEX.md` (rules below).
 4. Commit only the knowledge files: `knowledge: <short summary>`. Push follows the project's
    normal rule (at wrap-up).
 
@@ -91,7 +93,7 @@ Show Ian, in one short message:
 ## Page rules
 - Plain English, short sentences, numbered steps for procedures.
 - One page = one topic. If a page passes ~80 lines, propose splitting it.
-- File name = kebab-case of the title, inside the topic folder: `knowledge/<topic path>.md`.
+- File name = kebab-case of the title, inside the topic folder: `shareat-knowledge/<topic path>.md`.
 
 ## Red flags — stop
 - You are about to write a page and Ian has not said OK to this exact change.
