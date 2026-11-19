@@ -70,13 +70,22 @@ describe('T-601 S1 posSoakChecks', () => {
     sql`insert into person_grants (person_id, grant_name, granted_by, grant_source, store_id)
         values (${personId}, 'approve_pos_correction', ${f.adminId}, 'grant', ${f.storeId})`;
 
-  it('approver: a signed-in person with a PIN but no approve_pos_correction grant is not an approver; the grant makes it pass', async () => {
+  it('approver: a signed-in STAFF person with a PIN but no approve_pos_correction grant is not an approver; the grant makes it pass', async () => {
     const f = await ready();
     const who = await makeStaff(f, 'Pat Approver');
     await pinOf(f, who);
     expect((await row(f, 'approver')).ok).toBe(false);
     await grant(f, who);
     expect((await row(f, 'approver')).ok).toBe(true); // the cashier (a seller who is not the approver) can still ring up sales
+  });
+
+  it('approver (T-601 D2, Ian 2026-11-19): a store manager with a PIN and NO grant is an approver by role; the same person as plain staff is not', async () => {
+    const f = await ready();
+    const who = await makeStaff(f, 'Mia Manager');
+    await pinOf(f, who);
+    expect((await row(f, 'approver')).ok).toBe(false); // staff, no grant: refused (the ✗ side)
+    await sql`update person_roles set role = 'manager' where person_id = ${who}`;
+    expect((await row(f, 'approver')).ok).toBe(true); // manager, no grant: passes by role
   });
 
   it('approver: an approver without a live PIN does not count', async () => {
