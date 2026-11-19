@@ -188,3 +188,45 @@ export function totalOf(amounts: readonly Money[]): Money {
 export function remainingOf(principal: Money, principalPaid: Money): Money {
   return subtract(principal, principalPaid);
 }
+
+// -------------------------------------------------------------------------------------
+// T-608 (DEF-931): a platform dock on a SCHEDULED loan splits into principal and interest
+// -------------------------------------------------------------------------------------
+
+/** A scheduled loan: `total` = what the agreement repays in all (`repayment_amount x term_periods`), `interest` = `total - principal`, both in centavos. */
+export interface LoanSchedule {
+  total: bigint;
+  interest: bigint;
+}
+
+/**
+ * The schedule of a loan, or null when it has none: no repayment amount, no term, or a schedule that repays no more than was borrowed.
+ * A loan with no schedule keeps the old behaviour (a platform dock is all principal).
+ */
+export function loanSchedule(loan: { principalAmount: string; repaymentAmount: string | null; termPeriods: number }): LoanSchedule | null {
+  if (loan.repaymentAmount === null || !(loan.termPeriods > 0)) return null;
+  const total = toCentavos(money(loan.repaymentAmount)) * BigInt(loan.termPeriods);
+  const interest = total - toCentavos(money(loan.principalAmount));
+  return interest > 0n ? { total, interest } : null;
+}
+
+/** What a scheduled loan still has to pay, principal plus interest, in centavos: `total - (principal paid + interest paid)`, never below zero; nothing before the loan is drawn. */
+export function leftToPay(schedule: LoanSchedule, position: { disbursed: string; principalPaid: string; interestPaid: string }): bigint {
+  if (toCentavos(money(position.disbursed)) <= 0n) return 0n;
+  const left = schedule.total - (toCentavos(money(position.principalPaid)) + toCentavos(money(position.interestPaid)));
+  return left > 0n ? left : 0n;
+}
+
+/**
+ * How one platform dock (`leg`, centavos) splits on a scheduled loan. Interest is worked CUMULATIVELY, so rounding never drifts, the last payment lands exactly,
+ * and a loan whose earlier docks were all booked as principal catches up on its next one:
+ * `interest = clamp(roundHalfUp(min(paidBefore + leg, total) x I / T) - interestBefore, 0, leg)`, `principal = leg - interest`.
+ * `paidBefore` is principal paid + interest paid so far and `interestBefore` the interest already booked, both from the ledger. All integer centavos.
+ */
+export function splitSettlementLeg(schedule: LoanSchedule | null, leg: bigint, paidBefore: bigint, interestBefore: bigint): { principal: bigint; interest: bigint } {
+  if (schedule === null || leg <= 0n) return { principal: leg, interest: 0n };
+  const target = paidBefore + leg < schedule.total ? paidBefore + leg : schedule.total; // shortcut: a dock past the total pays no interest beyond I, the excess stays principal as today; capping a leg at the balance is a separate task
+  const owed = (2n * target * schedule.interest + schedule.total) / (2n * schedule.total) - interestBefore; // half-up
+  const interest = owed < 0n ? 0n : owed > leg ? leg : owed;
+  return { principal: leg - interest, interest };
+}

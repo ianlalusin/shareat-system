@@ -181,6 +181,7 @@ export default async function LoansPage({
                 <Th>Terms</Th>
                 <Th numeric>Drawn</Th>
                 <Th numeric>Repaid</Th>
+                <Th numeric>Interest paid</Th>
                 <Th numeric>Outstanding</Th>
                 <Th>State</Th>
               </tr>
@@ -206,6 +207,7 @@ export default async function LoansPage({
                   </Td>
                   <NumTd className="font-mono">{peso(l.position.disbursed)}</NumTd>
                   <NumTd className="font-mono">{peso(l.position.principalPaid)}</NumTd>
+                  <NumTd className="font-mono">{peso(l.position.interestPaid)}</NumTd>
                   <NumTd className="font-mono">{peso(l.position.outstanding)}</NumTd>
                   <Td className="text-xs"><Badge status={l.status} /></Td>
                 </LinkRow>
