@@ -26,6 +26,8 @@ export interface ReceiptHeader {
   addressLines: string[];
   tin: string | null;
   vatRegistered: boolean;
+  /** T-601 S4: the store is in TEST mode, so the paper says `TEST - NOT A SALE`. Absent = a real slip. */
+  test?: boolean;
 }
 
 /** One discount applied to a line. `amount` is a POSITIVE figure and is printed with a minus sign. */

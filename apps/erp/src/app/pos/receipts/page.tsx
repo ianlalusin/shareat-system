@@ -41,7 +41,7 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
     const store = await storesRepo.getById(tx, actor.orgId, storeId);
     const org = await organizationsRepo.identityOf(tx, actor.orgId);
     const slip = {
-      context: { storeName: store?.name ?? 'Store', vatRegistered: (await posV2Repo.getOrgTaxType(tx, actor.orgId)) === 'vat', identity: org && store ? receiptIdentityOf(org, store) : undefined },
+      context: { storeName: store?.name ?? 'Store', vatRegistered: (await posV2Repo.getOrgTaxType(tx, actor.orgId)) === 'vat', identity: org && store ? receiptIdentityOf(org, store) : undefined, mode: (await posV2Repo.getPosStore(tx, actor.orgId, storeId))?.mode },
       layout: printSettingsOf({ receiptPaperMm: till?.receiptPaperMm === 80 ? 80 : 58, receiptCopies: 1 }).layout,
     };
     return { receipts: receipts.filter((r) => r.terminalId === till?.id), tenders, canApprove, paired: true, slip };

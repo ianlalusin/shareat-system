@@ -48,3 +48,11 @@ describe('what prints', () => {
     expect(out.slice(0, 2)).toEqual(['ACME LIPA', '']);
   });
 });
+
+describe('T-601 S4 - the TEST flag', () => {
+  it('mode test sets header.test; any other mode leaves the key out (a real slip is unchanged)', () => {
+    expect(receiptHeaderOf({ name: 'Acme Lipa', vatRegistered: true, identity, mode: 'test' }).test).toBe(true);
+    expect(receiptHeaderOf({ name: 'Acme Lipa', vatRegistered: true, mode: 'test' }).test).toBe(true);
+    for (const mode of ['live', 'off', undefined]) expect('test' in receiptHeaderOf({ name: 'Acme Lipa', vatRegistered: true, identity, mode })).toBe(false);
+  });
+});

@@ -63,3 +63,12 @@ describe('T-534 S4 - the X/Z slip refunds row', () => {
     expect(formatXSlip(base as never, L32).join('\n')).not.toContain('REFUNDS');
   });
 });
+
+describe('T-601 S4 - TEST - NOT A SALE on the refund slip', () => {
+  it('a TEST store prints the line above REFUND; a real one does not', () => {
+    const out = formatRefundSlip(view({ header: { ...header, test: true } }), L32).map((l) => l.trim());
+    expect(out).toContain('TEST - NOT A SALE');
+    expect(out.indexOf('TEST - NOT A SALE')).toBeLessThan(out.indexOf('REFUND'));
+    expect(formatRefundSlip(view(), L32).join('|')).not.toContain('TEST - NOT A SALE');
+  });
+});

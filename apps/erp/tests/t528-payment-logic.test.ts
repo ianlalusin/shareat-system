@@ -5,7 +5,7 @@
  *   type Tender = { id: string; name: string; kind: string }                      the snapshot's `tenders` entry ('cash' | 'wallet' | ...)
  *   type PayRow = { tenderId: string; amount: string; referenceNo?: string }       amount is a 2-dp decimal string
  *   MAX_TENDERS = 20
- *   receiptNoOf(terminalNo: number, terminalSeq: number): string                   'T<terminalNo>-<terminalSeq padded to 6>'
+ *   receiptNoOf(storeCode: string | undefined, terminalNo: number, terminalSeq: number): string   '<store code>-<terminal 2>-<seq 6>' (T-601 S5), 'T<terminalNo>-<seq 6>' with no code
  *   paymentSummary({ total, rows, tenders }): { paid: string; balance: string; change: string }   balance = max(total - paid, 0), change = max(paid - total, 0)
  *   canAddPayment(rows): boolean                                                   false at 20 rows
  *   addPaymentRow(rows, tender, balance): PayRow[]                                 appends { tenderId, amount: balance } (+ referenceNo '' on a wallet); returns the SAME rows at the cap
@@ -332,11 +332,18 @@ describe('sale.completed payload (R3)', () => {
     expect(saleCompletedEvent({ personId: id(40), ...(await input()) })).toStrictEqual({ kind: 'sale.completed', personId: id(40), occurredAtDevice: NOW.toISOString(), payload: EXPECTED });
   });
 
-  it('receiptNoOf: T<terminalNo>-<terminalSeq padded to 6>', async () => {
+  it('receiptNoOf: the server format <store code>-<terminal padded to 2>-<seq padded to 6> (T-601 S5, the same spelling sale.ts writes to the register)', async () => {
     const { receiptNoOf } = await logic();
-    expect(receiptNoOf(1, 42)).toBe('T1-000042');
-    expect(receiptNoOf(3, 123456)).toBe('T3-123456');
-    expect(receiptNoOf(12, 4231)).toBe('T12-004231');
+    expect(receiptNoOf('LIP', 1, 42)).toBe('LIP-01-000042');
+    expect(receiptNoOf('LIP', 3, 123456)).toBe('LIP-03-123456');
+    expect(receiptNoOf('SL', 12, 4231)).toBe('SL-12-004231');
+  });
+
+  it('receiptNoOf: a snapshot cached before it carried the store code falls back to T<terminalNo>-<seq 6>', async () => {
+    const { receiptNoOf } = await logic();
+    expect(receiptNoOf(undefined, 1, 42)).toBe('T1-000042');
+    expect(receiptNoOf(undefined, 12, 4231)).toBe('T12-004231');
+    expect(receiptNoOf('', 3, 123456)).toBe('T3-123456');
   });
 });
 
@@ -375,7 +382,7 @@ const RECEIPT_LINES = [
 ];
 
 describe('paySale (R3): one tap, local-first', () => {
-  const setup = async (over: { enqueue?: () => Promise<unknown>; print?: () => Promise<string>; online?: boolean } = {}) => {
+  const setup = async (over: { enqueue?: () => Promise<unknown>; print?: () => Promise<string>; online?: boolean; storeCode?: string } = {}) => {
     const { paySale, priceBill } = await logic();
     const order: string[] = [];
     const enqueue = vi.fn(async (e: unknown) => {
@@ -398,7 +405,7 @@ describe('paySale (R3): one tap, local-first', () => {
       print,
     };
     const input = {
-      personId: id(40), sessionId: SESSION, online: over.online ?? true, terminalNo: 1, now: NOW, priced: priceBill({ lines: BILL_LINES, rules: RULES, vatRegistered: true }),
+      personId: id(40), sessionId: SESSION, online: over.online ?? true, ...(over.storeCode ? { storeCode: over.storeCode } : {}), terminalNo: 1, now: NOW, priced: priceBill({ lines: BILL_LINES, rules: RULES, vatRegistered: true }),
       rows: ROWS, tenders: TENDERS, seniors: SENIORS, vatRateLabel: '12%', layout: { width: 58, font: 'normal' }, copies: 1,
       receipt: {
         header: { businessName: 'Shareat Lipa', addressLines: ['Lipa City, Batangas'], tin: '123-456-789-000', vatRegistered: true },
@@ -408,9 +415,15 @@ describe('paySale (R3): one tap, local-first', () => {
     return { result: await paySale(deps, input), deps, order };
   };
 
+  it('T-601 S5: with the store code in the input the printed number is the server one (LIP-01-004231), on the receipt too', async () => {
+    const { result } = await setup({ storeCode: 'LIP' });
+    expect(result).toMatchObject({ ok: true, receiptNo: 'LIP-01-004231' });
+    expect((result as { lines: string[] }).lines.join(' ')).toContain('LIP-01-004231');
+  });
+
   it('online: reserves the number, enqueues the exact sale.completed, prints the receipt built from the same price, then asks for a drain', async () => {
     const { result, deps, order } = await setup();
-    expect(result).toMatchObject({ ok: true, receiptNo: 'T1-004231', print: 'printed', notice: null });
+    expect(result).toMatchObject({ ok: true, receiptNo: 'T1-004231', print: 'printed', notice: null }); // no storeCode in this input: the old-snapshot fallback
     expect(order[0]).toBe('reserve');
     expect(order.indexOf('enqueue')).toBeLessThan(order.indexOf('print'));
     expect(order.indexOf('enqueue')).toBeLessThan(order.indexOf('drain'));

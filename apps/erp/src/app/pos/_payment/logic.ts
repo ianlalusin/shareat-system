@@ -101,8 +101,13 @@ export function appendAmountKey(buffer: string, key: string): string {
 const centsText = (c: bigint): Money => fromCentavos(c);
 const kindOf = (tenders: readonly Tender[], id: string): string | undefined => tenders.find((t) => t.id === id)?.kind;
 
-export function receiptNoOf(terminalNo: number, terminalSeq: number): string {
-  return `T${terminalNo}-${String(terminalSeq).padStart(6, '0')}`;
+/**
+ * T-601 S5: the number on the paper is the number the server writes (`sale.ts`): `<store code>-<terminal 2>-<seq 6>`. Only a snapshot cached before it carried the
+ * store code falls back to `T<terminal>-<seq 6>`.
+ */
+export function receiptNoOf(storeCode: string | undefined, terminalNo: number, terminalSeq: number): string {
+  const seq = String(terminalSeq).padStart(6, '0');
+  return storeCode ? `${storeCode}-${String(terminalNo).padStart(2, '0')}-${seq}` : `T${terminalNo}-${seq}`;
 }
 
 export function paymentSummary(i: { total: string; rows: readonly PayRow[]; tenders: readonly Tender[] }): { paid: string; balance: string; change: string } {
@@ -357,6 +362,8 @@ export interface PayInput {
   personId: string;
   sessionId: string;
   online: boolean;
+  /** T-601 S5: from the snapshot; absent in an old cached one (the number then starts with T<terminal>). */
+  storeCode?: string;
   terminalNo: number;
   now: Date;
   priced: PricedSession;
@@ -407,7 +414,7 @@ export async function paySale(deps: PayDeps, input: PayInput): Promise<PayResult
   try {
     const terminalSeq = await deps.reserveTerminalSeq();
     const receiptId = deps.newId();
-    receiptNo = receiptNoOf(input.terminalNo, terminalSeq);
+    receiptNo = receiptNoOf(input.storeCode, input.terminalNo, terminalSeq);
     view = receiptViewOf(input, receiptNo);
     lines = formatReceipt(view, input.layout);
     await deps.enqueue(saleCompletedEvent({ ...input, receiptId, terminalSeq }));
