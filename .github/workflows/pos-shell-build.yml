@@ -1,0 +1,92 @@
+name: POS shell build
+
+# T-532 S3: a signed release APK of apps/pos-shell (the Android shell that opens https://erp2.shareat.net/pos).
+# Runs on changes under apps/pos-shell/** and on manual dispatch. Separate from ci.yml and app-build.yml on purpose:
+# the shell has no web build (its webDir is one static page), and `app-pos` (apps/pos) stays untouched.
+# GitHub-hosted runner, never the self-hosted one that runs `verify`. Never built on a droplet.
+on:
+  pull_request:
+    paths:
+      - 'apps/pos-shell/**'
+      - '.github/workflows/pos-shell-build.yml'
+      - 'scripts/apk-signing-gate.mjs'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/pos-shell/**'
+      - '.github/workflows/pos-shell-build.yml'
+      - 'scripts/apk-signing-gate.mjs'
+  workflow_dispatch:
+
+concurrency:
+  group: pos-shell-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build pos-shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell project exists
+        run: |
+          test -f apps/pos-shell/capacitor.config.ts || { echo "::error::apps/pos-shell/capacitor.config.ts is missing (T-532 S2 not merged yet)."; exit 1; }
+          test -x apps/pos-shell/android/gradlew || { echo "::error::apps/pos-shell/android/gradlew is missing or not executable."; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # Secrets reach the script only through env:. Missing keystore = skip (green); half-set = fail.
+      - name: Signing gate
+        id: gate
+        run: node scripts/apk-signing-gate.mjs
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Capacitor sync
+        working-directory: apps/pos-shell
+        run: npx cap sync android
+
+      # No secrets: still prove the project compiles, so a broken shell is caught on every PR.
+      - name: Assemble debug APK (unsigned check)
+        if: steps.gate.outputs.signing != 'release'
+        working-directory: apps/pos-shell/android
+        run: ./gradlew assembleDebug
+
+      - name: Decode keystore
+        if: steps.gate.outputs.signing == 'release'
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > apps/pos-shell/android/app/release.jks
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Assemble release APK
+        if: steps.gate.outputs.signing == 'release'
+        working-directory: apps/pos-shell/android
+        run: ./gradlew assembleRelease -PversionCode=${{ github.run_number }} -PversionName=0.1.${{ github.run_number }}
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Upload APK
+        if: steps.gate.outputs.signing == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-shell-${{ github.run_number }}.apk
+          path: apps/pos-shell/android/app/build/outputs/apk/release/*.apk
