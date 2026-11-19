@@ -16,6 +16,7 @@ import { AuthorizationError } from '@shareat/auth';
 import { RefusalError } from '@shareat/db';
 import { asOrg, closeAll, fixture, pinOf, sql, stateVersionOf, uuid, type Fx } from './_fixtures/t525-pos';
 import { posPreflight } from '../../src/pos/preflight';
+import { employManager } from './_fixtures/t533-store-ready';
 
 afterAll(closeAll);
 
@@ -37,6 +38,7 @@ async function ready(o: { rules?: boolean } = {}): Promise<Fx> {
   }
   await sql`update tenders set pos_v1_alias = lower(name) where store_id = ${f.storeId} and is_active`; // the inactive Maya keeps NO alias: inactive tenders are not counted
   for (const id of [f.managerId, f.counterId, f.kitchenId]) await pinOf(f, id);
+  await employManager(f); // T-601 S6: the approver must be on the tablet's sign-in list
   return f;
 }
 
@@ -117,10 +119,11 @@ describe('R3 posPreflight - each blocking item fires on its own', () => {
     expect(r.blocking[0]!.sentence).toContain('Senior citizen and PWD discount');
   });
 
-  it('no person at the store who may sell (record_sale): the only seller\'s employment ended', async () => {
+  it('no person at the store who may sell (record_sale): the cashier and the manager (who sells by role) have both left', async () => {
     const f = await ready();
-    await sql`update employments set ended_on = '2025-06-01', employment_status = 'resigned' where person_id = ${f.counterId}`;
-    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_record_sale_person'] });
+    await sql`update employments set ended_on = '2025-06-01', employment_status = 'resigned' where person_id in (${f.counterId}, ${f.managerId})`;
+    // No approver either: nobody is left on the sign-in list who has a PIN and the grant.
+    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_record_sale_person', 'no_approver'] });
   });
 
   it('no tablet registered for approvals (T-601 S6): no active pos_terminal_links row; a revoked one does not count', async () => {
@@ -129,19 +132,18 @@ describe('R3 posPreflight - each blocking item fires on its own', () => {
     expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_terminal_link'] });
   });
 
-  it('no approver (T-601 S6): a revoked PIN, a manager of another store, and a staff PIN do not count; a granted admin with a PIN does', async () => {
+  it('no approver (T-601 S6): a revoked PIN, a manager of another store, and a staff PIN do not count; the manager with a live PIN does', async () => {
     const f = await ready();
     await pinOf(f, f.managerOtherId);
     await sql`update person_credentials set revoked_at = now(), revoke_reason = 'test' where person_id = ${f.managerId} and kind = 'pin'`;
     expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_approver'] });
-    await pinOf(f, f.adminId);
+    await sql`update person_credentials set revoked_at = null, revoke_reason = null where person_id = ${f.managerId} and kind = 'pin'`;
     expect(await codes(f)).toEqual(NONE);
   });
 
-  it('no approver (T-601 S6): the only approver is also the only seller, so they cannot approve their own close', async () => {
+  it('no approver (T-601 S6): the only approver is also the only seller (the cashier left), so they cannot approve their own close', async () => {
     const f = await ready();
-    await sql`update person_credentials set revoked_at = now(), revoke_reason = 'test' where person_id = ${f.managerId} and kind = 'pin'`;
-    await sql`insert into person_grants (person_id, grant_name, granted_by, grant_source, store_id) values (${f.counterId}, 'approve_pos_correction', ${f.adminId}, 'grant', ${f.storeId})`;
+    await sql`update employments set ended_on = '2025-06-01', employment_status = 'resigned' where person_id = ${f.counterId}`;
     expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_approver'] });
   });
 
