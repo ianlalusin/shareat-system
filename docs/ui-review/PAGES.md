@@ -137,6 +137,7 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /documents/templates | apps/erp/src/app/documents/templates/page.tsx |  | not reviewed | T-584 | T-589 B7, #299 | could improve: Long new-template form sits above the records; Kind select text truncated on desktop. |
 | /pos | apps/erp/src/app/pos/page.tsx | 2026-11-15 | minor | G3 |  | good: Clean at both widths; tab bar sits at the bottom on phone. |
 | /pos/kitchen | apps/erp/src/app/pos/kitchen/page.tsx | 2026-11-15 | minor | G3 |  | good: Clean at both widths; empty state reads clearly on the dark screen. |
+| /pos/printer | apps/erp/src/app/pos/printer/page.tsx |  | not reviewed | T-532 |  |  |
 | /pos/receipts | apps/erp/src/app/pos/receipts/page.tsx | 2026-11-15 | minor | G3 | T-589 B8, #301 | could improve: Empty placeholder card only, saying receipts are coming in the next update. |
 | /pos/refills | apps/erp/src/app/pos/refills/page.tsx | 2026-11-15 | minor | G3 |  | good: Clean at both widths; on phone the ask-for-refill panel stacks above the list. |
 | /pos/till | apps/erp/src/app/pos/till/page.tsx | 2026-11-15 | minor | G3 |  | good: Clean at both widths; one info banner explains the till is on the store tablet. |
