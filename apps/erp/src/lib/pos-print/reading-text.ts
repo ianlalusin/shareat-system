@@ -1,4 +1,5 @@
 import { center, columnsFor, justify, printAmount, rule, wrap } from './layout';
+import { TEST_LINE } from './receipt-text';
 import type { PrintLayout, ReadingSlipView, ZSlipView } from './types';
 
 /**
@@ -27,6 +28,7 @@ function pushHeader(out: string[], view: ReadingSlipView, cols: number): void {
   for (const address of view.header.addressLines) pushCentered(out, address, cols);
   if (view.header.tin !== null) pushCentered(out, `TIN: ${view.header.tin} ${view.header.vatRegistered ? 'VAT' : 'Non-VAT'}`, cols);
   out.push('');
+  if (view.header.test) pushCentered(out, TEST_LINE, cols);
 }
 
 /** From / to, "Spans two dates", who printed it; the Z adds who approved it. */

@@ -266,6 +266,14 @@ export async function findOpenEmployment(
   return row as EmploymentRow | undefined;
 }
 
+/** T-609: how many OTHER open employments (any store of the org) this person holds besides `excludeEmploymentId`. */
+export async function countOtherOpenEmployments(tx: Tx, personId: string, orgId: string, excludeEmploymentId: string): Promise<number> {
+  const rows = (await tx.execute(sql`
+    select count(*)::int as n from employments
+    where person_id = ${personId} and org_id = ${orgId} and ended_on is null and id <> ${excludeEmploymentId}`)) as unknown as { n: number }[];
+  return rows[0]?.n ?? 0;
+}
+
 /**
  * T-407 (Invariant 21): lock ALL of a person's employment rows in one org, in id order, in ONE statement.
  * Two concurrent endEmployment calls for the same person then serialise here instead of each updating its

@@ -39,6 +39,8 @@ export interface SlipContext {
   printedBy: string;
   /** T-585: the issuer identity (legal name, address, TIN); absent from older callers, which print the store name only. */
   identity?: unknown;
+  /** T-601 S4: the POS mode of the store; `test` puts TEST - NOT A SALE on the slip. */
+  mode?: string;
 }
 
 const amountOf = (s: string | undefined): Money => money(s ?? '0.00');
@@ -53,7 +55,7 @@ export const businessDateLocal = (businessDate: string): string => {
 
 export function readingSlipView(reading: ReadingJson, ctx: SlipContext): ReadingSlipView {
   return {
-    header: receiptHeaderOf({ name: ctx.storeName, vatRegistered: ctx.vatRegistered, identity: ctx.identity }),
+    header: receiptHeaderOf({ name: ctx.storeName, vatRegistered: ctx.vatRegistered, identity: ctx.identity, mode: ctx.mode }),
     printedBy: ctx.printedBy,
     windowFromLocal: stamp(reading.windowStart),
     windowToLocal: stamp(reading.windowEnd),
