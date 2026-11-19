@@ -67,7 +67,16 @@ const CLASSIFIED_ENTRIES: {
   reason: string;
   checkFunctions?: string[];
   checkIdentifiers?: string[];
-}[] = [];
+}[] = [
+  {
+    file: 'loans/interest.ts',
+    comparison: '!(loan.termPeriods > 0)',
+    reason:
+      'termPeriods is a count of repayment periods, not money; an unscheduled loan (0 or missing) gets no split',
+    checkFunctions: ['loanSchedule'],
+    checkIdentifiers: ['termPeriods'],
+  },
+];
 
 const CLASSIFIED: Record<string, string> = Object.fromEntries(
   CLASSIFIED_ENTRIES.map(({ file, comparison, reason }) => [censusKey(file, comparison), reason]),
