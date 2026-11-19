@@ -13,12 +13,17 @@ import {
   posDayCloses,
   posDiscountPresets,
   posEvents,
+  posPaymentConversions,
+  posRefundLines,
+  posRefundPayments,
+  posRefunds,
   posSalesReceiptLineDiscounts,
   posSalesReceiptLines,
   posSalesReceiptPayments,
   posSalesReceipts,
   posStands,
   posStores,
+  posTenderCorrections,
   posTerminals,
   tableSessionLineDiscounts,
   tableSessionLines,
@@ -26,9 +31,14 @@ import {
   type PosDayCloseRow,
   type PosDiscountPresetRow,
   type PosEventRow,
+  type PosPaymentConversionRow,
+  type PosRefundLineRow,
+  type PosRefundPaymentRow,
+  type PosRefundRow,
   type PosSalesReceiptRow,
   type PosStandRow,
   type PosStoreRow,
+  type PosTenderCorrectionRow,
   type PosTerminalRow,
   type TableSessionLineDiscountRow,
   type TableSessionLineRow,
@@ -46,9 +56,14 @@ export type {
   PosDayCloseRow,
   PosDiscountPresetRow,
   PosEventRow,
+  PosPaymentConversionRow,
+  PosRefundLineRow,
+  PosRefundPaymentRow,
+  PosRefundRow,
   PosSalesReceiptRow,
   PosStandRow,
   PosStoreRow,
+  PosTenderCorrectionRow,
   PosTerminalRow,
   TableSessionLineDiscountRow,
   TableSessionLineRow,
@@ -1351,4 +1366,118 @@ export async function exportRowsForStore(
     Object.fromEntries(keys.map((k) => [cols[k]!.name, cols[k]!.columnType === 'PgJsonb' && r[k] !== null ? compactRedactedJson(r[k]!) : r[k]!])),
   );
   return { columns, rows };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-534 S1 (migration 0265) - the post-sale documents: Convert, a wrong-payment-method correction, a refund. Plain inserts and reads; the domain (S2-S4) decides every
+// rule, takes the row lock on the parent receipt, and writes a refund + its lines + its payments in ONE top-level transaction (the append guard refuses a child
+// under an earlier transaction's refund). Nothing calls these until S2-S4, so each is in the production-caller baseline until then.
+// ---------------------------------------------------------------------------------------------------------------------
+export interface NewPaymentConversion {
+  orgId: string;
+  storeId: string;
+  terminalId: string;
+  fromTenderId: string;
+  toTenderId: string;
+  amount: Money;
+  note: string | null;
+  recordedBy: string;
+  requestId: string;
+}
+export interface NewTenderCorrection {
+  orgId: string;
+  storeId: string;
+  receiptId: string;
+  paymentId: string;
+  /** The paid row's own tender (the composite FK proves it). */
+  fromTenderId: string;
+  toTenderId: string;
+  amount: Money;
+  referenceNo: string | null;
+  reason: string;
+  approvedBy: string;
+  recordedBy: string;
+  requestId: string;
+}
+export interface NewRefund {
+  orgId: string;
+  storeId: string;
+  terminalId: string;
+  parentReceiptId: string;
+  refundSeq: number;
+  total: Money;
+  reason: string;
+  approvedBy: string;
+  recordedBy: string;
+  requestId: string;
+}
+export interface NewRefundLine {
+  orgId: string;
+  refundId: string;
+  /** The refund's parent receipt. */
+  receiptId: string;
+  receiptLineId: string;
+  qty: number;
+  amount: Money;
+}
+export interface NewRefundPayment {
+  orgId: string;
+  refundId: string;
+  /** The refund's parent receipt. */
+  receiptId: string;
+  paymentId: string;
+  /** The original payment's own tender (the composite FK proves it). */
+  tenderId: string;
+  amount: Money;
+  referenceNo: string | null;
+}
+
+export async function insertPaymentConversion(tx: Tx, r: NewPaymentConversion): Promise<PosPaymentConversionRow> {
+  const [row] = await tx.insert(posPaymentConversions).values(r).returning();
+  return row!;
+}
+export async function insertTenderCorrection(tx: Tx, r: NewTenderCorrection): Promise<PosTenderCorrectionRow> {
+  const [row] = await tx.insert(posTenderCorrections).values(r).returning();
+  return row!;
+}
+export async function insertRefund(tx: Tx, r: NewRefund): Promise<PosRefundRow> {
+  const [row] = await tx.insert(posRefunds).values(r).returning();
+  return row!;
+}
+export async function insertRefundLines(tx: Tx, rows: NewRefundLine[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(posRefundLines).values(rows);
+}
+export async function insertRefundPayments(tx: Tx, rows: NewRefundPayment[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(posRefundPayments).values(rows);
+}
+
+/** The store's conversions not yet in a Z (voided ones included: the caller filters), oldest first. */
+export async function listOpenPaymentConversions(tx: Tx, orgId: string, storeId: string): Promise<PosPaymentConversionRow[]> {
+  return tx
+    .select()
+    .from(posPaymentConversions)
+    .where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.storeId, storeId), isNull(posPaymentConversions.dayCloseId)))
+    .orderBy(asc(posPaymentConversions.recordedAt), asc(posPaymentConversions.id));
+}
+/** A retried POST: the row an earlier call with this request id wrote, if any (unique per org). */
+export async function getPaymentConversionByRequestId(tx: Tx, orgId: string, requestId: string): Promise<PosPaymentConversionRow | undefined> {
+  const [row] = await tx.select().from(posPaymentConversions).where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.requestId, requestId)));
+  return row;
+}
+export async function getTenderCorrectionByRequestId(tx: Tx, orgId: string, requestId: string): Promise<PosTenderCorrectionRow | undefined> {
+  const [row] = await tx.select().from(posTenderCorrections).where(and(eq(posTenderCorrections.orgId, orgId), eq(posTenderCorrections.requestId, requestId)));
+  return row;
+}
+export async function getRefundByRequestId(tx: Tx, orgId: string, requestId: string): Promise<PosRefundRow | undefined> {
+  const [row] = await tx.select().from(posRefunds).where(and(eq(posRefunds.orgId, orgId), eq(posRefunds.requestId, requestId)));
+  return row;
+}
+/** The lines and the money-back rows of one refund, for a slip or a retried POST's reply. */
+export async function listRefundLines(tx: Tx, orgId: string, refundId: string): Promise<PosRefundLineRow[]> {
+  return tx.select().from(posRefundLines).where(and(eq(posRefundLines.orgId, orgId), eq(posRefundLines.refundId, refundId))).orderBy(asc(posRefundLines.id));
+}
+export async function listRefundPayments(tx: Tx, orgId: string, refundId: string): Promise<PosRefundPaymentRow[]> {
+  return tx.select().from(posRefundPayments).where(and(eq(posRefundPayments.orgId, orgId), eq(posRefundPayments.refundId, refundId))).orderBy(asc(posRefundPayments.id));
 }

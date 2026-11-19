@@ -151,7 +151,7 @@ describe('K1b -- the exemptions file after S3 (D2): no org->org left open, NO_FK
   it('RED until the builder edits NO_FK_REFERENCES: 24 entries, no ref-gap kind remains', () => {
     // T-455 S1 (0215): +lobby_entries.client_request_id (idempotency-key). 24 -> 25.
     // T-472 S1 (0216): +5 pos_bridge external keys (pos_store_id x2, firestore_doc_id, parent_doc_id, pos_item_id). 25 -> 30.
-    expect(NO_FK_REFERENCES.length, `NO_FK_REFERENCES has ${NO_FK_REFERENCES.length} entries; S3 leaves 24`).toBe(33); // T-398 S6 (0220): +franchise_access_log.session_id (snapshot), 30 -> 31; T-557 (0249): +pos_sales_receipt_lines.option_value_ids and table_session_lines.option_value_ids, 31 -> 33
+    expect(NO_FK_REFERENCES.length, `NO_FK_REFERENCES has ${NO_FK_REFERENCES.length} entries; S3 leaves 24`).toBe(36); // T-534 S1 (0265): +3 request_id idempotency keys, 33 -> 36; T-398 S6 (0220): +franchise_access_log.session_id (snapshot), 30 -> 31; T-557 (0249): +pos_sales_receipt_lines.option_value_ids and table_session_lines.option_value_ids, 31 -> 33
     expect(NO_FK_REFERENCES.filter((e) => e.kind === 'ref-gap').map((e) => e.column)).toEqual([]);
   });
   it('RED until reclassified (D2): pos_v1_day_feeds.batch_id is an idempotency-key (it has no parent), still declared, still FK-less', async () => {
@@ -214,7 +214,24 @@ async function leg(e: ScopeFk, target: 'foreign' | 'own' | 'null', asApp: boolea
     const b = await insertOrg(tx, 'b');
     const parentB = await insertSynth(tx, e.parent, b);
     const parentA = await insertSynth(tx, e.parent, a);
-    const childId = await insertSynth(tx, e.child, a);
+    // T-534 S1 (0265): a refund's lines and money-back rows carry a composite (refund_id, receipt_id) -> pos_refunds(id, parent_receipt_id) beside the same-org twin, plus the
+    // receipt's own line / payment composites. The generic child has random values for those, so a control update to the org's own refund would fail on the SIBLING composite,
+    // not on the org check. For these two children only, build the row consistent (the sibling FKs satisfied, FKs unchecked in this setup): receipt_id = the own refund's parent
+    // receipt, and a line / payment row of that receipt. The same-org twin under test is unchanged and still decides the F / O legs.
+    let extra: Record<string, string> = {};
+    if (e.col === 'refund_id' && (e.child === 'pos_refund_lines' || e.child === 'pos_refund_payments')) {
+      const [pr] = await tx<{ r: string }[]>`select parent_receipt_id::text r from pos_refunds where id = ${parentA}`;
+      const rid = `'${pr!.r}'::uuid`;
+      if (e.child === 'pos_refund_lines') {
+        const line = await insertSynth(tx, 'pos_sales_receipt_lines', a, { receipt_id: rid });
+        extra = { receipt_id: rid, receipt_line_id: `'${line}'::uuid` };
+      } else {
+        const pay = await insertSynth(tx, 'pos_sales_receipt_payments', a, { receipt_id: rid });
+        const [pt] = await tx<{ t: string }[]>`select tender_id::text t from pos_sales_receipt_payments where id = ${pay}`;
+        extra = { receipt_id: rid, payment_id: `'${pay}'::uuid`, tender_id: `'${pt!.t}'::uuid` };
+      }
+    }
+    const childId = await insertSynth(tx, e.child, a, extra);
     return { a, parentA, parentB, childId };
   });
   const out: LegResult = { rows: -1 };

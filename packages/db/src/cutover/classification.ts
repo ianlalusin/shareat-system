@@ -1651,6 +1651,31 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason:
       'Discounts on frozen lines of pilot sales receipts (T-523 R13): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379); the statutory records they point at are purged the same way. Append-only.',
   },
+  pos_payment_conversions: {
+    class: 'purge',
+    reason:
+      'Convert records (GCash cash-in / cash-out) of the pilot (T-534 S1, migration 0265): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Points at pos_day_closes, purged too.',
+  },
+  pos_tender_corrections: {
+    class: 'purge',
+    reason:
+      'Wrong-payment-method corrections of the pilot (T-534 S1, migration 0265): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Points at pos_sales_receipts and pos_day_closes, purged too.',
+  },
+  pos_refunds: {
+    class: 'purge',
+    reason:
+      'Refunds of pilot sales receipts (T-534 S1, migration 0265): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Points at pos_sales_receipts and pos_day_closes, purged too.',
+  },
+  pos_refund_lines: {
+    class: 'purge',
+    reason:
+      'Lines of pilot refunds (T-534 S1, migration 0265): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Append-only.',
+  },
+  pos_refund_payments: {
+    class: 'purge',
+    reason:
+      'Money-back lines of pilot refunds (T-534 S1, migration 0265): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Append-only.',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */
