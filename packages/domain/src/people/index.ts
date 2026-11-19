@@ -9,10 +9,11 @@
  * `resolveActor` (T-138), which is why `created_by` on an employment is worth anything at all —
  * v1's equivalent is a client-supplied parameter on ~24 server actions (landmine #17).
  */
-import { authorize, can, type Actor } from '@shareat/auth';
+import { authorize, can, holdsSuperAdminAuthority, isAdministrative, isStoreManagerOrAbove, type Actor } from '@shareat/auth';
 import {
   accessRepo,
   auditLogRepo,
+  attendanceCredentialsRepo,
   employmentRepo,
   personsRepo,
   sessionsRepo,
@@ -377,6 +378,16 @@ export async function endEmployment(
   // T-407 Inv 21: serialise concurrent ends for the same person BEFORE writing (no lock-order deadlock).
   await employmentRepo.lockPersonEmployments(tx, existing.personId, existing.orgId);
 
+  // T-609: no other open employment in the org means this end switches off the person's whole way in (role, PIN, every
+  // scope and grant), so the refusals that protect an organisation's authority run BEFORE anything is written.
+  // Re-read under the lock: ending a job that is already closed must not run the revocation (the person may have been re-hired
+  // at the same store since, and that new job is the one that would lose its access).
+  if ((await employmentRepo.getEmployment(tx, existing.id))?.endedOn) {
+    throw new EmploymentError(`endEmployment: employment ${existing.id} already ended`, 'This employment has already ended.');
+  }
+  const lastJob = (await employmentRepo.countOtherOpenEmployments(tx, existing.personId, existing.orgId, existing.id)) === 0;
+  if (lastJob) await refuseIfEndWouldStripAuthority(tx, actor, existing.personId, existing.orgId);
+
   const closed = await employmentRepo.closeEmployment(tx, input);
 
   // T-289 moment 5 — ending the employment leaves no open employment at this store, so
@@ -384,17 +395,32 @@ export async function endEmployment(
   // stores are untouched (a person may hold two open employments, one per store).
   await reconcilePositionGrants(tx, actor, { personId: existing.personId, storeId: existing.storeId });
 
-  // T-336 SCOPE LIFECYCLE fix (migration 0156) — the bug this closes: the hire-time scope grant
-  // was never revoked, so a terminated cashier kept sign-in. Delete the row ONLY when it exists
-  // BECAUSE of this employment (`source = 'employment'`) and no other open employment remains at
-  // this store — never an admin's deliberate `'manual'` grant or the `'fan_out'` materialisation,
-  // and never scope this same person still needs for a genuinely separate reason at this store.
-  const scope = await accessRepo.findStoreScope(tx, existing.personId, existing.storeId);
-  if (scope?.source === 'employment') {
-    const stillOpen = await employmentRepo.findOpenEmployment(tx, existing.personId, existing.storeId);
-    if (!stillOpen) {
-      await accessRepo.deleteStoreScopeById(tx, scope.id);
+  // T-609 (Ian, 19 Nov 2026: "terminating a staff employment must deactivate all its erp and pos access immediately").
+  // Supersedes T-336's "a manual scope survives": ending the person's LAST open employment in the org deletes every scope
+  // row and revokes every grant, the role and the PIN; while another job remains, only what is tied to THIS store goes
+  // (the scope of any source but the role's own `fan_out` materialisation, and grants honoured at this store).
+  const revoked = { storeScopes: 0, grants: 0, roles: 0, credentials: 0, badges: 0, sessions: 0 };
+  if (lastJob) {
+    revoked.storeScopes = await accessRepo.deleteStoreScopesForPerson(tx, existing.personId);
+    revoked.grants = await accessRepo.revokeActiveGrantsForPerson(tx, existing.personId, ACCESS_REVOKED_REASON);
+    revoked.roles = (await accessRepo.revokeActiveRole(tx, existing.personId, existing.orgId)) ? 1 : 0;
+    // Every way in: PIN, Firebase (email) and biometric alike.
+    for (const cred of await sessionsRepo.listLiveForPerson(tx, existing.personId)) {
+      await sessionsRepo.revokeCredential(tx, { id: cred.id, by: actor.personId, reason: ACCESS_REVOKED_REASON });
+      revoked.credentials += 1;
     }
+  } else {
+    // `fan_out` is the admin role's own materialisation: kept only while the person still holds an administrative role (a demoted
+    // ex-admin's stale row must not keep a way in at the ended store).
+    const stillAdmin = isAdministrative((await accessRepo.activeRoleForPerson(tx, existing.personId, existing.orgId))?.role);
+    revoked.storeScopes = await accessRepo.deleteStoreScopesForPerson(tx, existing.personId, { storeId: existing.storeId, keepSources: stillAdmin ? ['fan_out'] : [] });
+    revoked.grants = await accessRepo.revokeActiveGrantsForPerson(tx, existing.personId, ACCESS_REVOKED_REASON, existing.storeId);
+  }
+
+  // The ended job's clock badges (card / fingerprint), whatever the store: the terminals drop them on their next mirror sync.
+  for (const badge of await attendanceCredentialsRepo.listLiveForEmployment(tx, existing.id)) {
+    await attendanceCredentialsRepo.revokeCredential(tx, { id: badge.id, at: new Date(), by: actor.personId, reason: ACCESS_REVOKED_REASON });
+    revoked.badges += 1;
   }
 
   await auditLogRepo.append(tx, actor.orgId, {
@@ -413,12 +439,14 @@ export async function endEmployment(
   // refused by the closed row.
   let endedSessions = 0;
   let endedAtStore: string | null = null;
-  if (!(await accessRepo.personMaySignInToOrg(tx, existing.personId, existing.orgId))) {
+  // T-609: the last job's end always signs the person out of everything; the derived check stays as the backstop for the rest.
+  if (lastJob || !(await accessRepo.personMaySignInToOrg(tx, existing.personId, existing.orgId))) {
     endedSessions = await sessionsRepo.endAllForPerson(tx, existing.personId, 'revoked');
   } else if (!(await accessRepo.personMaySignInAtStore(tx, existing.personId, existing.storeId))) {
     endedAtStore = existing.storeId;
     endedSessions = await sessionsRepo.endAllForPerson(tx, existing.personId, 'revoked', existing.storeId);
   }
+  revoked.sessions = endedSessions;
   if (endedSessions > 0) {
     // Built outside the call: the T-402 S1b static guard reads any `storeId:` inside an append call as the row's store.
     const after = { reason: 'employment_ended', employmentId: existing.id, storeId: endedAtStore, ended: endedSessions };
@@ -433,7 +461,52 @@ export async function endEmployment(
     });
   }
 
+  // T-609: one row saying what was switched off (counts only; no ids, no PIN material). Built outside the call: the T-402 S1b
+  // static guard reads any `storeId:` inside an append call as the row's store.
+  const accessAfter = { personId: existing.personId, reach: lastJob ? 'everywhere' : 'this_store', ...revoked };
+  if (Object.values(revoked).some((n) => n > 0)) {
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'employment.access_revoked',
+      storeId: existing.storeId,
+      entityId: existing.id,
+      before: null,
+      after: accessAfter,
+      source: 'web',
+    });
+  }
+
   return closed;
+}
+
+const ACCESS_REVOKED_REASON = 'Employment ended.';
+
+/**
+ * T-609. Ending someone's last job also revokes their role, so two refusals apply first (both plain sentences, nothing
+ * written): (1) rank, the DEF-234 rule - you may not strip a role senior to your own; (2) the lockout guard - the
+ * organisation keeps an administrator who can sign in (T-238/T-237's `hasOtherActiveAdminWhoCanSignIn`, under the same org lock).
+ */
+async function refuseIfEndWouldStripAuthority(tx: Tx, actor: Actor, personId: string, orgId: string): Promise<void> {
+  // Lock first, then read: the role read and the last-admin read below are one decision (T-237/T-238 race), for every role.
+  await accessRepo.lockOrgAccess(tx, orgId);
+  const target = (await accessRepo.activeRoleForPerson(tx, personId, orgId))?.role;
+  if (!target || target === 'staff') return;
+  const mine = (await accessRepo.activeRoleForPerson(tx, actor.personId, orgId))?.role;
+  const may =
+    target === 'super_admin' ? await holdsSuperAdminAuthority(tx, actor, mine) : target === 'admin' ? isAdministrative(mine) : isStoreManagerOrAbove(mine);
+  if (!may) {
+    throw new EmploymentError(
+      `endEmployment: refusing - person ${personId} holds '${target}', which outranks '${mine ?? 'no role'}'`,
+      `This person is ${target === 'manager' ? 'a manager' : 'an administrator'}, and ending this job also removes that role, so it needs somebody at least as senior as them.`,
+    );
+  }
+  if (!isAdministrative(target)) return;
+  if (!(await accessRepo.hasOtherActiveAdminWhoCanSignIn(tx, orgId, personId))) {
+    throw new EmploymentError(
+      `endEmployment: refusing - person ${personId} is the organisation's last administrator who can sign in`,
+      'This is the only administrator who can sign in. Appoint another administrator with a PIN first, then end this job.',
+    );
+  }
 }
 
 /** Replace the set of positions an employment holds, naming exactly one primary. */

@@ -14,7 +14,7 @@
  * Every function takes a `Tx`, never the base connection (same convention as
  * `repo/journal.ts`) — so a caller cannot write outside a transaction by accident.
  */
-import { and, asc, eq, exists, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, inArray, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
 import { personGrants, personRoles, personStoreScope } from '../../schema/access';
 import { positions } from '../../schema/employment';
 import { positionCapabilityDefaults } from '../../schema/position-capability-defaults';
@@ -387,31 +387,6 @@ export async function grantStoreScope(
     .insert(personStoreScope)
     .values({ personId: input.personId, storeId: input.storeId, grantedBy: input.grantedBy, source: input.source })
     .onConflictDoNothing({ target: [personStoreScope.personId, personStoreScope.storeId] });
-}
-
-/**
- * T-336 SCOPE LIFECYCLE fix — the other half of `grantStoreScope`. Deletes exactly one
- * `person_store_scope` row, by id, never by (person, store): the caller (`endEmployment`) has
- * already decided this row is safe to remove (`source = 'employment'` and no other open
- * employment at that store) and names it, the same posture as `revokeDefaultById`.
- */
-export async function deleteStoreScopeById(tx: Tx, id: string): Promise<void> {
-  await tx.delete(personStoreScope).where(eq(personStoreScope.id, id));
-}
-
-/** The active scope row for (person, store), if any — what `endEmployment` reads before
- *  deciding whether it may delete it. */
-export async function findStoreScope(
-  tx: Tx,
-  personId: string,
-  storeId: string,
-): Promise<{ id: string; source: string } | undefined> {
-  const [row] = await tx
-    .select({ id: personStoreScope.id, source: personStoreScope.source })
-    .from(personStoreScope)
-    .where(and(eq(personStoreScope.personId, personId), eq(personStoreScope.storeId, storeId)))
-    .limit(1);
-  return row;
 }
 
 /** Removes one store. Ordinary delete — CAPABILITY-MATRIX.md frames store scope as "rows,
@@ -1026,6 +1001,44 @@ export async function revokeGrantById(tx: Tx, grantId: string, reason: string): 
   if (updated.length === 0) {
     throw recordGone(`revokeGrantById: grant ${grantId} does not exist or is already revoked`, 'grant');
   }
+}
+
+/**
+ * T-609. Revokes every ACTIVE grant of one person (`reason` required, the table refuses a blank one), optionally only the
+ * ones honoured at `storeId`. Returns how many it revoked so the caller can report it. Revoke, never
+ * delete: "who could do this in March" must stay answerable.
+ */
+export async function revokeActiveGrantsForPerson(
+  tx: Tx,
+  personId: string,
+  reason: string,
+  storeId?: string,
+): Promise<number> {
+  const filters = [eq(personGrants.personId, personId), isNull(personGrants.revokedAt)];
+  if (storeId) filters.push(eq(personGrants.storeId, storeId));
+  const rows = await tx
+    .update(personGrants)
+    .set({ revokedAt: sql`now()`, revokeReason: reason })
+    .where(and(...filters))
+    .returning({ id: personGrants.id });
+  return rows.length;
+}
+
+/**
+ * T-609. Deletes a person's store-scope rows: every store, or just `storeId`. `keepSources` spares rows whose source is not
+ * a free choice of this employment (the admin/manager `fan_out` materialisation belongs to the role, which survives while
+ * another job remains). Returns the number deleted.
+ */
+export async function deleteStoreScopesForPerson(
+  tx: Tx,
+  personId: string,
+  opts: { storeId?: string; keepSources?: readonly ('employment' | 'manual' | 'fan_out')[] } = {},
+): Promise<number> {
+  const filters = [eq(personStoreScope.personId, personId)];
+  if (opts.storeId) filters.push(eq(personStoreScope.storeId, opts.storeId));
+  if (opts.keepSources && opts.keepSources.length > 0) filters.push(notInArray(personStoreScope.source, [...opts.keepSources]));
+  const rows = await tx.delete(personStoreScope).where(and(...filters)).returning({ id: personStoreScope.id });
+  return rows.length;
 }
 
 /**

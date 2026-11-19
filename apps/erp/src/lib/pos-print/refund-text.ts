@@ -1,4 +1,5 @@
 import { center, columnsFor, justify, printAmount, rule, wrap } from './layout';
+import { TEST_LINE } from './receipt-text';
 import type { PrintLayout, RefundSlipView } from './types';
 
 /**
@@ -27,6 +28,7 @@ export function formatRefundSlip(view: RefundSlipView, layout: PrintLayout): str
   for (const address of view.header.addressLines) pushCentered(out, address, cols);
   if (view.header.tin !== null) pushCentered(out, `TIN: ${view.header.tin} ${view.header.vatRegistered ? 'VAT' : 'Non-VAT'}`, cols);
   out.push('');
+  if (view.header.test) pushCentered(out, TEST_LINE, cols);
   if (view.reprint) pushCentered(out, 'REPRINT', cols);
   pushCentered(out, 'REFUND', cols);
   out.push(...justify('REFUND NO:', view.refundNo, cols));
