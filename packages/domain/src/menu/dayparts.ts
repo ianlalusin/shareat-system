@@ -5,13 +5,14 @@
  * `manage_store_settings` AT THE STORE OF THE DAYPART (R8), writes its `audit_log` row in the same transaction (R12), and refuses in a
  * sentence. The database (migration 0233) is the authority on the hard rules (retire while a live offer uses it, overlap, unique active
  * name); the checks here only run FIRST and word the refusal, and a 23514 or 23505 that still gets through is worded too (the backstop).
+ * T-610: create and edit also refuse a window that overlaps another ACTIVE hour of the same store (`requireNoOverlap`, under a per-store lock); no database trigger backs it.
  * The pure window logic is `./daypart`.
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { daypartsRepo, menuRepo, storesRepo, type Tx } from '@shareat/db';
 import type { MenuChannel } from '@shareat/db/schema';
 import { gone, refuse } from '../shared/refusal';
-import { validateDaypart, type DaypartInvalidReason } from './daypart';
+import { daypartsOverlap, validateDaypart, type DaypartInvalidReason } from './daypart';
 import { audit, inTxRetry, pgCode, requireName } from './shared';
 
 const CAPABILITY = 'manage_store_settings' as const;
@@ -46,6 +47,38 @@ function requireWindow(w: DaypartInput, label: string): { days: number[]; start:
 
 const hhmm = (t: string): string => t.slice(0, 5);
 const snap = (d: daypartsRepo.MenuDaypartRow) => ({ name: d.name, days: [...d.days], start: hhmm(d.startTime), end: hhmm(d.endTime), status: d.status });
+
+const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+const MON_FIRST = [1, 2, 3, 4, 5, 6, 0];
+
+/** "Mon-Sun", "Mon-Fri" (a run of two or more days, Monday first) or "Sat, Sun" - how a refusal names a window's days. */
+function daysLabel(days: readonly number[]): string {
+  const have = MON_FIRST.filter((d) => days.includes(d));
+  const first = have[0];
+  const last = have[have.length - 1];
+  const at = MON_FIRST.indexOf(first ?? 0);
+  const run = first !== undefined && last !== undefined && have.length >= 2 && have.every((d, i) => MON_FIRST[at + i] === d);
+  return run ? `${DAY_SHORT[first]}–${DAY_SHORT[last]}` : have.map((d) => DAY_SHORT[d]).join(', ');
+}
+const windowLabel = (name: string, w: { days: readonly number[]; start: string; end: string }) => `${name} (${daysLabel(w.days)} ${w.start}–${w.end})`;
+
+/**
+ * T-610 (Ian, 19 Nov): a menu hour may not overlap another ACTIVE hour of the same store. Runs under the store's hours lock, so a second save waits and then sees
+ * this one. Back-to-back windows are fine (`daypartsOverlap` is half-open). `selfId` is the hour being edited (null on create).
+ */
+async function requireNoOverlap(trx: Tx, orgId: string, storeId: string, selfId: string | null, name: string, w: { days: number[]; start: string; end: string }, label: string): Promise<void> {
+  await daypartsRepo.lockStoreHours(trx, storeId);
+  const mine = { id: selfId ?? '', days: w.days, start: w.start, end: w.end };
+  const clash = (await daypartsRepo.listDaypartsOfStore(trx, orgId, storeId)).find(
+    (o) => o.status === 'active' && o.id !== selfId && daypartsOverlap(mine, { id: o.id, days: o.days, start: hhmm(o.startTime), end: hhmm(o.endTime) }),
+  );
+  if (!clash) return;
+  const theirs = windowLabel(clash.name, { days: clash.days, start: hhmm(clash.startTime), end: hhmm(clash.endTime) });
+  throw refuse(
+    `${label}: ${name} overlaps ${clash.name} at this store.`,
+    `${windowLabel(name, w)} overlaps ${theirs}. Change one so they meet or leave a gap.`,
+  );
+}
 
 const nameTaken = (name: string) =>
   refuse('daypart name already in use at this store', `This store already has a daypart called ${name}. Names are compared ignoring capital letters.`);
@@ -102,6 +135,7 @@ export async function createDaypart(actor: Actor, input: { storeId: string; name
     const name = requireName(input.name, 'createDaypart', 'A daypart');
     const w = requireWindow(input, 'createDaypart');
     if (!(await storesRepo.getById(trx, actor.orgId, input.storeId))) throw gone(`createDaypart: store ${input.storeId} does not exist.`, 'store');
+    await requireNoOverlap(trx, actor.orgId, input.storeId, null, name, w, 'createDaypart');
     let row: daypartsRepo.MenuDaypartRow;
     try {
       row = await daypartsRepo.insertDaypart(trx, { orgId: actor.orgId, storeId: input.storeId, name, days: w.days, startTime: w.start, endTime: w.end, createdBy: actor.personId });
@@ -130,6 +164,7 @@ export async function updateDaypart(
     const windowChanged =
       w.days.join() !== [...before.days].sort((a, b) => a - b).join() || w.start !== hhmm(before.startTime) || w.end !== hhmm(before.endTime);
     if (name === before.name && !windowChanged) return { id: before.id, wrote: false };
+    await requireNoOverlap(trx, actor.orgId, before.storeId, before.id, name, w, 'updateDaypart');
     if (windowChanged) {
       const c = await daypartsRepo.windowConflict(trx, before.id, { days: w.days, startTime: w.start, endTime: w.end });
       if (c) throw conflictSentence(c, 'updateDaypart');

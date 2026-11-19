@@ -84,7 +84,12 @@ describe('Lunch and Dinner side by side', () => {
     await price(w.c, dinnerOnly, w.dinner, '258.00');
     // a window on a weekday two days ahead: closed now and more than a day away, so the line names the weekday
     const aheadDow = (manilaDow + 2) % 7;
-    const brunch = (await asOrg(w.c.orgId, (tx) => createDaypart(w.c.admin, { storeId: w.c.storeA, name: 'Brunch', days: [aheadDow], start: '10:00', end: '12:00' }, tx))).id;
+    // raw SQL: it overlaps Lunch/Dinner (which fill the day), and T-610 makes the writers refuse that; the screen must still draw such a row already in the data
+    const brunch = (
+      await sql<{ id: string }[]>`
+        insert into menu_dayparts (org_id, store_id, name, days, start_time, end_time, created_by)
+        values (${w.c.orgId}, ${w.c.storeA}, 'Brunch', ${[aheadDow]}, '10:00', '12:00', ${w.c.admin.personId}) returning id`
+    )[0]!.id;
     const brunchOnly = await pkg(w.c, 'Brunch Special');
     await price(w.c, brunchOnly, brunch, '228.00');
 
@@ -292,7 +297,7 @@ describe('T-510 S3 audit fixes', () => {
     const m = await mk(c.managerA, 'Lunch');
     expect(m.flash.ok).toBeTruthy();
     expect(m.flash.ok).not.toMatch(/choose which prices/i);
-    const sa = await mk(c.superAdmin, 'Dinner');
+    const sa = await run(STORES, 'createDaypartAction', c.superAdmin, fd({ storeId: c.storeA, name: 'Dinner', days: ['1'], start: '17:00', end: '22:00' }));
     expect(sa.flash.ok).toMatch(/choose which prices follow them/i);
     for (const name of ['createDaypartAction', 'updateDaypartAction', 'retireDaypartAction']) {
       const out = await run(STORES, name, c.admin, fd({ storeId: 'not-a-uuid', daypartId: 'x', name: 'X', start: '01:00', end: '02:00' }));
