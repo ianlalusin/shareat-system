@@ -1,8 +1,8 @@
 /**
- * T-611 S1 - "Copy from another store": menu hours and store prices (with option prices). docs/tasks/611-copy-settings-between-stores.md.
+ * T-611 - "Copy from another store": menu hours and store prices (S1), kitchen stations and routes (S2), discount presets (S3). docs/tasks/611-copy-settings-between-stores.md.
  *
  * ONE store pair at a time. `previewCopyToStore` reads and writes nothing; `copySettingsToStore` plans again in the caller's transaction, then
- * writes ONLY through the existing writers (`createDaypart` / `updateDaypart` / `setMenuOffer` / `setOptionOffer`), so their gates, guards
+ * writes ONLY through the existing writers (`createDaypart` / `updateDaypart` / `setMenuOffer` / `setOptionOffer` / `createKitchenStation` / `setKitchenRoute` / `upsertPosDiscountPreset`), so their gates, guards
  * (T-610 overlap, 0233 slot rules, pairing authority), effective dating and per-write audit rows stay in force. Never raw SQL.
  * The plan is one function (`planCopy`), so the preview counts and the apply cannot disagree.
  *
@@ -11,14 +11,16 @@
  * The caller (the ERP action) verifies the administrator PIN and gives each target its own transaction; a refusal here rolls that target back.
  */
 import { authorize, can, type Actor, type Capability } from '@shareat/auth';
-import { accessRepo, daypartsRepo, menuRepo, storesRepo, type Tx } from '@shareat/db';
+import { accessRepo, daypartsRepo, kitchenRepo, menuRepo, posV2Repo, storesRepo, type Tx } from '@shareat/db';
 import type { MenuChannel } from '@shareat/db/schema';
-import { gone, refuse } from '../shared/refusal';
-import { createDaypart, updateDaypart } from './dayparts';
-import { setMenuOffer, setOptionOffer } from './pricing';
-import { audit } from './shared';
+import { gone, refuse } from './shared/refusal';
+import { createKitchenStation, setKitchenRoute } from './kitchen';
+import { upsertPosDiscountPreset } from './pos/store-setup';
+import { createDaypart, updateDaypart } from './menu/dayparts';
+import { setMenuOffer, setOptionOffer } from './menu/pricing';
+import { audit } from './menu/shared';
 
-export type CopyKind = 'hours' | 'prices';
+export type CopyKind = 'hours' | 'prices' | 'kitchen' | 'presets';
 export interface CopyInput {
   kind: CopyKind;
   sourceStoreId: string;
@@ -55,9 +57,17 @@ type Op =
   | { op: 'daypart_create'; name: string; days: number[]; start: string; end: string }
   | { op: 'daypart_update'; id: string; days: number[]; start: string; end: string }
   | { op: 'offer'; variantId: string; channel: MenuChannel; daypartId: string | null; row: menuRepo.OfferPriceFields }
-  | { op: 'option'; optionValueId: string; channel: MenuChannel; priceDelta: string };
+  | { op: 'option'; optionValueId: string; channel: MenuChannel; priceDelta: string }
+  | { op: 'station_create'; name: string; slaMinutes: number; printOnOutage: boolean; sortOrder: number }
+  | { op: 'route'; menuItemId: string; stationName: string }
+  | { op: 'preset'; name: string; valueType: 'percent' | 'fixed'; value: string };
 
-const CAPABILITY: Record<CopyKind, Capability> = { hours: 'manage_store_settings', prices: 'set_menu_price' };
+const CAPABILITY: Record<CopyKind, Capability> = {
+  hours: 'manage_store_settings',
+  prices: 'set_menu_price',
+  kitchen: 'manage_store_settings',
+  presets: 'manage_store_settings',
+};
 const hhmm = (t: string): string => t.slice(0, 5);
 const key = (name: string): string => name.trim().toLowerCase();
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -196,6 +206,69 @@ async function planPrices(trx: Tx, actor: Actor, source: string, target: string,
   return { ops, lines };
 }
 
+/**
+ * Stations by name (a missing one is created with the source's minutes, screen order and print-on-outage; one that exists is left as it is), then
+ * routes item -> station by the item and the station's NAME. Retired items and stations are not part of the live setup and are not copied.
+ */
+async function planKitchen(trx: Tx, orgId: string, source: string, target: string, replace: boolean): Promise<{ ops: Op[]; lines: CopyLine[] }> {
+  const sStations = await kitchenRepo.listStations(trx, orgId, source);
+  const tStations = await kitchenRepo.listStations(trx, orgId, target);
+  const tByKey = new Map(tStations.map((s) => [key(s.name), s]));
+  const ops: Op[] = [];
+  const lines: CopyLine[] = [];
+  for (const s of sStations) {
+    if (tByKey.has(key(s.name))) lines.push({ status: 'same', what: `Station ${s.name}` });
+    else {
+      ops.push({ op: 'station_create', name: s.name, slaMinutes: s.slaMinutes, printOnOutage: s.printOnOutage, sortOrder: s.sortOrder });
+      lines.push({ status: 'add', what: `Station ${s.name}` });
+    }
+  }
+  const sName = new Map(sStations.map((s) => [s.id, s.name]));
+  const tName = new Map(tStations.map((s) => [s.id, s.name]));
+  const items = new Map((await menuRepo.catalogOfOrg(trx, orgId)).items.map((i) => [i.id, i]));
+  const theirs = new Map((await kitchenRepo.listRoutes(trx, orgId, target)).map((r) => [r.menuItemId, r.stationId]));
+  for (const r of await kitchenRepo.listRoutes(trx, orgId, source)) {
+    const item = items.get(r.menuItemId);
+    const station = sName.get(r.stationId);
+    if (!item || item.status !== 'active' || !station) continue;
+    const what = `${item.name} cooks at ${station}`;
+    const haveId = theirs.get(r.menuItemId);
+    const have = haveId ? tName.get(haveId) : undefined;
+    if (!have) {
+      ops.push({ op: 'route', menuItemId: r.menuItemId, stationName: station });
+      lines.push({ status: 'add', what });
+    } else if (key(have) === key(station)) lines.push({ status: 'same', what });
+    else {
+      if (replace) ops.push({ op: 'route', menuItemId: r.menuItemId, stationName: station });
+      lines.push({ status: 'different', what, note: `The store has it at ${have}.` });
+    }
+  }
+  return { ops, lines };
+}
+
+const presetText = (type: string, value: string): string => (type === 'percent' ? `${value}%` : `${value} pesos`);
+
+/** Discount presets by name. The senior and PWD discounts are statutory rules held for the whole organisation, not presets, so they are never here. */
+async function planPresets(trx: Tx, orgId: string, source: string, target: string, replace: boolean): Promise<{ ops: Op[]; lines: CopyLine[] }> {
+  const theirs = new Map((await posV2Repo.listActivePresets(trx, orgId, target)).map((p) => [key(p.name), p]));
+  const ops: Op[] = [];
+  const lines: CopyLine[] = [];
+  for (const s of await posV2Repo.listActivePresets(trx, orgId, source)) {
+    const what = `${s.name}: ${presetText(s.valueType, s.value)}`;
+    const t = theirs.get(key(s.name));
+    const op: Op = { op: 'preset', name: s.name, valueType: s.valueType, value: s.value };
+    if (!t) {
+      ops.push(op);
+      lines.push({ status: 'add', what });
+    } else if (t.valueType === s.valueType && t.value === s.value) lines.push({ status: 'same', what });
+    else {
+      if (replace) ops.push(op);
+      lines.push({ status: 'different', what, note: `The store has ${presetText(t.valueType, t.value)}.` });
+    }
+  }
+  return { ops, lines };
+}
+
 function countsOf(lines: CopyLine[], replace: boolean): CopyCounts {
   const n = (s: CopyLineStatus) => lines.filter((l) => l.status === s).length;
   const different = n('different');
@@ -210,10 +283,15 @@ function countsOf(lines: CopyLine[], replace: boolean): CopyCounts {
 
 async function planCopy(trx: Tx, actor: Actor, input: CopyInput) {
   const targetName = await requireCopyRight(trx, actor, input);
+  const { sourceStoreId: from, targetStoreId: to, replace } = input;
   const { ops, lines } =
     input.kind === 'hours'
-      ? await planHours(trx, actor.orgId, input.sourceStoreId, input.targetStoreId, input.replace)
-      : await planPrices(trx, actor, input.sourceStoreId, input.targetStoreId, targetName, input.replace);
+      ? await planHours(trx, actor.orgId, from, to, replace)
+      : input.kind === 'kitchen'
+        ? await planKitchen(trx, actor.orgId, from, to, replace)
+        : input.kind === 'presets'
+          ? await planPresets(trx, actor.orgId, from, to, replace)
+          : await planPrices(trx, actor, from, to, targetName, replace);
   return { targetName, ops, lines, counts: countsOf(lines, input.replace) };
 }
 
@@ -230,8 +308,20 @@ export async function previewCopyToStore(actor: Actor, input: CopyInput, tx: Tx)
 export async function copySettingsToStore(actor: Actor, input: CopyInput & { approverPersonId: string }, tx: Tx): Promise<CopyPreview> {
   const p = await planCopy(tx, actor, input);
   const to = input.targetStoreId;
+  // Stations first: a route may point at a station this same copy creates.
   for (const o of p.ops) {
-    if (o.op === 'daypart_create') await createDaypart(actor, { storeId: to, name: o.name, days: o.days, start: o.start, end: o.end }, tx);
+    if (o.op === 'station_create') await createKitchenStation(tx, actor, { storeId: to, name: o.name, slaMinutes: o.slaMinutes, printOnOutage: o.printOnOutage, sortOrder: o.sortOrder });
+  }
+  const stationIds = new Map<string, string>();
+  if (p.ops.some((o) => o.op === 'route')) for (const s of await kitchenRepo.listStations(tx, actor.orgId, to)) stationIds.set(key(s.name), s.id);
+  for (const o of p.ops) {
+    if (o.op === 'station_create') continue;
+    if (o.op === 'route') {
+      const stationId = stationIds.get(key(o.stationName));
+      if (!stationId) throw refuse(`copyFromStore: station ${o.stationName} missing after create`, `The kitchen station ${o.stationName} could not be found at ${p.targetName}.`);
+      await setKitchenRoute(tx, actor, { storeId: to, menuItemId: o.menuItemId, stationId });
+    } else if (o.op === 'preset') await upsertPosDiscountPreset(tx, actor, { storeId: to, name: o.name, valueType: o.valueType, value: o.value });
+    else if (o.op === 'daypart_create') await createDaypart(actor, { storeId: to, name: o.name, days: o.days, start: o.start, end: o.end }, tx);
     else if (o.op === 'daypart_update') await updateDaypart(actor, { id: o.id, days: o.days, start: o.start, end: o.end }, tx);
     else if (o.op === 'option') await setOptionOffer(actor, { storeId: to, optionValueId: o.optionValueId, channel: o.channel, priceDelta: o.priceDelta }, tx);
     else {

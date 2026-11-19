@@ -5,6 +5,7 @@ Business rules that compose repository calls and declare transaction ownership p
 
 ## Interface
 - `index.ts`: the package barrel (`@shareat/domain`). It re-exports every module's public API, plus selected named exports such as `recordDualRunDisposition`, `packageCapExcess`, `normalizePosV1Alias` and `resolvePosV1Methods`.
+- `store-copy.ts`: `previewCopyToStore`, `copySettingsToStore` and the `Copy*` types (T-611): copy menu hours, store prices, kitchen stations and routes, or discount presets from one store to others through the existing writers; additive unless `replace`. Outside `menu/` because it reaches `pos/` (t401 I16 forbids menu files naming the v1 feed).
 - `item-code.ts`: a compatibility re-export of `./items/code`. The manifest maps `@shareat/domain/item-code` directly to `./src/items/code.ts`; the root Vitest alias routes it through this wrapper.
 - Other `package.json` subpath exports: `./money-lines`, `./money-input`, `./files/limits`, `./field-rules`, `./refusal-leaf`, `./attendance/fingerprint`, `./service-charge`. These are public subpaths, not a blanket browser-safety promise: `./service-charge` reaches server-side authorization and database code. Use only an entry whose transitive dependencies are appropriate for the caller; never import the main barrel into a client bundle.
 - The main barrel and the manifest subpaths expose different boundaries. Add a barrel export for APIs intended through `@shareat/domain`; a manifest subpath may expose a leaf independently.

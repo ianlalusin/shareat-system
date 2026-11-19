@@ -10,6 +10,7 @@ import { accessRepo, pinAttemptsRepo, posTerminalLinksRepo } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { listPosTerminals } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { copyChoicesFor } from '../../copy-from-store/lib';
 
 export type PosTabletLinkView = posTerminalLinksRepo.PosTabletLinkView;
 
@@ -46,6 +47,11 @@ export async function loadPosTablets(actor: Actor, storeId: string): Promise<Pos
 /** T-546: the store's tills and the live tablets still free to choose. `listPosTerminals` authorizes at the store itself (`pair_pos_tablet`). */
 export async function loadTills(actor: Actor, storeId: string) {
   return withOrgPrincipal(actor.orgId, (tx) => listPosTerminals(tx, actor, { storeId }));
+}
+
+/** T-611 S3: the stores the discounts Copy window offers, or null when the button is not drawn (not an administrator, or no other active store). */
+export async function loadCopyStores(actor: Actor, storeId: string) {
+  return withOrgPrincipal(actor.orgId, (tx) => copyChoicesFor(tx, actor, storeId));
 }
 
 /** The number the Add till box starts at: the first number from 1 that no till of the store uses (1 to 99; 1 when the store is full, the domain then refuses). */
