@@ -430,10 +430,11 @@ export async function closeDay(tx: Tx, actor: Actor, input: CloseDayInput, deps?
   const conversions = await openConversions(tx, orgId, storeId, till.terminalId);
   const refunds = await openRefunds(tx, orgId, storeId, till.terminalId);
   const reading = await figuresOf(tx, orgId, storeId, till.terminalId, w.open, { start: w.start, end: at }, w.hour, deps, conversions, refunds);
-  if (reading.receiptCount === 0) throw refuse('pos: nothing to close', NO_SALES_TO_CLOSE);
-  // R11 (row 450): from the oldest unclosed receipt's business day to today's, no more than 2 business dates.
+  // T-613 D3 (DEF-936): a Z is also for the day's money movements: refunds and Converts count even when nothing was sold since the last Z.
+  if (reading.receiptCount === 0 && reading.refunds.count === 0 && reading.convert.count === 0) throw refuse('pos: nothing to close', NO_SALES_TO_CLOSE);
+  // R11 (row 450): from the oldest unclosed receipt's business day to today's, no more than 2 business dates (a Z with no receipts has none to span).
   const today = startHourDate(at, w.hour);
-  if (daysBetween(startHourDate(w.open[0]!.issuedAtDevice, w.hour), today) + 1 > 2) throw refuse('pos: the close would span more than 2 business days', MORE_THAN_TWO_DAYS);
+  if (w.open.length > 0 && daysBetween(startHourDate(w.open[0]!.issuedAtDevice, w.hour), today) + 1 > 2) throw refuse('pos: the close would span more than 2 business days', MORE_THAN_TWO_DAYS);
 
   // Ruling 1: a Z is dated with the business day it closes, and after this terminal's last Z.
   const afterLast = w.lastZ ? addDays(parseBusinessDate(w.lastZ.businessDate), 1) : null;
@@ -550,6 +551,8 @@ export async function deriveSalesDayFromZ(
   const { storeId, close, reading } = input;
   const store = await posV2Repo.getPosStore(tx, orgId, storeId);
   if (!store || store.mode !== 'live') return null;
+  // T-613 D3: a Z of nothing sold and nothing refunded (Converts only) has no sales to book; the Converts post beside it (`postConversionsForZ`).
+  if (reading.receiptCount === 0 && reading.refunds.count === 0) return null;
   const date = dateText(close.businessDate);
   const existing = await salesDaysRepo.findByBusinessDate(tx, orgId, storeId, close.businessDate);
   if (existing) throw refuse(`pos: a ${existing.source} sales day already holds ${date}`, `A sales day for ${date} already exists (${existing.source}). Ask an accountant.`);

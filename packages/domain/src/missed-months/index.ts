@@ -120,6 +120,8 @@ export async function bookMissedMonth(
     const scheduleInput = scheduleInputFor(asset);
     charge = scheduleInput ? periodDue(scheduleInput, belongsToPeriod) : null;
   } else {
+    // DEF-939 (T-613 F): the item row lock comes BEFORE the status read, as the asset branch does with getByIdForUpdate, so a write-off that commits while we wait is seen and refused, never booked past cost.
+    await prepaidRepo.lockItemRow(tx, actor.orgId, input.subjectId);
     const item = await prepaidRepo.getById(tx, actor.orgId, input.subjectId);
     if (!item) {
       throw new Error(`bookMissedMonth: prepaid item ${input.subjectId} does not exist in this organisation`);
@@ -138,12 +140,10 @@ export async function bookMissedMonth(
     throw new Error(`bookMissedMonth: ${name} owes nothing for ${belongsToPeriod}`);
   }
 
-  // Step 4b (T-381 / DEF-606) — serialise bookers per subject: the second waits here, then re-reads below
+  // Step 4b (T-381 / DEF-606) — serialise bookers per subject (a prepaid item was locked at its load above): the second waits, then re-reads below
   // and answers "already booked" in words; the 0174 trigger stays as the backstop.
   if (input.schedule === 'depreciation') {
     await fixedAssetsRepo.lockAssetRow(tx, actor.orgId, input.subjectId);
-  } else {
-    await prepaidRepo.lockItemRow(tx, actor.orgId, input.subjectId);
   }
 
   // Step 5 — a link row already exists for (subject, P)?
