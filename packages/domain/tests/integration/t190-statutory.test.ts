@@ -39,6 +39,7 @@ if (!isTestDatabaseUrl(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, RefusalError, type Tx } from '@shareat/db';
 import { agree } from './_fixtures/t519-agreements';
+import { fundAccount } from './_fixtures/fund-account';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   addMinimumWage,
@@ -119,6 +120,8 @@ async function fixture(
     values (${orgId}, ${workerId}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${adminId}) returning id`;
   const [office] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
+  // T-597: payroll follows the draw rule - an office safe that cannot cover the run refuses - so the paying account holds cash.
+  await fundAccount(sql, { orgId, storeId, code: '1130', amount: '10000000.00' });
   return {
     orgId, storeId, configId: config!.id, adminId, managerId, workerId, employmentId: emp!.id, officeAccountId: office!.id,
     admin: actor(orgId, adminId), manager: actor(orgId, managerId), worker: actor(orgId, workerId),
@@ -498,6 +501,8 @@ describe('T-190 - one person, voids, locks (cases 10, 11, 21)', () => {
       values (${a.orgId}, ${a.workerId}, ${storeB}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${a.adminId}) returning id`;
     const [officeB] = await sql<{ id: string }[]>`
       select id from money_accounts where store_id = ${storeB} and instrument = 'cash' and custodian = 'office' and is_foundation`;
+    // T-597: payroll follows the draw rule - an office safe that cannot cover the run refuses - so the paying account holds cash.
+    await fundAccount(sql, { orgId: a.orgId, storeId: storeB, code: '1130', amount: '10000000.00' });
     await insertMinimumWage(a, storeB);
     const b = { ...a, storeId: storeB, configId: cfgB!.id, employmentId: empB!.id, officeAccountId: officeB!.id };
     await asOrg(a.orgId, (tx) => setPayRate(tx, a.admin, { employmentId: b.employmentId, storeId: storeB, basis: 'daily', amount: '800.00', effectiveFrom: '2026-01-01' }));

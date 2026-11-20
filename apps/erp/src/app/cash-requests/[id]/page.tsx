@@ -224,6 +224,8 @@ export default async function CashRequestPage({
           <FormModal trigger="Close this request" title="Close this request" size="lg">
             <CheckedForm rules={CASH_REQUEST_SETTLE_RULES} action={settleAction} className="space-y-4">
               <input type="hidden" name="requestId" value={req.id} />
+              {/* DEF-885: minted per render, so a double click is a replay of ONE settlement and a second identical return is not. */}
+              <input type="hidden" name="settleId" value={crypto.randomUUID()} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Returned" hint="Cash physically handed back. Leave blank if none." rule={CASH_REQUEST_SETTLE_RULES.returnedAmount}>
                   <input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.returnedAmount)} className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />

@@ -11,7 +11,7 @@
  * "Badge code" (R3's warning wording) is `employments.staff_code`: NOT NULL with a CHECK on its shape, so a person at the store can never lack one. The warning therefore
  * counts the missing PIN, the only half that can be missing.
  */
-import { authorize, can, isStoreManagerOrAbove, type Actor } from '@shareat/auth';
+import { authorize, can, type Actor } from '@shareat/auth';
 import { accessRepo, businessRulesRepo, kitchenRepo, manilaToday, posPreflightRepo, posV1Repo, posV2Repo, storesRepo, type Tx } from '@shareat/db';
 import { RULE_REGISTRY, type BusinessRuleKey } from '../business-rules/registry';
 import { gone } from '../shared/refusal';
@@ -45,7 +45,10 @@ export interface PreflightFacts {
   /** Labels of the POS business rules that have no saved row for the organisation. */
   readonly rulesNotSeeded: readonly string[];
   readonly recordSalePeople: number;
-  readonly managersWithPin: number;
+  /** An active `pos_terminal_links` row exists for the store (the tablet can ask for server approvals). */
+  readonly terminalLinked: boolean;
+  /** Someone with a live PIN may approve a correction, and that someone is not the only seller (`hasSeparateApprover`). */
+  readonly separateApprover: boolean;
   readonly keyFileConfigured: boolean;
   readonly itemsWithoutStation: readonly string[];
   readonly packagesWithoutRefills: readonly string[];
@@ -59,6 +62,11 @@ const POS_RULE_KEYS: readonly BusinessRuleKey[] = ['tax.vat_percent', 'pos.senio
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 /** "A, B, C, D, E" and "and 2 more" past five names. */
 const nameList = (names: readonly string[]): string => (names.length <= 5 ? names.join(', ') : `${names.slice(0, 5).join(', ')} and ${names.length - 5} more`);
+
+/** One approver who is also the only seller cannot approve their own close. Shared with the soak checklist's `approver` check. */
+export function hasSeparateApprover(approvers: ReadonlySet<string>, sellers: readonly string[]): boolean {
+  return approvers.size >= 1 && (approvers.size >= 2 || sellers.some((p) => !approvers.has(p)));
+}
 
 export function evaluatePreflight(f: PreflightFacts): PreflightResult {
   const store = `/admin/stores/${f.storeId}`;
@@ -79,7 +87,8 @@ export function evaluatePreflight(f: PreflightFacts): PreflightResult {
     block('rules_not_seeded', `These business rules have no saved value yet: ${f.rulesNotSeeded.join('; ')}. Save each one so the POS reads a real value, not a built-in default.`, '/settings/business-rules');
   }
   if (f.recordSalePeople === 0) block('no_record_sale_person', 'Nobody at this store is allowed to ring up sales. Add at least one cashier.', '/staff');
-  if (f.managersWithPin === 0) block('no_manager_with_pin', 'No manager or admin who can sign in at this store has a PIN. A manager PIN is needed to approve the end-of-day close.', '/staff');
+  if (!f.terminalLinked) block('no_terminal_link', 'The tablet is not registered for manager approvals, so the end-of-day close will fail.', '/admin/pos-tablets');
+  if (!f.separateApprover) block('no_approver', "Nobody but the cashier can approve the close. Give a manager 'approve a POS refund or correction' and a PIN.", '/admin/users');
   if (bridge && !f.keyFileConfigured) block('no_bridge_key_file', 'The setting POS_FIREBASE_SA_KEY_FILE is not set on the server, so the daily report to the old POS cannot be sent.', null);
 
   if (f.itemsWithoutStation.length > 0) {
@@ -121,13 +130,13 @@ export async function posPreflight(tx: Tx, actor: Actor, input: { storeId: strin
   for (const c of await posV2Repo.listOpenEmploymentsAtStore(tx, orgId, storeId)) {
     if (await accessRepo.personMaySignInAtStore(tx, c.personId, storeId)) signIn.push(c.personId);
   }
-  let recordSalePeople = 0;
-  for (const personId of signIn) if (await can(tx, { personId, orgId }, 'record_sale', { storeId })) recordSalePeople += 1;
   const withPin = await posPreflightRepo.personIdsWithLivePin(tx, orgId, signIn);
-
-  let managersWithPin = 0;
-  for (const h of await posPreflightRepo.listRoleHoldersWithLivePin(tx, orgId)) {
-    if (isStoreManagerOrAbove(h.role) && (await accessRepo.personMaySignInAtStore(tx, h.personId, storeId))) managersWithPin += 1;
+  const approvers = new Set<string>();
+  const sellers: string[] = [];
+  for (const personId of signIn) {
+    const who = { personId, orgId };
+    if (withPin.has(personId) && (await can(tx, who, 'approve_pos_correction', { storeId }))) approvers.add(personId);
+    if (await can(tx, who, 'record_sale', { storeId })) sellers.push(personId);
   }
 
   const offered = await kitchenRepo.offeredItemsWithRoute(tx, orgId, storeId);
@@ -141,8 +150,9 @@ export async function posPreflight(tx: Tx, actor: Actor, input: { storeId: strin
     bridgeDateAllowed: v1BridgeDateAllowed(today),
     tillsWithLivePairing: await posPreflightRepo.countTillsWithLivePairing(tx, orgId, storeId),
     rulesNotSeeded,
-    recordSalePeople,
-    managersWithPin,
+    recordSalePeople: sellers.length,
+    terminalLinked: (await posV2Repo.getActiveTerminalPersonId(tx, orgId, storeId)) !== undefined,
+    separateApprover: hasSeparateApprover(approvers, sellers),
     keyFileConfigured: deps.keyFilePresent(),
     itemsWithoutStation: offered.filter((o) => o.stationId === null).map((o) => o.name),
     packagesWithoutRefills: await posPreflightRepo.listOfferedPackagesWithoutRefills(tx, orgId, storeId),

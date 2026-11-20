@@ -28,7 +28,7 @@ import { requireRequestId, postEntryOnce, UUID_SHAPE } from '../ledger/replay';
 import { withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
 import type { PostEntryLine } from '../ledger/post-entry';
-import { checkDraw } from '../money-accounts/overdraft';
+import { assertActiveAccount, checkDraw } from '../money-accounts/overdraft';
 import { buildPeriodFacts, periodRefusal } from '../business-rules/expenses';
 import { assertPayrollMoneyAccount, payrollMoneyParty, STATUTORY_PAYABLE_ACCOUNT, WITHHOLDING_PAYABLE_ACCOUNT } from './index';
 
@@ -226,6 +226,7 @@ export async function recordStatutoryPayment(
   if (!account) {
     throw refuse(`recordStatutoryPayment: money account ${n.moneyAccountId} does not exist.`, 'That money account does not exist. Choose another.');
   }
+  assertActiveAccount(account, 'recordStatutoryPayment'); // DEF-895
   assertPayrollMoneyAccount(account, 'recordStatutoryPayment');
 
   // The month the payment is dated in, in words, before anything is written (postEntry's own answer is developer text).

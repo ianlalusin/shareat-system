@@ -397,16 +397,44 @@ describe('T-170 — the caps and the no-override guard', () => {
     await receiveOne(f, '10.000', '100.0000', '2026-01-05');
     expect(await onHand(f.itemId, f.locationId)).toBe('10.000');
 
-    const res = await asOrg(f.orgId, (tx) =>
-      recordReturn(tx, {
-        storeId: f.storeId, supplierId: f.supplierId, deliveryId: null,
-        returnedOn: '2026-01-06', reason: 'more than is on the shelf',
-        lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('11.000'), deliveryLineId: null }],
-        actor: f.manager,
-      }),
-    );
-    expect(res.ok).toBe(false);
+    // T-597 DEF-888: a shortfall is THROWN now (it used to be returned, and a multi-line caller committed the earlier lines).
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordReturn(tx, {
+          storeId: f.storeId, supplierId: f.supplierId, deliveryId: null,
+          returnedOn: '2026-01-06', reason: 'more than is on the shelf',
+          lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('11.000'), deliveryLineId: null }],
+          actor: f.manager,
+        }),
+      ),
+    ).rejects.toMatchObject({ message: expect.stringMatching(/^recordReturn: /), userMessage: expect.any(String) });
     expect(await onHand(f.itemId, f.locationId)).toBe('10.000');
+  });
+});
+
+describe('T-597 DEF-888 - a multi-line return that fails on a later line writes nothing', () => {
+  it('line 1 has stock, line 2 has none: the call throws, line 1 on-hand is unchanged, no supplier_returns row', async () => {
+    const f = await fixture();
+    await receiveOne(f, '10.000', '100.0000', '2026-01-05');
+    const [item2] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${f.orgId}, ${testItemCode()}, 'Chicken Breast', 'raw_material', 'kg', ${f.staff.personId}) returning id`;
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordReturn(tx, {
+          storeId: f.storeId, supplierId: f.supplierId, deliveryId: null,
+          returnedOn: '2026-01-06', reason: 'two lines',
+          lines: [
+            { itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('3.000'), deliveryLineId: null },
+            { itemId: item2!.id, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('1.000'), deliveryLineId: null },
+          ],
+          actor: f.manager,
+        }),
+      ),
+    ).rejects.toMatchObject({ message: expect.stringMatching(/^recordReturn: /) });
+    expect(await onHand(f.itemId, f.locationId)).toBe('10.000');
+    const [n] = await sql<{ n: string }[]>`select count(*)::text n from supplier_returns where org_id = ${f.orgId}`;
+    expect(n!.n).toBe('0');
   });
 });
 
@@ -533,6 +561,25 @@ describe('T-170 — the credit is spendable', () => {
         }),
       ),
     ).rejects.toThrow(/does not fit/);
+  });
+
+  it('T-597 DEF-888: a refund into the other store account or a retired account is refused; 1240 is unchanged', async () => {
+    const f = await fixture();
+    await invoicedReturnCredit(f, '100.0000'); // 1000.00 credit
+    const [other] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${f.otherStoreId} and instrument = 'cash' limit 1`;
+    const refund = (moneyAccountId: string) =>
+      asOrg(f.orgId, (tx) =>
+        refundSupplierCredit(tx, { requestId: crypto.randomUUID(), storeId: f.storeId, supplierId: f.supplierId, moneyAccountId, amount: '1000.00', businessDate: '2026-02-02', actor: f.manager }),
+      );
+
+    const cross = await refund(other!.id);
+    expect(cross).toEqual({ ok: false, reason: "That money account belongs to another store. Choose one of this store's accounts for the refund." });
+
+    await sql`update money_accounts set is_active = false where id = ${f.moneyAccountId}`;
+    const retired = await refund(f.moneyAccountId);
+    expect(retired.ok).toBe(false);
+    if (!retired.ok) expect(retired.reason).toMatch(/^".+" is retired and cannot receive the refund\. Choose another account\.$/);
+    expect(await asOrg(f.orgId, (tx) => supplierCreditBalance(tx, f.orgId, f.supplierId))).toBe('1000.00');
   });
 
   it('a cash refund draws 1240 to zero', async () => {
