@@ -27,6 +27,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { lowerCounts } from '../../../tests/helpers/census-write';
 
 const APP_ROOT = resolve(__dirname, '..', 'src', 'app');
 const COMPONENTS_ROOT = resolve(__dirname, '..', 'src', 'components');
@@ -446,6 +447,7 @@ function ratchet(actual: Record<string, number>, base: Record<string, number>): 
 describe('G7: record-bound forms are rendered through <EditableRecord>', () => {
   it('no raw record-bound form beyond the baseline (ends empty)', () => {
     const found = scan(lockFindings, true).filter((f) => !(f.file in EXEMPT));
+    lowerCounts(resolve(__dirname, 'editable-record-baseline.json'), counts(found));
     expect(ratchet(counts(found), baseline('editable-record-baseline.json'))).toEqual([]);
   });
   it('EXEMPT has no stale entry (each exempt file still has a raw form) and every entry has a reason', () => {
@@ -457,6 +459,7 @@ describe('G7: record-bound forms are rendered through <EditableRecord>', () => {
 
 describe('G8: submit labels are Save / Save draft / a COMMANDS verb / a toggle', () => {
   it('no other label beyond the baseline (ends empty)', () => {
+    lowerCounts(resolve(__dirname, 'submit-label-baseline.json'), counts(scan((s, f) => labelFindings(s, f))));
     expect(ratchet(counts(scan((s, f) => labelFindings(s, f))), baseline('submit-label-baseline.json'))).toEqual([]);
   });
   it('COMMANDS: every entry has a reason and still appears as a button label in app/ (no stale verb)', () => {

@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * T-307 / DEF-329 — nothing else in this repo checks that `.github/workflows/ci.yml`'s `verify`
- * job's `env:` block is a startup-valid example of the contract `packages/core/src/env.ts`
+ * T-307 / DEF-329 — nothing else in this repo checks that `.github/workflows/ci.yml`'s `unit` job (formerly `verify`)
+ * `env:` block is a startup-valid example of the contract `packages/core/src/env.ts`
  * enforces. DEF-328 was a one-character mismatch between two of those hand-maintained placeholders
  * that took CI red for a day, invisible to typecheck and to the unit suite (neither loads server
  * env) — this reads the real file and boots the real `env()` against it, so the next such mismatch
@@ -56,14 +56,14 @@ function extractJobEnvBlock(yaml: string, jobKey: string): Record<string, string
   return result;
 }
 
-describe("ci.yml verify-job env: block satisfies @shareat/core/env's startup contract (T-307 / DEF-329)", () => {
+describe("ci.yml unit-job env: block satisfies @shareat/core/env's startup contract (T-307 / DEF-329)", () => {
   let saved: NodeJS.ProcessEnv;
   let ciEnv: Record<string, string>;
 
   beforeEach(() => {
     saved = process.env;
     vi.resetModules();
-    ciEnv = extractJobEnvBlock(workflow, 'verify');
+    ciEnv = extractJobEnvBlock(workflow, 'unit');
   });
 
   afterEach(() => {
@@ -74,6 +74,11 @@ describe("ci.yml verify-job env: block satisfies @shareat/core/env's startup con
     expect(Object.keys(ciEnv).length).toBeGreaterThanOrEqual(10);
     expect(ciEnv.DATABASE_URL).toBeTruthy();
     expect(ciEnv.SESSION_SECRET).toBeTruthy();
+  });
+
+  it('T-604: the unit, integration and build jobs carry the same env block (they were one job)', () => {
+    expect(extractJobEnvBlock(workflow, 'integration')).toEqual(ciEnv);
+    expect(extractJobEnvBlock(workflow, 'build')).toEqual(ciEnv);
   });
 
   it('boots @shareat/core/env() cleanly against the real block — zero contract failures', async () => {
