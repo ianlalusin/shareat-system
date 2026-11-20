@@ -65,8 +65,6 @@ const UNRESOLVED_RAW_SQL: Readonly<Record<string, string>> = {
   'packages/db/src/cutover/purge.ts::applyPurge::dynamic-table': 'the table name is a runtime identifier from the cutover purge plan (`update ${quoteIdent(p.table)} set k = $n`); no static table to resolve',
   'packages/db/src/repo/budgets.ts::consumptionWindow::sql.raw': 'a SQL fragment (a date window) inside a SELECT, not a write',
   'packages/db/src/repo/commissary-kpis.ts::manilaDateOf::sql.raw': 'a SQL fragment (a column cast to a Manila date) inside a SELECT, not a write',
-  'packages/db/src/repo/cutover.ts::purgeComplete::sql.raw': 'a SQL fragment inside the purge-completeness read, not a write',
-  'packages/db/src/repo/payroll.ts::freezeDays::sql.raw': 'a SQL fragment (an IN list) inside an UPDATE of non-numeric columns (frozen_at)',
 };
 
 /** The closed list of reasons a comparison may be exempt (C4 (b)); anything else is a G2 failure. */

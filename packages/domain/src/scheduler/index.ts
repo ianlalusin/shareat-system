@@ -214,6 +214,11 @@ export function lastCompletedPeriod(today = new Date()): string {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
+/** DEF-856: a real calendar month, YYYY-MM -- `2026-13` and `2026-00` are not periods. */
+export function isValidPeriod(period: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
+}
+
 /**
  * The scheduler's one way to enumerate organisations to run a job for. Centralised so
  * `systemTransaction` has exactly one call site to reach through here, not seven independently

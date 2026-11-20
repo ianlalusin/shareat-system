@@ -1813,7 +1813,7 @@ export async function receivingDisputeOverdue(
            coalesce(sum(d.value) filter (where d.direction = 'short'), 0)::text as amount,
            (count(*) filter (where d.direction = 'short'))::int as short_n,
            (count(*) filter (where d.direction = 'over'))::int as over_n,
-           max(${MANILA_TODAY} - d.created_at::date)::int as oldest_age_days,
+           max(${MANILA_TODAY} - (d.created_at at time zone 'Asia/Manila')::date)::int as oldest_age_days,
            (count(*) filter (where d.status = 'deferred'))::int as deferred_n
     from trade_discrepancies d
     join stores s on s.id = d.store_id
@@ -1825,7 +1825,7 @@ export async function receivingDisputeOverdue(
       and d.status <> 'resolved'
       -- T-398 S5e: a franchise credit has its own reconcile findings and never sat in 1340.
       and d.disposition is distinct from 'franchise_credit'
-      and (${MANILA_TODAY} - d.created_at::date) > ${thresholdDays}
+      and (${MANILA_TODAY} - (d.created_at at time zone 'Asia/Manila')::date) > ${thresholdDays}
     group by d.store_id, s.name
   `)) as unknown as {
     store_id: string; store_name: string; n: number; amount: string; short_n: number; over_n: number;
