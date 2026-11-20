@@ -880,6 +880,83 @@ describe('T-172/T-173 — ⭐ the full loop, and the fail-direction asymmetry', 
   });
 });
 
+describe('DEF-897 - no ₱0 transfer line', () => {
+  // The refusal's SENTENCE (what the person reads) is `userMessage`; `message` is the raw developer text.
+  const NO_ZERO = { userMessage: expect.stringMatching(/must be more than ₱0\.00/) };
+
+  it('⛔ a draft line at rate 0 or 0.004 is refused by name, and nothing is written', async () => {
+    for (const rate of ['0', '0.004']) {
+      const f = await fixture();
+      await expect(
+        asOrg(f.orgId, (tx) => saveBranchOrderDraft(tx, f.branchStaff, draftInput(f, [{ itemId: f.pork, quantity: '5', rate }]))),
+      ).rejects.toMatchObject(NO_ZERO);
+      const [n] = await sql<{ c: string }[]>`select count(*)::text c from trade_orders where org_id = ${f.orgId}`;
+      expect(n!.c).toBe('0');
+    }
+  });
+
+  it('⛔ an offering whose manual cost is ₱0.00 and has no branch price counts as unpriced', async () => {
+    const f = await fixture();
+    await sql`update commissary_item_offerings set manual_cost = '0.0000' where item_id = ${f.pork}`;
+    await expect(
+      asOrg(f.orgId, (tx) => saveBranchOrderDraft(tx, f.branchStaff, draftInput(f, [{ itemId: f.pork, quantity: '5' }]))),
+    ).rejects.toThrow(/Pork belly cannot be priced/);
+    expect(await asOrg(f.orgId, (tx) => resolveBranchRate(tx, f.orgId, f.com.id, f.pork))).toBeNull();
+  });
+
+  it('⛔ fulfilLine and proposeLine refuse a ₱0 rate; a zero QUANTITY is still an answer', async () => {
+    const f = await fixture();
+    const orderId = await accepted(f);
+    const [l] = await lines(f, orderId);
+    await expect(
+      asOrg(f.orgId, (tx) => fulfilLine(tx, f.comStaff, { orderId, lineId: l!.id, quantity: '5', rate: '0' })),
+    ).rejects.toMatchObject(NO_ZERO);
+    await expect(
+      asOrg(f.orgId, (tx) => proposeLine(tx, f.comStaff, { orderId, itemId: f.sauce, quantity: '2', rate: '0' })),
+    ).rejects.toMatchObject(NO_ZERO);
+    expect((await lines(f, orderId)).find((x) => x.id === l!.id)!.fulfilledQuantity).toBe('20.000');
+    expect((await lines(f, orderId)).length).toBe(1);
+
+    // Positive: sending none needs no rate — zero is "we could not fill this line".
+    await asOrg(f.orgId, (tx) => fulfilLine(tx, f.comStaff, { orderId, lineId: l!.id, quantity: '0', rate: '0' }));
+    const after = (await lines(f, orderId))[0]!;
+    expect(after.fulfilledQuantity).toBe('0.000');
+    expect(after.lineTotal).toBe('0.00');
+  });
+
+  it('⛔ editing a draft line that already carries ₱0.00 is refused', async () => {
+    const f = await fixture();
+    const { orderId } = await asOrg(f.orgId, (tx) => saveBranchOrderDraft(tx, f.branchStaff, draftInput(f)));
+    const [l] = await lines(f, orderId);
+    await sql`update trade_order_lines set rate = '0' where id = ${l!.id}`;
+    await expect(
+      asOrg(f.orgId, (tx) => updateBranchOrderLine(tx, f.branchStaff, { orderId, lineId: l!.id, quantity: '3' })),
+    ).rejects.toMatchObject(NO_ZERO);
+  });
+
+  it('⛔ markReady is the backstop for a line already saved at ₱0.00', async () => {
+    const f = await fixture();
+    const orderId = await accepted(f);
+    await sql`update trade_order_lines set rate = '0' where order_id = ${orderId}`;
+    await expect(asOrg(f.orgId, (tx) => markReady(tx, f.comStaff, { orderId }))).rejects.toMatchObject({
+      userMessage: expect.stringMatching(/Pork belly is priced at ₱0\.00, so the branch could not take it into stock/),
+    });
+    expect(branchOrderStage(await order(f, orderId))).toBe('accepted');
+  });
+
+  it('positive: a ₱0.01 line dispatches and the branch receives it into stock', async () => {
+    const f = await fixture();
+    await stock(f, f.pork, '100', '300.0000');
+    const orderId = await accepted(f);
+    const [l] = await lines(f, orderId);
+    await asOrg(f.orgId, (tx) => fulfilLine(tx, f.comStaff, { orderId, lineId: l!.id, quantity: '18', rate: '0.01' }));
+    await asOrg(f.orgId, (tx) => markReady(tx, f.comStaff, { orderId }));
+    await asOrg(f.orgId, (tx) => dispatchBranchOrder(tx, f.comMgr, { orderId }));
+    await asOrg(f.orgId, (tx) => receiveTradeOrder(tx, f.branchStaff, { orderId, receivedOn: '2026-08-21' }));
+    expect(await onHand(f.porkBr, f.br.id)).toBe('18.000');
+  });
+});
+
 describe('T-172 — rate normalisation is integer arithmetic', () => {
   it('rounds half-up to the centavo, never through a float', () => {
     expect(normaliseRate('310', 'x')).toBe('310.00');

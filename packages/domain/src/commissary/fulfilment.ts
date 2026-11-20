@@ -30,7 +30,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { commissaryRepo, itemsRepo, lowStockRepo, refuse, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
 import { notActiveItemSentence } from '../items/not-active';
 import { dispatchTradeOrder, type DispatchResult } from '../trade';
-import { money, ZERO, type Money } from '@shareat/core/money';
+import { compare, money, ZERO, type Money } from '@shareat/core/money';
 import { lineCost } from '../stock/layers';
 import { isPositiveQuantity, isZeroQuantity, quantity, type Quantity } from '../stock/quantity';
 import {
@@ -41,6 +41,7 @@ import {
   noteOnThread,
   parseQuantity,
   refuseIfReady,
+  requirePositiveRate,
   resolveBranchRate,
 } from './orders';
 import { assertFieldRules } from '../shared/field-rules-assert';
@@ -144,6 +145,11 @@ export async function fulfilLine(tx: Tx, actor: Actor, input: FulfilLineInput): 
     const qty: Quantity = parseQuantity(input.quantity, 'fulfilLine');
     if (qty.startsWith('-')) throw new Error('fulfilLine: a fulfilled quantity cannot be negative.');
     const rate = input.rate != null && input.rate.trim() !== '' ? normaliseRate(input.rate, 'fulfilLine') : money(line.rate);
+    // DEF-897: a zero quantity sends nothing, so its rate is moot; any quantity that goes needs a rate.
+    if (isPositiveQuantity(qty)) {
+      const lineItem = await itemsRepo.getItemById(trx, actor.orgId, line.itemId);
+      requirePositiveRate(rate, lineItem?.name ?? 'this item', 'fulfilLine');
+    }
     const sourceLocationId = await resolveSourceLocation(trx, order.storeId, input.sourceLocationId, line.sourceLocationId);
 
     await tradeRepo.updateLine(trx, actor.orgId, line.id, {
@@ -206,6 +212,7 @@ export async function proposeLine(tx: Tx, actor: Actor, input: ProposeLineInput)
       }
       rate = resolved.rate;
     }
+    requirePositiveRate(rate, item.name, 'proposeLine');
     const sourceLocationId = await resolveSourceLocation(trx, order.storeId, input.sourceLocationId, null);
 
     let replacedName: string | null = null;
@@ -278,6 +285,16 @@ export async function markReady(tx: Tx, actor: Actor, input: { orderId: string }
     }
     if (!counted.some((l) => isPositiveQuantity(quantity(l.fulfilledQuantity!)))) {
       throw new Error('markReady: nothing would be sent — every line is at zero. Reject the order instead.');
+    }
+    // DEF-897 backstop: a line already saved at ₱0.00 would be received but never enter branch stock.
+    for (const l of counted) {
+      if (isPositiveQuantity(quantity(l.fulfilledQuantity!)) && compare(money(l.rate), ZERO) <= 0) {
+        const name = (await itemsRepo.getItemById(trx, actor.orgId, l.itemId))?.name ?? 'An item';
+        throw refuse(
+          `markReady: ${name} line rate is ${l.rate}`,
+          `${name} is priced at ₱0.00, so the branch could not take it into stock. Enter its rate before marking the order ready.`,
+        );
+      }
     }
     await tradeRepo.markReady(trx, actor.orgId, order.id, actor.personId);
   };
