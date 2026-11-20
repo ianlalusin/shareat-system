@@ -74,7 +74,7 @@ export default async function RemittancePage({
     recentRemittances(actor.orgId, storeId),
     openVariances(actor.orgId, storeId),
     orgWide ? openVarianceCountForOrg(actor.orgId) : Promise.resolve(0),
-    listActingPersons(actor.orgId),
+    listActingPersons(actor.orgId, storeId),
     cashCustodyFindings(actor.orgId, storeId),
     storeCashPolicy(actor.orgId, storeId),
   ]);
