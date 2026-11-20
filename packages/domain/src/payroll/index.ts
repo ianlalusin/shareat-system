@@ -20,6 +20,7 @@ import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover, computePay, type DayInput } from './compute';
 import { refuse } from '../shared/refusal';
 import { agreedRecoverable, applyDeductionRecovery, reopenAfterVoid } from './deduction-agreements';
+import { assertActiveAccount, checkDraw } from '../money-accounts/overdraft';
 import { EXPENSE_FUNDING_ACCOUNTS } from '../expenses/routing';
 import {
   AGENCIES,
@@ -640,7 +641,7 @@ export async function postPayRun(
     entryDate?: string;
     notes?: string | null;
   },
-): Promise<{ runId: string; payslips: number; totalNet: string }> {
+): Promise<{ runId: string; payslips: number; totalNet: string; warning?: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_payroll', { storeId: input.storeId });
 
@@ -687,6 +688,12 @@ export async function postPayRun(
       throw new Error('postPayRun: that money account belongs to another store.');
     }
     assertPayrollMoneyAccount(account, 'postPayRun');
+    // DEF-889 (T-597, Ian 18 Nov, option A): payroll follows the same draw rule as every other payout (bible row 154) - an office safe
+    // or bank account that cannot cover the run REFUSES, a cashier drawer warns. `cashOut` is exactly what the slips credit to the
+    // account (netPay above zero). Before the run row is written, so a refusal writes nothing; `checkDraw` locks the account.
+    assertActiveAccount(account, 'postPayRun');
+    const cashOut = preview.slips.reduce<Money>((sum, s) => (compare(s.netPay, ZERO) > 0 ? add(sum, s.netPay) : sum), ZERO);
+    const warning = compare(cashOut, ZERO) > 0 ? await checkDraw(trx, actor.orgId, account, cashOut, 'postPayRun') : null;
 
     const entryDate = input.entryDate ?? input.periodEnd;
     const runId = (
@@ -819,6 +826,7 @@ export async function postPayRun(
       runId,
       payslips: preview.slips.length,
       totalNet: formatMoney(preview.totalNet),
+      ...(warning ? { warning } : {}),
     };
   };
   return run(tx);

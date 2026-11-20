@@ -22,6 +22,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { seedStatutoryRates } from './_fixtures/statutory-rates';
 import { agree, asOrgT519, chargeEntry, creditEntry, scanFor } from './_fixtures/t519-agreements';
+import { fundAccount } from './_fixtures/fund-account';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, deductionAgreementsRepo } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
@@ -76,6 +77,8 @@ async function fixture(hint: string, rate = '540.00') {
     values (${orgId}, ${workerId}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${adminId}) returning id`;
   const [office] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
+  // T-597: payroll follows the draw rule - an office safe that cannot cover the run refuses - so the paying account holds cash.
+  await fundAccount(sql, { orgId, storeId, code: '1130', amount: '10000000.00' });
   await seedStatutoryRates(orgId, actor(orgId, adminId), [storeId]);
   const f = {
     orgId, storeId, store2Id, configId: config!.id, adminId, admin2Id, managerId, workerId,

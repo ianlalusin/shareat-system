@@ -256,7 +256,7 @@ describe('⭐ the float NETS TO ZERO when the request closes', () => {
 
     // ₱500 handed back, ₱100 unaccounted for.
     const settled = await asOrg(f.orgId, (tx) =>
-      settleCashRequest(tx, f.manager, {
+      settleCashRequest(tx, f.manager, { settleId: crypto.randomUUID(),
         requestId: id,
         returnedAmount: '500.00',
         shortAmount: '100.00',
@@ -335,7 +335,7 @@ describe('the refusals', () => {
     const id = await released(f, '2000.00');
     await expect(
       asOrg(f.orgId, (tx) =>
-        settleCashRequest(tx, f.manager, {
+        settleCashRequest(tx, f.manager, { settleId: crypto.randomUUID(),
           requestId: id, returnedAmount: '2500.00', toMoneyAccountId: f.till, on: '2026-01-08',
         }),
       ),
@@ -347,7 +347,7 @@ describe('the refusals', () => {
     const id = await released(f, '2000.00');
     await expect(
       asOrg(f.orgId, (tx) =>
-        settleCashRequest(tx, f.manager, { requestId: id, shortAmount: '100.00', on: '2026-01-08' }),
+        settleCashRequest(tx, f.manager, { settleId: crypto.randomUUID(), requestId: id, shortAmount: '100.00', on: '2026-01-08' }),
       ),
     ).rejects.toThrow(/needs a reason/);
   });
@@ -492,7 +492,7 @@ describe('⛔ DEF-159 — a second float cannot be released while the first is u
     const f = await fixture('def159-cleared');
     const first = await released(f, '1000.00');
     await asOrg(f.orgId, (tx) =>
-      settleCashRequest(tx, f.manager, {
+      settleCashRequest(tx, f.manager, { settleId: crypto.randomUUID(),
         requestId: first, returnedAmount: '1000.00', toMoneyAccountId: f.till, on: '2026-01-06',
       }),
     );

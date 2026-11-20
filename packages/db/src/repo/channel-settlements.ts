@@ -305,6 +305,26 @@ export async function postedSettlementFor(
   return row ? { id: String(row.id) } : undefined;
 }
 
+/**
+ * DEF-881 (T-595): the sales day a settlement names - its store, date, status, and whether it carries this channel. Read `for share`, so a day void
+ * (which takes the row `for update`) waits for the settlement's commit, the same lock `lockLiveSalesDay` takes.
+ */
+export async function salesDayForSettlement(
+  tx: Tx,
+  orgId: string,
+  salesDayId: string,
+  channelId: string,
+): Promise<{ storeId: string; businessDate: string; status: string; hasChannel: boolean } | undefined> {
+  const [row] = (await tx.execute(sql`
+    select sd.store_id::text as store_id, sd.business_date::text as business_date, sd.status::text as status,
+           exists (select 1 from sales_day_channels sdc where sdc.sales_day_id = sd.id and sdc.channel_id = ${channelId}) as has_channel
+    from sales_days sd
+    where sd.id = ${salesDayId} and sd.org_id = ${orgId}
+    for share of sd
+  `)) as unknown as { store_id: string; business_date: string; status: string; has_channel: boolean }[];
+  return row ? { storeId: row.store_id, businessDate: row.business_date, status: row.status, hasChannel: row.has_channel } : undefined;
+}
+
 /** Per-channel settlement configuration — where the payout lands, and how tax is treated. */
 export async function channelConfig(
   tx: Tx,

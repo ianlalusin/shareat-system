@@ -432,7 +432,7 @@ describe('I9 - a request that is not released, or is at another store, refuses a
     await coverFloat(f);
     const req = await releasedFloat(f, '1000.00');
     await asPerson(f.orgId, (tx) =>
-      settleCashRequest(tx, actorOf(f.orgId, f.managerId), { requestId: req, returnedAmount: '1000.00', toMoneyAccountId: f.officeSafeId, on: '2026-01-08' }),
+      settleCashRequest(tx, actorOf(f.orgId, f.managerId), { settleId: crypto.randomUUID(), requestId: req, returnedAmount: '1000.00', toMoneyAccountId: f.officeSafeId, on: '2026-01-08' }),
     );
     const id = await draft(f, [{ amount: '100.00', cashRequestId: req }]);
     expect(await userMessageOf(approve(f, id))).toBe("i9a Ana's cash request is no longer open (liquidated). Pick another source.");

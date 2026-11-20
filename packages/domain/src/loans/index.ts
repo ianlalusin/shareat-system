@@ -12,7 +12,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { auditLogRepo, journalRepo, loansRepo, moneyAccountsRepo, type Tx } from '@shareat/db';
 import { add, compare, decimal, money, subtract, ZERO, type Decimal, type Money } from '@shareat/core/money';
-import { checkDraw } from '../money-accounts/overdraft';
+import { assertActiveAccount, checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { gone, refuse } from '../shared/refusal';
@@ -235,6 +235,7 @@ export async function recordLoanPayment(
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
     if (!account) throw new Error('recordLoanPayment: that money account does not exist.');
+    assertActiveAccount(account, 'recordLoanPayment'); // DEF-895
     // T-369 S8b (DEF-556): paying from another store's account draws on money THERE; the loan's store alone
     // holding `record_ap_payment` is not enough. Before `positionOf`, so a non-holder reads nothing.
     if (account.storeId !== loan.storeId) {

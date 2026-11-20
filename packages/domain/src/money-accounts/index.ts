@@ -182,7 +182,7 @@ async function runRetire(
   await moneyAccountsRepo.retireMoneyAccount(tx, actor.orgId, input.moneyAccountId);
 }
 
-export { judgeDraw, checkDraw, type DrawVerdict } from './overdraft';
+export { judgeDraw, checkDraw, assertActiveAccount, type DrawVerdict } from './overdraft';
 
 /**
  * Renames a money account. ⭐ **The name is the configurable part of a foundation account.**

@@ -313,7 +313,7 @@ export function AutoAllocateCollectionForm({
       {compare(money(credit), ZERO) > 0 && (
         <Field
           label="Store credit to apply"
-          hint={`${peso(credit)} held as customer store credit. Spending it draws the liability down instead of taking cash.`}
+          hint={`${peso(credit)} of store credit can be spent at this store. Credit is spent where it was earned. Spending it draws the liability down instead of taking cash.`}
           rule={COLLECTION_RECORD_RULES.creditApplied}
         >
           <Input {...nativeAttrs(COLLECTION_RECORD_RULES.creditApplied)} placeholder="0.00" className="w-full" />

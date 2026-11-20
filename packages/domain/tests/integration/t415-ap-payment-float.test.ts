@@ -167,9 +167,9 @@ async function coverFloat(f: Fixture): Promise<void> {
 }
 
 const settle = (f: Fixture, requestId: string, returnedAmount: string, toMoneyAccountId: string, on = '2026-01-08') =>
-  asPerson(f.orgId, (tx) => settleCashRequest(tx, f.manager, { requestId, returnedAmount, toMoneyAccountId, on }));
+  asPerson(f.orgId, (tx) => settleCashRequest(tx, f.manager, { settleId: crypto.randomUUID(), requestId, returnedAmount, toMoneyAccountId, on }));
 const settleOp = (f: Fixture, requestId: string, returnedAmount: string, toMoneyAccountId: string) => (tx: Tx) =>
-  settleCashRequest(tx, f.manager, { requestId, returnedAmount, toMoneyAccountId, on: '2026-01-08' });
+  settleCashRequest(tx, f.manager, { settleId: crypto.randomUUID(), requestId, returnedAmount, toMoneyAccountId, on: '2026-01-08' });
 
 const outstandingOf = async (f: Fixture, id: string) =>
   (await asPerson(f.orgId, (tx) => cashRequestsRepo.floatPositionOf(tx, f.orgId, id))).outstanding;
