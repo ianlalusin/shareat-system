@@ -26,8 +26,9 @@
  */
 import { signOutAction } from '../../app/sign-in/actions';
 import { MenuButton } from './Sidebar';
+import { signOutLabel } from './sign-out-label';
 
-export function TopBar() {
+export function TopBar({ signedInAs }: { signedInAs: string | null }) {
   return (
     <header className="shell-nav-row sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 bg-surface px-2 dark:border-neutral-800 md:hidden">
       <MenuButton />
@@ -42,7 +43,7 @@ export function TopBar() {
           type="submit"
           className="shell-nav-row rounded-md px-2 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
         >
-          Sign out
+          {signOutLabel(signedInAs)}
         </button>
       </form>
     </header>

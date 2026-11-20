@@ -204,6 +204,14 @@ describe('W1 - the day page of a feed day on a linked store', () => {
     expect(await renderDay(f, id, f.storeId)).not.toMatch(PLATFORM_H2);
   });
 
+  it('DEF-609: "Check POS again" is offered while the store is linked and gone once it is unlinked', async () => {
+    const f = await fixture('recheck');
+    const { id } = await feedDay(f, D10);
+    expect(await renderDay(f, id, f.storeId), 'control: a linked store is offered the recheck').toContain('Check POS again');
+    await sql`update pos_v1_store_links set unlinked_at = now(), unlinked_by = ${f.admin.personId}, unlink_reason = 'closed' where store_id = ${f.storeId}`;
+    expect(await renderDay(f, id, f.storeId), 'an unlinked store has nothing to recheck').not.toContain('Check POS again');
+  });
+
   it('/sales-days/{id}/edit refuses with the R13 sentence', async () => {
     const f = await fixture('edit');
     const { id } = await feedDay(f, D10);

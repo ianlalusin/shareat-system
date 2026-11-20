@@ -80,13 +80,14 @@ export async function defaultRange(
   orgId: string,
   storeId: string,
   today: string,
-): Promise<{ from: string; to: string }> {
+): Promise<{ from: string; to: string; noPolicy: boolean }> {
   const config = await withOrgPrincipal(orgId, (tx) => attendanceConfigRepo.findLive(tx, storeId));
-  if (!config) return { from: today, to: today };
+  // DEF-253: with no live policy there is no payroll period to default to; the page says so instead of showing one quiet day.
+  if (!config) return { from: today, to: today, noPolicy: true };
   const [y, m] = today.split('-').map(Number) as [number, number];
   const periods = derivePeriods(config, y, m);
   const current = periods.find((p) => p.start <= today && today <= p.end) ?? periods[0];
-  return current ? { from: current.start, to: current.end } : { from: today, to: today };
+  return current ? { from: current.start, to: current.end, noPolicy: false } : { from: today, to: today, noPolicy: false };
 }
 
 /** Minutes-from-shift-start rendered as a clock time a human reads. */
