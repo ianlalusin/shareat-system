@@ -24,8 +24,8 @@
  * unchanged, and still runs inside every domain service on every write. This adds a **second
  * layer for reads** (bible §15.11 — no layer may be the only one for a given risk).
  *
- * ⛔ **Deny-by-default (bible §7 rule 11, T-603 S5).** A route absent from this map is still readable by any signed-in person at runtime,
- * but `tests/unit/route-capability-coverage.test.ts` fails for every page, and every server-action folder, that has no entry here and is not on
+ * ⛔ **Deny-by-default (bible §7 rule 11, T-603 S5).** A route absent from this map is refused at runtime by `requirePageAccess` (T-616) unless it is on the approved-open or awaiting list in `route-open-lists.ts`,
+ * and `tests/unit/route-capability-coverage.test.ts` fails for every page, and every server-action folder, that has no entry here and is not on
  * its approved-open or awaiting-a-decision list. A new screen therefore cannot ship unmapped: map it (a capability, a list, or an explicit `null`).
  */
 import type { Capability } from '@shareat/auth';
