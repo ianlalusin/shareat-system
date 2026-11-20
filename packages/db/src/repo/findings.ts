@@ -22,7 +22,7 @@ import { notCustodySourceType, tillFloorPosition } from './remittance';
 import { periodBounds } from './fiscal-periods';
 import * as posV1Repo from './pos-v1';
 import { STOP_AUTO_REOPEN_MINUTES } from './pin-attempts';
-import { businessDayRange, formatBusinessDateTime, parseBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDateTime, mediumBusinessDate, parseBusinessDate } from '@shareat/core/datetime';
 
 /**
  * ⛔ **Never interpolate the symbol by hand.** A hand-rolled peso plus `toFixed(2)` renders a
@@ -1936,7 +1936,7 @@ export async function posUsagePullNotRun(tx: Tx, orgId: string, asOf?: string): 
  * over the date's own Manila midnight) - one formatter, not a copy. Money is `peso` above (`@shareat/core/money`).
  */
 function humanDay(businessDate: string): string {
-  return formatBusinessDateTime(businessDayRange(parseBusinessDate(businessDate)).start, { dateStyle: 'medium' });
+  return mediumBusinessDate(parseBusinessDate(businessDate));
 }
 
 /**

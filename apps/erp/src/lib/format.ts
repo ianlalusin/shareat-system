@@ -27,7 +27,7 @@ export function peso(amount: string | number): string {
   // DEF-681/726: a decimal string goes to `Intl` as the string, which formats it exactly; through `Number`
   // a 14-digit balance prints a centavo wrong. Numbers (and anything not a plain decimal) keep the old path.
   if (typeof amount === 'string' && EXACT_DECIMAL.test(amount)) {
-    return PESO.format(/^-?0+(\.0+)?$/.test(amount) ? 0 : amount);
+    return PESO.format(/^-?0+(\.0+)?$/.test(amount) ? 0 : (amount as `${number}`));
   }
   const n = Number(amount);
   // ⚠️ `-0` formats as "-₱0.00", which reads as a deficit that is not there. A balance of exactly
