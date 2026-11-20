@@ -465,7 +465,7 @@ export async function freezeDays(
   await tx.execute(sql`
     update attendance_days
        set frozen_at = now(), frozen_by_pay_run_id = ${runId}
-     where id = any(${sql.raw(`array[${dayIds.map((d) => `'${d}'`).join(',')}]::uuid[]`)})
+     where id in (${sql.join(dayIds.map((d) => sql`${d}::uuid`), sql`, `)})
   `);
 }
 

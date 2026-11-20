@@ -244,7 +244,7 @@ export async function editSupplier(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_supplier', {});
 
-    const existing = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
+    const existing = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId, { forUpdate: true });
     if (!existing) {
       throw gone(`editSupplier: supplier ${input.supplierId} does not exist.`, 'supplier');
     }
@@ -299,6 +299,19 @@ export async function editSupplier(
         // The ERP screen is this function's only caller today; a second front-end must thread its
         // own source through, not inherit this one (same comment as the precedent).
         source: 'web',
+      });
+    }
+
+    // DEF-507: a name decides who a payment is addressed to, so a real rename is audited like the other supplier controls.
+    if (values.name !== undefined && values.name !== existing.name) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'supplier.renamed',
+        storeId: null,
+        entityId: input.supplierId,
+        before: { name: existing.name },
+        after: { name: values.name },
+        source: input.source ?? 'web',
       });
     }
 
@@ -991,6 +1004,8 @@ export async function recordExpenseForInvoice(
   input: RecordExpenseForInvoiceInput,
 ): Promise<RecordExpenseForInvoiceResult> {
   const run = async (trx: Tx) => {
+    // DEF-505: the stronger gate first, so a person who cannot approve is told so before any of the form is judged.
+    await authorize(trx, actor, 'approve_expense', { storeId: input.storeId });
     const { id: expenseId } = await createExpense(trx, actor, {
       storeId: input.storeId,
       businessDate: '', // ignored — createExpense forces this from the invoice's own date

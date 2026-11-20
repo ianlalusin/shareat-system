@@ -217,6 +217,15 @@ describe('money discipline', () => {
     const days = Array.from({ length: 26 }, () => day({ dailyRate: '333.33' }));
     expect(computePay(days, M).basicPay).toBe(money('8666.58'));
   });
+
+  it('⛔ DEF-859: an exact half-centavo premium rounds HALF-UP, not down through a float', () => {
+    // 100.02 x 1.5h x 0.50 / 9h = 8.335 exactly. The old float factor (0.0833333333, ten places) gave 8.3349999… and paid 8.33.
+    const p = computePay([day({ dailyRate: '100.02', nightDiffMinutes: 90 })], { ...M, nightDiffMultiplier: '1.50' });
+    expect(p.nightDiffPay).toBe(money('8.34'));
+    // Same tie through holiday (1.50 -> +0.50) and overtime (0.50 multiplier).
+    expect(computePay([day({ dailyRate: '100.02', holidayMinutes: 90 })], { ...M, holidayRegularMultiplier: '1.50' }).holidayPay).toBe(money('8.34'));
+    expect(computePay([day({ dailyRate: '100.02', otMinutes: 90 })], { ...M, overtimeMultiplier: '0.50' }).otPay).toBe(money('8.34'));
+  });
 });
 
 

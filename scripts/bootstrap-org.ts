@@ -50,7 +50,7 @@ config({ path: '.env.local' });
 
 import { isValidPinFormat } from '../packages/auth/src/credentials';
 import { SUPER_ADMIN_ONLY_CAPABILITIES } from '../packages/auth/src/capabilities';
-import { closeDb, systemTransaction, transaction } from '../packages/db/src/client';
+import { closeDb, systemTransaction } from '../packages/db/src/client';
 import * as organizationsRepo from '../packages/db/src/repo/organizations';
 // ⭐ T-232 slice 2 — ONE function, two callers. `/setup` calls exactly this, so the screen and the
 // CLI cannot drift: adding a step to first-run setup is adding it to both, or to neither.
@@ -165,7 +165,7 @@ async function main(): Promise<void> {
   // existing organisation in the message.
   const alreadySetUp = await systemTransaction((tx) => organizationsRepo.anyOrganizationExists(tx));
   const sameCode = alreadySetUp
-    ? await transaction((tx) => organizationsRepo.getOrgByCode(tx, args.code))
+    ? await systemTransaction((tx) => organizationsRepo.getOrgByCode(tx, args.code)) // DEF-300: a bare transaction reads zero rows under RLS
     : undefined;
 
   console.log('');

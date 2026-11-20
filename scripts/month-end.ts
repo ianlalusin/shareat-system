@@ -19,7 +19,7 @@
  */
 import { config } from 'dotenv';
 import { closeDb } from '@shareat/db';
-import { runMonthEnd, lastCompletedPeriod } from '@shareat/domain';
+import { runMonthEnd, lastCompletedPeriod, isValidPeriod } from '@shareat/domain';
 
 config({ path: '.env.local' });
 
@@ -30,6 +30,11 @@ function arg(name: string): string | undefined {
 
 async function main(): Promise<number> {
   const period = arg('period') ?? lastCompletedPeriod();
+  // DEF-856: refuse before anything posts -- `2026-13` would otherwise roll into January 2027.
+  if (!isValidPeriod(period)) {
+    console.error(`month-end: --period must be a real YYYY-MM (got "${period}"); nothing was run.`);
+    return 1;
+  }
   const orgId = arg('org');
   // ⭐ `manual` when a human typed it. "Nobody has run it since March" and "the cron died in March
   // and someone has been clicking the button" are different problems with different fixes.

@@ -194,14 +194,14 @@ describe('D5 (green, guard; positive control for "audit only on change")', () =>
 });
 
 describe('D6 (green, guard; positive control for "absent means untouched"; Amendment A1 mutant 5)', () => {
-  it('30-day supplier, { name: "Renamed" } only — row 30; name changed; 0 AUD rows', async () => {
+  it('30-day supplier, { name: "Renamed" } only — row 30; name changed; no TERMS audit row (the rename has its own, DEF-507)', async () => {
     const f = await fixture('d6');
     const id = await thirtyDaySupplier(f, 'd6');
     await asOrg(f.orgId, (tx) => editSupplier(tx, f.manager, { supplierId: id, name: 'Renamed' }));
     expect(await creditTermsOf(id)).toBe(30);
     const [row] = await sql<{ name: string }[]>`select name from suppliers where id = ${id}`;
     expect(row!.name).toBe('Renamed');
-    expect(await auditRowsFor(id)).toHaveLength(0);
+    expect((await auditRowsFor(id)).map((r) => r.action)).toEqual(['supplier.renamed']);
   });
 });
 

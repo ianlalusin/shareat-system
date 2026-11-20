@@ -85,7 +85,7 @@ describe('no committed secrets', () => {
             'as leaked. ROTATE the key in the Google Cloud console first, then remove the file, ' +
             'and put the replacement in secrets/ (gitignored) referenced by path from .env.local.',
     ).toEqual([]);
-  });
+  }, 30_000); // DEF-502: reads every tracked file; under load the default 5 s is not enough
 
   it('the secrets directory is ignored, and its README is not', () => {
     const ignored = (path: string): boolean => {
