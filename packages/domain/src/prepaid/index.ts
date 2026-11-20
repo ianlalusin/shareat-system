@@ -227,6 +227,8 @@ async function amortiseItemCore(
   input: { prepaidItemId: string; asOfPeriod: string },
 ): Promise<AmortiseResult> {
   const actor = { orgId, personId: postedBy } as Actor;
+  // DEF-883: lock the item BEFORE reading status/balance, so a write-off in flight cannot interleave.
+  await prepaidRepo.lockItemRow(tx, actor.orgId, input.prepaidItemId);
   const item = await prepaidRepo.getById(tx, actor.orgId, input.prepaidItemId);
   if (!item) {
     throw new Error(`amortisePrepaidItem: prepaid item ${input.prepaidItemId} does not exist.`);
@@ -331,9 +333,18 @@ export async function reverseAmortisation(
     if (!reason) {
       throw new Error('reverseAmortisation: a reason is required — a reversal with no reason is a gap.');
     }
+    await prepaidRepo.lockItemRow(trx, actor.orgId, input.prepaidItemId); // DEF-883
     const item = await prepaidRepo.getById(trx, actor.orgId, input.prepaidItemId);
     if (!item) {
       throw new Error(`reverseAmortisation: prepaid item ${input.prepaidItemId} does not exist.`);
+    }
+    // DEF-884: a written-off item's months are already inside the write-off; reversing one would debit 1400 back
+    // above zero.
+    if (item.status === 'written_off') {
+      throw refuse(
+        `reverseAmortisation: ${item.name} is written off.`,
+        `${item.name} has been written off. Undo the write-off first, then reverse the month.`,
+      );
     }
     const entry = await prepaidRepo.activeEntryForPeriod(trx, actor.orgId, item.id, input.period);
     if (!entry) {
@@ -402,6 +413,7 @@ async function runWriteOff(
   const reason = input.reason.trim();
   if (!reason) throw new Error('writeOffPrepaidItem: a reason is required.');
 
+  await prepaidRepo.lockItemRow(tx, actor.orgId, input.prepaidItemId); // DEF-883
   const item = await prepaidRepo.getById(tx, actor.orgId, input.prepaidItemId);
   if (!item) {
     throw new Error(`writeOffPrepaidItem: prepaid item ${input.prepaidItemId} does not exist.`);
@@ -474,12 +486,14 @@ async function runWriteOff(
     { accountCode: PREPAID_ACCOUNT_CODE, storeId: item.storeId, credit: remaining },
   ];
 
+  const priorWriteOffs = await prepaidRepo.writeOffEntries(tx, actor.orgId, item.id);
   const result = await postEntry(tx, {
     orgId: actor.orgId,
     entryDate: input.writtenOffOn,
     sourceType: 'prepaid_write_off',
     sourceId: item.id,
-    idempotencyKey: `prepaid:${item.id}:write-off`,
+    // DEF-882: a write-off after an undo needs a fresh key, or postEntry returns the reversed entry.
+    idempotencyKey: prepaidRepo.nextWriteOffKey(item.id, priorWriteOffs),
     memo: `Write-off — ${item.name}: ${reason}`,
     postedBy: actor.personId,
     lines,
@@ -512,6 +526,7 @@ export async function undoWriteOff(
     const reason = input.reason.trim();
     if (!reason) throw new Error('undoWriteOff: a reason is required.');
 
+    await prepaidRepo.lockItemRow(trx, actor.orgId, input.prepaidItemId); // DEF-883
     const item = await prepaidRepo.getById(trx, actor.orgId, input.prepaidItemId);
     if (!item) {
       throw new Error(`undoWriteOff: prepaid item ${input.prepaidItemId} does not exist.`);
