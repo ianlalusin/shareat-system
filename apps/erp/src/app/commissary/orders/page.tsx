@@ -206,7 +206,7 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
       </FormGrid>
       <div className="space-y-2">
         {NEW_ORDER_ROWS.map((n) => (
-          <div key={n} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_9rem] sm:items-end">
+          <div key={n} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem] sm:items-end">
             <label className={`${LABEL} col-span-2 sm:col-span-1`}>
               Item{n === 1 ? '' : ` ${n} (optional)`}
               <Select name="itemId" required={n === 1} defaultValue="">
@@ -214,7 +214,7 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
                 {choice.catalogue.map((l) => (
                   <option key={l.commissaryItemId} value={l.commissaryItemId}>
                     {l.name} ({l.baseUnit})
-                    {l.priced ? ` — ₱${l.price}` : ' — no price, state one'}
+                    {l.priced ? ` — ₱${l.price}` : ' — no price yet'}
                     {l.blocker ? ` — not ready: ${l.blocker}` : ''}
                   </option>
                 ))}
@@ -224,15 +224,11 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
               Quantity
               <Input name="quantity" inputMode="decimal" placeholder="0.000" className="tabular-nums" />
             </label>
-            <label className={LABEL}>
-              Rate ₱ (blank = default)
-              <Input name="rate" inputMode="decimal" placeholder="default" className="tabular-nums" />
-            </label>
           </div>
         ))}
         <p className="text-xs text-neutral-500 dark:text-neutral-500">
           &ldquo;Not ready&rdquo; marks an item that can be drafted but not yet <strong>submitted</strong>. Map it under
-          Commissary catalogue first. The rate you use is saved on the line.
+          Commissary catalogue first. The price comes from the commissary catalogue; only the commissary changes it.
         </p>
       </div>
       <DialogActions>

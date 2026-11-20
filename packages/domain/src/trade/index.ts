@@ -38,7 +38,7 @@ import { bookedReceiptQuantity, confirmReceipt, dispatchOrder, postInternalFreig
 import { consume, reverseConsumption } from '../stock/consume';
 import { postConsumption } from '../stock/consumption-posting';
 import type { ConsumedLine } from '../stock/layers';
-import { isPositiveQuantity, quantity, toThousandths, type Quantity } from '../stock/quantity';
+import { addQuantity, isPositiveQuantity, quantity, toThousandths, type Quantity } from '../stock/quantity';
 
 /**
  * ⭐ T-172. A BRANCH order has two legitimate actors from two stores — the branch that asked and
@@ -666,7 +666,11 @@ export async function dispatchTradeOrder(
       if (!inventoryAccount) {
         throw new Error(`dispatchTradeOrder: item kind "${item.kind}" has no inventory account in COA-ALIGNMENT §4.1.`);
       }
-      cogsLines.push({ itemId: line.itemId, quantity: quantity(line.quantity), inventoryAccount });
+      // DEF-900 (T-600): one item on two lines (a tiered price, a free portion) is ONE stock withdrawal —
+      // a second `consume` for the same order and item hits `stock_movements_source_pair_key` after the AR charge.
+      const sameItem = cogsLines.find((c) => c.itemId === line.itemId);
+      if (sameItem) sameItem.quantity = addQuantity(sameItem.quantity, quantity(line.quantity));
+      else cogsLines.push({ itemId: line.itemId, quantity: quantity(line.quantity), inventoryAccount });
       itemNameById.set(line.itemId, item.name);
     }
 

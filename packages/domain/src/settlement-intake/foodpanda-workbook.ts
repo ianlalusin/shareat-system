@@ -315,6 +315,8 @@ function readOrders(data: unknown[][]): OrderSheet | null {
   requireFields(at, REQUIRED_ORDER_FIELDS, FOODPANDA_COLUMNS, 'Appendix A');
 
   const orders: FoodpandaOrder[] = [];
+  // DEF-903: whole-row texts seen so far (memory only, never output). An exact repeat doubles the day; a reversal sharing an Order Code differs in its figures and passes.
+  const seenRows = new Map<string, number>();
   let invoiceNumber = '';
   let invoiceDate = '';
   let vendorCode = '';
@@ -332,6 +334,12 @@ function readOrders(data: unknown[][]): OrderSheet | null {
       throw intakeRefusal('FOODPANDA_TOO_MANY_ROWS', `Appendix A has more than ${FOODPANDA_MAX_ORDER_ROWS.toLocaleString('en-US')} order rows, so the file was refused.`);
     }
     const where = `Appendix A row ${r + 1}`;
+    const rowKey = Array.from(row, textOf).join('\u0001');
+    const firstRow = seenRows.get(rowKey);
+    if (firstRow !== undefined) {
+      throw intakeRefusal('FOODPANDA_BAD_VALUE', `${where} repeats row ${firstRow} exactly (same order, same amounts). Remove the repeated row and upload again.`);
+    }
+    seenRows.set(rowKey, r + 1);
     const number = textOf(cellAt(row, at, 'invoiceNumber'));
     const vendor = textOf(cellAt(row, at, 'vendorCode')).toUpperCase();
     if (orders.length === 0) {
@@ -461,7 +469,13 @@ function readCharges(data: unknown[][]): ChargeSheet | null {
   for (let r = 1; r < data.length; r++) {
     const row = data[r] ?? [];
     const category = textOf(cellAt(row, at, 'category'));
-    if (category === '') continue;
+    if (category === '') {
+      // DEF-899 (T-600): only a row with no amounts is blank; amounts without a Category are a defect, never silently dropped.
+      if (hasValue(cellAt(row, at, 'netTotal')) || hasValue(cellAt(row, at, 'ewt'))) {
+        throw intakeRefusal('FOODPANDA_BAD_VALUE', `Appendix B row ${r + 1} has amounts but no Category, so it is not a blank row and cannot be skipped.`);
+      }
+      continue;
+    }
     if (charges.length >= FOODPANDA_MAX_CHARGE_ROWS) {
       throw intakeRefusal('FOODPANDA_TOO_MANY_ROWS', `Appendix B has more than ${FOODPANDA_MAX_CHARGE_ROWS} charge rows, so the file was refused.`);
     }

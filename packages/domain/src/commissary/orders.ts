@@ -35,7 +35,7 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { commissaryRepo, itemsRepo, lowStockRepo, refuse, tradeRepo, type Tx, type TradeOrderLineRow, type TradeOrderRow } from '@shareat/db';
-import { decimal, money, ZERO, type Money } from '@shareat/core/money';
+import { compare, decimal, money, ZERO, type Money } from '@shareat/core/money';
 import { branchPriceFor } from '../items';
 import { notActiveItemSentence } from '../items/not-active';
 import { lineCost } from '../stock/layers';
@@ -158,6 +158,21 @@ export function normaliseRate(raw: string, what: string): Money {
   return decimal(`${centavos / 100n}.${(centavos % 100n).toString().padStart(2, '0')}`, '14,2');
 }
 
+/**
+ * ⭐ DEF-897 (T-600): a transfer line at ₱0.00 is received but never enters the branch's stock
+ * (`transfer.ts` drops a zero-value line at receipt with no movement and no discrepancy row), so
+ * every entry path refuses it by name, and `markReady` is the backstop for lines saved before this.
+ */
+export function requirePositiveRate(rate: Money, itemName: string, verb: string): Money {
+  if (compare(rate, ZERO) <= 0) {
+    throw refuse(
+      `${verb}: ${itemName} rate is ${rate}`,
+      `The rate for ${itemName} must be more than ₱0.00. Set its price on the commissary catalogue.`,
+    );
+  }
+  return rate;
+}
+
 export interface ResolvedRate {
   rate: Money;
   /** Which tier answered — T-171 §5. The margin rule is T-151's and is not re-implemented here. */
@@ -178,10 +193,17 @@ export async function resolveBranchRate(
   commissaryStoreId: string,
   itemId: string,
 ): Promise<ResolvedRate | null> {
+  // DEF-897: a price that normalises to ₱0.00 is "unpriced", not a price — fall through to the next tier.
   const bp = await branchPriceFor(tx, orgId, itemId);
-  if (bp) return { rate: normaliseRate(bp.price, 'branch price'), from: 'branch_price' };
+  if (bp) {
+    const rate = normaliseRate(bp.price, 'branch price');
+    if (compare(rate, ZERO) > 0) return { rate, from: 'branch_price' };
+  }
   const manual = await lowStockRepo.offeringCost(tx, orgId, commissaryStoreId, itemId);
-  if (manual !== null && manual !== undefined) return { rate: normaliseRate(manual, 'manual cost'), from: 'manual_cost' };
+  if (manual !== null && manual !== undefined) {
+    const rate = normaliseRate(manual, 'manual cost');
+    if (compare(rate, ZERO) > 0) return { rate, from: 'manual_cost' };
+  }
   return null;
 }
 
@@ -266,8 +288,7 @@ export async function listAvailableCommissaries(tx: Tx, orgId: string, branchSto
 export interface BranchLineDraft {
   itemId: string;
   quantity: string;
-  /** Omit to take the resolved branch rate. Whatever is used is CAPTURED (invariant 11). */
-  rate?: string | null;
+  // DEF-898 (T-600 R1): no `rate` — only the commissary sets the transfer price (T-172 invariant 10).
 }
 
 async function buildBranchLine(
@@ -299,20 +320,15 @@ async function buildBranchLine(
   const qty = parseQuantity(draft.quantity, item.name);
   if (!isPositiveQuantity(qty)) throw new Error(`${item.name}: a quantity must be more than zero.`);
 
-  let rate: Money;
-  if (draft.rate != null && draft.rate.trim() !== '') {
-    rate = normaliseRate(draft.rate, item.name);
-  } else {
-    const resolved = await resolveBranchRate(tx, orgId, order.storeId, item.id);
-    if (!resolved) {
-      // ⛔ Never a silent zero — T-171 §5. A ₱0 line becomes a ₱0 order becomes a ₱0 transfer.
-      throw new Error(
-        `${item.name} cannot be priced: it has no branch-price rule and the commissary set no manual ` +
-          'cost for it. Set one on the catalogue, or state a rate on the line.',
-      );
-    }
-    rate = resolved.rate;
+  const resolved = await resolveBranchRate(tx, orgId, order.storeId, item.id);
+  if (!resolved) {
+    // ⛔ Never a silent zero — T-171 §5. A ₱0 line becomes a ₱0 order becomes a ₱0 transfer.
+    throw new Error(
+      `${item.name} cannot be priced: it has no branch-price rule and the commissary set no manual ` +
+        'cost for it. Ask the commissary to set its price on the catalogue.',
+    );
   }
+  const rate = resolved.rate; // never <= 0: `resolveBranchRate` treats a ₱0.00 price as unpriced (DEF-897)
 
   // The map, if it exists today, is copied so the draft already shows what submit will demand.
   // ⚠️ Submit copies it AGAIN — that is the capture point; this is a preview of it.
@@ -430,7 +446,7 @@ export async function addBranchOrderLine(
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'place_branch_order', { storeId: order.requestedByStoreId });
-    assertFieldRules(COMMISSARY_ORDER_LINE_RULES, { itemId: input.itemId, quantity: input.quantity, rate: input.rate });
+    assertFieldRules(COMMISSARY_ORDER_LINE_RULES, { itemId: input.itemId, quantity: input.quantity });
     const stage = branchOrderStage(order);
     if (stage !== 'draft') {
       throw new Error(`addBranchOrderLine: the order is ${BRANCH_ORDER_STAGE_LABEL[stage].toLowerCase()} — only a draft takes new lines.`);
@@ -447,12 +463,12 @@ export async function addBranchOrderLine(
 export async function updateBranchOrderLine(
   tx: Tx,
   actor: Actor,
-  input: { orderId: string; lineId: string; quantity: string; rate?: string | null },
+  input: { orderId: string; lineId: string; quantity: string },
 ): Promise<void> {
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'place_branch_order', { storeId: order.requestedByStoreId });
-    assertFieldRules(COMMISSARY_LINE_EDIT_RULES, { quantity: input.quantity, rate: input.rate });
+    assertFieldRules(COMMISSARY_LINE_EDIT_RULES, { quantity: input.quantity });
     const stage = branchOrderStage(order);
     if (stage !== 'draft') {
       throw new Error(`updateBranchOrderLine: the order is ${BRANCH_ORDER_STAGE_LABEL[stage].toLowerCase()} — the ask is frozen after submit.`);
@@ -462,7 +478,9 @@ export async function updateBranchOrderLine(
 
     const qty = parseQuantity(input.quantity, 'quantity');
     if (!isPositiveQuantity(qty)) throw new Error('updateBranchOrderLine: a quantity must be more than zero — remove the line instead.');
-    const rate = input.rate != null && input.rate.trim() !== '' ? normaliseRate(input.rate, 'rate') : money(line.rate);
+    const rate = requirePositiveRate(
+      money(line.rate), (await itemsRepo.getItemById(trx, actor.orgId, line.itemId))?.name ?? 'this item', 'updateBranchOrderLine',
+    );
 
     await tradeRepo.updateLine(trx, actor.orgId, line.id, {
       quantity: qty,
