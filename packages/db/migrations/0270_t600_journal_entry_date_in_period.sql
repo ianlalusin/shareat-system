@@ -18,11 +18,16 @@
 --
 -- LOCK BUDGET. First statement SET LOCAL lock_timeout = '5s' (resets at commit). CREATE TRIGGER takes SHARE ROW EXCLUSIVE on
 -- journal_entries (blocks writes, not reads) until the migration transaction commits; nothing is rewritten; the only scan is
--- the pre-flight's one read-only join. Do not deploy 05:30-07:00 Manila (the T-396 POS import writes sales days).
+-- the pre-flight's one read-only join (run with row_security off, see below). Do not deploy 05:30-07:00 Manila (the T-396 POS import writes sales days).
 --
 -- Every statement is its own breakpoint; the last statement closes the file.
 
 SET LOCAL lock_timeout = '5s';
+--> statement-breakpoint
+-- journal_entries has FORCE ROW LEVEL SECURITY. Without this pair a role that is subject to RLS and has no app.org_id would
+-- count 0 rows below and the migration would pass against dirty data; with it that role fails loudly instead (same as 0162/0163).
+-- Production migrates as doadmin, which RLS cannot filter, so there it is a no-op. Reset right after, in the same transaction.
+SET LOCAL row_security = off;
 --> statement-breakpoint
 DO $$
 DECLARE
@@ -37,6 +42,8 @@ BEGIN
 	END IF;
 END
 $$;
+--> statement-breakpoint
+SET LOCAL row_security = on;
 --> statement-breakpoint
 CREATE FUNCTION "journal_entries_check_entry_date_in_period"() RETURNS trigger
 LANGUAGE plpgsql
