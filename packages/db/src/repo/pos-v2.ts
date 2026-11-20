@@ -13,12 +13,17 @@ import {
   posDayCloses,
   posDiscountPresets,
   posEvents,
+  posPaymentConversions,
+  posRefundLines,
+  posRefundPayments,
+  posRefunds,
   posSalesReceiptLineDiscounts,
   posSalesReceiptLines,
   posSalesReceiptPayments,
   posSalesReceipts,
   posStands,
   posStores,
+  posTenderCorrections,
   posTerminals,
   tableSessionLineDiscounts,
   tableSessionLines,
@@ -26,9 +31,14 @@ import {
   type PosDayCloseRow,
   type PosDiscountPresetRow,
   type PosEventRow,
+  type PosPaymentConversionRow,
+  type PosRefundLineRow,
+  type PosRefundPaymentRow,
+  type PosRefundRow,
   type PosSalesReceiptRow,
   type PosStandRow,
   type PosStoreRow,
+  type PosTenderCorrectionRow,
   type PosTerminalRow,
   type TableSessionLineDiscountRow,
   type TableSessionLineRow,
@@ -46,9 +56,14 @@ export type {
   PosDayCloseRow,
   PosDiscountPresetRow,
   PosEventRow,
+  PosPaymentConversionRow,
+  PosRefundLineRow,
+  PosRefundPaymentRow,
+  PosRefundRow,
   PosSalesReceiptRow,
   PosStandRow,
   PosStoreRow,
+  PosTenderCorrectionRow,
   PosTerminalRow,
   TableSessionLineDiscountRow,
   TableSessionLineRow,
@@ -600,6 +615,8 @@ export interface ReceiptListRow {
   receiptId: string;
   sessionId: string;
   terminalId: string;
+  /** Set once the receipt is in a Z (T-534 S3: a wrong payment method can no longer be corrected here). */
+  dayCloseId: string | null;
   subtotal: string;
   discountTotal: string;
   terminalNo: number;
@@ -625,6 +642,7 @@ export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: s
       receiptId: posSalesReceipts.id,
       sessionId: posSalesReceipts.tableSessionId,
       terminalId: posSalesReceipts.terminalId,
+      dayCloseId: posSalesReceipts.dayCloseId,
       subtotal: posSalesReceipts.subtotal,
       discountTotal: posSalesReceipts.discountTotal,
       terminalNo: posTerminals.terminalNo,
@@ -653,6 +671,7 @@ export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: s
       posSalesReceipts.id,
       posSalesReceipts.tableSessionId,
       posSalesReceipts.terminalId,
+      posSalesReceipts.dayCloseId,
       posSalesReceipts.subtotal,
       posSalesReceipts.discountTotal,
       posTerminals.terminalNo,
@@ -872,7 +891,7 @@ export async function hasPinSessionOnPairing(
 /** R4 clause 1: the person, if they belong to this organisation (RLS hides another organisation's people too). */
 export async function getPersonOfOrg(tx: Tx, orgId: string, personId: string): Promise<{ id: string; displayName: string; isActive: boolean } | undefined> {
   const [row] = await tx
-    .select({ id: persons.id, displayName: persons.displayName, isActive: persons.isActive })
+    .select({ id: persons.id, displayName: persons.displayName, isActive: sql<boolean>`${persons.accountStatus} = 'active'` })
     .from(persons)
     .where(and(eq(persons.orgId, orgId), eq(persons.id, personId)));
   return row;
@@ -890,7 +909,7 @@ export async function listOpenEmploymentsAtStore(tx: Tx, orgId: string, storeId:
     .select({ personId: employments.personId, displayName: persons.displayName, staffCode: employments.staffCode })
     .from(employments)
     .innerJoin(persons, and(eq(persons.id, employments.personId), eq(persons.orgId, employments.orgId)))
-    .where(and(eq(employments.orgId, orgId), eq(employments.storeId, storeId), isNull(employments.endedOn), eq(persons.isActive, true)))
+    .where(and(eq(employments.orgId, orgId), eq(employments.storeId, storeId), isNull(employments.endedOn), eq(persons.accountStatus, 'active')))
     .orderBy(asc(employments.staffCode));
 }
 
@@ -1351,4 +1370,279 @@ export async function exportRowsForStore(
     Object.fromEntries(keys.map((k) => [cols[k]!.name, cols[k]!.columnType === 'PgJsonb' && r[k] !== null ? compactRedactedJson(r[k]!) : r[k]!])),
   );
   return { columns, rows };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-534 S1 (migration 0265) - the post-sale documents: Convert, a wrong-payment-method correction, a refund. Plain inserts and reads; the domain (S2-S4) decides every
+// rule, takes the row lock on the parent receipt, and writes a refund + its lines + its payments in ONE top-level transaction (the append guard refuses a child
+// under an earlier transaction's refund). Nothing calls these until S2-S4, so each is in the production-caller baseline until then.
+// ---------------------------------------------------------------------------------------------------------------------
+export interface NewPaymentConversion {
+  orgId: string;
+  storeId: string;
+  terminalId: string;
+  fromTenderId: string;
+  toTenderId: string;
+  amount: Money;
+  note: string | null;
+  recordedBy: string;
+  requestId: string;
+}
+export interface NewTenderCorrection {
+  orgId: string;
+  storeId: string;
+  receiptId: string;
+  paymentId: string;
+  /** The paid row's own tender (the composite FK proves it). */
+  fromTenderId: string;
+  toTenderId: string;
+  amount: Money;
+  referenceNo: string | null;
+  reason: string;
+  approvedBy: string;
+  recordedBy: string;
+  requestId: string;
+}
+export interface NewRefund {
+  orgId: string;
+  storeId: string;
+  terminalId: string;
+  parentReceiptId: string;
+  refundSeq: number;
+  total: Money;
+  reason: string;
+  approvedBy: string;
+  recordedBy: string;
+  requestId: string;
+}
+export interface NewRefundLine {
+  orgId: string;
+  refundId: string;
+  /** The refund's parent receipt. */
+  receiptId: string;
+  receiptLineId: string;
+  qty: number;
+  amount: Money;
+}
+export interface NewRefundPayment {
+  orgId: string;
+  refundId: string;
+  /** The refund's parent receipt. */
+  receiptId: string;
+  paymentId: string;
+  /** The original payment's own tender (the composite FK proves it). */
+  tenderId: string;
+  amount: Money;
+  referenceNo: string | null;
+}
+
+/** Undefined when the (org, request id) already has a row: a retried or racing POST wrote it first (the caller reads it back). */
+export async function insertPaymentConversion(tx: Tx, r: NewPaymentConversion): Promise<PosPaymentConversionRow | undefined> {
+  const [row] = await tx.insert(posPaymentConversions).values(r).onConflictDoNothing({ target: [posPaymentConversions.orgId, posPaymentConversions.requestId] }).returning();
+  return row;
+}
+export async function insertTenderCorrection(tx: Tx, r: NewTenderCorrection): Promise<PosTenderCorrectionRow> {
+  const [row] = await tx.insert(posTenderCorrections).values(r).returning();
+  return row!;
+}
+export async function insertRefund(tx: Tx, r: NewRefund): Promise<PosRefundRow> {
+  const [row] = await tx.insert(posRefunds).values(r).returning();
+  return row!;
+}
+export async function insertRefundLines(tx: Tx, rows: NewRefundLine[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(posRefundLines).values(rows);
+}
+export async function insertRefundPayments(tx: Tx, rows: NewRefundPayment[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(posRefundPayments).values(rows);
+}
+
+/** The store's conversions not yet in a Z (voided ones included: the caller filters), oldest first. */
+export async function listOpenPaymentConversions(tx: Tx, orgId: string, storeId: string): Promise<PosPaymentConversionRow[]> {
+  return tx
+    .select()
+    .from(posPaymentConversions)
+    .where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.storeId, storeId), isNull(posPaymentConversions.dayCloseId)))
+    .orderBy(asc(posPaymentConversions.recordedAt), asc(posPaymentConversions.id));
+}
+/** A retried POST: the row an earlier call with this request id wrote, if any (unique per org). */
+export async function getPaymentConversionByRequestId(tx: Tx, orgId: string, requestId: string): Promise<PosPaymentConversionRow | undefined> {
+  const [row] = await tx.select().from(posPaymentConversions).where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.requestId, requestId)));
+  return row;
+}
+/** One conversion of the store, or undefined. */
+export async function getPaymentConversion(tx: Tx, orgId: string, storeId: string, id: string): Promise<PosPaymentConversionRow | undefined> {
+  const [row] = await tx.select().from(posPaymentConversions).where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.storeId, storeId), eq(posPaymentConversions.id, id)));
+  return row;
+}
+/** The conversions frozen to one Z (voided ones included: the caller filters), oldest first. */
+export async function listPaymentConversionsOfClose(tx: Tx, orgId: string, storeId: string, dayCloseId: string): Promise<PosPaymentConversionRow[]> {
+  return tx
+    .select()
+    .from(posPaymentConversions)
+    .where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.storeId, storeId), eq(posPaymentConversions.dayCloseId, dayCloseId)))
+    .orderBy(asc(posPaymentConversions.recordedAt), asc(posPaymentConversions.id));
+}
+/** Freezes conversions to the Z (the one column the guard lets the Z write, NULL -> value once). Returns how many were taken; the caller compares with what it read. */
+export async function closePaymentConversions(tx: Tx, orgId: string, storeId: string, dayCloseId: string, ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const rows = await tx
+    .update(posPaymentConversions)
+    .set({ dayCloseId })
+    .where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.storeId, storeId), inArray(posPaymentConversions.id, ids), isNull(posPaymentConversions.dayCloseId)))
+    .returning({ id: posPaymentConversions.id });
+  return rows.length;
+}
+/** Voids one open conversion (the void triple, once, before the Z). Returns 0 when it was already voided or already in a Z. */
+export async function voidPaymentConversion(tx: Tx, orgId: string, storeId: string, id: string, v: { by: string; at: Date; reason: string }): Promise<number> {
+  const rows = await tx
+    .update(posPaymentConversions)
+    .set({ voidedBy: v.by, voidedAt: v.at, voidReason: v.reason })
+    .where(and(eq(posPaymentConversions.orgId, orgId), eq(posPaymentConversions.storeId, storeId), eq(posPaymentConversions.id, id), isNull(posPaymentConversions.dayCloseId), isNull(posPaymentConversions.voidedAt)))
+    .returning({ id: posPaymentConversions.id });
+  return rows.length;
+}
+export async function getTenderCorrectionByRequestId(tx: Tx, orgId: string, requestId: string): Promise<PosTenderCorrectionRow | undefined> {
+  const [row] = await tx.select().from(posTenderCorrections).where(and(eq(posTenderCorrections.orgId, orgId), eq(posTenderCorrections.requestId, requestId)));
+  return row;
+}
+export async function getRefundByRequestId(tx: Tx, orgId: string, requestId: string): Promise<PosRefundRow | undefined> {
+  const [row] = await tx.select().from(posRefunds).where(and(eq(posRefunds.orgId, orgId), eq(posRefunds.requestId, requestId)));
+  return row;
+}
+/** The lines and the money-back rows of one refund, for a slip or a retried POST's reply. */
+export async function listRefundLines(tx: Tx, orgId: string, refundId: string): Promise<PosRefundLineRow[]> {
+  return tx.select().from(posRefundLines).where(and(eq(posRefundLines.orgId, orgId), eq(posRefundLines.refundId, refundId))).orderBy(asc(posRefundLines.id));
+}
+export async function listRefundPayments(tx: Tx, orgId: string, refundId: string): Promise<PosRefundPaymentRow[]> {
+  return tx.select().from(posRefundPayments).where(and(eq(posRefundPayments.orgId, orgId), eq(posRefundPayments.refundId, refundId))).orderBy(asc(posRefundPayments.id));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-534 S3 - wrong payment method (tender corrections)
+// ---------------------------------------------------------------------------------------------------------------------
+/** One receipt of the store, locked FOR UPDATE: two corrections of one receipt take turns. Undefined for another store's receipt or one that does not exist. */
+export async function getReceiptForUpdate(tx: Tx, orgId: string, storeId: string, receiptId: string): Promise<PosSalesReceiptRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posSalesReceipts)
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), eq(posSalesReceipts.id, receiptId)))
+    .for('update');
+  return row;
+}
+
+/** The paid rows of some receipts, with their ids and the change given (what a correction moves from). */
+export async function listPaymentRowsOfReceipts(
+  tx: Tx, orgId: string, receiptIds: readonly string[],
+): Promise<{ id: string; receiptId: string; tenderId: string; amount: string; changeGiven: string; referenceNo: string | null }[]> {
+  if (receiptIds.length === 0) return [];
+  return tx
+    .select({
+      id: posSalesReceiptPayments.id, receiptId: posSalesReceiptPayments.receiptId, tenderId: posSalesReceiptPayments.tenderId,
+      amount: posSalesReceiptPayments.amount, changeGiven: posSalesReceiptPayments.changeGiven, referenceNo: posSalesReceiptPayments.referenceNo,
+    })
+    .from(posSalesReceiptPayments)
+    .where(and(eq(posSalesReceiptPayments.orgId, orgId), inArray(posSalesReceiptPayments.receiptId, [...receiptIds])))
+    .orderBy(asc(posSalesReceiptPayments.id));
+}
+
+/** Every correction of some receipts (open or in a Z), oldest first. */
+export async function listTenderCorrectionsOfReceipts(tx: Tx, orgId: string, receiptIds: readonly string[]): Promise<PosTenderCorrectionRow[]> {
+  if (receiptIds.length === 0) return [];
+  return tx
+    .select()
+    .from(posTenderCorrections)
+    .where(and(eq(posTenderCorrections.orgId, orgId), inArray(posTenderCorrections.receiptId, [...receiptIds])))
+    .orderBy(asc(posTenderCorrections.recordedAt), asc(posTenderCorrections.id));
+}
+
+/** Freezes the open corrections of the receipts a Z takes (the one column the guard lets the Z write, NULL -> value once). Returns how many it took. */
+export async function closeTenderCorrectionsOfReceipts(tx: Tx, orgId: string, storeId: string, dayCloseId: string, receiptIds: readonly string[]): Promise<number> {
+  if (receiptIds.length === 0) return 0;
+  const rows = await tx
+    .update(posTenderCorrections)
+    .set({ dayCloseId })
+    .where(and(eq(posTenderCorrections.orgId, orgId), eq(posTenderCorrections.storeId, storeId), inArray(posTenderCorrections.receiptId, [...receiptIds]), isNull(posTenderCorrections.dayCloseId)))
+    .returning({ id: posTenderCorrections.id });
+  return rows.length;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-534 S4 - refunds
+// ---------------------------------------------------------------------------------------------------------------------
+export type PosSalesReceiptLineRow = typeof posSalesReceiptLines.$inferSelect;
+
+/** The lines of some receipts, in receipt line order: what a refund's quantity and money caps are read from. */
+export async function listReceiptLines(tx: Tx, orgId: string, receiptIds: readonly string[]): Promise<PosSalesReceiptLineRow[]> {
+  if (receiptIds.length === 0) return [];
+  return tx
+    .select()
+    .from(posSalesReceiptLines)
+    .where(and(eq(posSalesReceiptLines.orgId, orgId), inArray(posSalesReceiptLines.receiptId, [...receiptIds])))
+    .orderBy(asc(posSalesReceiptLines.receiptId), asc(posSalesReceiptLines.lineNo));
+}
+
+/** The next refund number of a store (max + 1, from 1). Only correct under the store's per-store Z lock, which every refund takes first; the unique (store_id, refund_seq) is the backstop. */
+export async function nextRefundSeq(tx: Tx, orgId: string, storeId: string): Promise<number> {
+  const rows = (await tx.execute(sql`select coalesce(max(refund_seq), 0)::int + 1 as seq from pos_refunds where org_id = ${orgId} and store_id = ${storeId}`)) as unknown as { seq: number }[];
+  return Number(rows[0]!.seq);
+}
+
+/** Every refund of some receipts (open or in a Z), oldest first. */
+export async function listRefundsOfReceipts(tx: Tx, orgId: string, receiptIds: readonly string[]): Promise<PosRefundRow[]> {
+  if (receiptIds.length === 0) return [];
+  return tx
+    .select()
+    .from(posRefunds)
+    .where(and(eq(posRefunds.orgId, orgId), inArray(posRefunds.parentReceiptId, [...receiptIds])))
+    .orderBy(asc(posRefunds.recordedAt), asc(posRefunds.id));
+}
+/** The refund lines of some receipts (every refund of them): the "already refunded" read of the quantity cap. */
+export async function listRefundLinesOfReceipts(tx: Tx, orgId: string, receiptIds: readonly string[]): Promise<PosRefundLineRow[]> {
+  if (receiptIds.length === 0) return [];
+  return tx.select().from(posRefundLines).where(and(eq(posRefundLines.orgId, orgId), inArray(posRefundLines.receiptId, [...receiptIds]))).orderBy(asc(posRefundLines.id));
+}
+/** The money-back rows of some receipts (every refund of them): the "already refunded" read of the per-payment cap. */
+export async function listRefundPaymentsOfReceipts(tx: Tx, orgId: string, receiptIds: readonly string[]): Promise<PosRefundPaymentRow[]> {
+  if (receiptIds.length === 0) return [];
+  return tx.select().from(posRefundPayments).where(and(eq(posRefundPayments.orgId, orgId), inArray(posRefundPayments.receiptId, [...receiptIds]))).orderBy(asc(posRefundPayments.id));
+}
+/** The money-back rows of some refunds (the Z's per-method read). */
+export async function listRefundPaymentsOfRefunds(tx: Tx, orgId: string, refundIds: readonly string[]): Promise<PosRefundPaymentRow[]> {
+  if (refundIds.length === 0) return [];
+  return tx.select().from(posRefundPayments).where(and(eq(posRefundPayments.orgId, orgId), inArray(posRefundPayments.refundId, [...refundIds]))).orderBy(asc(posRefundPayments.id));
+}
+
+/** The store's refunds not yet in a Z, oldest first (the open window's refunds, whichever day their receipt was sold). */
+export async function listOpenRefunds(tx: Tx, orgId: string, storeId: string): Promise<PosRefundRow[]> {
+  return tx
+    .select()
+    .from(posRefunds)
+    .where(and(eq(posRefunds.orgId, orgId), eq(posRefunds.storeId, storeId), isNull(posRefunds.dayCloseId)))
+    .orderBy(asc(posRefunds.recordedAt), asc(posRefunds.id));
+}
+/** The refunds frozen to one Z, oldest first. */
+export async function listRefundsOfClose(tx: Tx, orgId: string, storeId: string, dayCloseId: string): Promise<PosRefundRow[]> {
+  return tx
+    .select()
+    .from(posRefunds)
+    .where(and(eq(posRefunds.orgId, orgId), eq(posRefunds.storeId, storeId), eq(posRefunds.dayCloseId, dayCloseId)))
+    .orderBy(asc(posRefunds.recordedAt), asc(posRefunds.id));
+}
+/** Freezes refunds to the Z (the one column the guard lets the Z write, NULL -> value once). Returns how many were taken; the caller compares with what it read. */
+export async function closeRefunds(tx: Tx, orgId: string, storeId: string, dayCloseId: string, ids: readonly string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const rows = await tx
+    .update(posRefunds)
+    .set({ dayCloseId })
+    .where(and(eq(posRefunds.orgId, orgId), eq(posRefunds.storeId, storeId), inArray(posRefunds.id, [...ids]), isNull(posRefunds.dayCloseId)))
+    .returning({ id: posRefunds.id });
+  return rows.length;
+}
+
+/** The till number of a terminal (the middle of a printed receipt number), or undefined. */
+export async function getTerminalNoById(tx: Tx, orgId: string, terminalId: string): Promise<number | undefined> {
+  const [row] = await tx.select({ n: posTerminals.terminalNo }).from(posTerminals).where(and(eq(posTerminals.orgId, orgId), eq(posTerminals.id, terminalId)));
+  return row?.n;
 }

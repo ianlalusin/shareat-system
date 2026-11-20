@@ -58,6 +58,7 @@ const ROWS: Record<string, Row> = {
   'staff.endEmployment.endedOn': { ok: DATE, bad: [['nope', REAL('The end date')]] },
   'staff.endEmployment.employmentStatus': { ok: 'resigned', bad: [['  ', REQ('The status')]] },
   'staff.revokeCredential.reason': { ok: 'Lost card', bad: [['  ', REQ('The reason')]] },
+  'staff.suspendAccount.reason': { ok: 'Left the till open', bad: [['  ', REQ('The reason')]] }, // T-612
   'staff.enrolCard.cardId': {
     ok: 'CARD-1',
     bad: [['  ', `A card needs an id ${DASH} that is the whole credential.`]],

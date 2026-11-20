@@ -212,3 +212,31 @@ describe('Z-reading (R6): the closed window', () => {
     expect(lines).toContain('GROSS TOTAL                                 1.00');
   });
 });
+
+describe('T-534 S2 - the Convert lines (GCash cash-in / cash-out), the drawer\'s cash in and out', () => {
+  const converted = { convert: { cashIn: money('200.00'), cashOut: money('500.00'), count: 2 } };
+  it('an X and a Z print "CONVERT: CASH IN" and "CONVERT: CASH OUT" under the tenders, as given', () => {
+    for (const lines of [formatter('formatXSlip')({ ...base(), ...converted }, L32), formatter('formatZSlip')(zView(converted), L32)]) {
+      const i = lines.findIndex((l) => l.startsWith('CONVERT: CASH IN'));
+      expect(i).toBeGreaterThan(lines.findIndex((l) => l.startsWith('GCash')));
+      expect(lines[i]).toMatch(/200\.00$/);
+      expect(lines[i + 1]).toMatch(/^CONVERT: CASH OUT\s+500\.00$/);
+      expect(lines.every((l) => l.length <= 32)).toBe(true);
+    }
+  });
+  it('nothing is printed when nothing was converted, or the view has no Convert block (the older slips are unchanged)', () => {
+    const none = formatter('formatXSlip')({ ...base(), convert: { cashIn: money('0.00'), cashOut: money('0.00'), count: 0 } }, L32);
+    expect(none).toEqual(formatter('formatXSlip')(base(), L32));
+    expect(none.some((l) => l.includes('CONVERT'))).toBe(false);
+  });
+});
+
+describe('T-601 S4 - TEST - NOT A SALE on the X and Z slips', () => {
+  const withTest = (v: ReturnType<typeof base>, test: boolean) => ({ ...v, header: { ...v.header, test } });
+  it('a TEST store prints the line on the X and on the Z, a real one does not', () => {
+    expect(formatter('formatXSlip')(withTest(base(), true), L48).map((l) => l.trim())).toContain('TEST - NOT A SALE');
+    expect(formatter('formatZSlip')(withTest(zView(), true), L48).map((l) => l.trim())).toContain('TEST - NOT A SALE');
+    expect(formatter('formatXSlip')(withTest(base(), false), L48).join(chr(10))).not.toContain('TEST - NOT A SALE');
+    expect(formatter('formatZSlip')(zView(), L48).join(chr(10))).not.toContain('TEST - NOT A SALE');
+  });
+});

@@ -14,6 +14,7 @@ import { Banner, Dialog } from '@/components/ui';
 import { formatXSlip, printAmount, type PrintLayout } from '@/lib/pos-print';
 import type { PrintResult } from '@/lib/pos-print/adapter';
 import { Keypad } from '../_shell/Keypad';
+import { ConvertSection, type ConvertDeps, type ConvertRow, type ConvertTender } from './ConvertSection';
 import { readingSlipView, type ReadingJson } from './slips';
 
 export const CLOSE_NEEDS_INTERNET = 'Closing the day needs the internet.';
@@ -45,6 +46,10 @@ export interface TillDeps {
   postResend: (businessDate: string) => Promise<{ ok: boolean; error?: string }>;
   print: (lines: string[], opts: { copies: number }) => Promise<PrintResult>;
   newId: () => string;
+  /** T-534 S2: the Convert doors (online API calls); absent = no Convert section. */
+  postConvert?: ConvertDeps['postConvert'];
+  postVoidConvert?: ConvertDeps['postVoidConvert'];
+  refresh?: () => void;
 }
 export interface TillPanelProps {
   reading: ReadingJson;
@@ -53,9 +58,12 @@ export interface TillPanelProps {
   /** A store manager or above who may approve corrections: only they can use Close day by day and Resend. */
   isManager: boolean;
   layout: PrintLayout;
-  store: { name: string; vatRegistered?: boolean; identity?: unknown };
+  store: { name: string; vatRegistered?: boolean; identity?: unknown; mode?: string };
   cashierName: string;
   tillCountsHref: string;
+  /** T-534 S2: the store's active tenders and its Converts not yet in a Z. */
+  tenders?: readonly ConvertTender[];
+  conversions?: readonly ConvertRow[];
   deps: TillDeps;
 }
 
@@ -74,7 +82,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 }
 const amount = (m: string): string => printAmount(money(m));
 
-export function TillPanel({ reading, history, online, isManager, layout, store, cashierName, tillCountsHref, deps }: TillPanelProps) {
+export function TillPanel({ reading, history, online, isManager, layout, store, cashierName, tillCountsHref, tenders = [], conversions = [], deps }: TillPanelProps) {
   const [sheet, setSheet] = useState<null | 'z' | 'backlog'>(null);
   const [employeeId, setEmployeeId] = useState('');
   const [pin, setPin] = useState('');
@@ -113,7 +121,7 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
   const onClear = () => (field === 'id' ? setEmployeeId('') : setPin(''));
 
   const printX = async () => {
-    const lines = formatXSlip(readingSlipView(reading, { storeName: store.name, vatRegistered: store.vatRegistered ?? true, printedBy: cashierName, identity: store.identity }), layout);
+    const lines = formatXSlip(readingSlipView(reading, { storeName: store.name, vatRegistered: store.vatRegistered ?? true, printedBy: cashierName, identity: store.identity, mode: store.mode }), layout);
     const result = await deps.print(lines, { copies: 1 });
     setNotice(result === 'failed' ? 'The slip did not print. Try again.' : null);
   };
@@ -192,6 +200,9 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
           {reading.byTender.map((t) => (
             <Row key={t.name} label={t.name} value={amount(t.amount)} />
           ))}
+          {reading.convert && reading.convert.count > 0 ? <Row label="Convert: cash in" value={amount(reading.convert.cashIn)} /> : null}
+          {reading.convert && reading.convert.count > 0 ? <Row label="Convert: cash out" value={amount(reading.convert.cashOut)} /> : null}
+          {reading.refunds && reading.refunds.count > 0 ? <Row label="Refunds" value={`-${amount(reading.refunds.total)}`} /> : null}
           {reading.toCheckCount > 0 ? <Row label="Wallet payments to check" value={String(reading.toCheckCount)} /> : null}
           {reading.lateCount > 0 ? <Row label="Late receipts" value={String(reading.lateCount)} /> : null}
         </dl>
@@ -201,6 +212,10 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
           </p>
         ) : null}
       </section>
+
+      {deps.postConvert && deps.postVoidConvert ? (
+        <ConvertSection online={online} tenders={tenders} conversions={conversions} deps={{ postConvert: deps.postConvert, postVoidConvert: deps.postVoidConvert, newId: deps.newId }} onChanged={() => deps.refresh?.()} />
+      ) : null}
 
       <section aria-label="Close the day" className="space-y-2">
         <button type="button" data-erp-size="free" className={PRIMARY} disabled={!online || busy} aria-disabled={!online || busy} onClick={() => openSheet('z')}>

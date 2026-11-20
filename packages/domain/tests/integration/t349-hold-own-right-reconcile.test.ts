@@ -109,7 +109,7 @@ async function activeGrantRows(personId: string, grantName: string) {
 
 describe('C1 — reconcile: hold at A, then end the Cashier employment at A', () => {
   it(
-    "the position row is revoked; the hand grant survives, store-scoped at A (was red before T-349 S2: it was NULL-store, not store-scoped, so it still counted as a survivor either way, just not the right one)",
+    'the position row is revoked and (T-609) so is the hand grant, which was store-scoped at A',
     async () => {
       const f = await fixture('c1');
       await asOrg(f.orgId, (tx) => holdOwnRight(tx, f.admin, { personId: f.staffId, capability: CAP, positionGrantId: f.positionGrantId }));
@@ -120,11 +120,13 @@ describe('C1 — reconcile: hold at A, then end the Cashier employment at A', ()
       const position = rows.find((r) => r.grant_source === 'position');
       expect(position?.revoked_at, 'the position row must be revoked once the employment ends').not.toBeNull();
 
-      const activeGrant = rows.find((r) => r.grant_source === 'grant' && r.revoked_at === null);
-      expect(activeGrant, 'the hand grant must still be active after the employment ends').toBeDefined();
-      expect(activeGrant?.store_id, "was red before T-349 S2: the hold wrote a NULL-store row, not store A").toBe(f.storeAId);
+      // T-609 (Ian, 19 Nov 2026) supersedes T-349's "the hand grant outlives the job": ending the last job revokes every grant.
+      const handGrant = rows.find((r) => r.grant_source === 'grant');
+      expect(handGrant?.revoked_at, 'T-609: the hand grant is revoked with the employment').not.toBeNull();
+      expect(handGrant?.store_id, 'it was still store-scoped at A (T-349 S2)').toBe(f.storeAId);
+      expect(rows.filter((r) => r.revoked_at === null), 'nothing active is left').toHaveLength(0);
 
-      await expect(asOrg(f.orgId, (tx) => authorize(tx, f.staff, CAP, { storeId: f.storeAId }))).resolves.toBeUndefined();
+      await expect(asOrg(f.orgId, (tx) => authorize(tx, f.staff, CAP, { storeId: f.storeAId }))).rejects.toThrow();
     },
     30000,
   );

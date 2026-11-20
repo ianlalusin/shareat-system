@@ -10,6 +10,7 @@ import { formatZSlip } from '@/lib/pos-print';
 import { printLines } from '@/lib/pos-print/adapter';
 import { printSettingsOf } from '../_payment/logic';
 import { usePos } from '../_shell/pos-context';
+import type { ConvertRow, ConvertTender } from './ConvertSection';
 import { TillPanel, type CloseAnswer, type TillDeps, type TillHistoryRow } from './TillPanel';
 import { zSlipView, type ReadingJson } from './slips';
 
@@ -17,9 +18,11 @@ interface Props {
   reading: ReadingJson;
   history: TillHistoryRow[];
   isManager: boolean;
-  store: { name: string; vatRegistered: boolean; receiptPaperMm: 58 | 80; receiptCopies: number; identity?: unknown };
+  store: { name: string; vatRegistered: boolean; receiptPaperMm: 58 | 80; receiptCopies: number; identity?: unknown; /** T-601 S4 */ mode?: string };
   cashierName: string;
   tillCountsHref: string;
+  tenders: ConvertTender[];
+  conversions: ConvertRow[];
 }
 
 async function post(url: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
@@ -29,7 +32,7 @@ async function post(url: string, body: unknown): Promise<{ status: number; json:
 }
 const failed = (json: Record<string, unknown>, fallback: string): CloseAnswer => ({ ok: false, error: typeof json.error === 'string' ? json.error : fallback });
 
-export function TillView({ reading, history, isManager, store, cashierName, tillCountsHref }: Props) {
+export function TillView({ reading, history, isManager, store, cashierName, tillCountsHref, tenders, conversions }: Props) {
   const router = useRouter();
   const pos = usePos();
   const { layout } = printSettingsOf(store);
@@ -38,7 +41,7 @@ export function TillView({ reading, history, isManager, store, cashierName, till
       const { json } = await post('/api/pos/day-close', body);
       if (json.ok !== true) return failed(json, 'The day could not be closed.');
       const r = json as unknown as { dayCloseId: string; zNo: number; businessDate: string; reading: ReadingJson; closedByName: string; approvedByName: string };
-      const slip = formatZSlip(zSlipView(r.reading, { storeName: store.name, vatRegistered: store.vatRegistered, printedBy: r.closedByName, identity: store.identity }, { zNo: r.zNo, businessDate: r.businessDate, approvedBy: r.approvedByName, reprint: false }), layout);
+      const slip = formatZSlip(zSlipView(r.reading, { storeName: store.name, vatRegistered: store.vatRegistered, printedBy: r.closedByName, identity: store.identity, mode: store.mode }, { zNo: r.zNo, businessDate: r.businessDate, approvedBy: r.approvedByName, reprint: false }), layout);
       router.refresh();
       return { ok: true, dayCloseId: r.dayCloseId, zNo: r.zNo, slip };
     },
@@ -55,8 +58,17 @@ export function TillView({ reading, history, isManager, store, cashierName, till
       if (json.ok === true) router.refresh();
       return json.ok === true ? { ok: true } : { ok: false, error: typeof json.error === 'string' ? json.error : 'v1 could not be reached. Try again.' };
     },
+    postConvert: async (body) => {
+      const { json } = await post('/api/pos/conversions', body);
+      return json.ok === true ? { ok: true } : { ok: false, error: typeof json.error === 'string' ? json.error : 'The Convert could not be saved.' };
+    },
+    postVoidConvert: async (conversionId) => {
+      const { json } = await post('/api/pos/conversions/void', { conversionId });
+      return json.ok === true ? { ok: true } : { ok: false, error: typeof json.error === 'string' ? json.error : 'The Convert could not be voided.' };
+    },
+    refresh: () => router.refresh(),
     print: (lines, opts) => printLines(lines, opts), // X/Z/Reprint slips: TillPanel asks for 1 copy (cash-control slips, not receipts)
     newId: () => globalThis.crypto.randomUUID(),
   };
-  return <TillPanel reading={reading} history={history} online={pos?.online ?? true} isManager={isManager} layout={layout} store={store} cashierName={cashierName} tillCountsHref={tillCountsHref} deps={deps} />;
+  return <TillPanel reading={reading} history={history} online={pos?.online ?? true} isManager={isManager} layout={layout} store={store} cashierName={cashierName} tillCountsHref={tillCountsHref} tenders={tenders} conversions={conversions} deps={deps} />;
 }

@@ -111,6 +111,7 @@ describe('the reading so far (R6 X-reading)', () => {
     // 58 mm Font A is 32 columns, where the sentence wraps over two centred lines (the print test pins exactly that), so compare it with the line breaks folded.
     expect(text.replace(/\s+/g, ' ')).toContain('Reading so far - the day is NOT closed');
     expect(text).toContain('Cash control, not a BIR document');
+    expect(d.print.mock.calls[0]![1], 'a slip is ONE copy, whatever the till copy count is').toEqual({ copies: 1 });
   });
   it('a link "Till counts and handover" goes to the ERP till screen (row 319): no till UI of its own', async () => {
     await render();
@@ -142,10 +143,12 @@ describe('Close day (Z)', () => {
     expect(d.postClose.mock.calls[0]![0]).toEqual({ closeId: RUN_ID, approval: { employeeId: 'SE-007', pin: PIN } });
     expect(d.print).toHaveBeenCalledTimes(1);
     expect(d.print.mock.calls[0]![0]).toEqual(SLIP);
+    expect(d.print.mock.calls[0]![1], 'Z slip: one copy').toEqual({ copies: 1 });
     expect(host.textContent).toContain('Z-0001');
     await click(button('Reprint'));
     expect(d.print).toHaveBeenCalledTimes(2);
     expect(d.print.mock.calls[1]![0]).toEqual(SLIP);
+    expect(d.print.mock.calls[1]![1], 'Reprint: one copy').toEqual({ copies: 1 });
   });
 
   it('the PIN is not left on the screen after the close: not in any input value, not in the text', async () => {
@@ -230,5 +233,16 @@ describe('History and Resend', () => {
     await click(button('Reprint'));
     expect(d.print).toHaveBeenCalledTimes(1);
     expect(d.print.mock.calls[0]![0].join(NL)).toContain('Z-READING');
+    expect(d.print.mock.calls[0]![1], 'Reprint of a past Z: one copy').toEqual({ copies: 1 });
+  });
+});
+
+describe('TillView passes the slip copy count through (T-531 audit: the till copy count is for receipts only)', () => {
+  it('TillView prints with the options TillPanel asks for, never the till receipt-copy count', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const src = readFileSync(join(process.cwd(), 'apps/erp/src/app/pos/_till/TillView.tsx'), 'utf8');
+    expect(src).toContain('print: (lines, opts) => printLines(lines, opts)');
+    expect(src).not.toMatch(/printLines\(lines, \{\s*copies\s*\}\)/);
   });
 });

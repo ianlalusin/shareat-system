@@ -18,6 +18,10 @@ import { boolean, check, index, pgTable, text, timestamp, uuid, type AnyPgColumn
 import { organizations } from './organizations';
 import { storedFiles } from './stored-files';
 
+/** T-612. The four account statuses (the CHECK `persons_account_status_check`, migration 0268). */
+export const ACCOUNT_STATUSES = ['pending', 'active', 'suspended', 'ended'] as const;
+export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
+
 export const persons = pgTable(
   'persons',
   {
@@ -33,7 +37,17 @@ export const persons = pgTable(
     lastName: text('last_name'),
     firstName: text('first_name'),
     middleName: text('middle_name'),
+    /** @deprecated T-612 (migration 0268): UNREAD. `accountStatus` replaced it; a later clean-up task drops the column. */
     isActive: boolean('is_active').notNull().default(true),
+    /**
+     * ⭐ T-612 (migration 0268; supersedes bible row 340): the person's ERP/POS account status. `pending` = hired, waiting for a manager to
+     * activate; `active` = may sign in; `suspended` = rights KEPT but paused (sign-in refused, sessions ended); `ended` = T-609 ended the last
+     * job. Every sign-in gate and `authorize()` read THIS, never `is_active`. The domain keeps it in step with employment.
+     * ⭐ WHY THE DEFAULT IS 'active', NOT 'pending' (BOSS ruling, 20 Nov 2026): hundreds of existing writers and test fixtures insert persons raw and expect them
+     * to work, and every row written before 0268 was a working person. Safety does not rest on the default: the hire path (`createPerson`) and the re-hire of an
+     * `ended` person (`createEmployment`) set 'pending' explicitly, and a test proves both. A NEW writer that forgets a status gets 'active', exactly as before.
+     */
+    accountStatus: text('account_status', { enum: ACCOUNT_STATUSES }).notNull().default('active'),
     /**
      * ⭐ T-304 — explicit, not inferred. A shared-terminal Firebase credential (option (a),
      * `docs/tasks/304-two-layer-terminal-sign-in.md` §Q1) is attached to a `persons` row that is
@@ -62,6 +76,9 @@ export const persons = pgTable(
   },
   (t) => [
     check('persons_kind_check', sql`${t.kind} in ('person', 'terminal')`),
+    // T-612 (0268): the status vocabulary, and a shared terminal is never anything but active.
+    check('persons_account_status_check', sql`${t.accountStatus} in ('pending', 'active', 'suspended', 'ended')`),
+    check('persons_terminal_always_active_check', sql`${t.kind} <> 'terminal' or ${t.accountStatus} = 'active'`),
     // T-438 (0207): parts are all-NULL, or last+first set on a person-kind row with display_name equal to the formatted parts.
     check(
       'persons_name_parts_check',

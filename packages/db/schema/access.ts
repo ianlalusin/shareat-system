@@ -134,6 +134,10 @@ export const personStoreScope = pgTable(
      * to admin/manager keeps their scope after the employment ends) but never downgrades an
      * existing `manual` or `fan_out` row. `employment` never overwrites anything.
      *
+     * ⭐ T-609 (Ian, 19 Nov 2026) supersedes the "only `employment`" half: ending a person's LAST open employment deletes
+     * every scope row whatever its source; while another job remains, the ended store's `employment` and `manual` rows go
+     * and `fan_out` (the role's own materialisation) stays.
+     *
      * `default('manual')` — ~147 raw inserts across `scripts/dev-seed.ts` and test fixtures predate
      * this column and never will pass `source`; only `createEmployment` writes `'employment'`, so
      * every caller that has no opinion is, by construction, the same shape as a manual grant.

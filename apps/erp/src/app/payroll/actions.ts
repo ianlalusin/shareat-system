@@ -48,7 +48,7 @@ export async function postPayRunAction(formData: FormData): Promise<void> {
   const store = str(formData, 'storeId');
   const start = str(formData, 'periodStart');
   const end = str(formData, 'periodEnd');
-  let out = { payslips: 0, totalNet: '' };
+  let out: { payslips: number; totalNet: string; warning?: string } = { payslips: 0, totalNet: '' };
   try {
     out = await withOrgPrincipal(actor.orgId, (tx) =>
       postPayRun(tx, actor, {
@@ -65,7 +65,7 @@ export async function postPayRunAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(
     '/payroll',
     { store },
-    { stamp: 'POSTED', ok: `Posted ${out.payslips} payslip${out.payslips === 1 ? '' : 's'}, ${out.totalNet} net. The days they paid are now frozen.` },
+    { stamp: 'POSTED', ok: `Posted ${out.payslips} payslip${out.payslips === 1 ? '' : 's'}, ${out.totalNet} net. The days they paid are now frozen.${out.warning ? ` ⚠️ ${out.warning}` : ''}` },
   );
 }
 

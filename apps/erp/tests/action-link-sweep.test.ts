@@ -567,7 +567,12 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1692 -> 1686, T-592 R4 (17 Nov 2026): the Statement matching section left /settings/sales-channels (Settlement wiring EditableRecord, one bank-names EditableRecord per settle-later channel, their fields and the email checkbox): -6 census controls on the fixture-free source count; measured by runCensus() before (1692) and after (1686).
     // 1686 -> 1687, T-601 S2 (18 Nov 2026): the /pos/receipts placeholder became the Receipts list (+1 census control on the fixture-free source count); measured by runCensus() (the test reported 1687 against 1686).
     // 1687 -> 1688, T-606 S4 (18 Nov 2026): the admin-only "Move to Channel receivable" button on a platform channel's card (+1 census control); measured by runCensus() (the test reported 1688 against 1687).
-    expect(results.length).toBe(1688);
+    // 1688 -> 1694, T-532 S1 (19 Nov 2026): the /pos/printer screen and the shell Printer link: +6 census controls; the test reported 1694 against 1688, FAIL/UNRESOLVED unmoved.
+    // 1694 -> 1705, T-534 (19 Nov 2026): +5 for S2's Convert section on the Till tab (its branch did not bump this) and +6 for S3's Wrong payment method dialog on /pos/receipts (four buttons and the reference and reason boxes: all pass, min-h-12 or taller); FAIL/UNRESOLVED unmoved; re-measured by runCensus() (re-based on main after T-532 S1: 1694 + 11 = 1705; the original measure was 1699 against 1688).
+    // 1705 -> 1714, T-534 S4 (19 Nov 2026): +9 for the Refund dialog on /pos/receipts (the Refund button, the item minus and plus, the money-back box, the wallet reference box, the reason box, Print slip again, Done, and the Refund save button; all min-h-12 or taller, so FAIL/UNRESOLVED are unmoved); re-measured by runCensus() (merged with T-532 S1 +6; the final merged measure, by runCensus(), is 1714 against 1694 on main b6ee979).
+    // 1714 -> 1719, T-611 S1: Copy-from-store dialog +5 (all min-h-11 or taller, so FAIL/UNRESOLVED are unmoved).
+    // 1719 -> 1722, T-612 (20 Nov 2026): the staff record's Account row adds Activate, Reinstate and the Suspend dialog trigger (+3 census controls); re-measured by the test after merging main (1719 + 3).
+    expect(results.length).toBe(1722);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

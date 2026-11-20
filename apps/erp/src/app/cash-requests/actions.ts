@@ -118,6 +118,7 @@ export async function settleAction(formData: FormData): Promise<void> {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       settleCashRequest(tx, actor, {
         requestId: id,
+        settleId: str(formData, 'settleId'),
         ...(returnedAmount ? { returnedAmount } : {}),
         ...(shortAmount ? { shortAmount } : {}),
         ...(str(formData, 'shortReason') ? { shortReason: str(formData, 'shortReason') } : {}),

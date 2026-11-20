@@ -26,6 +26,8 @@ export interface ReceiptHeader {
   addressLines: string[];
   tin: string | null;
   vatRegistered: boolean;
+  /** T-601 S4: the store is in TEST mode, so the paper says `TEST - NOT A SALE`. Absent = a real slip. */
+  test?: boolean;
 }
 
 /** One discount applied to a line. `amount` is a POSITIVE figure and is printed with a minus sign. */
@@ -103,6 +105,24 @@ export interface ReceiptView {
   };
 }
 
+/** T-534 S4: what a refund slip prints, already worked out by the server. Times arrive formatted (Manila time). */
+export interface RefundSlipView {
+  header: ReceiptHeader;
+  refundNo: string;
+  /** The ORIGINAL receipt's number. */
+  receiptNo: string;
+  refundedAtLocal: string;
+  lines: { name: string; qty: number; amount: Money }[];
+  total: Money;
+  /** The money back, one row per original paid row, by that row's method. `reference` is a wallet's reference of the money sent back. */
+  payments: { name: string; amount: Money; reference: string | null }[];
+  reason: string;
+  approvedBy: string;
+  recordedBy: string;
+  /** True: the paper carries the line `REPRINT`. */
+  reprint?: boolean;
+}
+
 /** A kitchen ticket: one station's prep list for a sent round. */
 export interface KitchenTicketView {
   stationName: string;
@@ -148,6 +168,10 @@ export interface ReadingSlipView {
   varianceTotal?: Money;
   /** T-558: receipts short by more than the tolerance (findings); printed only above zero. */
   shortfallCount?: number;
+  /** T-534 S2: Convert (GCash cash-in / cash-out) of the window, in its own lines under the tenders; printed only when something was converted. Cash in/out are the DRAWER's. */
+  convert?: { cashIn: Money; cashOut: Money; count: number };
+  /** T-534 S4: refunds of the window; the tender rows above are already NET of them. Printed only when there was a refund. */
+  refunds?: { total: Money; count: number };
   /** Offline wallet payments still to check; printed only above zero. */
   toCheckCount: number;
   /** Receipts recorded after their window opened; printed only above zero. */

@@ -23,7 +23,7 @@ export async function post13thMonthRunAction(formData: FormData): Promise<void> 
   const actor = await requireActor();
   const store = str(formData, 'storeId');
   const year = str(formData, 'year');
-  let out = { payouts: 0, totalNet: '' };
+  let out: { payouts: number; totalNet: string; warning?: string } = { payouts: 0, totalNet: '' };
   try {
     out = await withOrgPrincipal(actor.orgId, (tx) =>
       post13thMonthRun(tx, actor, {
@@ -39,7 +39,7 @@ export async function post13thMonthRunAction(formData: FormData): Promise<void> 
   return await redirectWithFlash(
     '/payroll/thirteenth-month',
     { store, year },
-    { ok: `Posted ${out.payouts} payout${out.payouts === 1 ? '' : 's'}, ${out.totalNet} net.` },
+    { ok: `Posted ${out.payouts} payout${out.payouts === 1 ? '' : 's'}, ${out.totalNet} net.${out.warning ? ` ⚠️ ${out.warning}` : ''}` },
   );
 }
 

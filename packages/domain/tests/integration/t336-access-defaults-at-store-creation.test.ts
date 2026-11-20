@@ -113,6 +113,8 @@ describe('I2 — a Cashier can do its 18 and not the rest', () => {
         primaryPositionId: cashier!.id,
       }),
     );
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
     // T-336 auto-role delta: createEmployment now auto-assigns 'staff', so a manual insertRole
     // here would 23505 against person_roles_active_person_org_unique. Assert it happened instead.
     const [role] = await sql<{ role: string }[]>`
@@ -168,6 +170,8 @@ describe('I3 — a blank hire (Server) gets exactly {record_stock_movement, reco
         startedOn: '2026-09-24',
       }),
     );
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
 
     const grants = await sql<{ grant_name: string }[]>`
       select grant_name from person_grants where person_id = ${worker!.id} and grant_source = 'position'`;
@@ -271,6 +275,8 @@ describe('I5 — existing defaults are byte-identical (ruling item 2)', () => {
         positionIds: [server!.id], primaryPositionId: server!.id,
       }),
     );
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
 
     const snapshotDefaults = () => sql<{ id: string; position_id: string; store_id: string; capability: string; set_by: string; set_at: string; revoked_at: string | null }[]>`
       select id, position_id, store_id, capability, set_by, set_at::text, revoked_at from position_capability_defaults where store_id = ${boot.storeId} order by id`;

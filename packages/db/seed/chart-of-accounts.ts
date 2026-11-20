@@ -60,6 +60,8 @@ export interface ChartOfAccountsSeedAccount {
    * the nine control accounts COA-ALIGNMENT names "CONTROL + subledger". Always false for
    * headers (not postable, so never carry a line) and every other leaf. */
   requiresParty: boolean;
+  /** T-608 (migration 0267): a line MAY carry a party of exactly this type (7200 interest -> 'loan'); null = no party. Never set together with requiresParty. */
+  optionalPartyType: string | null;
 }
 
 const header = (
@@ -77,6 +79,7 @@ const header = (
   legacyCode: null,
   status: 'active',
   requiresParty: false,
+  optionalPartyType: null,
 });
 
 const leaf = (
@@ -85,7 +88,7 @@ const leaf = (
   type: AccountType,
   normalBalance: NormalBalance,
   parentCode: string,
-  opts: { legacyCode?: string; status?: SeedAccountStatus; requiresParty?: boolean } = {},
+  opts: { legacyCode?: string; status?: SeedAccountStatus; requiresParty?: boolean; optionalPartyType?: string } = {},
 ): ChartOfAccountsSeedAccount => ({
   code,
   name,
@@ -96,6 +99,7 @@ const leaf = (
   legacyCode: opts.legacyCode ?? null,
   status: opts.status ?? 'active',
   requiresParty: opts.requiresParty ?? false,
+  optionalPartyType: opts.optionalPartyType ?? null,
 });
 
 export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
@@ -408,7 +412,7 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('7100', 'Platform settlement gain', 'income', 'credit', '7000', {
     legacyCode: 'income__platform_settlement_gain',
   }),
-  leaf('7200', 'Interest expense', 'expense', 'debit', '7000', { legacyCode: 'expense__interest' }),
+  leaf('7200', 'Interest expense', 'expense', 'debit', '7000', { legacyCode: 'expense__interest', optionalPartyType: 'loan' }),
   leaf('7310', 'Staff charge recovery', 'income', 'credit', '7000', {
     legacyCode: 'income__charge_recovery',
   }),
@@ -500,13 +504,14 @@ export async function seedChartOfAccounts(sql: postgres.Sql, orgId: string): Pro
     legacy_code: h.legacyCode,
     status: h.status,
     requires_party: h.requiresParty,
+    optional_party_type: h.optionalPartyType,
   }));
 
   const headerRows = await sql<{ id: string }[]>`
-    insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status, requires_party)
-    select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, null, false, true, v.legacy_code, v.status, v.requires_party
+    insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status, requires_party, optional_party_type)
+    select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, null, false, true, v.legacy_code, v.status, v.requires_party, v.optional_party_type
     from jsonb_to_recordset((${JSON.stringify(headerPayload)})::text::jsonb)
-      as v(code text, name text, type text, normal_balance text, legacy_code text, status text, requires_party boolean)
+      as v(code text, name text, type text, normal_balance text, legacy_code text, status text, requires_party boolean, optional_party_type text)
     on conflict (org_id, code) do nothing
     returning accounts.id
   `;
@@ -520,13 +525,14 @@ export async function seedChartOfAccounts(sql: postgres.Sql, orgId: string): Pro
     legacy_code: l.legacyCode,
     status: l.status,
     requires_party: l.requiresParty,
+    optional_party_type: l.optionalPartyType,
   }));
 
   const leafRows = await sql<{ id: string }[]>`
-    insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status, requires_party)
-    select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, p.id, true, true, v.legacy_code, v.status, v.requires_party
+    insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status, requires_party, optional_party_type)
+    select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, p.id, true, true, v.legacy_code, v.status, v.requires_party, v.optional_party_type
     from jsonb_to_recordset((${JSON.stringify(leafPayload)})::text::jsonb)
-      as v(code text, name text, type text, normal_balance text, parent_code text, legacy_code text, status text, requires_party boolean)
+      as v(code text, name text, type text, normal_balance text, parent_code text, legacy_code text, status text, requires_party boolean, optional_party_type text)
     join accounts p on p.org_id = ${orgId}::uuid and p.code = v.parent_code
     on conflict (org_id, code) do nothing
     returning accounts.id

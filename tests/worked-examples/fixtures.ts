@@ -1572,6 +1572,19 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     entryDate: '2026-01-06',
   },
   {
+    id: 'asset_purchase.below-threshold',
+    sourceType: 'asset_purchase',
+    title: 'A CAPEX purchase under the threshold is expensed (DEF-891)',
+    narrative: 'A ₱4,500 tong set filed under Capital Expenditure is below the ₱5,000 threshold, so it is expensed the day it is bought.',
+    frequency: 1,
+    input: { assetId: 'ASSET-0094', description: 'Tong set', amount: '4500.00', payments: [{ method: 'cash', amount: '4500.00' }] },
+    expect: [
+      D('6510', '4500.00', null, { lineMemo: 'Tong set' }),
+      C('1110', '4500.00', null, { lineMemo: 'cash out' }),
+    ],
+    entryDate: '2026-01-06',
+  },
+  {
     id: 'asset_purchase.credit',
     sourceType: 'asset_purchase',
     title: 'Fixed asset purchase, on account',

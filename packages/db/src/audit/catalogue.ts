@@ -157,6 +157,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu_daypart.created', 'settings', 'high', 'store', 'menu_dayparts', 'T-510'),
   def('menu_daypart.edited', 'settings', 'high', 'store', 'menu_dayparts', 'T-510'),
   def('menu_daypart.retired', 'settings', 'high', 'store', 'menu_dayparts', 'T-510'),
+  // T-611 S1: an administrator copied one store's menu hours or prices onto another (one row per target store; payload = kind, source store, counts, approver; no personal data). Dotted: new.
+  def('settings.copied', 'settings', 'high', 'store', 'stores', 'T-611'),
   // T-511 S4: one file ingested into the staging tables (nothing is booked); store-scoped to the MATCHED store.
   def('settlement_upload.ingested', 'data', 'normal', 'store', 'settlement_uploads', 'T-511'),
   // T-511 S5b: the review stage. A day rejected / reopened and an admin's loan re-allocation; entity = the staged day line. Nothing here posts.
@@ -240,6 +242,13 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('pos.store_mode_set', 'settings', 'high', 'store', 'pos_stores', 'T-533'),
   // T-531: the day close (the Z; entity = the pos_day_closes row, or the run id for the backlog), the ERP sales day it derives, and the December bridge to v1 (entity = the store).
   // Server-only: the tablet never sends them. A Z is money, so the 10-year class; a failed bridge is `high` (a day v1 does not have yet).
+  // T-534 S2: a Convert (GCash cash-in / cash-out) recorded on the till, and one voided before the Z (entity = the pos_payment_conversions row). Payloads carry ids and amounts, never a note's text.
+  def('pos.conversion_recorded', 'money', 'normal', 'store', 'pos_payment_conversions', 'T-534'),
+  def('pos.conversion_voided', 'money', 'high', 'store', 'pos_payment_conversions', 'T-534'),
+  // T-534 S3: a wrong payment method fixed before the Z (entity = the pos_tender_corrections row). The payload carries ids, the amount and the reason, never a reference number's text.
+  def('pos.tender_corrected', 'money', 'high', 'store', 'pos_tender_corrections', 'T-534'),
+  // T-534 S4: a refund of a paid receipt (entity = the pos_refunds row). The payload carries ids, amounts, the reason and the approver, never a wallet reference's text.
+  def('pos.refund_recorded', 'money', 'high', 'store', 'pos_refunds', 'T-534'),
   def('pos.day_closed', 'money', 'high', 'store', 'pos_day_closes', 'T-531'),
   def('pos.day_closed_backlog', 'money', 'high', 'store', 'pos_day_closes', 'T-531'),
   def('pos.v1_bridge_sent', 'money', 'normal', 'store', 'stores', 'T-531'),
@@ -342,6 +351,12 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('security.event_store_mismatch', 'security', 'high', 'store', 'stores', 'T-402', { actor: 'either' }),
   def('employment.created', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402'),
+  // T-609: what ending an employment switched off (counts per kind: store scopes, grants, role, PIN, sessions). No ids, no PIN material.
+  def('employment.access_revoked', 'security', 'high', 'store', 'employments', 'T-609'),
+  // T-612: a person's ACCOUNT status moves (entity_id = the person; the store is the employment the button was pressed on). A suspend carries its reason and the sessions it ended.
+  def('account.activated', 'security', 'normal', 'store', 'persons', 'T-612'),
+  def('account.suspended', 'security', 'high', 'store', 'persons', 'T-612'),
+  def('account.reinstated', 'security', 'normal', 'store', 'persons', 'T-612'),
   // T-434: a staff photo is changed on an EMPLOYMENT (the store's ID card). Photo VIEWS are deliberately not logged (every card load would flood it).
   def('staff_photo.set', 'staff', 'normal', 'store', 'employments', 'T-434'),
   def('staff_photo.replaced', 'staff', 'normal', 'store', 'employments', 'T-434'),

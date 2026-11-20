@@ -3,8 +3,11 @@ import { ENDED_STATUSES } from '@shareat/db/schema';
 import { formatBusinessDateTime, formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import {
+  activateAccountAction,
   endEmploymentAction,
   issuePinAction,
+  reinstateAccountAction,
+  suspendAccountAction,
   removeStaffPhotoAction,
   removeStaffSignatureAction,
   renamePersonAction,
@@ -17,13 +20,13 @@ import { DeductionAgreementsSection } from './DeductionAgreementsSection';
 import { Avatar } from './Avatar';
 import { RefillForm } from './RefillForm';
 import { DocumentsSection } from './DocumentsSection';
-import { deductionAgreementsFor, documentsFor, employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import { accessOffAtStoreFor, deductionAgreementsFor, documentsFor, employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { staffRoleTitle } from '../role-title';
-import { STAFF_END_RULES, STAFF_GOV_ID_RULES, STAFF_PIN_RULES, STAFF_RENAME_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { STAFF_END_RULES, STAFF_GOV_ID_RULES, STAFF_PIN_RULES, STAFF_RENAME_RULES, STAFF_SUSPEND_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Badge, Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input } from '@/components/ui';
 import { ActionIcon } from '@/components/ui/action-icons';
 import { withFlash } from '@/lib/flash';
@@ -37,6 +40,14 @@ const INPUT =
   'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const CARD = 'space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800';
 const ACCESS_ROW = 'flex min-h-11 items-center justify-between gap-3 py-2';
+
+/** T-612: the account status as a badge and a sentence. `ended` has no button: it is the End employment action, undone by hiring again. */
+const ACCOUNT_BADGE = {
+  pending: { tone: 'warning', label: 'Pending', note: 'Waiting for a manager to activate this account. They cannot sign in yet.' },
+  active: { tone: 'success', label: 'Active', note: 'Can sign in.' },
+  suspended: { tone: 'danger', label: 'Suspended', note: 'Paused. Their role and access are kept, but they cannot sign in until you reinstate them.' },
+  ended: { tone: 'closed', label: 'Ended', note: 'Access ended. Hire again to restore.' },
+} as const;
 
 const capital = (v: string) => {
   const t = v.replace(/-/g, ' ');
@@ -68,7 +79,7 @@ export default async function EmploymentDetailPage({
 
   const isEnded = detail.employment.endedOn !== null;
   const roleOnly = detail.role === 'manager' || detail.role === 'admin' || detail.role === 'super_admin';
-  const [positions, livePin, otherBranches, govIds, media, agreements, documents] = await Promise.all([
+  const [positions, livePin, otherBranches, govIds, media, agreements, documents, accessOff] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
     livePinFor(actor, detail.employment.personId),
     // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
@@ -80,6 +91,8 @@ export default async function EmploymentDetailPage({
     deductionAgreementsFor(actor, detail.employment.personId, detail.employment.storeId),
     // T-584: documents issued for this employment; null (hidden) without view_documents at the store.
     documentsFor(actor, employmentId, detail.employment.storeId),
+    // T-609: an ended employment shows whether the person's access is really off here.
+    isEnded ? accessOffAtStoreFor(actor, detail.employment.personId, detail.employment.storeId) : Promise.resolve(false),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
@@ -93,14 +106,16 @@ export default async function EmploymentDetailPage({
     .map((t) => ` · ${t}`)
     .join('');
 
+  const account = ACCOUNT_BADGE[detail.accountStatus];
   const statePills = (
     <>
       {isEnded ? (
         <Badge tone="closed" label={`Ended on ${formatBusinessDayLong(detail.employment.endedOn!)}`} />
       ) : (
-        <Badge tone="success" label="Active" />
+        <Badge tone={account.tone} label={account.label} />
       )}
       {!isEnded && !livePin && <Badge tone="warning" label="No sign-in PIN" />}
+      {isEnded && accessOff && <Badge tone="closed" label="Access: off" />}
     </>
   );
 
@@ -368,6 +383,41 @@ export default async function EmploymentDetailPage({
                   )}
                 </span>
               </li>
+              <li className={ACCESS_ROW}>
+                <span className="min-w-0">
+                  <span className="block font-medium">Account: {account.label}</span>
+                  <span className="block text-neutral-600 dark:text-neutral-400">{account.note}</span>
+                  {detail.accountStatus === 'pending' && !livePin && <span className="block text-warning-ink">Set a PIN so they can sign in.</span>}
+                </span>
+                {detail.canManageAccount && detail.accountStatus === 'pending' && (
+                  <form action={activateAccountAction}>
+                    <input type="hidden" name="employmentId" value={employmentId} />
+                    <Button type="submit" variant="primary">Activate</Button>
+                  </form>
+                )}
+                {detail.canManageAccount && detail.accountStatus === 'suspended' && (
+                  <form action={reinstateAccountAction}>
+                    <input type="hidden" name="employmentId" value={employmentId} />
+                    <Button type="submit" variant="primary">Reinstate</Button>
+                  </form>
+                )}
+                {detail.canManageAccount && detail.accountStatus === 'active' && !detail.isSelf && (
+                  <FormModal trigger="Suspend" triggerVariant="danger" triggerIcon={null} title="Suspend account" size="md">
+                    <CheckedForm rules={STAFF_SUSPEND_RULES} action={suspendAccountAction} className="space-y-3">
+                      <input type="hidden" name="employmentId" value={employmentId} />
+                      <Field label="Reason" rule={STAFF_SUSPEND_RULES.reason}>
+                        <Input {...nativeAttrs(STAFF_SUSPEND_RULES.reason)} placeholder="Why is this account being suspended?" className="w-full" />
+                      </Field>
+                      <ConfirmDestructive
+                        tier="retype"
+                        label="Suspend account"
+                        consequence="Signs them out now and blocks sign-in. Their role and access are kept, paused; Reinstate restores them exactly."
+                        expectedName={detail.personName}
+                      />
+                    </CheckedForm>
+                  </FormModal>
+                )}
+              </li>
               <li>
                 <a href={`/admin/users/${detail.employment.personId}`} className={`${ACCESS_ROW} no-underline`}>
                   <span className="min-w-0">
@@ -427,6 +477,11 @@ export default async function EmploymentDetailPage({
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               Ended {formatBusinessDayLong(detail.employment.endedOn!)} as {detail.employment.employmentStatus.replace(/-/g, ' ')}.
             </p>
+            {accessOff && (
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                Access: off. To switch it back on, hire them again, then set a new PIN. A former manager or administrator comes back as staff; an administrator gives the role again. Extra access an administrator gave by hand is not brought back; an administrator grants it again.
+              </p>
+            )}
           </>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
@@ -454,10 +509,19 @@ export default async function EmploymentDetailPage({
                     ))}
                   </select>
                 </Field>
+                <p className="basis-full text-sm text-neutral-700 dark:text-neutral-300">
+                  {otherBranches.branches.length + otherBranches.hiddenCount > 0
+                    ? `This signs them out of ${detail.storeName} and removes their access there. Their PIN and access at their other store${otherBranches.branches.length + otherBranches.hiddenCount === 1 ? '' : 's'} stay.`
+                    : `This signs them out everywhere and removes their PIN, role and all access, at ${detail.storeName} and every other store.`}
+                </p>
                 <ConfirmDestructive
                   tier="admin-pin"
                   label="End employment"
-                  consequence="Ends this employment. The record stays visible. An administrator must approve with their own PIN."
+                  consequence={
+                    otherBranches.branches.length + otherBranches.hiddenCount > 0
+                      ? `Ends this employment and removes their access at ${detail.storeName}. The record stays visible. An administrator must approve with their own PIN.`
+                      : 'Ends this employment, signs them out everywhere and removes their PIN, role and all access. The record stays visible. An administrator must approve with their own PIN.'
+                  }
                 />
               </CheckedForm>
             </FormModal>

@@ -59,6 +59,12 @@ const nextConfig = {
     // Type errors fail the build. Never set this to true.
     ignoreBuildErrors: false,
   },
+  // T-532 S4: the build id the POS service worker puts in its cache name (`/sw.js?v=...`), so every deploy installs a fresh worker and clears the old caches.
+  env: { NEXT_PUBLIC_POS_SW_VERSION: (process.env.GITHUB_SHA || '').slice(0, 12) || Date.now().toString(36) },
+  // The worker script is never served from the browser's HTTP cache, or a deploy could not replace it.
+  async headers() {
+    return [{ source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache, max-age=0' }] }];
+  },
   // T-591: "cutover" became "Opening balances". Old links and bookmarks land on the new pages (308; Next keeps the query string).
   // One explicit rule per path, no catch-all: the sub-page names changed (count -> stock-count, opening -> balance-sheet).
   async redirects() {

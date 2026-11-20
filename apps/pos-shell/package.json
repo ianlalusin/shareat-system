@@ -1,0 +1,17 @@
+{
+  "name": "@shareat/pos-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "T-532 S2: the Android shell that opens https://erp2.shareat.net/pos. No web build; the ERP serves the screens.",
+  "scripts": {
+    "sync": "cap sync android",
+    "sync:emulator": "node -e \"process.env.POS_SHELL_MODE='emulator';require('child_process').execSync('npx cap sync android',{stdio:'inherit'})\""
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/core": "^6.2.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.1"
+  }
+}

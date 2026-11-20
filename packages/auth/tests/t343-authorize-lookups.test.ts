@@ -71,7 +71,7 @@ const tx = { transaction: (fn: (t: unknown) => unknown) => fn(tx) } as never;
 describe('T2 — success-path budget: no refusal lookup fires when authorize() resolves', () => {
   it('void_expense, admin, in scope — resolves, and neither identityOf nor getById is ever called', async () => {
     const { authorize } = await import('../src/authorize');
-    activeRoleForPerson.mockResolvedValue({ role: 'admin' });
+    activeRoleForPerson.mockResolvedValue({ role: 'admin', accountStatus: 'active' });
     storeBelongsToOrg.mockResolvedValue(true);
     personHasStoreScope.mockResolvedValue(true);
 
@@ -85,7 +85,7 @@ describe('T2 — success-path budget: no refusal lookup fires when authorize() r
 describe('T3 — no store scope: storesRepo.getById is called once, and userMessage names the store', () => {
   it('manager holds void_expense but not this store — userMessage contains "Store Name (CODE)"', async () => {
     const { authorize, AuthorizationError } = await import('../src/authorize');
-    activeRoleForPerson.mockResolvedValue({ role: 'manager' });
+    activeRoleForPerson.mockResolvedValue({ role: 'manager', accountStatus: 'active' });
     storeBelongsToOrg.mockResolvedValue(true);
     personHasStoreScope.mockResolvedValue(false);
     getById.mockReset().mockResolvedValue({ name: 'Store Name', code: 'CODE' });
@@ -107,7 +107,7 @@ describe('T3 — no store scope: storesRepo.getById is called once, and userMess
 describe('T4 — the lookup rejects: still AuthorizationError, userMessage falls back to "that store"', () => {
   it('storesRepo.getById throwing does not blow up the refusal — caught, fallback used', async () => {
     const { authorize, AuthorizationError } = await import('../src/authorize');
-    activeRoleForPerson.mockResolvedValue({ role: 'manager' });
+    activeRoleForPerson.mockResolvedValue({ role: 'manager', accountStatus: 'active' });
     storeBelongsToOrg.mockResolvedValue(true);
     personHasStoreScope.mockResolvedValue(false);
     getById.mockReset().mockRejectedValue(new Error('connection reset'));

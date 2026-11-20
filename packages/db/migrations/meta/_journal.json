@@ -1618,6 +1618,34 @@
       "when": 1808623907084,
       "tag": "0261_t592_store_code_settle_later",
       "breakpoints": true
+    },
+    {
+      "idx": 265,
+      "version": "7",
+      "when": 1808969507084,
+      "tag": "0265_t534_s1_pos_post_sale_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 266,
+      "version": "7",
+      "when": 1809055907084,
+      "tag": "0266_t534_s4_pos_receipts_day_refunds",
+      "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "7",
+      "when": 1809142307084,
+      "tag": "0267_t608_optional_party_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1809228707084,
+      "tag": "0268_t612_persons_account_status",
+      "breakpoints": true
     }
   ]
 }

@@ -189,7 +189,7 @@ describe('T-229 slice 3 — the store’s Wastage Monitor (DEF-206)', () => {
 
   it('5 a deactivated person cannot be made Monitor', async () => {
     const f = await fixture('inactive');
-    await sql`update persons set is_active = false where id = ${f.monitorId}`;
+    await sql`update persons set account_status = 'suspended' where id = ${f.monitorId}`;
     await expect(
       asOrg(f.orgId, (tx) => setWastageMonitor(tx, f.admin, { storeId: f.storeId, personId: f.monitorId })),
     ).rejects.toThrow(/no longer active/i);

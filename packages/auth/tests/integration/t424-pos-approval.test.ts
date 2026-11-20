@@ -111,6 +111,7 @@ interface Fixture {
   admin: Who;
   managerA: Who; // role manager, scope A, grant approve_pos_correction at A
   managerB: Who; // role manager, scope B, grant at B
+  managerNoGrant: Who; // role manager, scope A, NO grant (T-601 D2: the role alone approves at A)
   cashier: Who; // staff, employed at A, live PIN, NO capability
   diner: Who; // no role, no employment; holds the grant at A (row 350: a PIN alone, or a grant alone, is not a manager)
   termA1: Who; // terminal person of A, with a PIN of its own
@@ -150,6 +151,7 @@ async function org(hint: string): Promise<Fixture> {
   const managerB = await mk('Mona Manager', 'manager', [storeB]);
   await grant(managerA, storeA);
   await grant(managerB, storeB);
+  const managerNoGrant = await mk('Nora NoGrant', 'manager', [storeA]);
   const cashier = await mk('Cara Cashier', 'staff', [storeA], storeA);
   const diner = await mk('Dina Diner', null, [storeA]);
   await grant(diner, storeA);
@@ -172,7 +174,7 @@ async function org(hint: string): Promise<Fixture> {
       values (${orgId}, ${store}, ${pos}, 'POS store', ${ch!.id}, 'vat_inclusive', ${admin.personId})`;
   }
   return {
-    orgId, storeA, storeB, posStoreA, posStoreB, admin, managerA, managerB, cashier, diner,
+    orgId, storeA, storeB, posStoreA, posStoreB, admin, managerA, managerB, managerNoGrant, cashier, diner,
     termA1: await mkTerminal('Terminal A1', storeA),
     termA2: await mkTerminal('Terminal A2', storeA),
     termB: await mkTerminal('Terminal B', storeB),
@@ -207,6 +209,14 @@ describe('Acceptance 4 - the approval', () => {
     const f = await org('a4pass');
     expect(await approve(f, f.termA1, f.managerA.pin)).toEqual({ approverPersonId: f.managerA.personId });
     expect(await approve(f, f.termA1, f.admin.pin)).toEqual({ approverPersonId: f.admin.personId });
+  });
+
+  it('A4-role (T-601 D2, Ian 2026-11-19): a store manager with NO grant approves at their own store by role; the same manager at another store, and a cashier with no grant, are refused', async () => {
+    const f = await org('a4role');
+    expect(await approve(f, f.termA1, f.managerNoGrant.pin)).toEqual({ approverPersonId: f.managerNoGrant.personId });
+    const one = refusedSentence();
+    expect(await msg(approve(f, f.termB, f.managerNoGrant.pin, f.storeB)), 'manager of A at store B').toBe(one);
+    expect(await msg(approve(f, f.termA2, f.cashier.pin)), 'cashier, no grant').toBe(one);
   });
 
   it('A4-refused: the same manager at another store, a cashier, a diner-only person with the grant, a terminal PIN, a wrong PIN, a bad format - all the ONE sentence (M2, M3, M4)', async () => {

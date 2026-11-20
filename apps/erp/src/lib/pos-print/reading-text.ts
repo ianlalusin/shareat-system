@@ -1,4 +1,5 @@
 import { center, columnsFor, justify, printAmount, rule, wrap } from './layout';
+import { TEST_LINE } from './receipt-text';
 import type { PrintLayout, ReadingSlipView, ZSlipView } from './types';
 
 /**
@@ -27,6 +28,7 @@ function pushHeader(out: string[], view: ReadingSlipView, cols: number): void {
   for (const address of view.header.addressLines) pushCentered(out, address, cols);
   if (view.header.tin !== null) pushCentered(out, `TIN: ${view.header.tin} ${view.header.vatRegistered ? 'VAT' : 'Non-VAT'}`, cols);
   out.push('');
+  if (view.header.test) pushCentered(out, TEST_LINE, cols);
 }
 
 /** From / to, "Spans two dates", who printed it; the Z adds who approved it. */
@@ -56,6 +58,11 @@ function pushFigures(out: string[], view: ReadingSlipView, cols: number): void {
   out.push(...justify('SENIOR/PWD DINERS', String(view.seniorPwdDiners), cols));
   out.push(rule(cols));
   for (const tender of view.tenders) out.push(...justify(tender.name, printAmount(tender.amount), cols));
+  if (view.convert && view.convert.count > 0) {
+    out.push(...justify('CONVERT: CASH IN', printAmount(view.convert.cashIn), cols));
+    out.push(...justify('CONVERT: CASH OUT', printAmount(view.convert.cashOut), cols));
+  }
+  if (view.refunds && view.refunds.count > 0) out.push(...justify('REFUNDS', `-${printAmount(view.refunds.total)}`, cols));
   if (view.varianceTotal !== undefined && !isZeroAmount(view.varianceTotal)) out.push(...justify('SHORT PAYMENTS', printAmount(view.varianceTotal), cols));
   if ((view.shortfallCount ?? 0) > 0) out.push(...justify('SHORT PAY FINDINGS', String(view.shortfallCount), cols));
   if (view.toCheckCount > 0) out.push(...justify('TO CHECK (wallet)', String(view.toCheckCount), cols));

@@ -14,7 +14,7 @@
  * Every function takes a `Tx`, never the base connection (same convention as
  * `repo/journal.ts`) — so a caller cannot write outside a transaction by accident.
  */
-import { and, asc, eq, exists, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, inArray, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
 import { personGrants, personRoles, personStoreScope } from '../../schema/access';
 import { positions } from '../../schema/employment';
 import { positionCapabilityDefaults } from '../../schema/position-capability-defaults';
@@ -27,7 +27,7 @@ import { refuse } from '../refusal';
 // `personMaySignInAtStore` (T-302), which needs "does this person work here" and cannot import
 // `repo/employment.ts` without making two repos depend on each other for one EXISTS.
 import { personCredentials } from '../../schema/sessions';
-import { persons } from '../../schema/persons';
+import { persons, type AccountStatus } from '../../schema/persons';
 import { stores } from '../../schema/stores';
 import type { Tx } from '../client';
 
@@ -44,6 +44,9 @@ export interface ActiveRoleRow {
   role: RoleName;
   grantedBy: string | null;
   grantedAt: Date;
+  /** T-612: the person's account status, read with the role in the SAME statement so `authorize()` pays no extra round trip. A suspended or pending
+   *  person KEEPS the role row (Ian "A": rights kept, paused) - this is how `authorize()` knows to refuse anyway. */
+  accountStatus: AccountStatus;
 }
 
 /** The person's currently ACTIVE (revoked_at IS NULL) role in this org, if any. At most
@@ -61,8 +64,10 @@ export async function activeRoleForPerson(
       role: personRoles.role,
       grantedBy: personRoles.grantedBy,
       grantedAt: personRoles.grantedAt,
+      accountStatus: persons.accountStatus,
     })
     .from(personRoles)
+    .innerJoin(persons, eq(persons.id, personRoles.personId))
     .where(and(eq(personRoles.personId, personId), eq(personRoles.orgId, orgId), isNull(personRoles.revokedAt)))
     .limit(1);
   return row as ActiveRoleRow | undefined;
@@ -156,7 +161,7 @@ export async function listActiveAdminsWithPinState(
                     where c.person_id = p.id and c.kind = 'pin' and c.revoked_at is null) as has_pin
       from person_roles r
       join persons p on p.id = r.person_id
-     where r.org_id = ${orgId} and r.revoked_at is null and r.role in ('admin', 'super_admin') and p.is_active
+     where r.org_id = ${orgId} and r.revoked_at is null and r.role in ('admin', 'super_admin') and p.account_status = 'active'
      group by p.id, p.display_name
      order by p.display_name
   `)) as unknown as { person_id: string; display_name: string; role: 'admin' | 'super_admin'; has_pin: boolean }[];
@@ -251,6 +256,8 @@ async function otherActiveRoleExists(
     ne(personRoles.personId, excludePersonId),
   ];
   if (mustBeAbleToSignIn) {
+    // T-612: a suspended / pending / ended administrator cannot sign in either, so does not count as "someone else can still get in".
+    filters.push(exists(tx.select({ one: sql`1` }).from(persons).where(and(eq(persons.id, personRoles.personId), eq(persons.accountStatus, 'active')))));
     filters.push(
       exists(
         tx
@@ -389,31 +396,6 @@ export async function grantStoreScope(
     .onConflictDoNothing({ target: [personStoreScope.personId, personStoreScope.storeId] });
 }
 
-/**
- * T-336 SCOPE LIFECYCLE fix — the other half of `grantStoreScope`. Deletes exactly one
- * `person_store_scope` row, by id, never by (person, store): the caller (`endEmployment`) has
- * already decided this row is safe to remove (`source = 'employment'` and no other open
- * employment at that store) and names it, the same posture as `revokeDefaultById`.
- */
-export async function deleteStoreScopeById(tx: Tx, id: string): Promise<void> {
-  await tx.delete(personStoreScope).where(eq(personStoreScope.id, id));
-}
-
-/** The active scope row for (person, store), if any — what `endEmployment` reads before
- *  deciding whether it may delete it. */
-export async function findStoreScope(
-  tx: Tx,
-  personId: string,
-  storeId: string,
-): Promise<{ id: string; source: string } | undefined> {
-  const [row] = await tx
-    .select({ id: personStoreScope.id, source: personStoreScope.source })
-    .from(personStoreScope)
-    .where(and(eq(personStoreScope.personId, personId), eq(personStoreScope.storeId, storeId)))
-    .limit(1);
-  return row;
-}
-
 /** Removes one store. Ordinary delete — CAPABILITY-MATRIX.md frames store scope as "rows,
  * never a bypass"; the audit question it answers ("who can see Davao right now?") is
  * answered by which rows exist today, not by a revocation history (contrast person_roles
@@ -474,9 +456,13 @@ export async function personMaySignInAtStore(tx: Tx, personId: string, storeId: 
   // ⭐ T-407 R2 (DEF-649): (scope here OR an open employment here) AND the org-level rule R1 (see
   // `personMaySignInToOrg`, whose three legs are repeated here so this stays ONE statement; org comes from `persons`).
   // The open-employment legs read `for share` (R7) so a racing `endEmployment` waits for this transaction.
+  // ⭐ T-612: the person's ACCOUNT STATUS must be `active`, and the person row is read `for share` FIRST (the subquery in FROM is evaluated before the
+  // select-list's own `for share` subselects), so a racing suspend / end waits for this transaction and its later session-ending statement sees the session.
+  // Lock order everywhere: persons -> employments -> org advisory lock. Still ONE statement (t407-s3 Invariant 14).
   const [row] = (await tx.execute(sql`
     select (
-      (
+      p.account_status = 'active'
+      and (
         exists (
           select 1 from person_store_scope
           where person_id = ${personId} and store_id = ${storeId}
@@ -508,10 +494,15 @@ export async function personMaySignInAtStore(tx: Tx, personId: string, storeId: 
         )
       )
     ) as ok
-    from persons p
-    where p.id = ${personId}
+    from (select id, org_id, account_status from persons where id = ${personId} for share) p
   `)) as unknown as { ok: boolean }[];
   return row?.ok === true;
+}
+
+/** T-612: the person's account status (plain read, no lock), for the sentence a refused sign-in gives. Undefined = no such person. */
+export async function accountStatusOf(tx: Tx, personId: string): Promise<AccountStatus | undefined> {
+  const [row] = await tx.select({ status: persons.accountStatus }).from(persons).where(eq(persons.id, personId)).limit(1);
+  return row?.status;
 }
 
 /**
@@ -529,27 +520,33 @@ export async function personMaySignInAtStore(tx: Tx, personId: string, storeId: 
  * session. The lock lives HERE, not in the callers, so no caller can forget it.
  */
 export async function personMaySignInToOrg(tx: Tx, personId: string, orgId: string): Promise<boolean> {
+  // ⭐ T-612: the account status must be `active`; the person row is read `for share` first (see `personMaySignInAtStore`), so a racing
+  // suspend waits for this transaction. A person of another org is no row at all, hence refused.
   const [row] = (await tx.execute(sql`
     select (
-      exists (
-        select 1 from employments
-        where person_id = ${personId} and org_id = ${orgId} and ended_on is null
-        for share
-      )
-      or exists (
-        select 1 from person_roles
-        where person_id = ${personId} and org_id = ${orgId} and revoked_at is null and role in ('admin', 'super_admin')
-      )
-      or (
+      p.account_status = 'active'
+      and (
         exists (
-          select 1 from person_roles
-          where person_id = ${personId} and org_id = ${orgId} and revoked_at is null and role = 'manager'
+          select 1 from employments
+          where person_id = ${personId} and org_id = ${orgId} and ended_on is null
+          for share
         )
-        and not exists (
-          select 1 from employments where person_id = ${personId} and org_id = ${orgId}
+        or exists (
+          select 1 from person_roles
+          where person_id = ${personId} and org_id = ${orgId} and revoked_at is null and role in ('admin', 'super_admin')
+        )
+        or (
+          exists (
+            select 1 from person_roles
+            where person_id = ${personId} and org_id = ${orgId} and revoked_at is null and role = 'manager'
+          )
+          and not exists (
+            select 1 from employments where person_id = ${personId} and org_id = ${orgId}
+          )
         )
       )
     ) as ok
+    from (select id, account_status from persons where id = ${personId} and org_id = ${orgId} for share) p
   `)) as unknown as { ok: boolean }[];
   return row?.ok === true;
 }
@@ -608,11 +605,13 @@ export async function activeAdminPersonIds(tx: Tx, orgId: string): Promise<strin
   const rows = await tx
     .select({ personId: personRoles.personId })
     .from(personRoles)
+    .innerJoin(persons, eq(persons.id, personRoles.personId))
     .where(
       and(
         eq(personRoles.orgId, orgId),
         eq(personRoles.role, 'admin'),
         isNull(personRoles.revokedAt),
+        eq(persons.accountStatus, 'active'), // T-612 audit: a pending / suspended / ended administrator is not fanned a new store's scope
       ),
     );
   return [...new Set(rows.map((r) => r.personId))];
@@ -645,7 +644,7 @@ export async function activeManagerNamesAtStore(
         eq(personRoles.orgId, orgId),
         eq(personRoles.role, 'manager'),
         isNull(personRoles.revokedAt),
-        eq(persons.isActive, true),
+        eq(persons.accountStatus, 'active'),
       ),
     )
     .orderBy(asc(persons.displayName));
@@ -1026,6 +1025,44 @@ export async function revokeGrantById(tx: Tx, grantId: string, reason: string): 
   if (updated.length === 0) {
     throw recordGone(`revokeGrantById: grant ${grantId} does not exist or is already revoked`, 'grant');
   }
+}
+
+/**
+ * T-609. Revokes every ACTIVE grant of one person (`reason` required, the table refuses a blank one), optionally only the
+ * ones honoured at `storeId`. Returns how many it revoked so the caller can report it. Revoke, never
+ * delete: "who could do this in March" must stay answerable.
+ */
+export async function revokeActiveGrantsForPerson(
+  tx: Tx,
+  personId: string,
+  reason: string,
+  storeId?: string,
+): Promise<number> {
+  const filters = [eq(personGrants.personId, personId), isNull(personGrants.revokedAt)];
+  if (storeId) filters.push(eq(personGrants.storeId, storeId));
+  const rows = await tx
+    .update(personGrants)
+    .set({ revokedAt: sql`now()`, revokeReason: reason })
+    .where(and(...filters))
+    .returning({ id: personGrants.id });
+  return rows.length;
+}
+
+/**
+ * T-609. Deletes a person's store-scope rows: every store, or just `storeId`. `keepSources` spares rows whose source is not
+ * a free choice of this employment (the admin/manager `fan_out` materialisation belongs to the role, which survives while
+ * another job remains). Returns the number deleted.
+ */
+export async function deleteStoreScopesForPerson(
+  tx: Tx,
+  personId: string,
+  opts: { storeId?: string; keepSources?: readonly ('employment' | 'manual' | 'fan_out')[] } = {},
+): Promise<number> {
+  const filters = [eq(personStoreScope.personId, personId)];
+  if (opts.storeId) filters.push(eq(personStoreScope.storeId, opts.storeId));
+  if (opts.keepSources && opts.keepSources.length > 0) filters.push(notInArray(personStoreScope.source, [...opts.keepSources]));
+  const rows = await tx.delete(personStoreScope).where(and(...filters)).returning({ id: personStoreScope.id });
+  return rows.length;
 }
 
 /**

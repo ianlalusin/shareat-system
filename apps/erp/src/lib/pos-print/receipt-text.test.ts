@@ -394,3 +394,16 @@ describe('T-528c - the printed VAT figures add up to the total', () => {
     expect(printed(lines, 'VATABLE SALES') + printed(lines, 'VAT (12%)') + printed(lines, 'VAT-EXEMPT SALES')).toBe(printed(lines, 'TOTAL'));
   });
 });
+
+describe('T-601 S4 - TEST - NOT A SALE', () => {
+  const lines = (test?: boolean) => formatReceipt({ ...baseView(), header: { ...baseView().header, ...(test === undefined ? {} : { test }) } }, { width: 58, font: 'normal' }).map((l) => l.trim());
+  it('a store in TEST mode prints the line under the header, above the receipt number', () => {
+    const out = lines(true);
+    expect(out).toContain('TEST - NOT A SALE');
+    expect(out.indexOf('TEST - NOT A SALE')).toBeLessThan(out.findIndex((l) => l.startsWith('RECEIPT:')));
+  });
+  it('a real receipt does not carry it', () => {
+    expect(lines()).not.toContain('TEST - NOT A SALE');
+    expect(lines(false)).not.toContain('TEST - NOT A SALE');
+  });
+});

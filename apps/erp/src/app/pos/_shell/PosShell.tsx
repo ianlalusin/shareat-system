@@ -13,6 +13,8 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { Badge, Banner, Button } from '@/components/ui';
 import { signOutAction } from '@/app/sign-in/actions';
 import { printerMode } from '@/lib/pos-print/adapter';
+import { installPrinterBridge } from '@/lib/pos-print/native';
+import { purgePosShell, registerPosServiceWorker } from './offline-sw';
 import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHeldSalesMessage, posHttpErrorMessage, testBandText } from './messages';
 import { SwitchCashierDialog } from './SwitchCashierDialog';
 import { posOfflineBandText } from './offline-band';
@@ -43,6 +45,12 @@ export interface PosShellProps {
 const NAV = 'fixed inset-x-0 bottom-0 z-30 flex gap-0.5 border-t border-surface-border bg-canvas px-2 pt-1 pb-[env(safe-area-inset-bottom)] sm:static sm:z-auto sm:gap-1 sm:overflow-x-auto sm:border-b sm:border-t-0 sm:bg-transparent sm:px-3 sm:py-1';
 const TAB = 'min-h-12 min-w-0 flex-1 inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-full px-0.5 text-xs font-semibold sm:flex-none sm:gap-2 sm:px-4 sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 const MENU_ITEM = 'min-h-12 flex w-full items-center rounded-xl px-3 text-left text-sm font-semibold hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
+// T-532 S4: the saved offline page belongs to whoever is signed in; it goes before they do.
+const signOut = () =>
+  startTransition(async () => {
+    await purgePosShell();
+    await signOutAction();
+  });
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => (w[0] ?? '').toUpperCase()).join('');
 
 export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, children }: PosShellProps) {
@@ -68,7 +76,11 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   const signingOut = useRef(false);
   // The real printer path, read once the page is in the browser (the APK plugin is a window object): never a guess.
   const [printer, setPrinter] = useState<'plugin' | 'browser' | null>(null);
-  useEffect(() => setPrinter(printerMode()), []);
+  useEffect(() => {
+    void registerPosServiceWorker(); // T-532 S4: offline cold start; production only, never throws
+    installPrinterBridge(); // T-532 S1: defines window.ShareatPrinter inside the Android shell; a no-op in a browser
+    setPrinter(printerMode());
+  }, []);
   const bodiesRef = useRef<Record<string, SessionBody | undefined>>({});
   const [notices, setNotices] = useState<string[]>([]);
 
@@ -112,7 +124,7 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
     else if (actor && state.online && sync.pending === 0 && !sync.sending && !signingOut.current) {
       signingOut.current = true;
       sync.setOfflineActor(null);
-      startTransition(() => void signOutAction());
+      signOut();
     }
   }, [actor, person.personId, state.online, sync]);
 
@@ -122,8 +134,8 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   const pillShort = statusPillShort(pillInput);
   const pillTone = state.signedOut ? 'danger' : offline ? 'warning' : sync.sending ? 'info' : 'success';
   const name = actor?.displayName ?? person.displayName;
-  const switchCashier = () => (offline ? setSwitching(true) : startTransition(() => void signOutAction()));
-  const signInAgain = () => startTransition(() => void signOutAction());
+  const switchCashier = () => (offline ? setSwitching(true) : signOut());
+  const signInAgain = () => signOut();
   const showErp = erpHref && !offline;
   // T-527: a refusal is told on EVERY tab, not only Orders. The drain's send wrapper hands the results over before the outbox drops those events, so the
   // view (which still holds them) can name the stand. Read through a ref: the handler is registered once and must see the latest lists.
@@ -172,7 +184,11 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
             {store ? <span className="min-w-0 truncate rounded-full bg-closed-soft px-3 py-1 text-sm font-semibold text-closed">{store.name}</span> : null}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-            {printer ? <Badge tone={printer === 'plugin' ? 'success' : 'info'} label={printer === 'plugin' ? 'Printer ready' : 'Browser print'} className="hidden sm:inline-flex" /> : null}
+            {printer ? (
+              <Link href="/pos/printer" className="hidden min-h-12 items-center sm:inline-flex" aria-label="Printer settings">
+                <Badge tone={printer === 'plugin' ? 'success' : 'info'} label={printer === 'plugin' ? 'Printer ready' : 'Browser print'} />
+              </Link>
+            ) : null}
             <Badge tone={pillTone} label={pillShort} className="sm:hidden" />
             <Badge tone={pillTone} label={pill} className="hidden sm:inline-flex" />
             {/* 401: the session ended. The outbox keeps sending (events ride the device cookie); only a person can sign in again. */}

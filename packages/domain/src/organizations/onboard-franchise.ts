@@ -42,7 +42,7 @@ import { can, SUPER_ADMIN_ONLY_CAPABILITIES, type Actor } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core';
 import { add, money, ZERO } from '@shareat/core/money';
 import { createStore } from '../stores/service';
-import { createEmployment, createPerson, normaliseName } from '../people';
+import { activateAccount, createEmployment, createPerson, normaliseName } from '../people';
 import { refuse } from '../shared/refusal';
 import { createCustomer } from '../customers';
 import { createSupplier } from '../ap';
@@ -204,7 +204,7 @@ export async function onboardFranchiseOrganization(
         storeId: store.storeId,
         name: { lastName: s.last, firstName: s.first, middleName: s.middle },
       });
-      await createEmployment(tx, adminActor, {
+      const employment = await createEmployment(tx, adminActor, {
         storeId: store.storeId,
         personId: person.id,
         employmentStatus: 'probationary',
@@ -212,6 +212,8 @@ export async function onboardFranchiseOrganization(
         positionIds: [position.id],
         primaryPositionId: position.id,
       });
+      // T-612 (explicit, on purpose): a hire starts `pending`, but the owner is setting these people up deliberately, so onboarding activates them.
+      await activateAccount(tx, adminActor, { employmentId: employment.id });
     }
 
     // 7. The agreement.

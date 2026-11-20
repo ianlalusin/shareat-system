@@ -188,7 +188,7 @@ standing prompt is `C:\Users\ianla\webapps\shareat-coord\work-orders\FREEBUFF-PR
 - Your job ends at **one opened PR**. Never merge, rebase or push anyone else's branch, deploy, or
   enable auto-merge.
 - Never invent a migration, DEF, task or bible row number, and never edit `PROJECT_BIBLE.md` or
-  `knowledge/`.
+  `shareat-knowledge/` (local only, git-ignored, bible row 484).
 - Never `git worktree remove --force` or `rm -rf` a worktree. It has deleted real source files.
 - Money, permissions and database-schema work stay with Claude builders until Ian says otherwise.
 
