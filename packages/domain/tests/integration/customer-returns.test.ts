@@ -4,6 +4,7 @@ import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 
 /**
  * T-179 — customer returns. Sibling of T-170's `supplier-returns.test.ts`, pointing the other
@@ -807,5 +808,34 @@ describe('T-231 / DEF-210 — a customer return is stamped with the actor’s or
       }),
     );
     expect(res.ok, res.ok ? '' : `refused — it read the wrong org’s ledger: ${res.reason}`).toBe(true);
+  });
+});
+
+describe('T-615 void is no existence oracle (the twin of DEF-562 / DEF-546)', () => {
+  it('a caller who may not void gets the SAME refusal for a random id and a real return; no id in it', async () => {
+    const f = await fixture('voidoracle');
+    const s = await aSale(f, { qty: '3', rate: '500', stockQty: '20', unitCost: '90' });
+    const res = await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Wrong item.', lines: [{ tradeOrderLineId: s.lineId, quantity: '1' }], actor: f.manager }),
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const fakeId = randomUUID();
+    const refusal = (id: string, who: Actor) =>
+      asOrg(f.orgId, (tx) => voidCustomerReturn(tx, who, id, 'nope')).then(
+        () => { throw new Error('expected a refusal, but the call resolved'); },
+        (e: unknown) => e as { name: string; userMessage?: string },
+      );
+    const fake = await refusal(fakeId, f.staff);
+    const real = await refusal(res.returnId, f.staff);
+    expect(fake.name).toBe('AuthorizationError');
+    expect(fake.userMessage).toBeTruthy();
+    expect(fake.userMessage).toBe(real.userMessage);
+    expect(fake.userMessage).not.toContain(fakeId);
+    expect(fake.userMessage).not.toContain(res.returnId);
+    // an allowed caller with a random id reads the same sentence, so the answer never says which ids exist
+    expect((await refusal(randomUUID(), f.manager)).userMessage).toBe(real.userMessage);
+    // the real return is untouched
+    expect((await sql<{ status: string }[]>`select status from customer_returns where id = ${res.returnId}`)[0]!.status).not.toBe('void');
   });
 });
