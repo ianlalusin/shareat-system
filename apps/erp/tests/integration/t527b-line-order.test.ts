@@ -5,7 +5,7 @@
  */
 import { afterAll, describe, expect, it } from 'vitest';
 import { getSessionBill, openStand, setHeadsCashier } from '../../../../packages/domain/src/pos';
-import { asOrg, closeAll, fixture, newStand, nowIso } from '../../../../packages/domain/tests/integration/_fixtures/t525-pos';
+import { asOrg, closeAll, fixture, newStand, nowIso, sql } from '../../../../packages/domain/tests/integration/_fixtures/t525-pos';
 import { makeIdGenerator } from '../../src/app/pos/_orders/ids';
 
 afterAll(closeAll);
@@ -32,6 +32,13 @@ describe('T-527b - line order round trip', () => {
     await asOrg(f.orgId, (tx) => setHeadsCashier(tx, f.counter, { ...base, sessionId, headsCashier: 5 }));
     const after = await asOrg(f.orgId, (tx) => getSessionBill(tx, f.counter, { storeId: f.storeId, sessionId }));
     expect(after.lines.find((l) => l.menuItemId === f.menu.unli.itemId)?.qty).toBe(5); // the package line was re-made
-    expect(after.lines.map((l) => l.menuItemId)).toEqual(cart); // and it is still in the same place
+    try {
+      expect(after.lines.map((l) => l.menuItemId)).toEqual(cart); // and it is still in the same place
+    } catch (err) {
+      // T-604 S1d: the order failed once in about 200 runs. Print the stored times so the flake-loop run shows why.
+      const rows = await sql`select id, kind, added_at::text, added_at_device::text from table_session_lines where session_id = ${sessionId} order by added_at`;
+      console.error('t527b line order failed; stored lines:', JSON.stringify(rows));
+      throw err;
+    }
   });
 });
