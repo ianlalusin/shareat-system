@@ -11,6 +11,7 @@ import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { cashRequests, type CashRequestStatus } from '../../schema/cash-requests';
 import { recordGone } from './record-gone';
+import { refuse } from '../refusal';
 import type { Money } from '@shareat/core/money';
 import type { SafeInsert, SafeUpdate } from './numeric-input';
 
@@ -101,12 +102,27 @@ export async function update(
   orgId: string,
   id: string,
   values: UpdateRequestValues,
+  /** DEF-887: the status(es) the row must still be in. A row that moved on since it was read updates nothing and refuses. */
+  expectedStatus?: CashRequestStatus | readonly CashRequestStatus[],
 ): Promise<void> {
+  const expected = expectedStatus === undefined ? undefined : ([] as CashRequestStatus[]).concat(expectedStatus);
   const updated = await tx
     .update(cashRequests)
     .set({ ...values, updatedAt: sql`now()` })
-    .where(and(eq(cashRequests.id, id), eq(cashRequests.orgId, orgId)))
+    .where(
+      and(
+        eq(cashRequests.id, id),
+        eq(cashRequests.orgId, orgId),
+        ...(expected ? [inArray(cashRequests.status, expected)] : []),
+      ),
+    )
     .returning({ id: cashRequests.id });
+  if (updated.length === 0 && expected && (await getById(tx, orgId, id))) {
+    throw refuse(
+      `update: cash request ${id} is no longer ${expected.join('/')}`,
+      'This cash request was changed by someone else a moment ago. Reload the page and look again.',
+    );
+  }
   if (updated.length === 0) {
     throw recordGone(`update: cash request ${id} does not exist in org ${orgId}`, 'cash request');
   }
