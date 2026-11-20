@@ -135,7 +135,9 @@ export default async function FindingsPage({
           hint={
             readiness.ready
               ? 'Nothing is blocking it'
-              : `${readiness.blocking.length} ${readiness.blocking.length === 1 ? 'finding blocks' : 'findings block'} it`
+              : readiness.noOpenPeriod && readiness.blocking.length === 0
+                ? 'This month has no open period'
+                : `${readiness.blocking.length} ${readiness.blocking.length === 1 ? 'finding blocks' : 'findings block'} it`
           }
         />
       </section>

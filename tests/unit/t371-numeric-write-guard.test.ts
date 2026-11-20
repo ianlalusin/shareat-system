@@ -150,7 +150,7 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   'apps/erp/src/app/customers/[customerId]/AutoAllocateCollectionForm.tsx::AutoAllocateCollectionForm::i.dueDate < today': 'not-a-column-value',
   'apps/erp/src/app/customers/[customerId]/page.tsx::CustomerDetailPage::c.dueDate < now': 'not-a-column-value',
   'packages/domain/src/recurring-expenses/recurrence.ts::firstDueDate::parse(thisMonth) >= base': 'not-a-column-value',
-  'packages/domain/src/recurring-expenses/index.ts::run::template.nextDueDate < manilaToday()': 'not-a-column-value',
+  'packages/domain/src/recurring-expenses/index.ts::run::template.nextDueDate < manilaTodayFromClock()': 'not-a-column-value',
   'packages/domain/src/payroll/periods.ts::tilesTheMonth::p.end < p.start': 'not-a-column-value',
   'packages/domain/src/payroll/periods.ts::periodForDate::date >= p.start': 'not-a-column-value',
   'packages/domain/src/payroll/periods.ts::periodForDate::date <= p.end': 'not-a-column-value',

@@ -134,6 +134,16 @@ describe('fiscalPeriodRunwayLow — the runway warning, soft, never blocking a c
     expect(readiness.blocking.some((f) => f.kind === 'fiscalPeriodRunwayLow')).toBe(false);
   });
 
+  it('⛔ DEF-439: a month with NO open period is not "ready to close"; a month with one is', async () => {
+    const orgId = await bareOrg('def439');
+    const none = await asOrg(orgId, (tx) => closeReadiness(tx, orgId, '2031-03'));
+    expect(none.blocking).toEqual([]);
+    expect(none.ready).toBe(false);
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2031-03-01', '2031-03-31', 'open')`;
+    const withPeriod = await asOrg(orgId, (tx) => closeReadiness(tx, orgId, '2031-03'));
+    expect(withPeriod.ready).toBe(true);
+  });
+
   it('⛔ says the DIFFERENT true thing when periods exist but none are open — never "no periods", never "reopen"', async () => {
     const orgId = await bareOrg('all-closed');
     // Two closed periods, on purpose (plural) — proves the count is real, not a hardcoded "1".
