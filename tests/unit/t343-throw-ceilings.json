@@ -57,7 +57,7 @@
   "packages/domain/src/kitchen": 0,
   "packages/domain/src/settlement-intake": 0,
   "packages/domain/src/till": 18,
-  "packages/domain/src/trade": 50,
+  "packages/domain/src/trade": 49,
   "packages/domain/src/wastage": 10,
   "packages/auth/src": 0,
   "packages/db/src/repo": 17,

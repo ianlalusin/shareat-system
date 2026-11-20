@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SCHEDULER_JOBS } from '@shareat/db';
+import { scriptArg } from '../../scripts/lib/args';
 
 const repoRoot = path.resolve(__dirname, '..', '..');
 const OPS = path.join(repoRoot, 'docs', 'ops');
@@ -61,7 +62,12 @@ describe('T-396 S1 - the POS day import is a registered, hosted job', () => {
     const src = readFileSync(script, 'utf8');
     expect(src).toMatch(/--manual/);
     expect(src).toMatch(/--dry-run/);
-    expect(src).toMatch(/arg\(\s*['"]org['"]\s*\)/);
+    // DEF-423: --org= is read by the shared reader (the hosted job passes no flags; operators pass --org=<id>).
+    expect(src).toMatch(/scriptArg\(\s*['"]org['"]\s*\)/);
+    const argv = ['node', 'pos-day-import.ts', '--org=org-1', '--manual', '--dry-run'];
+    expect(scriptArg('org', argv)).toBe('org-1');
+    expect(scriptArg('org', ['node', 'pos-day-import.ts', '--manual'])).toBeUndefined();
+    expect(() => scriptArg('org', ['node', 'pos-day-import.ts', '--org', 'org-1'])).toThrow(/needs an equals sign/);
     expect(src, 'exit code is load-bearing').toMatch(/hadFailures/);
     expect(src).toMatch(/return 1/);
   });

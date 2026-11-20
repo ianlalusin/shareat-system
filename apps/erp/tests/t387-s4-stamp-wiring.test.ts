@@ -125,13 +125,14 @@ describe('S4 L8: status words differ by entity', () => {
 });
 
 describe('S4 L9: transfers are NOT wired', () => {
-  it('inventory/transfers/actions.ts carries no stamp at all (they throw; the detail page does not exist yet)', () => {
+  it('inventory/transfers/actions.ts carries no stamp at all (the detail page does not exist yet)', () => {
     const src = readFileSync(resolve(APP, 'inventory/transfers/actions.ts'), 'utf8');
     expect(src).not.toMatch(/stamp:/);
     // T-412: voidTransferAction (only) now redirects with a plain error/ok banner - a wrong administrator PIN has to be SHOWN, and a
-    // thrown server-action error reaches the person as a digest. Still no stamp. dispatch/receive keep throwing.
-    expect(body('inventory/transfers/actions.ts', 'dispatchTransferAction')).not.toMatch(/redirectWithFlash/);
-    expect(body('inventory/transfers/actions.ts', 'receiveTransferAction')).not.toMatch(/redirectWithFlash/);
+    // thrown server-action error reaches the person as a digest. Still no stamp.
+    // T-598 S8 (DEF-280): dispatch/receive/create stopped throwing for the same reason - a refusal is carried back as an error banner (no stamp).
+    expect(body('inventory/transfers/actions.ts', 'dispatchTransferAction')).toMatch(/redirectWithFlash\([^)]*error:/);
+    expect(body('inventory/transfers/actions.ts', 'receiveTransferAction')).toMatch(/redirectWithFlash\([^)]*error:/);
     for (const fn of ['dispatchTransferAction', 'receiveTransferAction', 'voidTransferAction']) {
       expect(body('inventory/transfers/actions.ts', fn)).not.toMatch(/stamp/);
     }

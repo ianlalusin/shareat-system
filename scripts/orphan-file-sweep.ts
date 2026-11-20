@@ -35,18 +35,14 @@ import { config } from 'dotenv';
 import { closeDb } from '@shareat/db';
 import { runOrphanFileSweep } from '@shareat/domain';
 import { installScriptStorageDriver } from './lib/storage-bootstrap';
+import { scriptArg } from './lib/args';
 
 config({ path: '.env.local' });
 
 installScriptStorageDriver('orphan-file-sweep');
 
-function arg(name: string): string | undefined {
-  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-  return hit?.split('=')[1];
-}
-
 async function main(): Promise<number> {
-  const orgId = arg('org');
+  const orgId = scriptArg('org');
   // ⭐ `manual` when a human typed it. "Nobody has run it since March" and "the cron died in March
   // and someone has been running it by hand" are different problems with different fixes.
   const trigger = process.argv.includes('--manual') ? 'manual' : 'cron';

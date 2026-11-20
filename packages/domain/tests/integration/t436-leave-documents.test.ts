@@ -39,11 +39,11 @@ import {
   leaveGrid,
   listLeave,
   loadLeaveRequest,
-  readFileUrl,
   requestLeave,
   setStorageDriver,
   uploadFile,
 } from '@shareat/domain';
+import { readFileUrl } from './_fixtures/read-file-url';
 
 const sql = postgres(url, { max: 5 });
 let driver = inMemoryDriver();

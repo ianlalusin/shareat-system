@@ -29,16 +29,13 @@ import { config } from 'dotenv';
 import { closeDb } from '@shareat/db';
 import { runFirestoreRelay } from '@shareat/domain';
 import { createFirestoreInboxDriver, createFirestoreMirrorDriver } from '@shareat/sync-firestore';
+import { scriptArg } from './lib/args';
 
 config({ path: '.env.local' });
 
-function arg(name: string): string | undefined {
-  return process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
-}
-
 async function main(): Promise<number> {
-  const orgId = arg('org');
-  const limitArg = arg('limit');
+  const orgId = scriptArg('org');
+  const limitArg = scriptArg('limit');
   const limit = limitArg ? Number(limitArg) : undefined;
   // ⭐ `manual` when a human typed it. "Nobody has run it since March" and "the cron died in March
   // and someone has been running it by hand" are different problems with different fixes.

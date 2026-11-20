@@ -115,8 +115,9 @@ export const storeAttendanceConfig = pgTable(
      * on the 560-session live corpus, 51.5 days a month, ~9.2% of basic pay.
      *
      * ⚠️ The default is load-bearing here in a way it usually is not: v2 assumes a zero starting
-     * point, so every store is created fresh and `seedAttendanceConfig` inserts with no explicit
-     * values. A store that wants it off supersedes its config.
+     * point, so a store's first config row takes the column defaults. DEF-255: `seedAttendanceConfig` writes
+     * that row only when a store is CREATED (`stores/service.ts`), so a store that predates it has no row until
+     * the backfill runs (DEF-249). A store that wants it off supersedes its config.
      */
     shortShiftHalfDayOt: boolean('short_shift_half_day_ot').notNull().default(true),
     /**
