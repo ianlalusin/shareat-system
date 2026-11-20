@@ -1639,6 +1639,13 @@
       "when": 1809142307084,
       "tag": "0267_t608_optional_party_type",
       "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "7",
+      "when": 1809401507084,
+      "tag": "0270_t600_journal_entry_date_in_period",
+      "breakpoints": true
     }
   ]
 }

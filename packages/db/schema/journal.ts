@@ -69,6 +69,7 @@ import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
 
+// NOTE: entry_date within the period's dates is hand-added in migration 0270 (T-600, DEF-902).
 export const journalEntries = pgTable(
   'journal_entries',
   {
