@@ -232,6 +232,15 @@ export function divideMoney(value: Money, divisor: bigint | number): Money {
   return fromCentavos(divideRoundHalfUp(toCentavos(value), d));
 }
 
+/**
+ * DEF-859 - `value x numerator / denominator` for whole-number parts, in bigint (no float). ROUNDING: HALF-UP away from
+ * zero, once, to the centavo. For a ratio that is not a finite decimal (hours / 9), where no decimal string can carry it.
+ */
+export function multiplyByFraction(value: Money, numerator: bigint, denominator: bigint): Money {
+  if (denominator <= 0n) throw new RangeError('multiplyByFraction() needs a positive denominator');
+  return fromCentavos(divideRoundHalfUp(toCentavos(value) * numerator, denominator));
+}
+
 /** Split an amount into n parts that sum EXACTLY to the original. Remainder goes to the
  *  earliest parts, so nothing is lost or invented — the classic penny-allocation problem. */
 export function allocate(value: Money, parts: number): Money[] {
