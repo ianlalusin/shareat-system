@@ -573,7 +573,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1714 -> 1719, T-611 S1: Copy-from-store dialog +5 (all min-h-11 or taller, so FAIL/UNRESOLVED are unmoved).
     // 1719 -> 1722, T-612 (20 Nov 2026): the staff record's Account row adds Activate, Reinstate and the Suspend dialog trigger (+3 census controls); re-measured by the test after merging main (1719 + 3).
     // 1722 -> 1719, T-600 (20 Nov 2026): the commissary Rate inputs are gone (new-order row, add-line form, line edit: -3 census controls); the price comes from the catalogue. Re-measured by the test: 1719.
-$11719);
+    expect(results.length).toBe(1719);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
