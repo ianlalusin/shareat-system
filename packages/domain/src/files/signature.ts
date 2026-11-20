@@ -138,11 +138,14 @@ export async function assertMayLearnSignatureAbsent(tx: Tx, actor: Actor, person
   }
 }
 
-/** A 60 s link to a signature file, after the rule and the `viewed` audit. The URL is never stored and never logged. */
-export async function signatureUrl(tx: Tx, actor: Actor, file: SignatureFile): Promise<{ url: string; contentType: string }> {
+/** The right to a 60 s link to a signature file, after the rule and the `viewed` audit. Signing waits for the caller (DEF-554); the URL is never stored and never logged. */
+export async function signatureLinkGrant(
+  tx: Tx,
+  actor: Actor,
+  file: SignatureFile,
+): Promise<{ storagePath: string; contentType: string; expiresInSeconds: number }> {
   await gate(tx, actor, file, 'screen');
-  const url = await resolveStorageDriver().signedUrl(file.storagePath, SIGNATURE_LINK_SECONDS);
-  return { url, contentType: file.contentType };
+  return { storagePath: file.storagePath, contentType: file.contentType, expiresInSeconds: SIGNATURE_LINK_SECONDS };
 }
 
 /** The signature's BYTES, for a server-side print route. Gated and audited exactly like a view; never a URL. */

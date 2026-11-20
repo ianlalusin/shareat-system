@@ -1045,3 +1045,35 @@ describe('DEF-874 - retired accounts', () => {
     expect(await count()).toBe(3);
   });
 });
+
+// -------------------------------------------------------------------------------------------------
+// T-598 S6 - DEF-544: a drawing is judged on the owner row AFTER the lock, and refuses before it
+// -------------------------------------------------------------------------------------------------
+
+describe('DEF-544 - recordDrawing and the owner row lock', () => {
+  const draw = (f: Fixture, id: string, amount: string, on = '2026-01-20') => (tx: Tx) =>
+    recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount, fromMoneyAccountId: f.till, on });
+
+  it('a limit set while the drawing waited applies to it - Mutant: judge the row read before the lock -> the drawing posts, red', async () => {
+    const f = await fixture('def544-reread');
+    const id = await owner(f);
+    const setLimit = (tx: Tx) => ownersRepo.updateOwner(tx, f.orgId, id, { drawingLimit: '100.00' as never, drawingLimitPeriod: 'monthly' });
+    const { b, bWaited } = await twoAtOnce(f.orgId, setLimit, draw(f, id, '500.00'));
+    expect(bWaited, 'B never waited on the owner lock').toBe(true);
+    expect(b.status).toBe('rejected');
+    expect(String((b as { reason: Error }).reason.message)).toMatch(/over the ₱100\.00 monthly limit/);
+    expect(await entryCount(f, 'drawing', id)).toBe(0);
+  });
+
+  it('a closed month is refused without ever queueing on the owner row - Mutant: lock first -> B waits, red', async () => {
+    const f = await fixture('def544-early');
+    const id = await owner(f);
+    await asOrg(f.orgId, (tx) => draw(f, id, '1000.00', '2026-01-10')(tx));
+    await asOrg(f.orgId, (tx) => closeDrawingMonth(tx, f.admin, { ownerId: id, month: '2026-01-01', on: '2026-02-01' }));
+    const holdLock = (tx: Tx) => tx.execute(dsql`select 1 from owners where id = ${id} for update`);
+    const { b, bWaited } = await twoAtOnce(f.orgId, holdLock, draw(f, id, '500.00', '2026-01-15'));
+    expect(bWaited, 'a closed-month drawing queued on the lock').toBe(false);
+    expect(b.status).toBe('rejected');
+    expect(String((b as { reason: Error }).reason.message)).toMatch(/2026-01 is closed for this owner/);
+  });
+});

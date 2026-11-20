@@ -1137,3 +1137,75 @@ describe('T-574 — the returnable cap holds under concurrency and across stores
     expect(await onHand(f.itemId, f.locationId)).toBe('20.000');
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// T-598 S5 — DEF-561 (one already-voided sentence), DEF-562 (no existence oracle), DEF-608 (a line is named by its item)
+// ---------------------------------------------------------------------------------------------
+describe('T-598 S5 — void wording, existence oracle, item names', () => {
+  const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  type Refusal = Error & { userMessage?: string };
+  const rejection = (p: Promise<unknown>) =>
+    p.then(
+      () => { throw new Error('expected a refusal, but the call resolved'); },
+      (e: unknown) => e as Refusal,
+    );
+  const line = (f: Fixture, deliveryLineId: string, qty: string, itemId = f.itemId) => ({
+    itemId, itemKind: 'raw_material' as const, locationId: f.locationId, quantity: quantity(qty), deliveryLineId,
+  });
+  async function oneReturn(f: Fixture) {
+    const { deliveryId, deliveryLineId } = await receiveOne(f, '10.000', '100.0000', '2026-01-05');
+    const res = await asOrg(f.orgId, (tx) =>
+      recordReturn(tx, { storeId: f.storeId, supplierId: f.supplierId, deliveryId, returnedOn: '2026-01-06', reason: 'damaged', lines: [line(f, deliveryLineId, '2.000')], actor: f.staff }),
+    );
+    if (!res.ok) throw new Error(`fixture: ${res.reason}`);
+    return { deliveryId, deliveryLineId, returnId: res.returnId };
+  }
+
+  it('DEF-562: a missing return and one at another store refuse with ONE sentence, no id; the in-scope manager still voids', async () => {
+    const f = await fixture();
+    const { returnId } = await oneReturn(f);
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Outsider') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${f.orgId}, 'manager')`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${f.otherStoreId})`;
+    const outsider: Actor = { personId: p!.id, orgId: f.orgId };
+    const fakeId = '0190a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b';
+
+    const real = await rejection(asOrg(f.orgId, (tx) => voidReturn(tx, outsider, returnId, 'nope')));
+    const fake = await rejection(asOrg(f.orgId, (tx) => voidReturn(tx, outsider, fakeId, 'nope')));
+    expect(real.userMessage, real.message).toBeTruthy();
+    expect(fake.userMessage, fake.message).toBe(real.userMessage);
+    for (const e of [real, fake]) {
+      expect(e.userMessage ?? '').not.toMatch(UUID_RE);
+      expect(e.userMessage ?? '').not.toContain(returnId);
+    }
+    expect((await asOrg(f.orgId, (tx) => voidReturn(tx, f.manager, returnId, 'wrong call'))).ok).toBe(true);
+  });
+
+  it('DEF-561: the second void of a return reads the one shared sentence (the customer-return void says the same)', async () => {
+    const f = await fixture();
+    const { returnId } = await oneReturn(f);
+    await asOrg(f.orgId, (tx) => voidReturn(tx, f.manager, returnId, 'first'));
+    const again = await asOrg(f.orgId, (tx) => voidReturn(tx, f.manager, returnId, 'second'));
+    expect(again).toEqual({ ok: false, reason: 'This return has already been voided.' });
+  });
+
+  it('DEF-608: a refusal on a delivery line names the item, never the line id', async () => {
+    const f = await fixture();
+    const { deliveryId, deliveryLineId } = await receiveOne(f, '10.000', '100.0000', '2026-01-05');
+    const [other] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${f.orgId}, ${testItemCode()}, 'Soy Sauce', 'raw_material', 'kg', ${f.staff.personId}) returning id`;
+    const ret = (lines: ReturnType<typeof line>[]) => asOrg(f.orgId, (tx) =>
+      recordReturn(tx, { storeId: f.storeId, supplierId: f.supplierId, deliveryId, returnedOn: '2026-01-06', reason: 'x', lines, actor: f.staff }));
+
+    const wrongItem = await ret([line(f, deliveryLineId, '1.000', other!.id)]);
+    const missing = await ret([line(f, '0190a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b', '1.000')]);
+    const tooMany = await ret([line(f, deliveryLineId, '11.000')]);
+    for (const [r, name] of [[wrongItem, 'Soy Sauce'], [missing, 'Pork Belly'], [tooMany, 'Pork Belly']] as const) {
+      expect(r.ok).toBe(false);
+      const reason = r.ok ? '' : r.reason;
+      expect(reason).toContain(name);
+      expect(reason).not.toMatch(UUID_RE);
+    }
+  });
+});

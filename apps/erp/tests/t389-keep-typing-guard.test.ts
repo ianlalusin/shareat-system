@@ -28,6 +28,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { posix, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { lowerCounts } from '../../../tests/helpers/census-write';
 
 const SRC_ROOT = resolve(__dirname, '..', 'src');
 
@@ -377,6 +378,7 @@ describe('G10 on the real tree', () => {
   const found = () => applyExempt(elementFindings(tree()), TYPED_EXEMPT);
 
   it('G10a/c/e: no EditableRecord beyond the baseline lacks typed=, a keepTyping( action, or stale: (ends empty)', () => {
+    lowerCounts(resolve(__dirname, 'typed-baseline.json'), counts(found().live));
     expect(ratchet(counts(found().live), baseline())).toEqual([]);
   });
 

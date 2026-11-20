@@ -350,3 +350,28 @@ describe('T-154 — authorization', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('T-598 S6 / DEF-504 - endEmployment and setEmploymentPositions are not employment-id oracles', () => {
+  it('an unknown id and another store\'s employment get the SAME refusal, naming no id', async () => {
+    const f = await fixture('def504');
+    const emp = await hire(f);
+    // a manager who can only see store B: the employment is real but out of reach
+    const [m] = await sql<{ id: string }[]>`
+      insert into persons (org_id, display_name) values (${f.orgId}, 'Manager B') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${m!.id}, ${f.orgId}, 'manager')`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${m!.id}, ${f.storeBId})`;
+    const mgr = actor(f.orgId, m!.id);
+    const unknown = '00000000-0000-4000-8000-000000000009';
+    const sentence = (p: Promise<unknown>) => p.then(() => 'ALLOWED', (e: { userMessage?: string; message: string }) => e.userMessage ?? e.message);
+
+    const end = (id: string) => asOrg(f.orgId, (tx) => endEmployment(tx, mgr, { employmentId: id, endedOn: '2026-03-31', employmentStatus: 'resigned' }));
+    const pos = (id: string) => asOrg(f.orgId, (tx) => setEmploymentPositions(tx, mgr, { employmentId: id, positionIds: [], primaryPositionId: unknown }));
+    for (const act of [end, pos]) {
+      const real = await sentence(act(emp.id));
+      const fake = await sentence(act(unknown));
+      expect(real).toBe(fake);
+      expect(real).toMatch(/does not exist, or it is not at a store where you manage staff/);
+      expect(real).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+    }
+  });
+});

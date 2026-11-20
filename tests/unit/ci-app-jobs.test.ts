@@ -3,7 +3,7 @@
  * reusable `.github/workflows/app-build.yml`, plus guards that the ERP's own CI is untouched.
  *
  * Text-level checks (no YAML parser in the repo). The "untouched" guards pin a SHA-256 of the
- * exact text as it stood at 9c1704b (LF-normalised): the `verify` job, the existing
+ * exact text as it stood at 9c1704b (LF-normalised): the existing
  * `Determine docs-only` step, and all of `deploy.yml`. A deliberate edit to any of them must
  * update the pin in the same commit, which is the point.
  */
@@ -36,19 +36,24 @@ function jobBlock(text: string, job: string): string | undefined {
 }
 
 describe('T-417 ERP CI is untouched (case 13)', () => {
-  it('the verify job is byte-identical to 9c1704b. Mutant: any ERP job edit or reorder', () => {
+  // T-604 S2: the old single `verify` job (9c1704b) was split into typecheck / unit / integration / build, and `verify`
+  // became the gate that keeps the required check name. The gate's text is pinned; so are the properties that make it safe.
+  it('the verify gate keeps the required check name and cannot be skipped. Mutant: drop `if: always()` or a job from needs', () => {
     const block = jobBlock(ci(), 'verify');
     expect(block, 'verify job not found').toBeDefined();
-    // T-455 S3: the customer lobby's DB-backed tests run inside verify between `# >>> Customer lobby` and
-    // `# <<< Customer lobby` markers (same pattern as POS v2 in deploy.yml); with that block removed, verify is 9c1704b's.
-    const out: string[] = [];
-    let skip = false;
-    for (const line of block!.split('\n')) {
-      if (line.includes('# >>> Customer lobby')) { skip = true; continue; }
-      if (line.includes('# <<< Customer lobby')) { skip = false; continue; }
-      if (!skip) out.push(line);
+    expect(block).toMatch(/\n    name: typecheck, test, build\n/); // branch protection requires exactly this name
+    expect(block).toMatch(/\n    if: always\(\)\n/); // a gate skipped after a failed job would report success
+    expect(block).toMatch(/\n    needs: \[changes, typecheck, unit, integration, build\]\n/);
+    expect(sha(block!.trimEnd())).toBe('74fbe3bbc632976ae494ac6a7c1b26d5c7905abe4c2b0548671cadd416b5c0a2');
+  });
+
+  it('unit has no job-level `if` (the documentation guards run on docs-only changes); the other three skip only on docs-only', () => {
+    const unit = jobBlock(ci(), 'unit')!;
+    expect(unit).toBeDefined();
+    expect(unit).not.toMatch(/\n    if:/);
+    for (const job of ['typecheck', 'integration', 'build']) {
+      expect(jobBlock(ci(), job), job).toMatch(/\n    if: needs\.changes\.outputs\.docs_only != 'true'\n/);
     }
-    expect(sha(out.join('\n').trimEnd())).toBe('2ffcc4ac79eb6ad768c12af9e61f7f33068baec2e2832b992efec2ba8fa13753');
   });
 
   it('the existing "Determine docs-only" step text is untouched', () => {

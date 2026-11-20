@@ -134,6 +134,8 @@ export default defineConfig({
           // T-380 S1a / REV-2: an empty `next/headers` jar for any test that renders a page which
           // calls `withFlash` without mocking cookies itself (a test's own vi.mock still wins).
           setupFiles: ['apps/erp/tests/helpers/flash-jar-setup.ts', 'apps/erp/tests/helpers/form-status-setup.ts'],
+          // T-604 S1c: tests that read every task file or page (deferral-staleness, toc-freshness, pages ledger) overran 5 s on a cold disk.
+          testTimeout: 15_000,
         },
       },
       {

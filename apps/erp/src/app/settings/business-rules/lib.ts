@@ -7,7 +7,7 @@
  */
 import { listBusinessRules, type BusinessRuleChange, type BusinessRuleItem } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
-import { addDays, businessDayRange, formatBusinessDateTime, toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
+import { addDays, mediumBusinessDate, toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { peso } from '../../../lib/format';
 import { withOrgPrincipal } from '../../expenses/lib';
 
@@ -74,7 +74,7 @@ export function inputValue(unit: RuleUnit, text: string): string {
 
 /** '2026-12-01' -> 'Dec 1, 2026'. */
 export function showDay(day: string): string {
-  return formatBusinessDateTime(businessDayRange(day as BusinessDate).start, { dateStyle: 'medium' });
+  return mediumBusinessDate(day as BusinessDate);
 }
 
 /** The ids that win a start day shared by several rows: the newest of them is in force (history is newest first, so the first of each day). */

@@ -371,7 +371,7 @@ describe('T-218 / DEF-176 — receivingDisputeOverdue, the backstop receiving ne
    */
   async function dispute(
     f: Fixture,
-    opts: { ageDays: number; value?: string; status?: 'open' | 'deferred' | 'resolved' },
+    opts: { ageDays: number; value?: string; status?: 'open' | 'deferred' | 'resolved'; manilaHour?: number },
   ) {
     const tag = uid('disp');
     const [cust] = await sql<{ id: string }[]>`
@@ -400,7 +400,7 @@ describe('T-218 / DEF-176 — receivingDisputeOverdue, the backstop receiving ne
         ${status === 'resolved' ? f.personId : null},
         ${status === 'deferred' ? '2026-12-31' : null},
         ((((now() at time zone 'Asia/Manila')::date - ${opts.ageDays}::int)::timestamp
-          + interval '12 hours') at time zone 'Asia/Manila'))
+          + (${opts.manilaHour ?? 12}::int * interval '1 hour')) at time zone 'Asia/Manila'))
       returning id`;
     return d!.id;
   }
@@ -417,6 +417,18 @@ describe('T-218 / DEF-176 — receivingDisputeOverdue, the backstop receiving ne
     expect(finding!.detail).toMatch(/20 days old/);
     // ⚠️ DEF-175 — the figure is AT COST, and the wording has to say so.
     expect(finding!.detail).toMatch(/₱3,000\.00 at cost/);
+  });
+
+  it('⭐ DEF-860: age is counted in Manila days even when the DB session is UTC', async () => {
+    const f = await fixture('disptz');
+    // Created 02:00 Manila, exactly 15 days back: age 15 in Manila, NOT over the threshold. That
+    // instant is 18:00 UTC the day before, so a session-zone `created_at::date` counted 16 and fired.
+    await dispute(f, { ageDays: 15, manilaHour: 2 });
+    const utcFeed = await asOrg(f.orgId, async (tx) => {
+      await tx.execute(dsql`set local timezone = 'UTC'`);
+      return listFindings(tx, f.orgId, { period: PERIOD });
+    });
+    expect(utcFeed.findings.map((x) => x.kind)).not.toContain('receivingDisputeOverdue');
   });
 
   it('⛔ does NOT fire while the dispute is inside the threshold', async () => {

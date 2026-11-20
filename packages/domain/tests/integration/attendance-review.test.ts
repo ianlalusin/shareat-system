@@ -38,6 +38,7 @@ import {
   recordPunch,
   seedAttendanceConfig,
   parseShiftDay,
+  runAttendanceSweep,
   seedCanonicalPositions,
   shiftDayRange,
   supersedeConfig,
@@ -477,6 +478,23 @@ describe('⛔ T-199 — the sweep closes a shift nobody clocked out of', () => {
     expect(out.swept).toHaveLength(0);
     expect(out.leftOpen).toBe(1);
     expect((await openDaysAt(f))[0]!.status).toBe('open');
+  });
+
+  it('⛔ DEF-251/252: an active store with NO attendance config fails by name, never a clean run', async () => {
+    const f = await fixture('sweepnocfg');
+    const [bare] = await sql<{ id: string }[]>`
+      insert into stores (org_id, code, name) values (${f.orgId}, ${uid('nocfg')}, 'Unconfigured Branch')
+      returning id`;
+    const run = await runAttendanceSweep({ orgId: f.orgId, nowMs: Date.now() });
+    expect(run.hadFailures).toBe(true);
+    const failures = run.outcomes.flatMap((o) => o.failures);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.subjectId).toBe(bare!.id);
+    expect(failures[0]!.subjectName).toMatch(/Unconfigured Branch/);
+    // A closed store with no config is not a failure: nothing there is meant to clock in.
+    await sql`update stores set is_active = false where id = ${bare!.id}`;
+    const quiet = await runAttendanceSweep({ orgId: f.orgId, nowMs: Date.now() });
+    expect(quiet.hadFailures).toBe(false);
   });
 
   it('⭐ the sweep is idempotent — a second run changes nothing', async () => {

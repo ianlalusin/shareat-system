@@ -280,13 +280,13 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — `setStaffSignature` and `removeStaffSignature` (`people/staff-media.ts`) call it in the same ' +
     'transaction to audit every signature change.',
   mayViewSignature:
-    'INTERNAL — `signatureUrl` and `signatureBytes` (`files/signature.ts`) and `staffMediaView` (`people/staff-media.ts`) call it; ' +
+    'INTERNAL — `signatureLinkGrant` and `signatureBytes` (`files/signature.ts`) and `staffMediaView` (`people/staff-media.ts`) call it; ' +
     'it is the single read rule for signatures, never a screen action.',
   signatureBytes:
     'INTERNAL — `signatureForPrint` (`people/staff-media.ts`) is its only caller, for the print path.',
-  signatureUrl:
-    'INTERNAL — `readFileUrl` (`files/index.ts`) calls it to ' +
-    'mint the 60-second link.',
+  signatureLinkGrant:
+    'INTERNAL — `authorizeFileRead` (`files/index.ts`) calls it to ' +
+    'authorize the 60-second link (the route signs it after commit, DEF-554).',
   signatureForPrint:
     'UNWIRED — RESERVED: print routes for payslips/forms come later (T-434 spec: prints out of scope).',
 

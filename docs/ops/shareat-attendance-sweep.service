@@ -17,7 +17,7 @@ ExecStart=/usr/bin/npm run attendance-sweep
 User=shareat
 Group=shareat
 
-# ⚠️ NEVER build here. This is a 2 GB droplet; a build OOMs it. This unit runs an
+# ⚠️ NEVER build here. This is a 4 GB droplet; a build OOMs it. This unit runs an
 # already-installed tree shipped by CI — bible §2.10.
 Environment=NODE_ENV=production
 

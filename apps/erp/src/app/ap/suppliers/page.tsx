@@ -177,7 +177,7 @@ export default async function SuppliersPage({
                       : '—'}
                   </td>
                   <td className="py-2 pr-3 text-right font-mono tabular-nums">
-                    {peso(Number(s.controlBalance))}
+                    {peso(s.controlBalance)}
                   </td>
                 </LinkRow>
               ))}

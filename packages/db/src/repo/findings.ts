@@ -22,7 +22,7 @@ import { notCustodySourceType, tillFloorPosition } from './remittance';
 import { periodBounds } from './fiscal-periods';
 import * as posV1Repo from './pos-v1';
 import { STOP_AUTO_REOPEN_MINUTES } from './pin-attempts';
-import { businessDayRange, formatBusinessDateTime, parseBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDateTime, mediumBusinessDate, parseBusinessDate } from '@shareat/core/datetime';
 
 /**
  * ⛔ **Never interpolate the symbol by hand.** A hand-rolled peso plus `toFixed(2)` renders a
@@ -563,7 +563,7 @@ export async function fiscalPeriodRunwayLow(tx: Tx, orgId: string): Promise<Dete
     severity: 'soft',
     detail:
       `Fiscal period coverage runs out on ${row.latest_end} (${daysRemaining} day(s) from today). ` +
-      'Generate the next year of periods before then.',
+      "The monthly 'fiscal_period_seed' job tops up the next year on the 1st; if this stays, that job has stopped running.",
   }];
 }
 
@@ -1813,7 +1813,7 @@ export async function receivingDisputeOverdue(
            coalesce(sum(d.value) filter (where d.direction = 'short'), 0)::text as amount,
            (count(*) filter (where d.direction = 'short'))::int as short_n,
            (count(*) filter (where d.direction = 'over'))::int as over_n,
-           max(${MANILA_TODAY} - d.created_at::date)::int as oldest_age_days,
+           max(${MANILA_TODAY} - (d.created_at at time zone 'Asia/Manila')::date)::int as oldest_age_days,
            (count(*) filter (where d.status = 'deferred'))::int as deferred_n
     from trade_discrepancies d
     join stores s on s.id = d.store_id
@@ -1825,7 +1825,7 @@ export async function receivingDisputeOverdue(
       and d.status <> 'resolved'
       -- T-398 S5e: a franchise credit has its own reconcile findings and never sat in 1340.
       and d.disposition is distinct from 'franchise_credit'
-      and (${MANILA_TODAY} - d.created_at::date) > ${thresholdDays}
+      and (${MANILA_TODAY} - (d.created_at at time zone 'Asia/Manila')::date) > ${thresholdDays}
     group by d.store_id, s.name
   `)) as unknown as {
     store_id: string; store_name: string; n: number; amount: string; short_n: number; over_n: number;
@@ -1936,7 +1936,7 @@ export async function posUsagePullNotRun(tx: Tx, orgId: string, asOf?: string): 
  * over the date's own Manila midnight) - one formatter, not a copy. Money is `peso` above (`@shareat/core/money`).
  */
 function humanDay(businessDate: string): string {
-  return formatBusinessDateTime(businessDayRange(parseBusinessDate(businessDate)).start, { dateStyle: 'medium' });
+  return mediumBusinessDate(parseBusinessDate(businessDate));
 }
 
 /**

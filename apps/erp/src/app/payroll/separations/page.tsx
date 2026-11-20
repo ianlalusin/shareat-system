@@ -154,9 +154,9 @@ export default async function SeparationsPage({
               <input type="hidden" name="separationDate" value={separationDate} />
 
               <p className="text-xs text-neutral-500">
-                Pro-rated 13th month: basic pay earned {peso(Number(pvResult.preview.thirteenthMonthBasicPayEarned))}, so
-                gross <b className="text-neutral-700 dark:text-neutral-300">{peso(Number(pvResult.preview.thirteenthMonthGross))}</b>.
-                Outstanding advance: {peso(Number(pvResult.preview.outstandingAdvance))}.
+                Pro-rated 13th month: basic pay earned {peso(pvResult.preview.thirteenthMonthBasicPayEarned)}, so
+                gross <b className="text-neutral-700 dark:text-neutral-300">{peso(pvResult.preview.thirteenthMonthGross)}</b>.
+                Outstanding advance: {peso(pvResult.preview.outstandingAdvance)}.
               </p>
 
               <FormGrid>
@@ -221,8 +221,8 @@ export default async function SeparationsPage({
                 {s.voidReason && <span className="text-xs text-neutral-500">Voided: {s.voidReason}</span>}
               </div>
               <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                13th month {peso(Number(s.thirteenthMonthGross))} + separation pay {peso(Number(s.separationPayAmount))} −
-                advance {peso(Number(s.advanceRecovered))} = net {peso(Number(s.netPay))}
+                13th month {peso(s.thirteenthMonthGross)} + separation pay {peso(s.separationPayAmount)} −
+                advance {peso(s.advanceRecovered)} = net {peso(s.netPay)}
               </p>
               {s.status === 'posted' && (
                 <form action={voidSeparationAction} className="flex flex-wrap items-end gap-2">

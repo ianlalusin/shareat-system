@@ -45,6 +45,7 @@ import { assertFieldRules } from '../shared/field-rules-assert';
 import { RETURN_RECORD_RULES } from '../field-rules/trade';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from '../stock/period-guard';
+import { RETURN_ALREADY_VOIDED } from '../stock/supplier-returns';
 
 export const RETURN_REVENUE_CODE = '4950';
 export const CUSTOMER_RETURN_UNSELLABLE_REASON = 'customer_return_unsellable' as const;
@@ -570,7 +571,7 @@ export async function voidCustomerReturn(
     // under it, so a concurrent spend of this return's credit or a second void queues instead of reading a stale balance.
     await customersRepo.lockForCredit(trx, ret.orgId, ret.customerId);
     const current = (await customerReturnsRepo.getReturn(trx, actor.orgId, returnId)) ?? ret;
-    if (current.status === 'void') return { ok: false, reason: 'this return is already void.' };
+    if (current.status === 'void') return { ok: false, reason: RETURN_ALREADY_VOIDED };
 
     const trimmed = reason.trim();
     if (!trimmed) return { ok: false, reason: 'say why this return is being voided.' };

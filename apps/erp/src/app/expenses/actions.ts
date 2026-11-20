@@ -19,6 +19,8 @@
 import {
   approveExpense,
   assertFieldRules,
+  CREATE_EXPENSE_CAPABILITIES,
+  RECORD_EXPENSE_FOR_INVOICE_CAPABILITIES,
   createExpense,
   editExpense,
   editCapabilityFor,
@@ -253,7 +255,7 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let parsed: ParsedExpenseForm;
   try {
-    parsed = await parseExpenseForm(formData, actor, '/expenses/new', ['create_expense'], async (tx) => {
+    parsed = await parseExpenseForm(formData, actor, '/expenses/new', CREATE_EXPENSE_CAPABILITIES, async (tx) => {
       // Capability copied from parseExpenseForm's gate for this form (S9 pattern iii); it has just passed, so this always judges.
       if (await can(tx, actor, 'create_expense', { storeId: str(formData, 'storeId') })) assertFieldRules(EXPENSE_CREATE_RULES, formData);
     });
@@ -297,7 +299,7 @@ export async function recordExpenseForInvoiceAction(formData: FormData): Promise
   const actor = await requireActor();
   let parsed: ParsedExpenseForm;
   try {
-    parsed = await parseExpenseForm(formData, actor, '/ap', ['create_expense', 'approve_expense']);
+    parsed = await parseExpenseForm(formData, actor, '/ap', RECORD_EXPENSE_FOR_INVOICE_CAPABILITIES);
   } catch (err) {
     const returned = splitReturnTo(str(formData, 'returnTo'), '/ap');
     return await redirectWithFlash(returned.path, { ...returned.nav, ...carryNav(formData) }, { error: errorMessage(err) });
@@ -349,7 +351,7 @@ export async function recordInvoiceExpensesBatchAction(formData: FormData): Prom
   const back = splitReturnTo(str(formData, 'returnTo'), '/ap');
   let parsed: ParsedExpenseForm;
   try {
-    parsed = await parseExpenseForm(formData, actor, '/ap', ['create_expense']);
+    parsed = await parseExpenseForm(formData, actor, '/ap', CREATE_EXPENSE_CAPABILITIES);
   } catch (err) {
     return await redirectWithFlash(back.path, { ...back.nav, ...carryNav(formData) }, { error: errorMessage(err) });
   }

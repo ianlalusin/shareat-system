@@ -94,6 +94,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('destructive.approved', 'security', 'high', 'either', 'persons', 'T-412', { actor: 'either' }),
   def('set_supplier_credit_terms', 'money', 'normal', 'org', 'suppliers', 'T-362'),
   def('set_supplier_status', 'money', 'normal', 'org', 'suppliers', 'T-391'),
+  def('supplier.renamed', 'money', 'normal', 'org', 'suppliers', 'T-598'),
   def('set_supplier_bank_account', 'money', 'high', 'org', 'suppliers', 'T-365'),
   def('set_supplier_counterparty_store', 'money', 'normal', 'org', 'suppliers', 'T-391'),
   def('set_channel_payout', 'money', 'high', 'store', 'sales_channels', 'T-350'),

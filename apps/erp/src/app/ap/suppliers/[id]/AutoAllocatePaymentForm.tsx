@@ -82,6 +82,7 @@
  */
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { compare, money, ZERO } from '@shareat/core/money';
+import { formatBusinessDayLong } from '@shareat/core/datetime';
 import type { AutoAllocateRequest, AutoAllocateResponse } from '../../actions';
 import { Button, Input, Select, DialogActions } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
@@ -94,6 +95,9 @@ export interface PayableItem {
   outstanding: string;
   /** T-432: the bill this open item belongs to, so `?bill=` can pre-fill only that bill's items. */
   supplierInvoiceId?: string;
+  /** DEF-404: shown beside each item, so the operator can see which bill is actually overdue. */
+  invoiceNo?: string | null;
+  dueDate?: string | null;
 }
 export interface Wallet {
   id: string;
@@ -298,7 +302,11 @@ export function AutoAllocatePaymentForm({
                 checked={checked}
                 onChange={(e) => setAmount(i.expenseId, e.target.checked ? i.outstanding : '')}
               />
-              <span className="min-w-0 flex-1 basis-48">{i.particulars} — owed {peso(i.outstanding)}</span>
+              <span className="min-w-0 flex-1 basis-48">
+                {i.particulars}
+                {i.invoiceNo ? ` · invoice ${i.invoiceNo}` : ''}
+                {i.dueDate ? ` · due ${formatBusinessDayLong(i.dueDate)}` : ''} — owed {peso(i.outstanding)}
+              </span>
               <Input
                 type="text"
                 inputMode="decimal"

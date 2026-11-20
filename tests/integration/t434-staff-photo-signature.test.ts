@@ -66,11 +66,11 @@ import {
   canReadFiles,
   inMemoryDriver,
   listRoster,
-  readFileUrl,
   searchPersons,
   setStorageDriver,
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from '../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
+import { readFileUrl } from '../../packages/domain/tests/integration/_fixtures/read-file-url';
 import { GET as filesRoute } from '../../apps/erp/src/app/files/[fileId]/route';
 
 const sql = postgres(url, { max: 5 });
