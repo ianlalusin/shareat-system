@@ -23,7 +23,7 @@ import {
   withOrgPrincipal,
 } from '../lib';
 import { Page } from '@/components/shell/Page';
-import { Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, Field, FlashBanner, Input, SaveBar, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import {
   ADMIN_ASSIGN_ROLE_RULES,
@@ -534,11 +534,11 @@ function GrantPicker({ personId, offerable }: { personId: string; offerable: rea
       ))}
 
       {/* Stays at the bottom of the screen while the long list scrolls, so the save is never off-screen. Red = the brand fill (primary). */}
-      <div className="sticky bottom-0 z-10 -mx-2 border-t border-surface-border bg-canvas/95 px-2 py-3 backdrop-blur">
+      <SaveBar>
         <Button type="submit" variant="primary">
           Grant selected
         </Button>
-      </div>
+      </SaveBar>
     </form>
   );
 }

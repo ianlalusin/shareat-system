@@ -12,7 +12,7 @@
 import type { ReactNode } from 'react';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { peso } from '@/lib/format';
-import { Button, Input } from '@/components/ui';
+import { Button, Input, SaveBar } from '@/components/ui';
 import { RuleCheck } from '@/components/forms';
 import { DraftMemory } from './DraftMemory';
 import { accountLabel } from '@/lib/account-label';
@@ -238,11 +238,11 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
       )}
 
       {/* T-589 B8 G8: the long form scrolls under the save, so it is never off-screen on a phone (same bar as admin/users). */}
-      <div className="sticky bottom-0 z-10 -mx-2 border-t border-surface-border bg-canvas/95 px-2 py-3 backdrop-blur">
+      <SaveBar>
         <Button type="submit" variant="primary">
           {submitLabel}
         </Button>
-      </div>
+      </SaveBar>
     </>
   );
 }
