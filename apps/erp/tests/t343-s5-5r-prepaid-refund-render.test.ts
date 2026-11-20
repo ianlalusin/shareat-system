@@ -39,6 +39,8 @@ vi.mock('../src/lib/page-access', () => ({
   requirePageAccess: (...args: unknown[]) => requirePageAccessMock(...args),
 }));
 
+// T-603: the store scope reads the database; these tests render with the session and page-access stubbed, so the scope is stubbed open too.
+vi.mock('../src/lib/store-scope', () => ({ recordInScope: async () => true, listStoreIds: async () => undefined }));
 // ⛔ NOT a stub — forwards to the real module (the bare `@/...` specifier the root
 // `vitest.config.mts` never resolves; s5-5p/s5-5q precedent).
 vi.mock('@/lib/constraint-messages', async () => {

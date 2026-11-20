@@ -15,6 +15,8 @@ export interface RefundLineChoice {
   amounts: readonly string[];
 }
 export interface RefundPaymentChoice {
+  /** Tells apart two ways of refunding one paid row (T-613 D1: its own method, and a method a correction moved money to): `paymentId:tenderId`. The split and references are keyed by it. */
+  slotId: string;
   paymentId: string;
   tenderId: string;
   tenderName: string;
@@ -47,7 +49,7 @@ export function autoSplit(payments: readonly RefundPaymentChoice[], totalCents: 
   let rest = totalCents;
   for (const p of refundOrder(payments)) {
     const take = rest < amountCents(p.left) ? rest : amountCents(p.left);
-    if (take > 0n) out[p.paymentId] = take;
+    if (take > 0n) out[p.slotId] = take;
     rest -= take;
   }
   return out;
@@ -62,9 +64,9 @@ export function splitProblem(
 ): string | null {
   let sum = 0n;
   for (const p of payments) {
-    const cents = amountCents(split[p.paymentId]);
+    const cents = amountCents(split[p.slotId]);
     if (cents > amountCents(p.left)) return `${p.tenderName} can only take back ₱${p.left}.`;
-    if (cents > 0n && p.kind === 'wallet' && (references[p.paymentId] ?? '').trim().length < 4) return `Type the reference number for the money sent back by ${p.tenderName}.`;
+    if (cents > 0n && p.kind === 'wallet' && (references[p.slotId] ?? '').trim().length < 4) return `Type the reference number for the money sent back by ${p.tenderName}.`;
     sum += cents;
   }
   if (totalCents > 0n && sum !== totalCents) return `The money going back (₱${centsToText(sum)}) must equal the refund (₱${centsToText(totalCents)}).`;

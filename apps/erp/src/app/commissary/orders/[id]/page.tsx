@@ -249,14 +249,14 @@ export default async function BranchOrderPage({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-medium">Add a line</h2>
             <FormModal trigger="+ Add line" title="Add a line to this order" size="lg">
-          <CheckedForm rules={COMMISSARY_ORDER_LINE_RULES} action={addLineAction} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_9rem_auto] sm:items-end">
+          <CheckedForm rules={COMMISSARY_ORDER_LINE_RULES} action={addLineAction} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_auto] sm:items-end">
             <input type="hidden" name="orderId" value={order.id} />
             <Field label="Item (the commissary&rsquo;s catalogue)" className={`${LABEL} col-span-2 sm:col-span-1`} rule={COMMISSARY_ORDER_LINE_RULES.itemId}>
               <Select {...nativeAttrs(COMMISSARY_ORDER_LINE_RULES.itemId)} defaultValue="">
                 <option value="">— pick —</option>
                 {catalogue.map((c) => (
                   <option key={c.commissaryItemId} value={c.commissaryItemId}>
-                    {c.name} ({c.baseUnit}){c.priced ? ` — ₱${c.price}` : ' — no price, state one'}
+                    {c.name} ({c.baseUnit}){c.priced ? ` — ₱${c.price}` : ' — no price yet'}
                     {c.blocker ? ` — not ready: ${c.blocker}` : ''}
                   </option>
                 ))}
@@ -264,9 +264,6 @@ export default async function BranchOrderPage({
             </Field>
             <Field label="Quantity" className={LABEL} rule={COMMISSARY_ORDER_LINE_RULES.quantity}>
               <Input {...nativeAttrs(COMMISSARY_ORDER_LINE_RULES.quantity)} placeholder="0.000" className="tabular-nums" />
-            </Field>
-            <Field label="Rate ₱ (blank = default)" className={LABEL} rule={COMMISSARY_ORDER_LINE_RULES.rate}>
-              <Input {...nativeAttrs(COMMISSARY_ORDER_LINE_RULES.rate)} className="tabular-nums" />
             </Field>
             <DialogActions className="col-span-full">
               <Button type="submit" variant="secondary">
@@ -577,9 +574,6 @@ function LineCard({
               <FormGrid>
                 <Field label={`Quantity (${l.unit})`} className={`${LABEL} min-w-0`} rule={COMMISSARY_LINE_EDIT_RULES.quantity}>
                   <Input {...nativeAttrs(COMMISSARY_LINE_EDIT_RULES.quantity)} defaultValue={l.requestedQuantity ?? l.quantity} className="w-full tabular-nums" />
-                </Field>
-                <Field label="Rate ₱" className={`${LABEL} min-w-0`} rule={COMMISSARY_LINE_EDIT_RULES.rate}>
-                  <Input {...nativeAttrs(COMMISSARY_LINE_EDIT_RULES.rate)} defaultValue={l.rate} className="w-full tabular-nums" />
                 </Field>
               </FormGrid>
             </EditableRecord>

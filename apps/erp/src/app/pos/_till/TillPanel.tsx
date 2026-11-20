@@ -177,7 +177,7 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
   };
 
   const ready = employeeId.trim() !== '' && pin !== '';
-  const hasSales = reading.receiptCount > 0;
+  const hasSales = reading.receiptCount > 0 || (reading.refunds?.count ?? 0) > 0 || (reading.convert?.count ?? 0) > 0; // T-613 D3: refunds and Converts are closed too
   return (
     <div className="grid gap-4 pb-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="rounded-2xl border border-surface-border bg-surface p-5 space-y-6">

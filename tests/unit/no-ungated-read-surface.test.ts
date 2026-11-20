@@ -42,6 +42,8 @@ const SESSION_MARKERS = [
   'requireActor(',
   'currentSession(',
   'reportScope(',
+  // T-603: `storePageScope` calls `requirePageAccess` (session + route gate) first, then limits the store list.
+  'storePageScope(',
 ];
 
 /** Strips comments before matching.

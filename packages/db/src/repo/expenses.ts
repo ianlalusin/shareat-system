@@ -15,7 +15,7 @@
  * `packages/domain/src/expenses/*.ts` composes these primitives with
  * `packages/domain/src/expenses/routing.ts` and `@shareat/auth`'s `authorize()`.
  */
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { expenseCategories, expensePayments, expenseSubcategories, expenses } from '../../schema';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
@@ -471,6 +471,8 @@ export async function getExpenseById(tx: Tx, orgId: string, id: string): Promise
 export interface ListExpensesInput {
   orgId: string;
   storeId?: string;
+  /** T-603: only these stores' expenses (an empty list matches nothing); omitted = every store. */
+  storeIds?: readonly string[];
   status?: ExpenseStatus;
   limit?: number;
 }
@@ -478,6 +480,7 @@ export interface ListExpensesInput {
 export async function listExpenses(tx: Tx, input: ListExpensesInput): Promise<ExpenseRow[]> {
   const conditions = [eq(expenses.orgId, input.orgId)];
   if (input.storeId) conditions.push(eq(expenses.storeId, input.storeId));
+  if (input.storeIds) conditions.push(input.storeIds.length ? inArray(expenses.storeId, [...input.storeIds]) : sql`false`);
   if (input.status) conditions.push(eq(expenses.status, input.status));
 
   const rows = await tx

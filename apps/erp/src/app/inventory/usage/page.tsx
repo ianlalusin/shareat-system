@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { WASTAGE_REASONS, WASTAGE_REASON_LABEL, wastageReasonLabel } from '@shareat/domain';
 import { addDays, formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import { saveUsageDraftAction } from './actions';
-import { listStores, usageQueueData, usageScreenData } from './lib';
+import { usageQueueData, usageScreenData } from './lib';
 import { NewUsageForm } from './NewUsageForm';
 import { ACTION_LINK, NAV_LINK } from '@/components/action-link';
 import { Page } from '@/components/shell/Page';
@@ -40,9 +40,9 @@ function pctOf(tolerance: string): string {
 
 export default async function UsagePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/inventory/usage');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  const scope = await storePageScope('/inventory/usage', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
 
   if (!storeId) {
     return (

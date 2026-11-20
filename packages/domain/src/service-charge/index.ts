@@ -19,7 +19,7 @@ import { advisoryLocksRepo, moneyAccountsRepo, serviceChargeRepo, storesRepo, ty
 import { authorize, type Actor } from '@shareat/auth';
 import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
-import { checkDraw } from '../money-accounts/overdraft';
+import { assertActiveAccount, checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { SERVICE_CHARGE_DISTRIBUTE_RULES } from '../field-rules/service-charge';
@@ -62,6 +62,7 @@ export async function distributeServiceCharge(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
     if (!account) throw new Error('distributeServiceCharge: that money account does not exist.');
+    assertActiveAccount(account, 'distributeServiceCharge');
     // ⛔ §7 invariant 4 — mirrors payLiability's exact check against its liability's store.
     if (account.storeId !== input.storeId) {
       throw new Error('distributeServiceCharge: that money account belongs to another store.');

@@ -190,6 +190,29 @@ afterAll(async () => {
 });
 
 describe('external return — §3, the full posting', () => {
+  it('DEF-900: a return against the SECOND line of an item sold on two lines succeeds', async () => {
+    const f = await fixture('twolinesret');
+    const itemId = await wholesaleItem(f, 'Rice');
+    await stock(f, f.storeId, f.locationId, itemId, '20', '50.0000');
+    const customerId = await buyer(f);
+    const order = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, {
+        storeId: f.storeId, customerId, orderDate: '2026-01-10',
+        lines: [{ itemId, quantity: '5', rate: '50.00' }, { itemId, quantity: '3', rate: '40.00' }],
+      }),
+    );
+    await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: order.orderId }));
+    const lines = await asOrg(f.orgId, (tx) => tradeRepo.linesFor(tx, f.orgId, order.orderId));
+    const second = lines.find((l) => l.quantity === '3.000')!;
+    const res = await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, {
+        tradeOrderId: order.orderId, returnedOn: '2026-01-15', reason: 'Wrong grade.',
+        lines: [{ tradeOrderLineId: second.id, quantity: '2' }], actor: f.manager,
+      }),
+    );
+    expect(res.ok).toBe(true);
+  });
+
   it('1. a full resaleable return: Dr 4950/Cr 1210, Dr 1310/Cr 5100, on-hand rises, trial balance ties', async () => {
     const f = await fixture('full');
     const s = await aSale(f, { qty: '10', rate: '500', stockQty: '50', unitCost: '90' });
@@ -375,6 +398,26 @@ describe('settlement — §3\'s table and invariant 9\'s split', () => {
     expect(legs[0]!.credit).toBe('500.00');
     const balance = await asOrg(f.orgId, (tx) => customerCreditBalance(tx, f.orgId, s.customerId));
     expect(balance).toBe('0.00');
+  });
+});
+
+describe('T-613 DEF-932 — a cash refund is not paid from a retired account', () => {
+  it('is refused in words; the same account live refunds', async () => {
+    const f = await fixture('refund-retired');
+    const s = await aSale(f, { qty: '2', rate: '500' });
+    const refund = () =>
+      asOrg(f.orgId, (tx) =>
+        recordCustomerReturn(tx, {
+          tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Refund requested.',
+          lines: [{ tradeOrderLineId: s.lineId, quantity: '1' }], refund: true, moneyAccountId: f.cashAccountId, actor: f.manager,
+        }),
+      );
+    await sql`update money_accounts set is_active = false where id = ${f.cashAccountId}`;
+    const refused = await refund();
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.reason).toMatch(/is retired/);
+    await sql`update money_accounts set is_active = true where id = ${f.cashAccountId}`;
+    expect((await refund()).ok).toBe(true);
   });
 });
 

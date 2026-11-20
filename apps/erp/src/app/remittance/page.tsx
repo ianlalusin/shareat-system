@@ -2,7 +2,7 @@ import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
-import { requireSession } from '../../lib/session';
+import { listStoreIds, storePageScope } from '../../lib/store-scope';
 import { listActingPersons } from '../expenses/lib';
 import {
   createRemittanceAction,
@@ -17,7 +17,6 @@ import {
   cashierAccounts,
   defaultStoreFor,
   endDays,
-  listStores,
   officeAccounts,
   openVarianceCountForOrg,
   openVariances,
@@ -52,11 +51,12 @@ export default async function RemittancePage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/remittance');
-
-  const stores = await listStores(actor.orgId);
-  const storeId =
-    sp.store || (await defaultStoreFor(actor, stores.map((s) => s.id))) || stores[0]?.id;
+  const scope = await storePageScope('/remittance', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores } = scope;
+  const storeId = sp.store || (await defaultStoreFor(actor, stores.map((s) => s.id))) || scope.storeId;
+  // The org-wide "more at other stores" count is for a viewer who is not store-limited; a store-limited manager sees only their own.
+  const orgWide = (await listStoreIds(actor, '/remittance')) === undefined;
 
   if (!storeId) {
     return (
@@ -73,7 +73,7 @@ export default async function RemittancePage({
     officeAccounts(actor.orgId, storeId),
     recentRemittances(actor.orgId, storeId),
     openVariances(actor.orgId, storeId),
-    openVarianceCountForOrg(actor.orgId),
+    orgWide ? openVarianceCountForOrg(actor.orgId) : Promise.resolve(0),
     listActingPersons(actor.orgId),
     cashCustodyFindings(actor.orgId, storeId),
     storeCashPolicy(actor.orgId, storeId),

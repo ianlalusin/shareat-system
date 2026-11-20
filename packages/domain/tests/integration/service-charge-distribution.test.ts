@@ -420,6 +420,21 @@ describe('T-187 §7 invariant 4 — the money account must belong to the paying 
   });
 });
 
+describe('T-613 DEF-932 — a retired money account does not pay out a distribution', () => {
+  it('refuses with the retired sentence and writes nothing; the same account live pays', async () => {
+    const f = await fixture('retired');
+    await accrue(f, f.storeA, '2026-01-05', '1000.00', uid('accrue'));
+    const pay = () =>
+      asOrg(f.orgId, (tx) => distributeServiceCharge(tx, f.admin, { storeId: f.storeA.id, moneyAccountId: f.storeA.officeCashId, amount: '300.00', paidOn: '2026-01-20' }));
+    await sql`update money_accounts set is_active = false where id = ${f.storeA.officeCashId}`;
+    const before = await ledgerCounts(f.orgId);
+    await expect(pay()).rejects.toThrow(/is retired/);
+    expect(await ledgerCounts(f.orgId)).toEqual(before);
+    await sql`update money_accounts set is_active = true where id = ${f.storeA.officeCashId}`;
+    expect((await pay()).created).toBe(true);
+  });
+});
+
 describe('T-187 §5 AMENDMENT — the residual, not just the silence', () => {
   /**
    * ⛔⛔ Why this exists alongside every "no finding" assertion in this file and in

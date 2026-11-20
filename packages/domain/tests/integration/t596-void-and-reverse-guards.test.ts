@@ -38,6 +38,7 @@ import {
   payReimbursement,
   reverseLiabilityEntry,
   voidExpense,
+  capitalizeApprovedExpense,
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
@@ -370,7 +371,8 @@ describe('DEF-893 - a paid-down charge cannot be reversed', () => {
     const c = await charge(f, id, '1000.00');
     await pay(f, id, '600.00');
     const sentence = await refusal(reverse(f, id, c.entryId));
-    expect(sentence).toMatch(/Reversing this .*1,000\.00 charge would leave Loan from landlord owing -₱600\.00, because payments already cover it\. Reverse a payment first\./);
+    // DEF-942 (T-613 H): a positive amount. Mutant: put the sign back (outstanding - removed) -> the sentence reads -₱600.00, red.
+    expect(sentence).toMatch(/Reversing this .*1,000\.00 charge would overpay Loan from landlord by ₱600\.00, because payments already cover it\. Reverse a payment first\./);
     expect(await outstanding(f, id)).toBe('400.00');
   });
 
@@ -535,5 +537,18 @@ describe('DEF-891 - CAPEX under the capitalisation threshold posts to 6510', () 
     expect(posted.assetId).toBeTruthy();
     expect((await linesFor(posted.journalEntryId)).map((l) => l.code).sort()).toEqual(['1110', '1510']);
     expect(await ledgerTotal(f.orgId, e, '6510')).toBe('0');
+  });
+
+  it('DEF-941 (T-613 G): the approval own below-threshold answer is used, not the policy read again - Mutant: ignore the passed value -> red', async () => {
+    const f = await setup('d941');
+    const e = await expenseWithInvoice(f, '4999.99');
+    await approve(f, e); // below the 5,000 threshold: posted to 6510, no asset
+    const act = actor(f.orgId, f.managerId);
+    // No decision passed: it compares itself and does not register it (the direct-call behaviour is unchanged).
+    expect((await asOrg(f.orgId, (tx) => capitalizeApprovedExpense(tx, act, e))).reason).toBe('below_threshold');
+    // A decision of "at or above" is trusted over the policy: the asset is registered.
+    const decided = await asOrg(f.orgId, (tx) => capitalizeApprovedExpense(tx, act, e, false));
+    expect(decided.reason).toBe('created');
+    expect(decided.assetId).toBeTruthy();
   });
 });

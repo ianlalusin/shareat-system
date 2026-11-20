@@ -338,6 +338,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: 'An entry may post only into an OPEN period (0003) — reads the period\'s CURRENT status.',
   },
+  journal_entries_entry_date_in_period: {
+    table: 'journal_entries',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "An entry's date must fall inside its fiscal period (0270, T-600, DEF-902) — reads the period's CURRENT dates.",
+  },
   journal_lines_period_open: {
     table: 'journal_lines',
     mode: 'origin',
@@ -1665,6 +1671,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'always',
     kind: 'history_guard',
     reason: 'No money-back line is added to a refund written by an earlier transaction (reads the PARENT refund xmin, the 0240 pattern) (0265, T-534 S1).',
+  },
+  pos_refund_payment_tender_guard: {
+    table: 'pos_refund_payments',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'A money-back line goes back by the paid row own tender or by the target of a correction of that row (0269, T-613 D1). It reads OTHER rows (the payment and its corrections), so a replay must not re-run it.',
   },
   issued_document_versions_sequence: {
     table: 'issued_document_versions',

@@ -25,6 +25,16 @@ vi.mock('next/navigation', () => ({
 
 const held = { current: new Set<string>() };
 vi.mock('@shareat/auth', async (orig) => ({ ...(await orig<typeof import('@shareat/auth')>()), heldCapabilities: async () => held.current }));
+// T-603: the pages ask `storePageScope` (route gate + the viewer's stores); this harness stubs the session, so the scope is stubbed to its one store.
+vi.mock('../src/lib/store-scope', () => ({
+  storePageScope: async (_route: string, requested?: string) => ({
+    actor: { orgId: 'org-1', personId: 'p-1' },
+    stores: [{ id: 'store-1', name: 'Lipa', code: 'LP' }],
+    storeId: requested ?? 'store-1',
+  }),
+  recordInScope: async () => true,
+  listStoreIds: async () => undefined,
+}));
 vi.mock('../src/lib/session', () => ({ requireSession: async () => ({ actor: { orgId: 'org-1', personId: 'p-1' } }) }));
 vi.mock('../src/app/expenses/lib', () => ({
   withOrgPrincipal: async (_o: string, fn: (tx: unknown) => unknown) => fn({}),
@@ -90,7 +100,8 @@ describe('T-583 S2 the recipes screens are read-gated by record_stock_movement',
     expect(capabilitiesForRoute(RECIPES)).toEqual(['record_stock_movement']);
     expect(capabilitiesForRoute(`${RECIPES}/0194a1b2-0000-7000-8000-000000000000`)).toEqual(['record_stock_movement']);
     expect(capabilitiesForRoute(`${RECIPES}/new`)).toEqual(['manage_recipes']);
-    expect(capabilitiesForRoute('/inventory/production')).toEqual([]);
+    // T-603: /inventory is keyed now; the production screen reads by that list (the recipes keys above are longer and win).
+    expect(capabilitiesForRoute('/inventory/production')).toEqual(capabilitiesForRoute('/inventory'));
   });
   it('staff with no cook role (no record_stock_movement) are refused the page itself; a cook and a manager get it', async () => {
     held.current = new Set();

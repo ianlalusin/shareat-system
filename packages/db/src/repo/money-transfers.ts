@@ -5,7 +5,7 @@
  * what an account holds is `moneyAccountsRepo.balanceOf`, read from the ledger. Both are exposed
  * as derived reads below so no caller is ever tempted to add a column for them.
  */
-import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { moneyAccounts } from '../../schema/money-accounts';
 import { stores } from '../../schema/stores';
@@ -109,6 +109,8 @@ export async function getById(
 
 export interface ListMoneyTransfersFilter {
   storeId?: string;
+  /** T-603: a transfer shows when its store OR its destination account's store is listed (an empty list matches nothing). */
+  storeIds?: readonly string[];
   from?: string;
   to?: string;
   status?: MoneyTransferStatus;
@@ -124,6 +126,10 @@ export async function listMoneyTransfers(
   const toAcct = sql`to_acct`;
   const conditions = [eq(moneyTransfers.orgId, orgId)];
   if (filter.storeId) conditions.push(eq(moneyTransfers.storeId, filter.storeId));
+  if (filter.storeIds) {
+    const ids = filter.storeIds;
+    conditions.push(ids.length ? or(inArray(moneyTransfers.storeId, [...ids]), inArray(sql`${toAcct}.store_id`, [...ids]))! : sql`false`);
+  }
   if (filter.from) conditions.push(gte(moneyTransfers.transferDate, filter.from));
   if (filter.to) conditions.push(lte(moneyTransfers.transferDate, filter.to));
   if (filter.status) conditions.push(eq(moneyTransfers.status, filter.status));

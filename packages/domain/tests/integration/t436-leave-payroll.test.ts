@@ -67,7 +67,7 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 }
 const actor = (orgId: string, personId: string): Actor => ({ personId, orgId });
 
-async function fixture(hint: string, opts: { secondStore?: boolean } = {}) {
+async function fixture(hint: string, opts: { secondStore?: boolean; fund?: string } = {}) {
   const code = uid(`p436-${hint}`);
   const [org] = await sql<{ id: string }[]>`
     insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
@@ -84,7 +84,7 @@ async function fixture(hint: string, opts: { secondStore?: boolean } = {}) {
     const [office] = await sql<{ id: string }[]>`
       select id from money_accounts where store_id = ${s!.id} and instrument = 'cash' and custodian = 'office' and is_foundation`;
     // T-597: payroll follows the draw rule - an office safe that cannot cover the run refuses - so the paying account holds cash.
-    await fundAccount(sql, { orgId: orgId, storeId: s!.id, code: '1130', amount: '10000000.00' });
+    await fundAccount(sql, { orgId: orgId, storeId: s!.id, code: '1130', amount: opts.fund ?? '10000000.00' });
     return { storeId: s!.id, officeId: office!.id };
   };
   const A = await mkStore('A');
@@ -417,6 +417,34 @@ describe('T-436 payroll - the year-end SIL cash payout (D11)', () => {
       select count(*)::text as n from journal_lines l join journal_entries e2 on e2.id = l.entry_id
       where e2.org_id = ${f.orgId} and l.credit = '1800.00'`;
     expect(Number(reversal[0]!.n)).toBeGreaterThanOrEqual(1);
+  });
+
+  // T-613 E (DEF-938): the SIL cash-out at separation is a SECOND draw on the paying account; the separation's own pay (13th month 500.00) is judged first, then the 1,800.00 SIL on top.
+  async function leaverFixture(hint: string, fund: string) {
+    const f = await fixture(hint, { fund });
+    const pid = await f.mk('Leaver', 'staff');
+    const e = await f.emp(pid, f.A.storeId, '2025-01-01', '600.00', '2026-06-30');
+    await asOrg(f.orgId, (tx) => recordLeave(tx, f.mgr, { employmentId: e.employmentId, leaveType: 'sil', days: [day('2026-03-02'), day('2026-03-03')] } as never));
+    const [run] = await sql<{ id: string }[]>`
+      insert into pay_runs (org_id, store_id, period_start, period_end, status, money_account_id, posted_at, posted_by, created_by)
+      values (${f.orgId}, ${f.A.storeId}, '2026-01-01', '2026-01-15', 'posted', ${f.A.officeId}, now(), ${f.adminId}, ${f.adminId}) returning id`;
+    await sql`insert into payslips (run_id, org_id, employment_id, person_id, pay_rate_id, days_worked, basic_pay, gross_pay, advance_recovered, net_pay)
+              values (${run!.id}, ${f.orgId}, ${e.employmentId}, ${pid}, ${e.rateId}, '1', '6000.00', '6000.00', '0', '6000.00')`;
+    const separate = () =>
+      asOrg(f.orgId, (tx) =>
+        postSeparation(tx, f.admin, { storeId: f.A.storeId, employmentId: e.employmentId, separationDate: '2026-06-30', cause: 'resignation', separationPayAmount: '0', moneyAccountId: f.A.officeId, clearanceConfirmedBy: f.adminId }));
+    return { f, pid, separate };
+  }
+  it('20e. an office safe that covers the final pay but not the SIL cash-out on top refuses the whole separation; nothing is posted or claimed [kills: SIL outside the draw check]', async () => {
+    const { f, pid, separate } = await leaverFixture('p20e', '2000.00');
+    await expect(separate()).rejects.toThrow(/holds 1500.00 and this takes 1800.00/);
+    expect(await commutations(pid)).toHaveLength(0);
+    expect(Number((await sql<{ n: string }[]>`select count(*)::text n from separations where org_id = ${f.orgId}`)[0]!.n)).toBe(0);
+  });
+  it('20f. the same separation with exactly enough in the safe (500.00 + 1,800.00) posts', async () => {
+    const { pid, separate } = await leaverFixture('p20f', '2300.00');
+    await separate();
+    expect((await commutations(pid))[0]).toMatchObject({ amount: '1800.00' });
   });
 
   it('20e. the 13th month for a person with leave pay AND a SIL payout equals the same-pay person\'s without them', async () => {
