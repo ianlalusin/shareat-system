@@ -2,11 +2,12 @@
  * Migration runner. Forward-only, committed, never edited after being applied anywhere.
  * PROJECT_BIBLE.md §15.5 (expand/contract) and §2 rule 8.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { config } from 'dotenv';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
+import { skippedJournalEntries, type JournalEntry } from './migrate-check';
 
 config({ path: '../../.env.local' });
 
@@ -42,6 +43,13 @@ async function main() {
 
   try {
     await migrate(drizzle(sql), { migrationsFolder: MIGRATIONS_DIR });
+    // DEF-094: drizzle passes over a journal entry older than the newest one recorded and still reports success - say so.
+    const journal = (JSON.parse(readFileSync(`${MIGRATIONS_DIR}/meta/_journal.json`, 'utf8')) as { entries: JournalEntry[] }).entries;
+    const recorded = await sql<{ created_at: string }[]>`select created_at from drizzle.__drizzle_migrations`;
+    const skipped = skippedJournalEntries(recorded.map((r) => r.created_at), journal);
+    if (skipped.length > 0) {
+      throw new Error(`Migrations were skipped, not applied: ${skipped.join(', ')}. Their journal timestamps are older than a migration already recorded.`);
+    }
     console.log(`Migrations applied in ${Date.now() - start}ms`);
   } finally {
     await sql.end({ timeout: 5 });
