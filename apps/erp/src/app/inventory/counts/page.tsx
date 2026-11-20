@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { countsRegister, listStores } from './lib';
+import { countsRegister } from './lib';
 import { openCountSessionAction } from './actions';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import { Page } from '@/components/shell/Page';
 import { Badge, Button, Card, DialogActions, EmptyState, FlashBanner, FormGrid, FormModal, Field, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, statusTone } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
@@ -39,9 +39,9 @@ function today(): string {
 
 export default async function CountsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/inventory/counts');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  const scope = await storePageScope('/inventory/counts', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
 
   if (!storeId) {
     return (

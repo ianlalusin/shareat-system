@@ -439,8 +439,11 @@ describe('AUDIT A — the photo thumbnail is shown ONLY to people who hold the f
       return renderToStaticMarkup((await DeliveryPage({ params: Promise.resolve({ id: deliveryId }), searchParams: Promise.resolve({}) })) as never);
     };
     expect(links(await render(f.manager)), 'positive control: the holder sees the link').toBe(1);
+    // T-603: reading a delivery needs an inventory word at its store; give staff `transfer_stock` (NOT the receiver's), so the thumbnail rule is still what is tested.
+    await grantPositionCapability(sql, { orgId: f.orgId, storeId: f.storeId, personId: f.staffId, setBy: f.managerId, capability: 'transfer_stock' });
     expect(links(await render(f.staff)), 'staff without the capability was handed a /files/ link').toBe(0);
-    expect(links(await render(f.otherManager)), "another store's manager was handed a /files/ link").toBe(0);
+    // ...and another store's manager no longer reads the delivery at all (the same not-found as a forged id).
+    await expect(render(f.otherManager), "another store's manager").rejects.toThrow(/notFound\(\)/);
   });
 
   it("customer page: a collection receipt's thumbnail shows for the holder of record_ar_collection and NOT for staff without it", async () => {

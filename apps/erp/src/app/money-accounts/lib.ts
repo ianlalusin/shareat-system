@@ -26,10 +26,10 @@ export interface MoneyAccountRow {
 }
 
 /** Every money account, retired ones included — this is the register, not a payment picker. */
-export async function listAll(orgId: string): Promise<MoneyAccountRow[]> {
-  return withOrgPrincipal(orgId, (tx) =>
-    moneyAccountsRepo.listMoneyAccounts(tx, orgId, { activeOnly: false }),
-  );
+/** `storeIds`: only these stores' accounts; `undefined` = the viewer is not store-limited (T-603). */
+export async function listAll(orgId: string, storeIds?: readonly string[]): Promise<MoneyAccountRow[]> {
+  const rows = await withOrgPrincipal(orgId, (tx) => moneyAccountsRepo.listMoneyAccounts(tx, orgId, { activeOnly: false }));
+  return rows.filter((a) => !storeIds || storeIds.includes(a.storeId));
 }
 
 export const CUSTODIAN_LABEL: Record<string, string> = {

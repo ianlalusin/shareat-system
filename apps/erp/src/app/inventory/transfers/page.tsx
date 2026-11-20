@@ -1,14 +1,13 @@
 import Link from 'next/link';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { itemsRepo, schema } from '@shareat/db';
-import { listStores } from '../lib';
 import {
   dispatchTransferAction,
   receiveTransferAction,
   voidTransferAction,
 } from './actions';
 import { NewTransferForm } from './NewTransferForm';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
@@ -28,9 +27,9 @@ interface SearchParams {
 
 export default async function TransfersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/inventory/transfers');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  const scope = await storePageScope('/inventory/transfers', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
 
   if (!storeId) {
     return (

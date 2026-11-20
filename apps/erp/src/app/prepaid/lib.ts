@@ -24,13 +24,14 @@ export interface PrepaidListRow extends PrepaidItemRow {
   monthsPosted: number;
 }
 
-export async function listRegister(orgId: string): Promise<PrepaidListRow[]> {
+/** `storeIds`: only these stores' items; `undefined` = the viewer is not store-limited (T-603). */
+export async function listRegister(orgId: string, storeIds?: readonly string[]): Promise<PrepaidListRow[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const [items, amortisedMap] = await Promise.all([
       prepaidRepo.listPrepaidItems(tx, orgId),
       prepaidRepo.amortisedByItem(tx, orgId),
     ]);
-    return items.map((i) => {
+    return items.filter((i) => !storeIds || storeIds.includes(i.storeId)).map((i) => {
       const amortised = amortisedMap.get(i.id) ?? '0';
       return {
         ...i,
@@ -43,8 +44,8 @@ export async function listRegister(orgId: string): Promise<PrepaidListRow[]> {
   });
 }
 
-export async function reviewCount(orgId: string): Promise<number> {
-  return withOrgPrincipal(orgId, (tx) => prepaidRepo.countNeedingReview(tx, orgId));
+export async function reviewCount(orgId: string, storeIds?: readonly string[]): Promise<number> {
+  return withOrgPrincipal(orgId, (tx) => prepaidRepo.countNeedingReview(tx, orgId, storeIds));
 }
 
 export interface PrepaidDetail extends PrepaidListRow {

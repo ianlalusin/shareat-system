@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
+import { listStoreIds } from '@/lib/store-scope';
 import { scorecardFor, scorecardRange } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -23,9 +24,11 @@ export const dynamic = 'force-dynamic';
  * ⚠️ It also has no actor, which is why the unit here is the STORE and not a person.
  */
 export default async function ScorecardPage() {
-  const { actor } = await requireSession('/findings/scorecard');
+  const { actor, refusal } = await requirePageAccess('/findings/scorecard');
+  if (refusal) return refusal;
   const range = scorecardRange();
-  const { card, storeName } = await scorecardFor(actor.orgId, range);
+  const storeIds = await listStoreIds(actor, '/findings');
+  const { card, storeName } = await scorecardFor(actor.orgId, range, storeIds);
 
   const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 100)}%`);
   const num = (v: number | null) => (v == null ? '—' : String(v));

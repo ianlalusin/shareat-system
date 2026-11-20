@@ -1,7 +1,7 @@
 import { compare, money, ZERO } from '@shareat/core/money';
-import { requirePageAccess } from '../../lib/page-access';
+import { storePageScope } from '../../lib/store-scope';
 import { distributeAction } from './actions';
-import { floatBalance, listStores, moneyAccounts, peso, today } from './lib';
+import { floatBalance, moneyAccounts, peso, today } from './lib';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { SERVICE_CHARGE_DISTRIBUTE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
@@ -25,12 +25,10 @@ export default async function ServiceChargePage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor, refusal } = await requirePageAccess('/service-charge');
-  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
-  if (refusal) return refusal;
-
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store || stores[0]?.id;
+  // T-288 / T-603: the read gate, then only the stores where the viewer holds the screen's word.
+  const scope = await storePageScope('/service-charge', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
 
   if (!storeId) {
     return (

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { peso } from '@/lib/format';
 import { CUSTODIANS, MONEY_INSTRUMENTS } from '@shareat/db';
 import { requirePageAccess } from '../../lib/page-access';
+import { listStoreIds } from '@/lib/store-scope';
 import {
   createMoneyAccountAction,
   renameMoneyAccountAction,
@@ -46,7 +47,8 @@ export default async function MoneyAccountsPage({
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
 
-  const [stores, accounts] = await Promise.all([listStores(actor.orgId), listAll(actor.orgId)]);
+  const storeIds = await listStoreIds(actor, '/money-accounts');
+  const [stores, accounts] = await Promise.all([listStores(actor.orgId), listAll(actor.orgId, storeIds)]);
   const storeById = new Map(stores.map((s) => [s.id, s]));
 
   const active = accounts.filter((a) => a.isActive);
