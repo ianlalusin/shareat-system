@@ -30,6 +30,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { signOutAction } from '../../app/sign-in/actions';
+import { purgePosShell } from '../../app/pos/_shell/offline-sw';
 import { CloseIcon, CollapseIcon, MenuIcon, SignOutIcon } from './icons';
 import { FOCUS_RING, writeSidebarStateCookie, type SidebarState } from './sidebar-state';
 import { SidebarNav } from './SidebarNav';
@@ -153,7 +154,7 @@ function PersistentSidebar({ allowedHrefs }: { allowedHrefs: readonly string[] }
         />
       </div>
       <div className="mx-2 mb-2 flex items-center justify-center border-t border-neutral-100 pt-2 dark:border-neutral-900">
-        <form action={signOutAction}>
+        <form action={signOutAction} onSubmit={purgeSavedPosPage}>
           <button
             type="submit"
             className={`shell-sidebar-expanded-only shell-nav-row rounded-md px-2 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100 ${FOCUS_RING}`}
@@ -161,7 +162,7 @@ function PersistentSidebar({ allowedHrefs }: { allowedHrefs: readonly string[] }
             Sign out
           </button>
         </form>
-        <form action={signOutAction}>
+        <form action={signOutAction} onSubmit={purgeSavedPosPage}>
           <button
             type="submit"
             aria-label="Sign out"
@@ -178,6 +179,18 @@ function PersistentSidebar({ allowedHrefs }: { allowedHrefs: readonly string[] }
         </form>
       </div>
     </div>
+  );
+}
+
+/** T-614 S3: the saved offline /pos page is the last person's; it goes with their sign-out. Starts before the Server Action's round trip; never blocks or throws. */
+export const purgeSavedPosPage = () => void purgePosShell();
+
+/** For the Server Component TopBar (it cannot hand a function to a form): the same form, with the same purge. */
+export function SignOutForm({ children }: { children: ReactNode }) {
+  return (
+    <form action={signOutAction} onSubmit={purgeSavedPosPage}>
+      {children}
+    </form>
   );
 }
 
