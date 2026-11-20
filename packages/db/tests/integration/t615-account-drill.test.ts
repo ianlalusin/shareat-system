@@ -51,7 +51,7 @@ async function fixture() {
     const b = await mk('9002', 'asset');
     const entries = Array.from({ length: N + 1 }, (_, i) => ({
       org_id: orgId, period_id: (i < N ? jan : dec)!.id, entry_date: i < N ? `2026-01-${String((i % 28) + 1).padStart(2, '0')}` : '2026-12-31',
-      source_type: i < N ? 'manual_journal' : 'year_close', source_id: uid('src'), idempotency_key: uid('idem'), memo: 'drill probe', status: 'draft',
+      source_type: i < N ? 'manual_journal' : 'year_close', source_id: uid('src') + `-${i}`, idempotency_key: uid('idem') + `-${i}`, memo: 'drill probe', status: 'draft',
     }));
     const ids = await tx<{ id: string }[]>`insert into journal_entries ${tx(entries)} returning id`;
     const lines = ids.flatMap((e, i) => {

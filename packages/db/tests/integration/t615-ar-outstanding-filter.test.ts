@@ -106,10 +106,10 @@ async function planOf(tx: Tx, run: (spy: Tx) => Promise<unknown>): Promise<strin
   return ((await tx.execute(dsql.raw(`explain ${inlined}`))) as unknown as Record<string, string>[]).map((r) => r['QUERY PLAN']).join('\n');
 }
 
-// Narrowed, each of the two index probes carries an Index Cond on ar_charge_id (a constant or the semi-join's id); un-narrowed they are walked end to end.
+// Narrowed, each of the two index probes (whichever scan type or index the planner picks: Index or Bitmap, any index) carries an Index Cond on ar_charge_id (a constant or the semi-join's id); un-narrowed they are walked end to end.
 const probes = (plan: string) => {
-  expect(plan).toMatch(/Index Scan using ar_collection_allocations_charge_idx on ar_collection_allocations a[^\n]*\n\s+Index Cond: \(ar_charge_id /);
-  expect(plan).toMatch(/Index Scan using ar_write_offs_charge_idx on ar_write_offs[^\n]*\n\s+Index Cond: \(ar_charge_id /);
+  expect(plan).toMatch(/ on ar_collection_allocations\b[^\n]*\n\s+(?:Index|Recheck) Cond: \(ar_charge_id /);
+  expect(plan).toMatch(/ on ar_write_offs\b[^\n]*\n\s+(?:Index|Recheck) Cond: \(ar_charge_id /);
 };
 
 describe('T-615 item 3: AR outstanding queries are narrowed to the charge / the customer', () => {
