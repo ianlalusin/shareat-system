@@ -436,6 +436,25 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'Never lower revenue to match the cash and never charge the gap to the cashier (1230): a short payment the till accepted ' +
       'is a sale at full price with a cash shortfall, which is what 7350 carries (the same account remittance.overage swings the other way).',
   },
+  {
+    id: 'sale.pos-refund-excess',
+    sourceType: 'sale',
+    title: 'A POS method refunded more than it took in the Z (T-614 S1, DEF-940)',
+    narrative:
+      'v2-only, POS Z. Cash refunded for a sale of an earlier day is ₱750.00 and the cash taken in the Z window is ₱250.00, so cash nets to minus ₱500.00. ' +
+      'The sales day floors cash at 0 and its refunds figure drops by the same ₱500.00; the ₱500.00 posts as its own entry at the Z, dated the Z business date: ' +
+      'Dr 4950 sales returns and voids / Cr the cashier drawer 1110 (a wallet: 1140 with its money account as party). A sales day built from a Z can never be voided (T-531), ' +
+      'so this entry is permanent, like a Convert entry.',
+    input: { businessDate: '2026-01-13', method: 'cash', refunded: '750.00', taken: '250.00', excess: '500.00' },
+    expect: [
+      D('4950', '500.00', null, { lineMemo: 'sales returns and voids' }),
+      C('1110', '500.00', null, { lineMemo: 'cashier drawer' }),
+    ],
+    entryDate: '2026-01-13',
+    trap:
+      'Never let the sales day hold a negative cash or wallet figure, and never post the whole refund twice: the day keeps only the refunds the takings of the same method covered; ' +
+      'the excess is the other entry.',
+  },
 
   // =========================================================================================
   // salary_advance — 1,488 legs. leg-mapping.ts FINDING: disbursement and repayment (the
