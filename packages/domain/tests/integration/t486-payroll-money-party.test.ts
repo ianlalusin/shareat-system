@@ -25,6 +25,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedStatutoryRates } from './_fixtures/statutory-rates';
+import { fundAccount } from './_fixtures/fund-account';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
@@ -85,6 +86,9 @@ async function fixture(hint: string) {
   const officeId = await acct('cash', 'office', '1130');
   const ewalletId = await acct('ewallet', 'office', '1140');
   const floatId = await acct('cash', 'staff', '1120');
+  // T-597: payroll follows the draw rule - an office safe or e-wallet that cannot cover the run refuses - so both hold cash.
+  await fundAccount(sql, { orgId, storeId, code: '1130', amount: '10000000.00' });
+  await fundAccount(sql, { orgId, storeId, code: '1140', amount: '10000000.00', accountId: ewalletId });
 
   const mk = async (name: string, role: string) => {
     const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, ${name}) returning id`;
@@ -178,7 +182,8 @@ describe('T-486 - pay run', () => {
     const f = await fixture('pr-fl');
     await workedDay(f, '2026-01-05');
     await expectFloatRefusal(run(f, f.floatId));
-    expect(await count('journal_entries', f.orgId)).toBe(0);
+    // T-597: the fixture's two opening-balance entries (office safe, e-wallet) are the only entries; the refused run added none.
+    expect(await count('journal_entries', f.orgId)).toBe(2);
     expect(await count('pay_runs', f.orgId)).toBe(0);
   });
 

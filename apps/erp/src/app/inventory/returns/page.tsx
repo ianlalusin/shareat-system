@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { and, asc, desc, eq, inArray, sql as dsql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql as dsql } from 'drizzle-orm';
 import { schema } from '@shareat/db';
 import { compare, ZERO } from '@shareat/core/money';
 import { isPositiveQuantity, quantity, subtractQuantity, supplierCreditBalance } from '@shareat/domain';
@@ -108,7 +108,15 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
     const [money] = await tx
       .select({ id: schema.moneyAccounts.id })
       .from(schema.moneyAccounts)
-      .where(and(eq(schema.moneyAccounts.storeId, storeId), eq(schema.moneyAccounts.instrument, 'cash')))
+      .where(
+        and(
+          eq(schema.moneyAccounts.storeId, storeId),
+          eq(schema.moneyAccounts.instrument, 'cash'),
+          // DEF-888: a retired account is refused by the domain, and a staff float cannot take a refund (its 1120 line needs a cash-request party).
+          eq(schema.moneyAccounts.isActive, true),
+          ne(schema.moneyAccounts.custodian, 'staff'),
+        ),
+      )
       .limit(1);
 
     return {

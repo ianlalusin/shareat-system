@@ -16,7 +16,7 @@ import type { LiabilityCategory } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { reverseEntry } from '../ledger/reverse-entry';
-import { checkDraw } from '../money-accounts/overdraft';
+import { assertActiveAccount, checkDraw } from '../money-accounts/overdraft';
 import { refuse } from '../shared/refusal';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
@@ -201,6 +201,7 @@ export async function payLiability(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
     if (!account) throw new Error('payLiability: that money account does not exist.');
+    assertActiveAccount(account, 'payLiability'); // DEF-905
     if (account.storeId !== liability.storeId) {
       throw new Error('payLiability: that account belongs to another store.');
     }

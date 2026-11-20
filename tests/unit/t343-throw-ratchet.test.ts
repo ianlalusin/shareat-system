@@ -78,7 +78,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/ar': 30, // T-595 S4 (DEF-880): 31 -> 30, recordCollection's credit-does-not-fit throw converted to refuse(...); T-343 S5.5p: 35 -> 34, recordCollection's negative-credit throw converted to refuse(...); T-367 S1 + DEF-546 (2026-10-01): 34 -> 31, writeOffCharge, voidCharge and voidCollection not-found throws folded into the uniform AuthorizationError
   'packages/domain/src/attendance': 1,
   'packages/domain/src/budgets': 4,
-  'packages/domain/src/cash-requests': 16, // T-415: 19 -> 16, settleCashRequest's three touched throws converted (gone, refuse x2)
+  'packages/domain/src/cash-requests': 15, // T-415: 19 -> 16, settleCashRequest's three touched throws converted (gone, refuse x2); T-597: 16 -> 15, cancel's status throw is a refuse
   // T-350 (RULED EDIT, red until BUILDER lands it): 12 -> 8. ⚠️ Contract item 3(b) calls these
   // "the three throw new Error( refusals" but then lists FOUR resulting human sentences — measured
   // against the actual source (`setChannelPayoutDestination`, index.ts:656/662/669/675), there are

@@ -27,6 +27,7 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
   const store = str(formData, 'storeId');
   const employmentId = str(formData, 'employmentId');
   const separationDate = str(formData, 'separationDate');
+  let warning: string | undefined;
   try {
     // T-412 Tier P: posting a separation pays out and ends the employment. An administrator's PIN, verified on the server
     // against the EMPLOYMENT's store (the record), not the form's `storeId`.
@@ -34,7 +35,7 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
     assertFieldRules(PAYROLL_SEPARATION_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'run_payroll' });
     await withOrgPrincipal(actor.orgId, async (tx) => {
-      await postSeparation(tx, actor, {
+      const posted = await postSeparation(tx, actor, {
         storeId: store,
         employmentId,
         separationDate,
@@ -46,6 +47,7 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
         clearanceNotes: str(formData, 'clearanceNotes') || null,
         notes: str(formData, 'notes') || null,
       });
+      warning = posted.warning;
       await recordApproval(tx, actor, approval, { capability: 'run_payroll', entityType: 'employment', entityId: employmentId, storeId: target.storeId });
     });
   } catch (err) {
@@ -57,7 +59,7 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
       { error: errorMessage(err), keep: { separationDate } },
     );
   }
-  return await redirectWithFlash('/payroll/separations', { store }, { ok: 'Separation posted.' });
+  return await redirectWithFlash('/payroll/separations', { store }, { ok: `Separation posted.${warning ? ` ⚠️ ${warning}` : ''}` });
 }
 
 export async function voidSeparationAction(formData: FormData): Promise<void> {
