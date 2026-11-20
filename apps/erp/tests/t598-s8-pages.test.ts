@@ -53,7 +53,7 @@ describe('DEF-468 - the 13th-month year is a year or it is refused by name', () 
   it('absent means this year; a four-digit year is taken; blank and text are refused', () => {
     expect(parseYearParam(undefined, 2026)).toEqual({ year: 2026 });
     expect(parseYearParam('2025', 2026)).toEqual({ year: 2025 });
-    for (const bad of ['', 'abc', '25', '20255', '1999', '2101', '2025.5']) {
+    for (const bad of ['', 'abc', '25', '20255', '1999', '2100', '2025.5']) {
       expect(parseYearParam(bad, 2026), `"${bad}"`).toEqual({ error: 'The year must be a four-digit year, for example 2026.' });
     }
   });
