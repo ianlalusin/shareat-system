@@ -562,13 +562,13 @@ export async function voidCustomerReturn(
   reason: string,
 ): Promise<VoidCustomerReturnOutcome> {
   const run = async (trx: Tx): Promise<VoidCustomerReturnOutcome> => {
-    const ret = await customerReturnsRepo.getReturn(trx, returnId);
+    const ret = await customerReturnsRepo.getReturn(trx, actor.orgId, returnId);
     if (!ret) return { ok: false, reason: `return ${returnId} does not exist.` };
     await authorize(trx, actor, 'void_customer_return', { storeId: ret.storeId });
     // DEF-880 (T-595 audit): the customer row lock first (same order as applyCredit and recordCollection: customer, then the rest), and the return re-read
     // under it, so a concurrent spend of this return's credit or a second void queues instead of reading a stale balance.
     await customersRepo.lockForCredit(trx, ret.orgId, ret.customerId);
-    const current = (await customerReturnsRepo.getReturn(trx, returnId)) ?? ret;
+    const current = (await customerReturnsRepo.getReturn(trx, actor.orgId, returnId)) ?? ret;
     if (current.status === 'void') return { ok: false, reason: 'this return is already void.' };
 
     const trimmed = reason.trim();

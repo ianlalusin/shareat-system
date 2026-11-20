@@ -57,7 +57,7 @@ export default async function TillPage({
   }
 
   const { open, recent, accounts, chargedLineIds } = await tillOverview(actor.orgId, storeId);
-  const people = await listActingPersons(actor.orgId);
+  const people = await listActingPersons(actor.orgId, storeId);
 
   // The shift a new one would take over from: the most recent CLOSED shift that nobody has
   // already inherited. A branching chain is refused by the database; this stops it being offered.
