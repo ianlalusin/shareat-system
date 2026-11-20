@@ -155,7 +155,12 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/staff/hire': 'enrol_staff',
   // T-603 S2 (DEF-906, 907, 910, 916): the store-picker screens. Each key is the screen's own write words (any ONE opens it); the page then lists only the stores where
   // one is held (`storePageScope`) and a record page asks the same list at the record's store (`recordInScope`). Longer keys below still win.
-  '/inventory': ['record_stock_movement', 'receive_delivery', 'transfer_stock', 'record_supplier_return', 'open_count_session', 'post_usage', 'post_production'],
+  // Every word a screen under /inventory exists for: stock moves and receiving, rooms, thresholds, counts, usage and wastage (record and post), transfers, supplier returns, production, and their voids.
+  '/inventory': [
+    'record_stock_movement', 'record_wastage', 'receive_delivery', 'transfer_stock', 'void_transfer', 'record_supplier_return', 'void_supplier_return',
+    'set_item_threshold', 'manage_locations', 'open_count_session', 'commit_count', 'post_usage', 'void_usage_record', 'finalize_pos_usage_pull',
+    'post_production', 'edit_posted_production', 'void_production',
+  ],
   '/till': ['record_till_count', 'resolve_till_variance'],
   '/remittance': 'accept_remittance',
   '/trade/returns': ['record_customer_return', 'void_customer_return', 'apply_customer_credit'],

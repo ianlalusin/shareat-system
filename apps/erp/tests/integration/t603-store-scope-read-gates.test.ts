@@ -42,6 +42,17 @@ async function staffHolding(w: World, capabilities: readonly Capability[]): Prom
   return { personId: p!.id, orgId: w.orgId };
 }
 
+const M3_CACHE: { actor?: Promise<Actor> } = {};
+async function m3(w: World): Promise<Actor> {
+  M3_CACHE.actor ??= (async () => {
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${w.orgId}, 'Manager Closedbranch') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${w.orgId}, 'manager')`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${w.s3})`;
+    return { personId: p!.id, orgId: w.orgId };
+  })();
+  return M3_CACHE.actor;
+}
+
 const LOC = { s1: 'Kitchen Zebrafish', s2: 'Kitchen Walrus' } as const;
 const REF = { s1: 'DR-OTTER-S1', s2: 'DR-BADGER-S2' } as const;
 const CUST = { s1: 'Onestorebuyer Marigold', s2: 'Twostorebuyer Hyacinth' } as const;
@@ -64,7 +75,7 @@ async function build(): Promise<Records> {
   const adminId = w.A.personId;
 
   const workers = new Map<string, Actor>();
-  for (const cap of ['record_stock_movement', 'record_till_count', 'accept_remittance', 'record_customer_return', 'record_order_wastage'] as const) {
+  for (const cap of ['record_stock_movement', 'record_till_count', 'accept_remittance', 'record_customer_return', 'record_order_wastage', 'create_expense'] as const) {
     workers.set(cap, await staffHolding(w, [cap]));
   }
 
@@ -157,6 +168,8 @@ const screens = [
   { route: '/remittance', cap: 'accept_remittance', load: () => import('../../src/app/remittance/page') },
   { route: '/trade/returns', cap: 'record_customer_return', load: () => import('../../src/app/trade/returns/page') },
   { route: '/wastage', cap: 'record_order_wastage', load: () => import('../../src/app/wastage/page') },
+  // the new-expense form: another store's open invoices, budget caps and money lines follow ?store=
+  { route: '/expenses/new', cap: 'create_expense', load: () => import('../../src/app/expenses/new/page') },
 ] as const;
 
 describe('T-603 S2 - every store-picker screen: the holder works, a cashier is refused, another store is one sentence', () => {
@@ -463,4 +476,30 @@ describe('T-603 S3 - /findings and the scorecard', () => {
     expectPresent(await render(scorecard, w.A), 'A scorecard', M.s1Name, M.s2Name, 'Organisation-wide');
     expectRefusalCard(await render(scorecard, w.C), 'C scorecard');
   });
+});
+
+describe('T-603 - a closed (retired) store stays workable for the people who hold it', () => {
+  const closedScreens = [
+    ['/till', () => import('../../src/app/till/page')],
+    ['/remittance', () => import('../../src/app/remittance/page')],
+    ['/wastage', () => import('../../src/app/wastage/page')],
+    ['/inventory', () => import('../../src/app/inventory/page')],
+    ['/service-charge', () => import('../../src/app/service-charge/page')],
+    ['/expenses/recurring', () => import('../../src/app/expenses/recurring/page')],
+  ] as const;
+  const selected = (html: string, id: string) => new RegExp(`value="${id}"[^>]*selected`).test(html);
+
+  for (const [route, load] of closedScreens) {
+    it(`${route}: admin A can pick the closed S3 (pickable, not the default); M1 without a scope row there gets the sentence; the manager of S3 alone lands on it`, async () => {
+      const w = await world();
+      const closed = await render(load, w.A, { search: { store: w.s3 } });
+      expect(plain(closed), `A ${route}?store=S3`).not.toContain(M.notAvailable);
+      expectPresent(closed, `A ${route}?store=S3`, w.s3);
+      expect(selected(closed, w.s3), `A ${route}?store=S3 selects it`).toBe(true);
+      const dflt = await render(load, w.A);
+      expect(selected(dflt, w.s3), `A ${route} default must not be the closed store`).toBe(false);
+      expectNotAvailable(await render(load, w.M1, { search: { store: w.s3 } }), `M1 ${route}?store=S3`);
+      expect(plain(await render(load, await m3(w))), `M3 ${route}`).not.toContain(M.notAvailable);
+    });
+  }
 });

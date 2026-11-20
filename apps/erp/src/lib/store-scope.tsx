@@ -6,7 +6,7 @@
  * `notFound()` on false (T-577: a record outside the viewer's stores is the same page as a forged id).
  */
 import type { ReactNode } from 'react';
-import { asc, and, eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { Actor } from '@shareat/auth';
 import { schema } from '@shareat/db';
 import { withOrgPrincipal } from '../app/expenses/lib';
@@ -23,17 +23,20 @@ export async function storePageScope(route: string, requested: string | undefine
   const { actor, refusal } = await requirePageAccess(route);
   if (refusal) return { refusal };
   const capabilities = capabilitiesForRoute(route);
-  // An org-wide role (admin, super_admin) is never store-filtered on a read, whatever its scope rows say (T-577 round 3); it picks among every active store.
-  const stores = await withOrgPrincipal(actor.orgId, async (tx) =>
-    (await isOrgWideRole(tx, actor))
-      ? tx
-          .select({ id: schema.stores.id, name: schema.stores.name, code: schema.stores.code })
-          .from(schema.stores)
-          .where(and(eq(schema.stores.orgId, actor.orgId), eq(schema.stores.isActive, true)))
-          .orderBy(asc(schema.stores.name))
-      : heldStoresFor(tx, actor, capabilities),
-  );
-  const storeId = requested ?? stores[0]?.id;
+  // Closed (retired) stores stay pickable where the viewer holds them: cash, stock and money screens still have to be worked for a closed branch.
+  // An org-wide role (admin, super_admin) is never store-filtered on a read, whatever its scope rows say (T-577 round 3), so it gets every store;
+  // anyone else gets the stores where one of the route's words is held (`includeRetired`: only where they have a scope row, as `can()` does).
+  const { stores, activeIds } = await withOrgPrincipal(actor.orgId, async (tx) => {
+    const all = await tx
+      .select({ id: schema.stores.id, name: schema.stores.name, code: schema.stores.code, isActive: schema.stores.isActive })
+      .from(schema.stores)
+      .where(eq(schema.stores.orgId, actor.orgId))
+      .orderBy(asc(schema.stores.name));
+    const held = (await isOrgWideRole(tx, actor)) ? all : await heldStoresFor(tx, actor, capabilities, { includeRetired: true });
+    return { stores: held.map(({ id, name, code }) => ({ id, name, code })), activeIds: new Set(all.filter((r) => r.isActive).map((r) => r.id)) };
+  });
+  // The default is an open store, never a closed one that sorts first by name.
+  const storeId = requested ?? (stores.find((s) => activeIds.has(s.id)) ?? stores[0])?.id;
   if (!storeId || !stores.some((s) => s.id === storeId)) return { refusal: <StoreNotAvailable /> };
   return { actor, stores, storeId };
 }
