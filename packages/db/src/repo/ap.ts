@@ -644,6 +644,26 @@ export async function advancesPositionOf(
   return Number(row?.balance ?? 0).toFixed(2);
 }
 
+/**
+ * T-602 S6-3: every supplier's `1240` balance (what `advancesPositionOf` returns for one) in ONE grouped query. Suppliers with no `1240` line are absent (their balance is 0).
+ */
+export async function advancesBySupplier(tx: Tx, orgId: string): Promise<Map<string, string>> {
+  const rows = (await tx.execute(sql`
+    select jl.party_id as supplier_id, coalesce(sum(jl.debit - jl.credit), 0)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and a.code = ${ADVANCES_CODE}
+      and je.status <> 'draft'
+    group by jl.party_id
+  `)) as unknown as Record<string, string>[];
+  const map = new Map<string, string>();
+  for (const r of rows) map.set(String(r.supplier_id), Number(r.balance ?? 0).toFixed(2));
+  return map;
+}
+
 export interface OpenItem {
   expenseId: string;
   supplierId: string;
@@ -907,11 +927,11 @@ export async function aging(
   return rows.map((r) => ({
     supplierId: String(r.supplier_id ?? r.supplierId),
     storeId: String(r.store_id ?? r.storeId),
-    current: money(r.current),
-    d1to30: money(r.d1to30),
-    d31to60: money(r.d31to60),
-    d61to90: money(r.d61to90),
-    d90plus: money(r.d90plus),
+    current: money(r.current!),
+    d1to30: money(r.d1to30!),
+    d31to60: money(r.d31to60!),
+    d61to90: money(r.d61to90!),
+    d90plus: money(r.d90plus!),
   }));
 }
 

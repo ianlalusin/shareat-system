@@ -743,7 +743,8 @@ export async function listDayCloses(tx: Tx, actor: Actor, input: { storeId: stri
   const limit = Math.min(Math.max(Math.trunc(input.limit ?? 7), 1), 31);
   const rows = await posV2Repo.listDayCloses(tx, actor.orgId, input.storeId, limit);
   const link = await posV1Repo.getLinkByStore(tx, actor.orgId, input.storeId);
-  const marks = await auditLogRepo.listForStoreActions(tx, actor.orgId, input.storeId, ['pos.v1_bridge_sent', 'pos.v1_bridge_failed']);
+  // T-602 S6-1: the marks only matter to a store with a v1 link and a date the bridge covers (the status line below ignores them otherwise).
+  const marks = link && rows.some((r) => v1BridgeDateAllowed(r.close.businessDate)) ? await auditLogRepo.listForStoreActions(tx, actor.orgId, input.storeId, ['pos.v1_bridge_sent', 'pos.v1_bridge_failed']) : [];
   const names = await posV2Repo.listPersonNames(tx, actor.orgId, rows.flatMap((r) => [r.close.closedBy, r.close.approvedBy]));
   const tenders = new Map((await posV1Repo.listTendersByStore(tx, actor.orgId, input.storeId)).map((t) => [t.id, t.name]));
   const closes: DayCloseListItem[] = [];

@@ -161,8 +161,11 @@ export async function listOpenInvoicesForPicker(orgId: string, storeId?: string)
     ]);
     const supplierById = new Map(suppliers.map((s) => [s.id, s]));
     const out: InvoicePickerOption[] = [];
-    for (const inv of [...pending, ...verified]) {
-      const capacity = await apRepo.capacityOf(tx, orgId, inv.id);
+    const invoices = [...pending, ...verified];
+    // T-602 S6-2: one grouped query for every invoice's room (the same sums as capacityOf), not one query per invoice.
+    const capacities = await apRepo.capacityOfMany(tx, orgId, invoices.map((i) => i.id));
+    for (const inv of invoices) {
+      const capacity = capacities.get(inv.id);
       // T-371 (R4, C4): the room left is a database figure, re-minted and ordered exactly — a NaN no longer reads as room.
       if (!capacity || compare(money(capacity.remaining), money('1')) < 0) continue;
       out.push({

@@ -1123,7 +1123,7 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     const sale2 = two.events[2]!;
     sale2.payload = { ...sale2.payload, terminalNo: 2, terminalSeq: one.terminalSeq + 100 };
     expect(statuses(await send(f, two.events, RATES, p2!.id)), 'the till-2 sale is accepted').toEqual(['applied', 'applied', 'applied']);
-    const lastOf = async (pairingId: string) => ((await asOrg(f.orgId, (tx) => SNAPSHOT.buildPosSnapshot(tx, { pairing: { pairingId, orgId: f.orgId, storeId: f.storeId } }, RATES))) as Snap).body.device.lastTerminalSeq;
+    const lastOf = async (pairingId: string) => ((await (asOrg(f.orgId, (tx) => SNAPSHOT.buildPosSnapshot(tx, { pairing: { pairingId, orgId: f.orgId, storeId: f.storeId } }, RATES)) as Promise<Snap>)).body.device as { lastTerminalSeq: number }).lastTerminalSeq;
     expect(await lastOf(f.pairingId), 'till 1').toBe(one.terminalSeq);
     expect(await lastOf(p2!.id), 'till 2').toBe(one.terminalSeq + 100);
   });

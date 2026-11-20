@@ -183,6 +183,11 @@ describe('T-475 S2 / E2 + C2 (F1) - Credit on /expenses/new follows the picked i
     const { listOpenInvoicesForPicker } = await import('../../src/app/ap/lib');
     const opts = (await listOpenInvoicesForPicker(f.orgId, f.storeId)) as unknown as Array<Record<string, unknown>>;
     const by = (id: string) => opts.find((o) => o.id === id);
+    // T-602 S6-2: the picker's room now comes from one grouped query; it must equal the per-invoice figure for every option.
+    for (const o of opts) {
+      const one = await asOrg(f.orgId, (tx) => apRepo.capacityOf(tx, f.orgId, String(o.id)));
+      expect({ recorded: o.recorded, remaining: o.remaining }, `room of ${String(o.id)}`).toEqual({ recorded: one!.recorded, remaining: one!.remaining });
+    }
     expect(by(a), 'terms supplier invoice listed').toMatchObject({ supplierId: terms, supplierName: 'Terms Co', creditTermsDays: 30, supplierStatus: 'active', remaining: '2000.00' });
     expect(by(b), 'COD supplier invoice listed').toMatchObject({ supplierId: cod, supplierName: 'Cash Only Co', creditTermsDays: null, supplierStatus: 'active' });
     expect(by(c), 'inactive supplier invoice listed (F5 marks it, it does not vanish)').toMatchObject({ supplierId: dormant, supplierStatus: 'inactive' });

@@ -37,15 +37,31 @@ export interface LowStockRow {
  * a finding (`itemHasNoThreshold`) so it nags a manager instead of hiding.
  */
 export async function lowStock(tx: Tx, orgId: string, storeId: string): Promise<LowStockRow[]> {
+  return (await lowStockForStores(tx, orgId, [storeId])).map(({ storeId: _store, ...row }) => row);
+}
+
+export interface LowStockStoreRow extends LowStockRow {
+  readonly storeId: string;
+}
+
+/**
+ * T-602 S6-7: `lowStock` for SEVERAL stores in one query (the dashboard asked once per store). Same rule, same rows per store; each row carries its `storeId`.
+ * Worst shortfall first, then name, then store (the store key only breaks a tie between two stores' rows).
+ */
+export async function lowStockForStores(tx: Tx, orgId: string, storeIds: readonly string[]): Promise<LowStockStoreRow[]> {
+  if (storeIds.length === 0) return [];
+  const ids = sql.join(storeIds.map((id) => sql`${id}`), sql`, `);
   const rows = await tx.execute(sql`
     with on_hand as (
-      select ${stockMovements.itemId} as item_id,
+      select ${stockMovements.storeId} as store_id,
+             ${stockMovements.itemId} as item_id,
              coalesce(sum(${stockMovements.quantity}), 0) as qty
       from ${stockMovements}
-      where ${stockMovements.orgId} = ${orgId} and ${stockMovements.storeId} = ${storeId}
-      group by ${stockMovements.itemId}
+      where ${stockMovements.orgId} = ${orgId} and ${stockMovements.storeId} in (${ids})
+      group by ${stockMovements.storeId}, ${stockMovements.itemId}
     )
-    select t.item_id                                   as "itemId",
+    select t.store_id                                  as "storeId",
+           t.item_id                                   as "itemId",
            i.name                                      as "itemName",
            i.base_unit                                 as "baseUnit",
            coalesce(h.qty, 0)::text                    as "onHand",
@@ -53,14 +69,14 @@ export async function lowStock(tx: Tx, orgId: string, storeId: string): Promise<
            greatest(t.low_stock_threshold - coalesce(h.qty, 0), 0)::text as "shortfall"
     from ${storeItemThresholds} t
     join ${items} i on i.id = t.item_id
-    left join on_hand h on h.item_id = t.item_id
+    left join on_hand h on h.store_id = t.store_id and h.item_id = t.item_id
     where t.org_id = ${orgId}
-      and t.store_id = ${storeId}
+      and t.store_id in (${ids})
       and i.status = 'active'
       and coalesce(h.qty, 0) <= t.low_stock_threshold
-    order by (t.low_stock_threshold - coalesce(h.qty, 0)) desc, i.name asc
+    order by (t.low_stock_threshold - coalesce(h.qty, 0)) desc, i.name asc, t.store_id asc
   `);
-  return rows as unknown as LowStockRow[];
+  return rows as unknown as LowStockStoreRow[];
 }
 
 /**

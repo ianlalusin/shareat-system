@@ -113,6 +113,28 @@ describe('T-175 — low stock is a QUERY, not a list somebody maintains', () => 
     expect(rows[1]!.shortfall).toBe('2.000');
   });
 
+  it('T-602 S6-7: lowStockForStores gives each store the rows lowStock gives it, one query for all of them', async () => {
+    await stock(branch, brKitchen, pork, '5');
+    await stock(branch, brKitchen, sauce, '18');
+    await stock(commissary, comKitchen, pork, '1');
+    await stock(commissary, comKitchen, sauce, '50'); // above its threshold: absent
+    for (const st of [branch, commissary, other]) {
+      await threshold(st, pork, '20');
+      await threshold(st, sauce, '20');
+    }
+    const many = await withOrgPrincipal(orgA, (tx) => lowStockRepo.lowStockForStores(tx, orgA, [branch, commissary]));
+    const perStore = await withOrgPrincipal(orgA, async (tx) => ({
+      [branch]: await lowStockRepo.lowStock(tx, orgA, branch),
+      [commissary]: await lowStockRepo.lowStock(tx, orgA, commissary),
+    }));
+    for (const st of [branch, commissary]) {
+      expect(many.filter((r) => r.storeId === st).map(({ storeId: _s, ...r }) => r), `store ${st}`).toEqual(perStore[st]);
+    }
+    expect(many).toHaveLength(perStore[branch]!.length + perStore[commissary]!.length);
+    expect(many.some((r) => r.storeId === other)).toBe(false);
+    expect(await withOrgPrincipal(orgA, (tx) => lowStockRepo.lowStockForStores(tx, orgA, []))).toEqual([]);
+  });
+
   it('an item ABOVE its threshold does not appear; exactly AT it does', async () => {
     await stock(branch, brKitchen, pork, '25');
     await stock(branch, brKitchen, sauce, '20');

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { and, asc, desc, eq, inArray, ne, sql as dsql } from 'drizzle-orm';
 import { schema } from '@shareat/db';
 import { compare, ZERO } from '@shareat/core/money';
-import { isPositiveQuantity, quantity, subtractQuantity, supplierCreditBalance } from '@shareat/domain';
+import { isPositiveQuantity, quantity, subtractQuantity, supplierCreditBalances } from '@shareat/domain';
 import { recordReturnAction, refundCreditAction, voidReturnAction } from './actions';
 import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
@@ -79,9 +79,11 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
       .where(eq(schema.suppliers.orgId, actor.orgId))
       .orderBy(asc(schema.suppliers.name));
 
+    // T-602 S6-3: one grouped query for every supplier's balance, not one per supplier.
     const creditBySupplier = new Map<string, string>();
+    const balances = await supplierCreditBalances(tx, actor.orgId);
     for (const s of supplierRows) {
-      const bal = await supplierCreditBalance(tx, actor.orgId, s.id);
+      const bal = balances.get(s.id) ?? ZERO;
       if (compare(bal, ZERO) === 1) creditBySupplier.set(s.id, bal);
     }
 

@@ -69,7 +69,7 @@ export async function drainOutbox(
   driver: MirrorDriver,
   options: { limit?: number } = {},
 ): Promise<DrainReport> {
-  const limit = options.limit ?? 500;
+  const limit = options.limit ?? 100; // T-602 S6-6: was 500
 
   const rows = await mirrorOutboxRepo.claimUnpublished(tx, limit);
 

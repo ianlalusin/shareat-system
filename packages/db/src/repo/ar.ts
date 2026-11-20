@@ -191,6 +191,26 @@ export async function creditBalanceOf(
   return Number(row?.balance ?? 0).toFixed(2);
 }
 
+/**
+ * T-602 S6-4: every customer's `2140` store credit (what `creditBalanceOf` returns for one, org-wide) in ONE grouped query. Customers with no `2140` line are absent (their balance is 0).
+ */
+export async function creditBalancesByCustomer(tx: Tx, orgId: string): Promise<Map<string, string>> {
+  const rows = (await tx.execute(sql`
+    select jl.party_id as customer_id, coalesce(sum(jl.credit - jl.debit), 0)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and a.code = ${STORE_CREDIT_CODE}
+      and je.status <> 'draft'
+    group by jl.party_id
+  `)) as unknown as Record<string, string>[];
+  const map = new Map<string, string>();
+  for (const r of rows) map.set(String(r.customer_id), Number(r.balance ?? 0).toFixed(2));
+  return map;
+}
+
 export interface ArOpenItem {
   chargeId: string;
   customerId: string;
@@ -425,11 +445,11 @@ export async function aging(
   return rows.map((r) => ({
     customerId: String(r.customer_id ?? r.customerId),
     storeId: String(r.store_id ?? r.storeId),
-    current: money(r.current),
-    d1to30: money(r.d1to30),
-    d31to60: money(r.d31to60),
-    d61to90: money(r.d61to90),
-    d90plus: money(r.d90plus),
+    current: money(r.current!),
+    d1to30: money(r.d1to30!),
+    d31to60: money(r.d31to60!),
+    d61to90: money(r.d61to90!),
+    d90plus: money(r.d90plus!),
   }));
 }
 

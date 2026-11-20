@@ -430,6 +430,11 @@ export async function supplierCreditBalance(tx: Tx, orgId: string, supplierId: s
   return money(await apRepo.advancesPositionOf(tx, orgId, supplierId));
 }
 
+/** T-602 S6-3: `supplierCreditBalance` for every supplier with a `1240` line, in one query (a supplier not in the map holds 0). */
+export async function supplierCreditBalances(tx: Tx, orgId: string): Promise<Map<string, Money>> {
+  return new Map([...(await apRepo.advancesBySupplier(tx, orgId))].map(([id, bal]) => [id, money(bal)]));
+}
+
 export interface RefundCreditInput {
   /** ⛔ NO `orgId` — see `RecordReturnInput`. T-231/DEF-210. */
   readonly storeId: string;

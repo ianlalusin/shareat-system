@@ -118,6 +118,11 @@ export async function customerCreditBalance(tx: Tx, orgId: string, customerId: s
   return money(await arRepo.creditBalanceOf(tx, orgId, customerId));
 }
 
+/** T-602 S6-4: `customerCreditBalance` for every customer with a `2140` line, in one query (a customer not in the map holds 0). */
+export async function customerCreditBalances(tx: Tx, orgId: string): Promise<Map<string, Money>> {
+  return new Map([...(await arRepo.creditBalancesByCustomer(tx, orgId))].map(([id, bal]) => [id, money(bal)]));
+}
+
 // -----------------------------------------------------------------------------------------
 // recordCustomerReturn
 // -----------------------------------------------------------------------------------------
