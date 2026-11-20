@@ -563,7 +563,7 @@ export async function fiscalPeriodRunwayLow(tx: Tx, orgId: string): Promise<Dete
     severity: 'soft',
     detail:
       `Fiscal period coverage runs out on ${row.latest_end} (${daysRemaining} day(s) from today). ` +
-      'Generate the next year of periods before then.',
+      "The monthly 'fiscal_period_seed' job tops up the next year on the 1st; if this stays, that job has stopped running.",
   }];
 }
 

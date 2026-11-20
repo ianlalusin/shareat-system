@@ -371,9 +371,11 @@ async function runSweepForOrg(
     // failure below can name the store, never its id.
     const stores = await asSystem(org.id, (tx) =>
       tx.execute(
+        // DEF-251: a LEFT join, so an active store with no live config is in the population and
+        // fails by name below, instead of vanishing and leaving a clean run over nothing.
         sql`select s.id::text as "id", s.name as "name", s.code as "code" from stores s
-             join store_attendance_config c on c.store_id = s.id and c.superseded_at is null
-            where s.org_id = ${org.id}`,
+             left join store_attendance_config c on c.store_id = s.id and c.superseded_at is null
+            where s.org_id = ${org.id} and (c.store_id is not null or s.is_active)`,
       ),
     );
 

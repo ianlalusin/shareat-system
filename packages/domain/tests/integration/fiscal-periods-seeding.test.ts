@@ -168,6 +168,9 @@ describe('fiscalPeriodRunwayLow — the runway warning, soft, never blocking a c
     expect(finding).toBeDefined();
     expect(finding!.severity).toBe('soft');
     expect(finding!.detail).toMatch(monthEnd);
+    // DEF-285: names the job that does the generating, never an imagined button.
+    expect(finding!.detail).toMatch(/fiscal_period_seed/);
+    expect(finding!.detail).not.toMatch(/Generate the next year/);
   });
 
   it('stays quiet when coverage comfortably exceeds the 60-day window', async () => {
