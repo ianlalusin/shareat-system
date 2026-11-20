@@ -1,6 +1,9 @@
 # T-598 — Open defect sweep: every open register row triaged; the no-decision fixes sliced
 
-Status: SPEC (Opus planner), 2026-11-18. Read on main 9892641 (wt-plans), code read only, nothing run.
+Status: IN PROGRESS, branch fix/t598-defect-sweep (builder run 21 Nov). DONE: S1 (all), S2, S3 (DEF-537 was already fixed), S4 (DEF-507 audit action is the dotted `supplier.renamed`:
+the t402 guard forbids a new undotted name), S6, S7 (DEF-425, 439, 542, 411; DEF-510 already fixed), S9 (DEF-300, 355, 372, 373, 410, 502, 845). LEFT: S5 (DEF-561 lock and
+re-read already exist; DEF-562/608/525 open), S7 (367, 554), S8, S9 (402/403, 094, 634, 455), S10, S11, S12, R. Register rows for the finished items are marked fixed.
+Original status: SPEC (Opus planner), 2026-11-18. Read on main 9892641 (wt-plans), code read only, nothing run.
 Scope: every row of `docs/DEFECTS-REGISTER.md` not marked fixed/closed (409 rows, sections A-E and the E rows
 after the change log). DEF-866..905 are out of scope (866-868 fixed; 869-905 are owned by T-593..T-597, T-600).
 Builders: Sonnet. Auditor: Sonnet on S2, S4, S6, S7 (money, auth). No bible edits by builders (RULES §1.14).
