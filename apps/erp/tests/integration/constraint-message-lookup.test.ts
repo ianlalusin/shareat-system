@@ -541,6 +541,15 @@ describe('T-383 S1 - an item cannot be blank-named or blank-coded', () => {
     expect(row.constraintName).toBe('items_org_name_key');
     expect(row.message).toBe(CONSTRAINT_MESSAGES.items_org_name_key);
   });
+  it('suppliers_org_name_key (T-598 DEF-507)', async () => {
+    const f = await blankItemOrg();
+    const name = uid('Supplier');
+    await sql`insert into suppliers (org_id, name, created_by) values (${f.orgId}, ${name}, ${f.personId})`;
+    const err = await provoke(() => sql`insert into suppliers (org_id, name, created_by) values (${f.orgId}, ${name}, ${f.personId})`);
+    const row = record('suppliers_org_name_key', err);
+    expect(row.constraintName).toBe('suppliers_org_name_key');
+    expect(row.message).toBe(CONSTRAINT_MESSAGES.suppliers_org_name_key);
+  });
   it('items_code_not_blank_check', async () => {
     const f = await blankItemOrg();
     const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, '', ${uid('n')}, 'retail', 'pcs', ${f.personId})`);
@@ -894,5 +903,5 @@ it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   // T-193: 50 -> 53, three real statutory payment errors above.
   // T-502: 53 -> 72, fourteen real item-catalog errors plus five sub-category errors above (re-measured).
   // T-502 section 13 (A6): 72 -> 74, the two service-not-a-variation CHECK keys (re-measured).
-  expect(rows.length).toBe(77); // T-502 S4: +items_org_name_key; T-592: +2 (the two sales_channels store-code keys)
+  expect(rows.length).toBe(78); // T-598 DEF-507 suppliers_org_name_key; T-502 S4: +items_org_name_key; T-592: +2 (the two sales_channels store-code keys)
 });
