@@ -460,3 +460,28 @@ describe('T-511 S4 stage - checkStagedDay mirrors the table CHECKs and refuses b
     expect(refusalOf(d).message).not.toContain('[hidden]');
   });
 });
+
+/* ------------------------------------------------------------------ DEF-901: a payout loaded on one day, whatever its orders' dates */
+
+describe('DEF-901 stage - Grab payout whose orders are dated other than its store day', () => {
+  const pay = (createdOn: string, line: number): GrabTransactionRow =>
+    row({ kind: 'payment', netSales: M('100'), amount: M('100'), channelCommission: M('-25'), total: M('75'), createdOn: { date: createdOn, time: '10:00' }, line });
+
+  it('orders from the day before and two days before are named in ONE file-level warning; the day itself stays clean [kills: comparing against the payout date instead of the store day]', () => {
+    const { transactions, transfers } = synthetic([pay('2026-10-05', 2), pay('2026-10-04', 3), pay('2026-10-03', 4)], '225.00');
+    const staged = stageGrabDays(tieGrabPayouts(transactions, transfers), transactions);
+    expect(staged.warnings).toEqual([
+      'Grab payout SPHSYNTH0001 (paid 2026-10-06) includes orders from 2026-10-03, 2026-10-04, but all of it is loaded as sales day 2026-10-05. Check those days before approving.',
+    ]);
+    expect(staged.days[0]?.warnings).toEqual([]); // the day's own warnings mean "does not add up to the payout"
+  });
+
+  it('every order on the store day gives no warning', () => {
+    const { transactions, transfers } = synthetic([pay('2026-10-05', 2), pay('2026-10-05', 3)], '150.00');
+    expect(stageGrabDays(tieGrabPayouts(transactions, transfers), transactions).warnings).toEqual([]);
+  });
+
+  it('the real Lipa, Malvar and Banay files warn about nothing (measured 0 payouts, 5 pairs, 20 Nov 2026)', () => {
+    for (const pair of GRAB_PAIRS) expect(stageGrab(pair.tx, pair.tr).staged.warnings, pair.name).toEqual([]);
+  });
+});

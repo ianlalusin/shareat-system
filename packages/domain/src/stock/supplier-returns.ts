@@ -483,6 +483,10 @@ export async function refundSupplierCredit(tx: Tx, input: RefundCreditInput): Pr
   if (!account.isActive) {
     return { ok: false, reason: `"${account.name}" is retired and cannot receive the refund. Choose another account.` };
   }
+  // DEF-933 (T-613): a staff cash float belongs to one person through a cash request, so no refund lands in it - refused here, not left to the page filter.
+  if (account.glAccountCode === '1120') {
+    return { ok: false, reason: 'That account is a staff cash float, which belongs to one person through a cash request. A supplier refund cannot land in it. Choose an office or e-wallet account.' };
+  }
 
   const posted = await postEntryOnce(tx, {
     orgId,

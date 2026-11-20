@@ -19,8 +19,8 @@ import { PosContext } from '../src/app/pos/_shell/pos-context';
 const LINES = [{ lineId: 'line-1', name: 'Pork belly', qty: 4, left: 4, amounts: ['250.00', '500.00', '750.00', '1000.00'] }];
 // GCash is listed FIRST on purpose: the default split must still put cash first.
 const PAYMENTS = [
-  { paymentId: 'pay-g', tenderId: 'gcash-id', tenderName: 'GCash', kind: 'wallet' as const, left: '700.00' },
-  { paymentId: 'pay-c', tenderId: 'cash-id', tenderName: 'Cash', kind: 'cash' as const, left: '300.00' },
+  { slotId: 'pay-g:gcash-id', paymentId: 'pay-g', tenderId: 'gcash-id', tenderName: 'GCash', kind: 'wallet' as const, left: '700.00' },
+  { slotId: 'pay-c:cash-id', paymentId: 'pay-c', tenderId: 'cash-id', tenderName: 'Cash', kind: 'cash' as const, left: '300.00' },
 ];
 const SLIP = {
   refundNo: 'SL-R-000001', receiptNo: 'SL-01-000007', recordedAt: '2026-11-20T04:30:00.000Z', reason: 'Customer returned it', total: '500.00',
@@ -151,7 +151,7 @@ describe('T-534 S4 - Refund (the Receipts row)', () => {
     const [first, second] = post.mock.calls.map((c) => c[0]);
     expect(first).toEqual({
       requestId: first!.requestId, receiptId: 'rcpt-1', lines: [{ receiptLineId: 'line-1', qty: 2 }],
-      payments: [{ paymentId: 'pay-c', amount: '300.00', referenceNo: '' }, { paymentId: 'pay-g', amount: '200.00', referenceNo: 'GC-0001234' }], reason: 'Customer returned it', pin: '',
+      payments: [{ paymentId: 'pay-c', tenderId: 'cash-id', amount: '300.00', referenceNo: '' }, { paymentId: 'pay-g', tenderId: 'gcash-id', amount: '200.00', referenceNo: 'GC-0001234' }], reason: 'Customer returned it', pin: '',
     });
     expect(second!.requestId).toBe(first!.requestId);
     expect(document.body.textContent).toContain('Refund SL-R-000001 saved.');
@@ -197,14 +197,14 @@ describe('T-534 S4 - the pure parts', () => {
   });
   it('autoSplit fills cash first and then the others in order, each up to what it takes; paid rows with nothing left are skipped', () => {
     expect(refundOrder(PAYMENTS).map((p) => p.paymentId)).toEqual(['pay-c', 'pay-g']);
-    expect(autoSplit(PAYMENTS, 50000n)).toEqual({ 'pay-c': 30000n, 'pay-g': 20000n });
-    expect(autoSplit(PAYMENTS, 20000n)).toEqual({ 'pay-c': 20000n });
-    expect(autoSplit([{ ...PAYMENTS[1]!, left: '0.00' }, PAYMENTS[0]!], 10000n)).toEqual({ 'pay-g': 10000n });
+    expect(autoSplit(PAYMENTS, 50000n)).toEqual({ 'pay-c:cash-id': 30000n, 'pay-g:gcash-id': 20000n });
+    expect(autoSplit(PAYMENTS, 20000n)).toEqual({ 'pay-c:cash-id': 20000n });
+    expect(autoSplit([{ ...PAYMENTS[1]!, left: '0.00' }, PAYMENTS[0]!], 10000n)).toEqual({ 'pay-g:gcash-id': 10000n });
   });
   it('splitProblem: within the caps, adding up, a wallet row with a reference is fine; anything else is a sentence', () => {
-    expect(splitProblem(PAYMENTS, { 'pay-c': '300.00', 'pay-g': '200.00' }, { 'pay-g': 'GC-0001234' }, 50000n)).toBeNull();
-    expect(splitProblem(PAYMENTS, { 'pay-c': '300.00', 'pay-g': '200.00' }, {}, 50000n)).toContain('reference number');
-    expect(splitProblem(PAYMENTS, { 'pay-c': '300.01', 'pay-g': '199.99' }, { 'pay-g': 'GC-0001234' }, 50000n)).toContain('Cash can only take back');
-    expect(splitProblem(PAYMENTS, { 'pay-c': '100.00' }, {}, 50000n)).toContain('must equal');
+    expect(splitProblem(PAYMENTS, { 'pay-c:cash-id': '300.00', 'pay-g:gcash-id': '200.00' }, { 'pay-g:gcash-id': 'GC-0001234' }, 50000n)).toBeNull();
+    expect(splitProblem(PAYMENTS, { 'pay-c:cash-id': '300.00', 'pay-g:gcash-id': '200.00' }, {}, 50000n)).toContain('reference number');
+    expect(splitProblem(PAYMENTS, { 'pay-c:cash-id': '300.01', 'pay-g:gcash-id': '199.99' }, { 'pay-g:gcash-id': 'GC-0001234' }, 50000n)).toContain('Cash can only take back');
+    expect(splitProblem(PAYMENTS, { 'pay-c:cash-id': '100.00' }, {}, 50000n)).toContain('must equal');
   });
 });
