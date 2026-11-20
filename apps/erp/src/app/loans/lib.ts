@@ -37,13 +37,14 @@ const ZERO: LoanPosition = {
   outstanding: '0.00',
 };
 
-export async function listRegister(orgId: string): Promise<LoanListRow[]> {
+/** `storeIds`: only these stores' loans; `undefined` = the viewer is not store-limited (T-603). */
+export async function listRegister(orgId: string, storeIds?: readonly string[]): Promise<LoanListRow[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const [rows, positions] = await Promise.all([
       loansRepo.listLoans(tx, orgId),
       loansRepo.positionsByLoan(tx, orgId),
     ]);
-    return rows.map((l) => ({ ...withoutRepaymentAmount(l), position: positions.get(l.id) ?? ZERO }));
+    return rows.filter((l) => !storeIds || storeIds.includes(l.storeId)).map((l) => ({ ...withoutRepaymentAmount(l), position: positions.get(l.id) ?? ZERO }));
   });
 }
 

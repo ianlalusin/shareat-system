@@ -582,6 +582,19 @@ describe('T-170 — the credit is spendable', () => {
     expect(await asOrg(f.orgId, (tx) => supplierCreditBalance(tx, f.orgId, f.supplierId))).toBe('1000.00');
   });
 
+  it('T-613 DEF-933: a refund into a staff cash float is refused by the domain itself; 1240 is unchanged', async () => {
+    const f = await fixture();
+    await invoicedReturnCredit(f, '100.0000'); // 1000.00 credit
+    const [float] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${f.storeId} and gl_account_code = '1120' limit 1`;
+    expect(float).toBeDefined();
+    const res = await asOrg(f.orgId, (tx) =>
+      refundSupplierCredit(tx, { requestId: crypto.randomUUID(), storeId: f.storeId, supplierId: f.supplierId, moneyAccountId: float!.id, amount: '1000.00', businessDate: '2026-02-02', actor: f.manager }),
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toMatch(/staff cash float/);
+    expect(await asOrg(f.orgId, (tx) => supplierCreditBalance(tx, f.orgId, f.supplierId))).toBe('1000.00');
+  });
+
   it('a cash refund draws 1240 to zero', async () => {
     const f = await fixture();
     await invoicedReturnCredit(f, '100.0000'); // 1000.00 credit

@@ -225,12 +225,24 @@ function grabDay(p: GrabPayout): StagedDay {
 export function stageGrabDays(tied: GrabPayoutTie, _transactions: GrabTransactionsFile): StagedFile {
   const days: StagedDay[] = [];
   const waitingForRows: StagedFile['waitingForRows'] = [];
+  const warnings: string[] = [];
   for (const p of tied.payouts) {
-    if (p.state === 'waiting_for_rows') waitingForRows.push({ settlementId: p.settlementId, salesDate: p.storeDay });
-    else days.push(grabDay(p));
+    if (p.state === 'waiting_for_rows') {
+      waitingForRows.push({ settlementId: p.settlementId, salesDate: p.storeDay });
+      continue;
+    }
+    days.push(grabDay(p));
+    // DEF-901 (T-600): the whole payout is loaded on one store day (payout date minus one, task 511 S1 4.4). Say so when its
+    // orders are dated otherwise. A file-level warning, never the day's own: those count as "does not add up to the payout".
+    const otherDays = [...new Set(p.rows.filter((r) => r.kind === 'payment' && r.createdOn.date !== p.storeDay).map((r) => r.createdOn.date))].sort();
+    if (otherDays.length > 0) {
+      warnings.push(
+        `Grab payout ${p.settlementId} (paid ${p.payoutDate}) includes orders from ${otherDays.join(', ')}, but all of it is loaded as sales day ${p.storeDay}. Check those days before approving.`,
+      );
+    }
   }
   days.sort((a, b) => a.salesDate.localeCompare(b.salesDate));
-  return { days, periodLines: [], waitingForRows, warnings: [], pandagoNetTotal: null, pandagoReceivable: null };
+  return { days, periodLines: [], waitingForRows, warnings, pandagoNetTotal: null, pandagoReceivable: null };
 }
 
 /* ------------------------------------------------------------------ Foodpanda */

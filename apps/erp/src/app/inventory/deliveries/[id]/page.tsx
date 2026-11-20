@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
 import { canViewPhoto, photoKinds } from '../../../../lib/photo-link';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '../../../../lib/page-access';
+import { recordInScope } from '../../../../lib/store-scope';
 import { peso } from '../../../../lib/format';
 import { receiveDeliveryAction } from '../actions';
 import { deliveryDetail } from '../lib';
@@ -65,9 +66,10 @@ export default async function DeliveryPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/inventory/deliveries/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/inventory/deliveries/${id}`);
+  if (refusal) return refusal;
   const detail = await deliveryDetail(actor.orgId, id);
-  if (!detail) notFound();
+  if (!detail || !(await recordInScope(actor, `/inventory/deliveries/${id}`, detail.doc.storeId))) notFound();
   const { doc, locations } = detail;
 
   const canViewProof = await canViewPhoto(actor, doc.proofFileId);

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../../lib/page-access';
+import { recordInScope } from '@/lib/store-scope';
 import {
   amortiseAction,
   confirmTermAction,
@@ -59,7 +60,7 @@ export default async function PrepaidItemPage({
   if (refusal) return refusal;
 
   const item = await getDetail(actor.orgId, id);
-  if (!item) notFound();
+  if (!item || !(await recordInScope(actor, '/prepaid', item.storeId))) notFound();
 
   const active = item.status === 'active';
 

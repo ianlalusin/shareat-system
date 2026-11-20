@@ -220,3 +220,20 @@ describe('T-534 S2 - the books (POSTING-PATTERNS transfer.cash.simple: DR the ac
     expect((await rows(w)).map((r) => r.day_close_id === z.dayCloseId)).toEqual([true, false]);
   });
 });
+
+describe('T-613 D3 - a Z is also for Converts when nothing was sold', () => {
+  it('a cash -> GCash Convert and no receipts: the Z closes (it said "no sales to close"), books the Convert, and derives no sales day [kills: the receipt-count gate]', async () => {
+    const w = await world();
+    const conv = await record(w, { from: w.cash, to: w.gcash, amount: '500.00', note: 'customer took cash' });
+    const z = await close(w, AT, await pinOf(w, w.managerId));
+    expect(z.wrote).toBe(true);
+    expect(z.reading).toMatchObject({ receiptCount: 0, convert: { count: 1 } });
+    expect(z.salesDayId).toBeNull();
+    expect((await rows(w)).find((r) => r.id === conv.id)!.day_close_id).toBe(z.dayCloseId);
+    expect((await entriesOfZ(w)).length).toBeGreaterThan(0);
+  });
+  it('nothing sold, refunded or converted still says there is nothing to close', async () => {
+    const w = await world();
+    await expectRefusal(close(w, AT, await pinOf(w, w.managerId)), 'There are no sales to close since the last Z.');
+  });
+});

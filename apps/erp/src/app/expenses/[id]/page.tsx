@@ -5,7 +5,7 @@ import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/dat
 import { previewExpenseApproval } from '@shareat/domain';
 import { buildCategoryFacts } from '@shareat/domain/business-rules';
 import { listStores, listActingPersons, listCategoriesGrouped } from '../lib';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { canReadAtStore } from '@/lib/can-read-at-store';
 import { approveExpenseAction, voidExpenseAction, updateDraftAction, deleteDraftAction } from '../actions';
 import { withOrgPrincipal } from '../lib';
@@ -59,7 +59,8 @@ export default async function ExpenseDetailPage({
   const { id } = await params;
   const sp = await withFlash(searchParams);
 
-  const { actor } = await requireSession(`/expenses/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/expenses/${id}`);
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
   const expense = await withOrgPrincipal(orgId, (tx) => expensesRepo.getExpenseById(tx, orgId, id));

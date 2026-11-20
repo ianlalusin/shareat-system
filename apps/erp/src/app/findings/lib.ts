@@ -63,9 +63,23 @@ function previousPeriod(period: string): string {
  * ⛔ **`closeReadiness` is not recomputed here.** The task spec's own rule: the close checker and
  * the findings feed are one machine, or they disagree on the 15th.
  */
-export async function findingsFor(orgId: string, period: string) {
+export async function findingsFor(orgId: string, period: string, storeIds?: readonly string[]) {
   return withOrgPrincipal(orgId, async (tx) => {
     const feed = await listFindings(tx, orgId, { period });
+    if (storeIds) {
+      // T-603 (DEF-912): a store-limited viewer sees their stores' findings only. Findings with no store (trial balance, fiscal runway) and the
+      // org-wide close readiness are for a viewer who is not store-limited; the counts are re-derived from what is kept.
+      const findings = feed.findings.filter((f) => f.storeId != null && storeIds.includes(f.storeId));
+      return {
+        feed: {
+          findings,
+          openCount: findings.filter((f) => f.status === 'open').length,
+          acknowledgedCount: findings.filter((f) => f.status === 'acknowledged').length,
+          hardCount: findings.filter((f) => f.severity === 'hard').length,
+        },
+        readiness: null,
+      };
+    }
     const readiness = await closeReadiness(tx, orgId, period);
     return { feed, readiness };
   });
@@ -149,9 +163,11 @@ export function scorecardRange(now = new Date()): { from: string; to: string } {
   return { from, to };
 }
 
-export async function scorecardFor(orgId: string, range: { from: string; to: string }) {
+export async function scorecardFor(orgId: string, range: { from: string; to: string }, storeIds?: readonly string[]) {
   return withOrgPrincipal(orgId, async (tx) => {
-    const card = await managerScorecard(tx, orgId, range);
+    const full = await managerScorecard(tx, orgId, range);
+    // T-603 (DEF-912): a store-limited viewer sees only their own stores' rows, never the others' or the organisation-wide one.
+    const card = storeIds ? { ...full, stores: full.stores.filter((s) => s.storeId != null && storeIds.includes(s.storeId)) } : full;
     const stores = await storesRepo.listForOrg(tx, orgId);
     return { card, storeName: new Map(stores.map((s) => [s.id, `${s.code} — ${s.name}`])) };
   });

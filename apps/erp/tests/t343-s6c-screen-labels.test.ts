@@ -35,6 +35,21 @@ import { OFFERABLE_TO_POSITIONS } from '@shareat/domain';
 
 const ACTOR = { orgId: 'org-1', personId: 'actor-1' };
 
+// T-603: usage/[id] asks the route gate now; the session is stubbed here, so the gate is stubbed open (every other export stays real).
+vi.mock('../src/lib/page-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/lib/page-access')>()),
+  requirePageAccess: async () => ({ actor: ACTOR, refusal: null }),
+}));
+// T-603: the pages ask `storePageScope` (route gate + the viewer's stores); this harness stubs the session, so the scope is stubbed to its one store.
+vi.mock('../src/lib/store-scope', () => ({
+  storePageScope: async (_route: string, requested?: string) => ({
+    actor: ACTOR,
+    stores: [{ id: 'store-1', name: 'SmokeStore', code: 'SMK-1' }],
+    storeId: requested ?? 'store-1',
+  }),
+  recordInScope: async () => true,
+  listStoreIds: async () => undefined,
+}));
 vi.mock('../src/lib/session', () => ({
   requireSession: vi.fn(async () => ({ actor: ACTOR })),
 }));

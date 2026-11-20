@@ -636,7 +636,7 @@ export interface ReceiptListRow {
  * till number, the table and the tenders - in ONE query. Money stays text. `terminalId`'s till row, the session's stand and the payments are
  * joined without multiplying a receipt (payments fold into one `string_agg`).
  */
-export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: string, since: Date | undefined): Promise<ReceiptListRow[]> {
+export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: string, since: Date | undefined, match?: { terminalNo: number; terminalSeq: number }): Promise<ReceiptListRow[]> {
   const rows = await tx
     .select({
       receiptId: posSalesReceipts.id,
@@ -665,6 +665,8 @@ export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: s
         eq(posSalesReceipts.orgId, orgId),
         eq(posSalesReceipts.storeId, storeId),
         since ? gte(posSalesReceipts.issuedAtDevice, since) : undefined,
+        // T-613 D4: one printed number (till + sequence on that till).
+        match ? and(eq(posTerminals.terminalNo, match.terminalNo), eq(posSalesReceipts.terminalSeq, match.terminalSeq)) : undefined,
       ),
     )
     .groupBy(

@@ -4,6 +4,7 @@ import { add, ZERO } from '@shareat/core/money';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { SchedulerStatus } from '../../components/scheduler-status';
 import { requirePageAccess } from '../../lib/page-access';
+import { listStoreIds } from '@/lib/store-scope';
 import { createPrepaidItemAction } from './actions';
 import {
   CATEGORY_LABEL,
@@ -39,10 +40,11 @@ export default async function PrepaidPage({
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
 
+  const storeIds = await listStoreIds(actor, '/prepaid');
   const [stores, all, needingReview] = await Promise.all([
     listStores(actor.orgId),
-    listRegister(actor.orgId),
-    reviewCount(actor.orgId),
+    listRegister(actor.orgId, storeIds),
+    reviewCount(actor.orgId, storeIds),
   ]);
   const storeById = new Map(stores.map((s) => [s.id, s]));
 

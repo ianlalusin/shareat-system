@@ -262,6 +262,7 @@ async function recordExternalReturn(
     if (!input.moneyAccountId) return { ok: false, reason: 'a cash refund needs a money account.' };
     refundAccount = await moneyAccountsRepo.getById(tx, input.orgId, input.moneyAccountId);
     if (!refundAccount) return { ok: false, reason: 'that money account does not exist.' };
+    if (!refundAccount.isActive) return { ok: false, reason: `"${refundAccount.name}" is retired. Choose another account to refund from.` };
     if (refundAccount.storeId !== order.storeId) {
       return { ok: false, reason: "That money account belongs to another store. A refund is paid from this store's own cash." };
     }

@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
+import { listStoreIds } from '@/lib/store-scope';
 import {
   acknowledgeFindingAction,
   bookMissedMonthAction,
@@ -46,11 +47,13 @@ export default async function FindingsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/findings');
+  const { actor, refusal } = await requirePageAccess('/findings');
+  if (refusal) return refusal;
 
   const periods = selectablePeriods();
   const period = sp.period && periods.includes(sp.period) ? sp.period : lastCompletedPeriod();
-  const { feed, readiness } = await findingsFor(actor.orgId, period);
+  const storeIds = await listStoreIds(actor, '/findings');
+  const { feed, readiness } = await findingsFor(actor.orgId, period, storeIds);
 
   // T-344 / DEF-422 §3.6 — independent of the 12-month period selector above, so a hole older
   // than a year still shows. Through the same M+11 window the monthly seed job itself covers.
@@ -129,23 +132,25 @@ export default async function FindingsPage({
           value={String(feed.hardCount)}
           hint="The books do not add up"
         />
-        <Tile
-          label={`${monthLabel(period)} close`}
-          value={readiness.ready ? 'Ready' : 'Blocked'}
-          hint={
-            readiness.ready
-              ? 'Nothing is blocking it'
-              : readiness.noOpenPeriod && readiness.blocking.length === 0
-                ? 'This month has no open period'
-                : `${readiness.blocking.length} ${readiness.blocking.length === 1 ? 'finding blocks' : 'findings block'} it`
-          }
-        />
+        {readiness && (
+          <Tile
+            label={`${monthLabel(period)} close`}
+            value={readiness.ready ? 'Ready' : 'Blocked'}
+            hint={
+              readiness.ready
+                ? 'Nothing is blocking it'
+                : readiness.noOpenPeriod && readiness.blocking.length === 0
+                  ? 'This month has no open period'
+                  : `${readiness.blocking.length} ${readiness.blocking.length === 1 ? 'finding blocks' : 'findings block'} it`
+            }
+          />
+        )}
       </section>
 
       {/* ⛔ `readiness.ready` here is a HINT, never the authority — `closePeriod` re-checks the
           capability, the unposted-draft gate, `closeReadiness` and the earlier-period-open rule
           itself, so a stale page or a second click cannot close a period that is not closeable. */}
-      {readiness.ready && (
+      {readiness?.ready && (
         <form action={closePeriodAction} className="flex items-center gap-3 rounded-lg border border-success bg-success-soft p-4">
           <input type="hidden" name="period" value={period} />
           <div className="flex-1 text-sm text-success">

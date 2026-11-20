@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import { peso } from '../../../lib/format';
-import { deliveryFormData, deliveryRegister, listStores } from './lib';
+import { deliveryFormData, deliveryRegister } from './lib';
 import { NewDeliveryForm } from './NewDeliveryForm';
 import { createDeliveryAction } from './actions';
 import { Page } from '@/components/shell/Page';
@@ -26,9 +26,9 @@ const KIND_LABEL: Record<string, string> = { supplier: 'Supplier', purchase: 'Ca
 
 export default async function DeliveriesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/inventory/deliveries');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  const scope = await storePageScope('/inventory/deliveries', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
 
   if (!storeId) {
     return (

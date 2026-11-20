@@ -18,6 +18,16 @@ vi.mock('next/navigation', () => ({
     throw new Error('redirect');
   },
 }));
+// T-603: the pages ask `storePageScope` (route gate + the viewer's stores); this harness stubs the session, so the scope is stubbed to its one store.
+vi.mock('../src/lib/store-scope', () => ({
+  storePageScope: async (_route: string, requested?: string) => ({
+    actor: { orgId: 'org-1', personId: 'p-1' },
+    stores: [{ id: 'store-1', name: 'Lipa', code: 'LP' }],
+    storeId: requested ?? 'store-1',
+  }),
+  recordInScope: async () => true,
+  listStoreIds: async () => undefined,
+}));
 vi.mock('../src/lib/session', () => ({ requireSession: async () => ({ actor: { orgId: 'org-1', personId: 'p-1' } }) }));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
 vi.mock('../src/app/inventory/locations/actions', () => {

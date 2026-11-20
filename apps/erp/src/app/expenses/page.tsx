@@ -2,7 +2,8 @@ import { expensesRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listCategoriesGrouped, withOrgPrincipal } from './lib';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
+import { listStoreIds } from '@/lib/store-scope';
 import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, Button, LinkRow, RowLink, Select } from '@/components/ui';
 
@@ -22,10 +23,14 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
 
   // The org comes from the SESSION, never the URL — a person cannot reach another
   // org's spend by editing a query string, and RLS refuses them underneath in any case.
-  const { actor } = await requireSession('/expenses');
+  const { actor, refusal } = await requirePageAccess('/expenses');
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
-  const [storeRows, categories] = await Promise.all([listStores(orgId), listCategoriesGrouped(orgId)]);
+  // T-603: only the stores where the viewer records or approves expenses (`undefined` = not store-limited).
+  const storeIds = await listStoreIds(actor, '/expenses');
+  const [allStores, categories] = await Promise.all([listStores(orgId), listCategoriesGrouped(orgId)]);
+  const storeRows = storeIds ? allStores.filter((s) => storeIds.includes(s.id)) : allStores;
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : undefined;
 
   const status = sp.status === 'draft' || sp.status === 'posted' || sp.status === 'voided' ? sp.status : undefined;
@@ -34,7 +39,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
   const storeById = new Map(storeRows.map((s) => [s.id, s]));
 
   const expenses = await withOrgPrincipal(orgId, (tx) =>
-    expensesRepo.listExpenses(tx, { orgId, storeId, status, limit: 100 }),
+    expensesRepo.listExpenses(tx, { orgId, storeId, storeIds, status, limit: 100 }),
   );
 
   const qs = new URLSearchParams();

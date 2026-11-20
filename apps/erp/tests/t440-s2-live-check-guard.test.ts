@@ -402,7 +402,7 @@ const EXEMPT: Record<string, { count: number; reason: string }> = {
   'remittance/page.tsx': { count: 2, reason: `lineAmount_\${i} / lineOverage_\${i}: ${REPEATED}` },
   'sales-days/[id]/page.tsx': { count: 1, reason: `channel_\${c.id} per-channel amounts: ${REPEATED}` },
   'settings/attendance/page.tsx': { count: 2, reason: 'local number-field helpers: name arrives as a prop, one component for many callers' },
-  'commissary/orders/page.tsx': { count: 3, reason: 'repeated line family, S8' },
+  'commissary/orders/page.tsx': { count: 2, reason: 'repeated line family, S8' },
   'commissary/orders/[id]/page.tsx': { count: 1, reason: 'repeated line family, S8' },
   'inventory/deliveries/NewDeliveryForm.tsx': { count: 5, reason: 'repeated line family, S8' },
   'inventory/deliveries/[id]/page.tsx': { count: 1, reason: 'repeated line family, S8' },
