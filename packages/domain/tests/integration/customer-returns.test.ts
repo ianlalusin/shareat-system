@@ -190,6 +190,29 @@ afterAll(async () => {
 });
 
 describe('external return — §3, the full posting', () => {
+  it('DEF-900: a return against the SECOND line of an item sold on two lines succeeds', async () => {
+    const f = await fixture('twolinesret');
+    const itemId = await wholesaleItem(f, 'Rice');
+    await stock(f, f.storeId, f.locationId, itemId, '20', '50.0000');
+    const customerId = await buyer(f);
+    const order = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, {
+        storeId: f.storeId, customerId, orderDate: '2026-01-10',
+        lines: [{ itemId, quantity: '5', rate: '50.00' }, { itemId, quantity: '3', rate: '40.00' }],
+      }),
+    );
+    await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: order.orderId }));
+    const lines = await asOrg(f.orgId, (tx) => tradeRepo.linesFor(tx, f.orgId, order.orderId));
+    const second = lines.find((l) => l.quantity === '3.000')!;
+    const res = await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, {
+        tradeOrderId: order.orderId, returnedOn: '2026-01-15', reason: 'Wrong grade.',
+        lines: [{ tradeOrderLineId: second.id, quantity: '2' }], actor: f.manager,
+      }),
+    );
+    expect(res.ok).toBe(true);
+  });
+
   it('1. a full resaleable return: Dr 4950/Cr 1210, Dr 1310/Cr 5100, on-hand rises, trial balance ties', async () => {
     const f = await fixture('full');
     const s = await aSale(f, { qty: '10', rate: '500', stockQty: '50', unitCost: '90' });

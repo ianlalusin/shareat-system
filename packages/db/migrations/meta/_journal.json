@@ -1653,6 +1653,13 @@
       "when": 1809315107084,
       "tag": "0269_t613_refund_to_corrected_tender",
       "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "7",
+      "when": 1809401507084,
+      "tag": "0270_t600_journal_entry_date_in_period",
+      "breakpoints": true
     }
   ]
 }
