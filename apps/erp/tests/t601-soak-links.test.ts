@@ -22,7 +22,8 @@ const ALL_WRONG: PreflightFacts = {
   tillsWithLivePairing: 0,
   rulesNotSeeded: ['VAT included in prices (%)'],
   recordSalePeople: 0,
-  managersWithPin: 0,
+  terminalLinked: false,
+  separateApprover: false,
   keyFileConfigured: false,
   itemsWithoutStation: ['Pork belly'],
   packagesWithoutRefills: ['Unli Grill'],
@@ -65,7 +66,7 @@ const links = [
 
 describe('T-601 - the Fix this links point at real pages', () => {
   it('the all-wrong store really fires every pre-flight item and fails every soak check (so the links below are the whole set)', () => {
-    expect(pre.blocking).toHaveLength(9);
+    expect(pre.blocking).toHaveLength(10);
     expect(pre.warnings).toHaveLength(4);
     expect(soak.filter((c) => !c.ok)).toHaveLength(soak.length);
     expect(soak).toHaveLength(15);

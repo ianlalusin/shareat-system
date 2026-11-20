@@ -44,7 +44,7 @@ import { postEntry } from '../ledger/post-entry';
 import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
-import { checkDraw } from '../money-accounts/overdraft';
+import { assertActiveAccount, checkDraw } from '../money-accounts/overdraft';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { gone, humanDate, internalFault, refuse } from '../shared/refusal';
 import { checkField } from '../field-rules/check';
@@ -1187,6 +1187,7 @@ export async function recordPayment(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
     if (!account) throw gone('recordPayment: that money account does not exist.', 'money account');
+    assertActiveAccount(account, 'recordPayment'); // DEF-895
     if (account.storeId !== input.storeId) {
       // ⭐ Cross-store money movement — same rule as `approveExpense` (bible row 153).
       await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });

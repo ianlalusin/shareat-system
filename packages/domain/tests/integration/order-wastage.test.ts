@@ -28,6 +28,7 @@ import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { APP_ROLE, closeDb, orderWastageRepo, transaction, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { recordChannelSettlement } from '../../src/channel-settlements';
+import { makeSettleableDay } from './_fixtures/sales-day-flow';
 import { listPostedSettlementsForStore } from '../../src/channel-settlements';
 import { matchWastagesToSettlement, type SettleableOrderWastage } from '../../src/wastage/settlement-match';
 import { postEntry } from '../../src/ledger/post-entry';
@@ -98,6 +99,7 @@ async function fixture(hint: string) {
   const [day] = await sql<{ id: string }[]>`
     insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by)
     values (${orgId}, ${storeId}, '2026-01-10', 0, 0, 0, ${manager!.id}) returning id`;
+  await makeSettleableDay(sql, day!.id, channel!.id, manager!.id); // DEF-881: a settlement names a verified day carrying the channel
 
   return {
     orgId, storeId, channelId: channel!.id, salesDayId: day!.id, bankId: bank!.id,

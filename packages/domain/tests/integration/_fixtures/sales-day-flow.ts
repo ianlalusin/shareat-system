@@ -46,6 +46,16 @@ export async function forceVerifiedSql(
 }
 
 /**
+ * T-595 (DEF-881): a settlement names a VERIFIED day that carries the channel, so a fixture that records one needs both: the day forced to
+ * verified and one `sales_day_channels` row (idempotent; a test that wants a figure there updates the amount).
+ */
+export async function makeSettleableDay(sql: SqlLike, dayId: string, channelId: string, verifierId: string, amount = '0'): Promise<void> {
+  const q = sql as postgres.Sql;
+  await forceVerifiedSql(sql, dayId, verifierId);
+  await q`insert into sales_day_channels (sales_day_id, channel_id, amount) values (${dayId}, ${channelId}, ${amount}) on conflict (sales_day_id, channel_id) do nothing`;
+}
+
+/**
  * A second manager for fixtures that only had one: the person who SUBMITS a day the fixture's manager then verifies
  * (S3 - the submitter may not verify their own day). Scoped to every store named, so it can submit a day on any of them.
  */
