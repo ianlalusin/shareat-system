@@ -84,7 +84,7 @@ export async function listActingPersons(orgId: string): Promise<PersonOption[]> 
       schema.personRoles,
       and(eq(schema.personRoles.personId, schema.persons.id), isNull(schema.personRoles.revokedAt)),
     )
-      .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.isActive, true)))
+      .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.accountStatus, 'active'), eq(schema.persons.kind, 'person')))
       .orderBy(asc(schema.persons.displayName)),
   );
   return rows;
@@ -103,7 +103,7 @@ export async function listActivePersons(orgId: string): Promise<Omit<PersonOptio
     tx
       .select({ id: schema.persons.id, displayName: schema.persons.displayName })
       .from(schema.persons)
-      .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.isActive, true)))
+      .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.accountStatus, 'active'), eq(schema.persons.kind, 'person')))
       .orderBy(asc(schema.persons.displayName)),
   );
 }

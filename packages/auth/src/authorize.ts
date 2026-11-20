@@ -51,6 +51,7 @@ import { enqueueAuthorizeDenied } from './security-events';
 import {
   closePeriodNeedsWholeOrg,
   jobIsElsewhere,
+  accountNotActive,
   noActiveRole,
   notAssignedToStore,
   otherOrg,
@@ -199,6 +200,13 @@ async function decide(tx: Tx, actor: Actor, capability: Capability, ctx: Authori
       );
     };
   }
+  // ⭐ T-612: pending / suspended / ended people hold no working rights, whatever role rows they still carry (a suspended person KEEPS them, paused).
+  // Read in the SAME statement as the role, so this adds no round trip. Strict `!== 'active'`: an unknown or missing status is a refusal, never an allow.
+  if (activeRole.accountStatus !== 'active') {
+    const status = activeRole.accountStatus;
+    return async () =>
+      new AuthorizationError(`authorize: person ${actor.personId} account status is '${String(status)}', not 'active'`, capability, accountNotActive(status));
+  }
   const role = activeRole.role as Role;
 
   // --- Axis 3a/3b: capability from the matrix, OR an explicit override grant -------------
@@ -329,7 +337,7 @@ export async function heldCapabilities(tx: Tx, actor: Actor): Promise<ReadonlySe
   const activeRole = await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId);
   // ⛔ No active role is NOT a fallback to the least-privileged role — same posture as
   //    `authorize()` above. An unconfigured person holds nothing.
-  if (!activeRole) return new Set();
+  if (!activeRole || activeRole.accountStatus !== 'active') return new Set(); // T-612: paused rights are not shown either
   const role = activeRole.role as Role;
 
   const grants = await accessRepo.grantsForPerson(tx, actor.personId);

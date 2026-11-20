@@ -21,7 +21,7 @@ import { refuse } from '../shared/refusal';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { LIABILITY_ADD_RULES, LIABILITY_CHARGE_RULES, LIABILITY_PAY_RULES } from '../field-rules/liabilities';
-import { compare, isZero, money, ZERO } from '@shareat/core/money';
+import { add, compare, formatMoney, isZero, money, subtract, ZERO } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 
 export const LIABILITY_CONTROL_CODE = '2500';
@@ -288,6 +288,23 @@ export async function reverseLiabilityEntry(
 
     const reason = input.reason.trim();
     if (!reason) throw new Error('reverseLiabilityEntry: say why this is being reversed.');
+    // DEF-893: reversing a charge that payments already cover would take 2500 below zero. Only a live entry is judged
+    // (an already-reversed one is a no-op); a payment's net is negative, so reversing a payment always passes.
+    if (entry.status === 'posted') {
+      let removed = ZERO;
+      for (const l of await journalRepo.findLinesForEntryWithAccountCodes(trx, entry.id)) {
+        if (l.accountCode === LIABILITY_CONTROL_CODE && l.partyId === liability.id) {
+          removed = add(removed, subtract(money(l.credit), money(l.debit)));
+        }
+      }
+      const outstanding = money((await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id)).outstanding);
+      if (compare(outstanding, removed) < 0) {
+        throw refuse(
+          `reverseLiabilityEntry: reversing entry ${entry.id} would take ${liability.id} to ${formatMoney(subtract(outstanding, removed))} owed — payments already cover it`,
+          `Reversing this ${formatMoney(removed)} charge would leave ${liability.name} owing ${formatMoney(subtract(outstanding, removed))}, because payments already cover it. Reverse a payment first.`,
+        );
+      }
+    }
     const result = await reverseEntry(trx, {
       entryId: input.entryId,
       reason,

@@ -252,6 +252,26 @@ describe('T-181 invariant 6 — a delete is a TOMBSTONE', () => {
   });
 });
 
+describe('T-612 - the clock roster is a work record, not ERP access', () => {
+  it('a PENDING (and a suspended) person with an open employment stays on the roster mirror, so kitchen staff can still clock in', async () => {
+    const f = await fixture('t612-pending');
+    const e = await hire(f);
+    await sql`update persons set account_status = 'pending' where id = ${f.workerId}`;
+    // A name change re-enqueues the roster row through the real persons trigger (display_name), as any later edit would.
+    await sql`update persons set display_name = display_name || ' Jr' where id = ${f.workerId}`;
+    for (const status of ['pending', 'suspended']) {
+      await sql`update persons set account_status = ${status} where id = ${f.workerId}`;
+      await sql`update persons set display_name = display_name || '.' where id = ${f.workerId}`;
+      const { driver, written } = fakeDriver();
+      await drain(f, driver);
+      const last = written.filter((d) => d.path === `mirror/${f.storeId}/roster/${e.id}`).pop();
+      expect(last, `${status}: the roster row is published`).toBeDefined();
+      // Mutant: publisher reads account_status = 'active' for personActive -> deleted is true and this is red.
+      expect(last!.deleted, `${status}: not a tombstone`).toBe(false);
+    }
+  });
+});
+
 describe('T-181 invariants 7 & 10 — failure, and emptiness', () => {
   it('⛔ 7. a publish failure leaves the row UNPUBLISHED, with attempts and lastError', async () => {
     const f = await fixture('fail');

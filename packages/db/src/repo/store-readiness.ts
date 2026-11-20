@@ -41,7 +41,7 @@ export async function storeFacts(tx: Tx, orgId: string, storeId: string): Promis
       select distinct p.id as person_id, p.display_name
         from persons p
         join employments e on e.person_id = p.id and e.org_id = ${orgId} and e.store_id = ${storeId} and e.ended_on is null
-       where p.org_id = ${orgId}
+       where p.org_id = ${orgId} and p.account_status = 'active' -- T-612: a pending / suspended / ended person cannot sign in, so does not make a store ready
     `),
   );
   const mgr = rowsOf<{ person_id: string; display_name: string }>(
@@ -50,7 +50,7 @@ export async function storeFacts(tx: Tx, orgId: string, storeId: string): Promis
         from persons p
         join person_roles r on r.person_id = p.id and r.org_id = ${orgId} and r.role = 'manager' and r.revoked_at is null
         join person_store_scope s on s.person_id = p.id and s.store_id = ${storeId}
-       where p.org_id = ${orgId}
+       where p.org_id = ${orgId} and p.account_status = 'active'
     `),
   );
   return {

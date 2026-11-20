@@ -311,7 +311,7 @@ describe('R4 - who did it: the person check, each clause on its own', () => {
 
     const idle = await makeStaff(f, 'Ina Inactive');
     await signedIn(f, idle);
-    await sql`update persons set is_active = false where id = ${idle}`;
+    await sql`update persons set account_status = 'suspended' where id = ${idle}`;
     await expectPersonRefused(f, openEvent(f, idle, 3));
   });
 

@@ -1641,6 +1641,13 @@
       "breakpoints": true
     },
     {
+      "idx": 268,
+      "version": "7",
+      "when": 1809228707084,
+      "tag": "0268_t612_persons_account_status",
+      "breakpoints": true
+    },
+    {
       "idx": 270,
       "version": "7",
       "when": 1809401507084,

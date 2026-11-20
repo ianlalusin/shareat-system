@@ -141,7 +141,7 @@ export async function loadMoneyLines(orgId: string, storeId: string, actor?: Act
       tx
         .select({ id: schema.persons.id, displayName: schema.persons.displayName })
         .from(schema.persons)
-        .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.isActive, true)))
+        .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.accountStatus, 'active'), eq(schema.persons.kind, 'person')))
         .orderBy(asc(schema.persons.displayName)),
     ]);
 
