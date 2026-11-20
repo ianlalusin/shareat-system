@@ -385,9 +385,15 @@ export async function closeReadiness(
   orgId: string,
   period: string,
 ): Promise<{ ready: boolean; blocking: Finding[] }> {
-  const feed = await listFindings(tx, orgId, { period });
-  // ⚠️ An acknowledged HARD finding still blocks. Accepting a risk is not the same as the books
-  // adding up, and a close is exactly the moment that distinction matters.
+  return readinessOf(await listFindings(tx, orgId, { period }));
+}
+
+/**
+ * T-602 S2: the close verdict from a feed the caller already holds, so a screen that needs both the feed and the verdict computes the ~45 detectors ONCE.
+ * ⚠️ An acknowledged HARD finding still blocks. Accepting a risk is not the same as the books
+ * adding up, and a close is exactly the moment that distinction matters.
+ */
+export function readinessOf(feed: FindingsFeed): { ready: boolean; blocking: Finding[] } {
   const blocking = feed.findings.filter((f) => f.severity === 'hard');
   return { ready: blocking.length === 0, blocking };
 }
