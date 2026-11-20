@@ -77,8 +77,9 @@ describe('T-492 S2 — reversed header is frozen', () => {
     expect(msg).toMatch(/reversed journal entry .* is immutable/);
   });
   it('refuses UPDATE of period_id', async () => {
+    // T-600 0270: entry_date moves with period_id, else the date-in-period trigger refuses first and this stops proving the T-492 guard.
     const { entryId, otherPeriodId } = await fixture('period', 'reversed');
-    const msg = await fails(() => sql`update journal_entries set period_id = ${otherPeriodId} where id = ${entryId}`);
+    const msg = await fails(() => sql`update journal_entries set period_id = ${otherPeriodId}, entry_date = '2026-02-10' where id = ${entryId}`);
     expect(msg).toMatch(/reversed journal entry .* is immutable/);
   });
   it('refuses UPDATE of status (reversed -> posted / draft)', async () => {
