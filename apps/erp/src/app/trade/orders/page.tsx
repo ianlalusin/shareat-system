@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { createOrderAction } from './actions';
 import { NewOrderForm } from './NewOrderForm';
 import { orderFormData, orderRegister, peso, today, tradeStoresFor } from './lib';
@@ -24,7 +24,8 @@ interface SearchParams {
 
 export default async function TradeOrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/trade/orders');
+  const { actor, refusal } = await requirePageAccess('/trade/orders');
+  if (refusal) return refusal;
   // T-435 / bible row 353 - only the viewer's own stores; a forged ?store= is one sentence, never a quiet fallback.
   const stores = await tradeStoresFor(actor);
   if (sp.store && !stores.some((s) => s.id === sp.store)) return <StoreNotAvailable />;

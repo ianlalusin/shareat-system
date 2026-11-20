@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { Page } from '@/components/shell/Page';
 import { FlashBanner } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -20,7 +20,8 @@ export default async function RecordSettlementPage({
 }: {
   searchParams: Promise<{ channel?: string; day?: string }>;
 }) {
-  const { actor } = await requireSession('/channel-settlements/record');
+  const { actor, refusal } = await requirePageAccess('/channel-settlements/record');
+  if (refusal) return refusal;
   // After the session check, so a flash cookie waiting for this page is not spent on a sign-in redirect.
   const sp = await withFlash(searchParams);
   const [channels, waiting, loans] = await Promise.all([

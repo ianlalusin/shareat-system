@@ -61,15 +61,23 @@ describe('T-435 S4 trade - case 32: the loader never sends a credit limit to the
 
 describe('T-435 S4 trade - case 33: an order at a store is invisible to someone with no money/order role there (M33)', () => {
   const FORGED = '019a0000-0000-7000-8000-000000000003';
-  for (const who of ['C', 'M2'] as const) {
-    it(`${who} opens the S1 sale order for Y: the very same not-found as a forged id (no buyer, lines, totals, limit)`, async () => {
-      const w = await world();
-      const forged = await pageError(() => render(orderPage, w[who], { params: { id: FORGED } }));
-      expect(forged).toBe('NEXT_NOT_FOUND');
-      const real = await pageError(() => render(orderPage, w[who], { params: { id: w.orderYS1 } }));
-      expect(real, `${who} must not be able to tell the order exists`).toBe(forged);
-    });
-  }
+  // T-617: M2 holds the trade words (at S2), so passes the route gate and meets the per-order store check.
+  it('M2 opens the S1 sale order for Y: the very same not-found as a forged id (no buyer, lines, totals, limit)', async () => {
+    const w = await world();
+    const forged = await pageError(() => render(orderPage, w.M2, { params: { id: FORGED } }));
+    expect(forged).toBe('NEXT_NOT_FOUND');
+    const real = await pageError(() => render(orderPage, w.M2, { params: { id: w.orderYS1 } }));
+    expect(real, 'M2 must not be able to tell the order exists').toBe(forged);
+  });
+  // T-617: C holds no trade word, so the route gate answers first - the same refusal card for a real id and a forged one, none of the order on it.
+  it('C opens the S1 sale order for Y: the route refusal, identical for a real id and a forged id (nothing of the order)', async () => {
+    const w = await world();
+    const forged = plain(await render(orderPage, w.C, { params: { id: FORGED } }));
+    const real = plain(await render(orderPage, w.C, { params: { id: w.orderYS1 } }));
+    expect(forged).toContain(M.refusedCard);
+    expect(real).toBe(forged);
+    expectAbsent(real, 'C order', M.yName, M.limit);
+  });
   it('W1 (create_wholesale_order only, no approve_buyer) still sees the order, but not the credit limit', async () => {
     const w = await world();
     const html = await render(orderPage, w.W1, { params: { id: w.orderYS1 } });
@@ -100,17 +108,21 @@ describe('T-435 S4 trade - case 34: the manager of the order\'s store sees the l
 });
 
 describe('T-435 S4 trade - case 35: the register offers the viewer\'s stores only (M35)', () => {
-  it('C /trade/orders?store=<S2> is "This store is not available to you."', async () => {
+  it('W1 (T-617: C no longer reaches the register) /trade/orders?store=<S2> is "This store is not available to you."', async () => {
     const w = await world();
-    const html = await render(registerPage, w.C, { search: { store: w.s2 } });
-    expectNotAvailable(html, 'C /trade/orders?store=S2');
-    expectAbsent(html, 'C /trade/orders?store=S2', M.s2Name, M.xName);
+    const html = await render(registerPage, w.W1, { search: { store: w.s2 } });
+    expectNotAvailable(html, 'W1 /trade/orders?store=S2');
+    expectAbsent(html, 'W1 /trade/orders?store=S2', M.s2Name, M.xName);
   });
-  it('C /trade/orders lists S1 orders only: Y\'s order in, X\'s S2 order and S2 out', async () => {
+  it('W1 /trade/orders lists S1 orders only: Y\'s order in, X\'s S2 order and S2 out', async () => {
     const w = await world();
-    const html = await render(registerPage, w.C);
-    expectPresent(html, 'C /trade/orders', M.s1Name, M.yName);
-    expectAbsent(html, 'C /trade/orders', M.s2Name, M.xName, w.s2, w.orderXS2);
+    const html = await render(registerPage, w.W1);
+    expectPresent(html, 'W1 /trade/orders', M.s1Name, M.yName);
+    expectAbsent(html, 'W1 /trade/orders', M.s2Name, M.xName, w.s2, w.orderXS2);
+  });
+  it('T-617: C (no trade word) is refused at the register', async () => {
+    const w = await world();
+    expect(plain(await render(registerPage, w.C))).toContain(M.refusedCard);
   });
   it('M1 /trade/orders also offers S1 only', async () => {
     const w = await world();

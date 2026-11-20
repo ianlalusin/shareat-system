@@ -26,6 +26,11 @@ import { seedSearch } from './helpers/flash-jar';
 const ACTOR = { orgId: 'org-1', personId: 'actor-1' };
 
 const requireSessionMock = vi.fn();
+// T-617: the page now asks the route gate first; this file is about rendering, so the gate is stubbed open (the gate itself is proved in t617-gate-awaiting-routes.test.ts).
+vi.mock('../src/lib/page-access', () => ({
+  requirePageAccess: async (route: string) => ({ actor: (await requireSessionMock(route)).actor, refusal: null }),
+  StoreNotAvailable: () => null,
+}));
 vi.mock('../src/lib/session', () => ({
   requireSession: (...args: unknown[]) => requireSessionMock(...args),
   requireActor: async (...args: unknown[]) => (await requireSessionMock(...args)).actor,

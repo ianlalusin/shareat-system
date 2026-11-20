@@ -1,6 +1,7 @@
 import { CheckedForm } from '@/components/forms';
 import { ITEMS_APPROVE_RULES, ITEMS_REJECT_RULES, ITEMS_REQUEST_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import {
   approveItemRequestAction,
   createItemAction,
@@ -49,7 +50,10 @@ export default async function ItemsPage({
   const rawParams = await searchParams;
   const kind = parseKindFilter(typeof rawParams.kind === 'string' ? rawParams.kind : undefined);
   const sp = await withFlash(Promise.resolve(rawParams));
-  const { actor } = await requireSession(kind ? `/items?kind=${kind}` : '/items');
+  // T-617: sign-in first (so the return trip keeps the kind filter), then the route gate on the bare path (a query string never matches a map key).
+  await requireSession(kind ? `/items?kind=${kind}` : '/items');
+  const { actor, refusal } = await requirePageAccess('/items');
+  if (refusal) return refusal;
   const [items, requests, dupes, dismissed, kindCounts, parentOptions, categoryOptions, subcategoryOptions] = await Promise.all([
     listItems(actor.orgId, true, kind),
     pendingRequests(actor.orgId),

@@ -248,11 +248,17 @@ describe('T-603 S5 - every page and every server-action folder has a permission-
     expect(USE_SERVER.test("import x from 'y';\nexport const a = 1;")).toBe(false);
   });
 
-  it('⛔ PLANT - an awaiting route removed from the list while still unmapped is caught', () => {
-    const [first] = ROUTES_AWAITING_A_DECISION;
-    expect(first, 'the awaiting list is not empty').toBeDefined();
-    const pruned = ROUTES_AWAITING_A_DECISION.filter((r) => r !== first);
-    expect(unmappedRoutes(realRoutes).filter((r) => !pruned.includes(r))).toContain(first);
+  it('T-617: the awaiting list ended EMPTY - every route is mapped, approved-open, or refused', () => {
+    expect(ROUTES_AWAITING_A_DECISION).toEqual([]);
+    expect(unmappedRoutes(realRoutes)).toEqual([]);
+  });
+
+  it('⛔ PLANT - dropping any one of the 13 map entries makes its route unmapped again (the guard would go red)', () => {
+    const stillMapped = (route: string) => Object.keys(ROUTE_CAPABILITY).filter((k) => k !== route).some((k) => route === k || route.startsWith(`${k}/`));
+    // A child key (/attendance/leave, /items/import) sits under a mapped parent, so dropping it narrows nothing; only the roots go unmapped.
+    const roots = Object.keys(T617).filter((r) => !Object.keys(T617).some((o) => o !== r && r.startsWith(`${o}/`)));
+    expect(roots.length).toBe(10);
+    for (const route of roots) expect(stillMapped(route), `${route}: no other key may cover it`).toBe(false);
   });
 
   it('⛔ PLANT - an awaiting entry that has become mapped is stale and is caught (the list can only shrink)', () => {
@@ -298,8 +304,8 @@ describe('capabilityForRoute — prefix matching', () => {
     expect(accepts('/reports/ap-aging')).toEqual(['view_financial_reports']);
   });
 
-  it('an unmapped route is open to any signed-in person', () => {
-    expect(capabilityForRoute('/attendance')).toBeNull();
+  it('an unmapped route is open to any signed-in person (the pure lookup; requirePageAccess refuses it at runtime, T-616)', () => {
+    expect(capabilityForRoute('/zz-unmapped-screen')).toBeNull();
     // T-589 B3a: /sales-days is keyed now (the day list shows every day's totals); `/` stays the one open landing page.
     expect(capabilityForRoute('/')).toBeNull();
   });
@@ -307,7 +313,7 @@ describe('capabilityForRoute — prefix matching', () => {
 
 describe('navHrefAllowed — presentation only', () => {
   it('shows an unmapped link to everyone', () => {
-    expect(navHrefAllowed('/attendance', new Set())).toBe(true);
+    expect(navHrefAllowed('/attendance/leave', new Set())).toBe(true);
   });
 
   it('hides a mapped link from someone without the capability', () => {
@@ -449,6 +455,75 @@ describe('T-577 - /ap, /budgets and /cash-requests are mapped, and every page un
       const src = codeOnly(readFileSync(path.join(repoRoot, file), 'utf8'));
       expect(re.test(src), `${file}: the store check on the record's own store`).toBe(true);
       expect(src.includes('notFound()'), `${file}: refusal is the standard not-found`).toBe(true);
+    }
+  });
+});
+
+
+// =====================================================================================================================
+// T-617 (Ian, 22 Nov 2026, "approve the defaults") - the 13 routes that awaited a decision are mapped to EXISTING words. Who is let in, who is refused and
+// that an admin sees each one is proved against real Postgres in apps/erp/tests/integration/t617-gate-awaiting-routes.test.ts.
+// Mutants: M1 drop one route's map entry; M2 swap one page back to bare requireSession; M3 map /opening-balances to nothing.
+// =====================================================================================================================
+
+/** route -> the words that open it (any ONE); [] = open by decision. */
+const T617: Readonly<Record<string, readonly string[]>> = {
+  '/attendance': ['manage_attendance'],
+  '/attendance/leave': [],
+  '/channel-settlements': ['record_ar_collection'],
+  '/commissary/catalogue': ['manage_commissary_offerings', 'manage_commissary_map', 'fulfil_branch_order'],
+  '/commissary/discrepancies': ['resolve_trade_discrepancy', 'fulfil_branch_order'],
+  '/commissary/orders': ['place_branch_order', 'fulfil_branch_order', 'dispatch_branch_order', 'confirm_receipt', 'post_order_message'],
+  '/items': ['manage_items', 'approve_item', 'approve_item_request'],
+  '/items/import': ['approve_item_request'],
+  '/opening-balances': ['run_cutover'],
+  '/statutory-discounts': ['record_statutory_discount'],
+  '/trade/orders': ['create_wholesale_order', 'approve_buyer', 'record_ar_collection'],
+  '/franchise': ['view_franchise_sales'],
+};
+
+describe('T-617 - the 13 routes are mapped, and every page under them calls the gate', () => {
+  it('each route accepts exactly the words the default names (a child inherits it); /attendance/leave is open', () => {
+    for (const [route, words] of Object.entries(T617)) {
+      expect(accepts(route).sort(), route).toEqual([...words].sort());
+      if (route !== '/items') expect(accepts(`${route}/019a0000-0000-7000-8000-000000000001`).sort(), `${route}/<id>`).toEqual([...words].sort());
+    }
+    // Longer keys keep their own words: the settlements record page inherits, upload and review do not.
+    expect(accepts('/channel-settlements/record')).toEqual(['record_ar_collection']);
+    expect(accepts('/channel-settlements/upload')).toEqual(['upload_settlement_files']);
+    expect(accepts('/attendance/terminals')).toEqual(['manage_attendance']);
+    expect(accepts('/franchise/access-log')).toEqual(['view_franchise_access_log']);
+    expect(accepts('/items/import')).toEqual(['approve_item_request']);
+  });
+
+  it('every page under the 13 routes calls the gate (requirePageAccess or storePageScope), never bare requireSession - leave included, though it is open', () => {
+    const roots = Object.keys(T617);
+    const offenders: string[] = [];
+    let seen = 0;
+    for (const file of trackedPages()) {
+      const route = routeOf(file);
+      if (!roots.some((r) => route === r || route.startsWith(`${r}/`))) continue;
+      seen++;
+      const src = codeOnly(readFileSync(path.join(repoRoot, file), 'utf8'));
+      if (!(src.includes('requirePageAccess(') || src.includes('storePageScope('))) offenders.push(route);
+    }
+    expect(seen, 'the pages exist').toBeGreaterThanOrEqual(20);
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  it('⛔ PLANT - a page that goes back to bare requireSession is caught by the same predicate', () => {
+    const src = codeOnly(readFileSync(path.join(repoRoot, 'apps/erp/src/app/items/import/page.tsx'), 'utf8'));
+    expect(src.includes('requirePageAccess(')).toBe(true);
+    expect(src.replaceAll('requirePageAccess(', 'requireSession(').includes('requirePageAccess(')).toBe(false);
+  });
+
+  it('nav: a cashier keeps SC/PWD, the commissary screens and own leave; loses attendance review, settlements, items, opening balances, trade orders, franchise', () => {
+    const cashier = new Set(['record_statutory_discount', 'fulfil_branch_order', 'place_branch_order', 'confirm_receipt', 'post_order_message']);
+    for (const keep of ['/statutory-discounts', '/commissary/orders', '/commissary/catalogue', '/commissary/discrepancies', '/attendance/leave']) {
+      expect(navHrefAllowed(keep, cashier), keep).toBe(true);
+    }
+    for (const lose of ['/attendance', '/channel-settlements', '/items', '/opening-balances', '/trade/orders', '/franchise']) {
+      expect(navHrefAllowed(lose, cashier), lose).toBe(false);
     }
   });
 });

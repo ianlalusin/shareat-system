@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
 import { compareQuantity, quantity, ZERO_QUANTITY } from '@shareat/domain';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '../../../../lib/page-access';
+import { recordInScope } from '../../../../lib/store-scope';
 import {
   acceptOrderAction,
   addLineAction,
@@ -81,8 +82,11 @@ export default async function BranchOrderPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/commissary/orders/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/commissary/orders/${id}`);
+  if (refusal) return refusal;
   const [view, scope] = await Promise.all([orderView(actor.orgId, id), actorStoreIds(actor)]);
+  // T-617: an order is opened only by someone holding one of the route's words at its branch or its commissary; anyone else gets the same page as a forged id.
+  if (view && !(await recordInScope(actor, `/commissary/orders/${id}`, view.order.requestedByStoreId)) && !(await recordInScope(actor, `/commissary/orders/${id}`, view.order.storeId))) notFound();
   if (!view) {
     // T-589 B4b: a trade (customer) order opened here gets a pointer to where it lives, only for someone who may open it
     // there. A missing id, another org's order or a branch order that cannot be shown stays a 404.

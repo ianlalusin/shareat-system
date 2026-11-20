@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { notFound } from 'next/navigation';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { asClock, asHours, loadDay } from '../lib';
 import type { DayReviewDetail } from '../lib';
 import {
@@ -72,7 +72,8 @@ export default async function AttendanceDayPage({
 }) {
   const { dayId } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/attendance/${dayId}`);
+  const { actor, refusal } = await requirePageAccess(`/attendance/${dayId}`);
+  if (refusal) return refusal;
 
   const detail = await loadDay(actor.orgId, actor, dayId);
   if (!detail) notFound();

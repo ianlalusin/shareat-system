@@ -1,11 +1,10 @@
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
-import { requireSession } from '../../lib/session';
+import { storePageScope } from '../../lib/store-scope';
 import {
   REVIEW_REASON_TEXT,
   asHours,
   defaultRange,
-  listStores,
   loadLeaveGrid,
   loadQueue,
   loadRoster,
@@ -52,10 +51,10 @@ export default async function AttendanceReviewPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/attendance');
-
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store || stores[0]?.id;
+  // T-617: the route gate (manage_attendance), then only the stores where it is held; a store outside that list is one sentence, never a fallback.
+  const scope = await storePageScope('/attendance', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
   if (!storeId) {
     return (
       <Page density="table" className="space-y-4">
