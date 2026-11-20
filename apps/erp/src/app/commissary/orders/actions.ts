@@ -30,11 +30,10 @@ export async function createOrderAction(fd: FormData): Promise<void> {
   const branchStoreId = str(fd, 'branchStoreId');
   const itemIds = strs(fd, 'itemId');
   const quantities = strs(fd, 'quantity');
-  const rates = strs(fd, 'rate');
   // A row whose item was never picked is an empty row, not an error — skipped. A picked item
   // with no quantity is a real mistake, and the domain says so by name.
   const lines = itemIds
-    .map((itemId, i) => ({ itemId, quantity: quantities[i] ?? '', rate: rates[i] || null }))
+    .map((itemId, i) => ({ itemId, quantity: quantities[i] ?? '' }))
     .filter((l) => l.itemId);
 
   let orderId = '';

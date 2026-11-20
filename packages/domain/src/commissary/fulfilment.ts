@@ -80,10 +80,28 @@ export async function acceptOrder(tx: Tx, actor: Actor, input: { orderId: string
 
     for (const line of await tradeRepo.linesFor(trx, actor.orgId, order.id)) {
       if (line.fulfilledQuantity !== null) continue;
+      const seeded = quantity(line.requestedQuantity ?? line.quantity);
+      if (line.origin !== 'requested') {
+        await tradeRepo.updateLine(trx, actor.orgId, line.id, { fulfilledQuantity: seeded });
+        continue;
+      }
+      // DEF-898 (R1): a branch-typed rate on an open order never reaches packing — the line takes the
+      // catalogue rate now; the commissary's `fulfilLine` rate still wins afterwards.
+      const resolved = await resolveBranchRate(trx, actor.orgId, order.storeId, line.itemId);
+      if (!resolved) {
+        const name = (await itemsRepo.getItemById(trx, actor.orgId, line.itemId))?.name ?? 'An item';
+        throw refuse(
+          `acceptOrder: ${name} has no catalogue price`,
+          `${name} has no price on the catalogue. Set its price before accepting the order.`,
+        );
+      }
       await tradeRepo.updateLine(trx, actor.orgId, line.id, {
-        fulfilledQuantity: quantity(line.requestedQuantity ?? line.quantity),
+        fulfilledQuantity: seeded,
+        rate: resolved.rate,
+        lineTotal: lineCost(seeded, resolved.rate),
       });
     }
+    await lowStockRepo.refreshOrderTotal(trx, order.id);
     await tradeRepo.markAccepted(trx, actor.orgId, order.id, actor.personId);
   };
   return run(tx);

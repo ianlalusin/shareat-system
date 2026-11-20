@@ -231,12 +231,12 @@ async function lines(f: Fixture, id: string) {
   return asOrg(f.orgId, (tx) => tradeRepo.linesFor(tx, f.orgId, id));
 }
 
-const draftInput = (f: Fixture, lines: { itemId: string; quantity: string; rate?: string }[] = [{ itemId: f.pork, quantity: '20' }]) => ({
+const draftInput = (f: Fixture, lines: { itemId: string; quantity: string }[] = [{ itemId: f.pork, quantity: '20' }]) => ({
   branchStoreId: f.br.id, commissaryStoreId: f.com.id, orderDate: '2026-08-20', lines,
 });
 
 /** Draft → submit → accept, as the two staff members — the state most tests start from. */
-async function accepted(f: Fixture, lineInput?: { itemId: string; quantity: string; rate?: string }[]): Promise<string> {
+async function accepted(f: Fixture, lineInput?: { itemId: string; quantity: string }[]): Promise<string> {
   const { orderId } = await asOrg(f.orgId, (tx) => saveBranchOrderDraft(tx, f.branchStaff, draftInput(f, lineInput)));
   await asOrg(f.orgId, (tx) => submitOrder(tx, f.branchStaff, { orderId }));
   await asOrg(f.orgId, (tx) => acceptOrder(tx, f.comStaff, { orderId }));
@@ -274,20 +274,25 @@ describe('T-172 — the draft, and what a branch may put on it', () => {
     expect(l!.expenseCategoryId).toBe(f.cogs);
   });
 
-  it('⭐ a stated rate wins over the branch price — and survives the pricing rule changing (invariant 11)', async () => {
+  it('⭐ the branch takes the catalogue rate and keeps it when the rule changes; a rate stated by the commissary wins at packing (invariant 11, DEF-898)', async () => {
     const f = await fixture();
     await asOrg(f.orgId, (tx) => setItemPricing(tx, f.admin, { itemId: f.pork, pricingMode: 'fixed', fixedAmount: '350' }));
-    // No rate stated: the branch-price RULE (tier 1) beats the offering's manual cost (tier 3).
+    // The branch-price RULE (tier 1) beats the offering's manual cost (tier 3).
     const resolved = await asOrg(f.orgId, (tx) => resolveBranchRate(tx, f.orgId, f.com.id, f.pork));
     expect(resolved).toEqual({ rate: '350.00', from: 'branch_price' });
 
     const { orderId } = await asOrg(f.orgId, (tx) =>
-      saveBranchOrderDraft(tx, f.branchStaff, draftInput(f, [{ itemId: f.pork, quantity: '10', rate: '320' }])),
+      saveBranchOrderDraft(tx, f.branchStaff, draftInput(f, [{ itemId: f.pork, quantity: '10' }])),
     );
     await asOrg(f.orgId, (tx) => setItemPricing(tx, f.admin, { itemId: f.pork, pricingMode: 'fixed', fixedAmount: '400' }));
     const [l] = await lines(f, orderId);
-    expect(l!.rate).toBe('320.00');
-    expect(l!.lineTotal).toBe('3200.00');
+    expect(l!.rate).toBe('350.00');
+    expect(l!.lineTotal).toBe('3500.00');
+
+    await asOrg(f.orgId, (tx) => submitOrder(tx, f.branchStaff, { orderId }));
+    await asOrg(f.orgId, (tx) => acceptOrder(tx, f.comStaff, { orderId }));
+    await asOrg(f.orgId, (tx) => fulfilLine(tx, f.comStaff, { orderId, lineId: l!.id, quantity: '10', rate: '315' }));
+    expect((await lines(f, orderId))[0]!.rate).toBe('315.00');
   });
 
   it('⛔ an unpriced item is refused by name — never a ₱0 line (T-171 §5)', async () => {
@@ -884,17 +889,6 @@ describe('DEF-897 - no ₱0 transfer line', () => {
   // The refusal's SENTENCE (what the person reads) is `userMessage`; `message` is the raw developer text.
   const NO_ZERO = { userMessage: expect.stringMatching(/must be more than ₱0\.00/) };
 
-  it('⛔ a draft line at rate 0 or 0.004 is refused by name, and nothing is written', async () => {
-    for (const rate of ['0', '0.004']) {
-      const f = await fixture();
-      await expect(
-        asOrg(f.orgId, (tx) => saveBranchOrderDraft(tx, f.branchStaff, draftInput(f, [{ itemId: f.pork, quantity: '5', rate }]))),
-      ).rejects.toMatchObject(NO_ZERO);
-      const [n] = await sql<{ c: string }[]>`select count(*)::text c from trade_orders where org_id = ${f.orgId}`;
-      expect(n!.c).toBe('0');
-    }
-  });
-
   it('⛔ an offering whose manual cost is ₱0.00 and has no branch price counts as unpriced', async () => {
     const f = await fixture();
     await sql`update commissary_item_offerings set manual_cost = '0.0000' where item_id = ${f.pork}`;
@@ -954,6 +948,32 @@ describe('DEF-897 - no ₱0 transfer line', () => {
     await asOrg(f.orgId, (tx) => dispatchBranchOrder(tx, f.comMgr, { orderId }));
     await asOrg(f.orgId, (tx) => receiveTradeOrder(tx, f.branchStaff, { orderId, receivedOn: '2026-08-21' }));
     expect(await onHand(f.porkBr, f.br.id)).toBe('18.000');
+  });
+});
+
+describe('DEF-898 - only the commissary sets the transfer price', () => {
+  it('a line saved at a branch-typed rate on a submitted order is re-priced from the catalogue at accept', async () => {
+    const f = await fixture();
+    const { orderId } = await asOrg(f.orgId, (tx) => saveBranchOrderDraft(tx, f.branchStaff, draftInput(f)));
+    await asOrg(f.orgId, (tx) => submitOrder(tx, f.branchStaff, { orderId }));
+    // What an old tab could have saved: the branch's own 0.10 for pork.
+    await sql`update trade_order_lines set rate = '0.10', line_total = '2.00' where order_id = ${orderId}`;
+    await asOrg(f.orgId, (tx) => acceptOrder(tx, f.comStaff, { orderId }));
+    const [l] = await lines(f, orderId);
+    expect(l!.rate).toBe('310.00');
+    expect(l!.lineTotal).toBe('6200.00');
+    expect((await order(f, orderId)).totalAmount).toBe('6200.00');
+  });
+
+  it('⛔ accept refuses a requested line whose item has lost its catalogue price, naming it', async () => {
+    const f = await fixture();
+    const { orderId } = await asOrg(f.orgId, (tx) => saveBranchOrderDraft(tx, f.branchStaff, draftInput(f)));
+    await asOrg(f.orgId, (tx) => submitOrder(tx, f.branchStaff, { orderId }));
+    await sql`update commissary_item_offerings set manual_cost = null where item_id = ${f.pork}`;
+    await expect(asOrg(f.orgId, (tx) => acceptOrder(tx, f.comStaff, { orderId }))).rejects.toMatchObject({
+      userMessage: expect.stringMatching(/Pork belly has no price on the catalogue\. Set its price before accepting the order\./),
+    });
+    expect(branchOrderStage(await order(f, orderId))).toBe('submitted');
   });
 });
 
