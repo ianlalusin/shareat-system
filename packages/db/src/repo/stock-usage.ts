@@ -495,7 +495,7 @@ export async function systemAuthorId(tx: Tx, orgId: string, source: AuditLogSour
   if (afterLock) return afterLock;
   const [row] = await tx
     .insert(persons)
-    .values({ orgId, displayName: USAGE_SYSTEM_AUTHOR_NAME, isActive: false, kind: 'terminal' })
+    .values({ orgId, displayName: USAGE_SYSTEM_AUTHOR_NAME, isActive: false, accountStatus: 'active', kind: 'terminal' })
     .returning({ id: persons.id });
   await auditLogRepo.appendSystem(tx, orgId, {
     action: 'stock.usage_system_author_created',

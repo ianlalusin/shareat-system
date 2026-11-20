@@ -75,7 +75,7 @@ const J1_SENTENCE =
 describe('L1 — row 5, store-scoped, job elsewhere found: userMessage is the DEF-430 sentence', () => {
   it("userMessage === J1's sentence; message stays authorize: role 'staff' may not 'submit_sales_day'", async () => {
     const { authorize, AuthorizationError } = await import('../src/authorize');
-    activeRoleForPerson.mockResolvedValue({ role: 'staff' });
+    activeRoleForPerson.mockResolvedValue({ role: 'staff', accountStatus: 'active' });
     personHasActiveGrant.mockResolvedValue(false);
     positionGrantsElsewhere.mockResolvedValue([{ positionName: 'Cashier', storeName: 'SmokeStore', storeCode: 'SMK' }]);
     getById.mockResolvedValue(SMK2);
@@ -96,7 +96,7 @@ describe('L1 — row 5, store-scoped, job elsewhere found: userMessage is the DE
 describe('L2 — positionGrantsElsewhere is called once with the right args', () => {
   it('{ personId, orgId: actor.orgId, capability, excludingStoreId: storeId }', async () => {
     const { authorize } = await import('../src/authorize');
-    activeRoleForPerson.mockResolvedValue({ role: 'staff' });
+    activeRoleForPerson.mockResolvedValue({ role: 'staff', accountStatus: 'active' });
     personHasActiveGrant.mockResolvedValue(false);
     positionGrantsElsewhere.mockResolvedValue([]);
 
@@ -115,7 +115,7 @@ describe('L2 — positionGrantsElsewhere is called once with the right args', ()
 describe('L3 (⛔) — empty lookup result falls back to roleMayNot; getById never called', () => {
   it('green before and after', async () => {
     const { authorize, AuthorizationError } = await import('../src/authorize');
-    activeRoleForPerson.mockResolvedValue({ role: 'staff' });
+    activeRoleForPerson.mockResolvedValue({ role: 'staff', accountStatus: 'active' });
     personHasActiveGrant.mockResolvedValue(false);
     positionGrantsElsewhere.mockResolvedValue([]);
 
@@ -135,7 +135,7 @@ describe('L3 (⛔) — empty lookup result falls back to roleMayNot; getById nev
 describe('L4 — the lookup rejects: still AuthorizationError, roleMayNot text, logger.warn called once', () => {
   it('warn is called once (today: 0 calls — no lookup exists)', async () => {
     const { authorize, AuthorizationError } = await import('../src/authorize');
-    activeRoleForPerson.mockResolvedValue({ role: 'staff' });
+    activeRoleForPerson.mockResolvedValue({ role: 'staff', accountStatus: 'active' });
     personHasActiveGrant.mockResolvedValue(false);
     positionGrantsElsewhere.mockRejectedValue(new Error('connection reset'));
 
@@ -155,7 +155,7 @@ describe('L4 — the lookup rejects: still AuthorizationError, roleMayNot text, 
 describe('L5 (⛔) — the lookup never fires outside row 5’s store-scoped-and-refused branch', () => {
   it('success path never calls positionGrantsElsewhere/getById, even if they would throw', async () => {
     const { authorize } = await import('../src/authorize');
-    activeRoleForPerson.mockResolvedValue({ role: 'admin' });
+    activeRoleForPerson.mockResolvedValue({ role: 'admin', accountStatus: 'active' });
     personHasActiveGrant.mockResolvedValue(false);
     storeBelongsToOrg.mockResolvedValue(true);
     personHasStoreScope.mockResolvedValue(true);
@@ -173,7 +173,7 @@ describe('L5 (⛔) — the lookup never fires outside row 5’s store-scoped-and
 
   it('an org-scoped row-5 refusal (close_period, staff) never calls positionGrantsElsewhere', async () => {
     const { authorize } = await import('../src/authorize');
-    activeRoleForPerson.mockResolvedValue({ role: 'staff' });
+    activeRoleForPerson.mockResolvedValue({ role: 'staff', accountStatus: 'active' });
     personHasActiveGrant.mockResolvedValue(false);
 
     await authorize(tx, actor, 'close_period', {}).catch(() => undefined);
@@ -182,7 +182,7 @@ describe('L5 (⛔) — the lookup never fires outside row 5’s store-scoped-and
 
   it('a store-scoped refusal with no storeId never calls positionGrantsElsewhere', async () => {
     const { authorize } = await import('../src/authorize');
-    activeRoleForPerson.mockResolvedValue({ role: 'staff' });
+    activeRoleForPerson.mockResolvedValue({ role: 'staff', accountStatus: 'active' });
     personHasActiveGrant.mockResolvedValue(false);
 
     await authorize(tx, actor, 'submit_sales_day', {}).catch(() => undefined);

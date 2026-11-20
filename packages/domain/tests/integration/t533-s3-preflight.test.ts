@@ -142,6 +142,15 @@ describe('R3 posPreflight - each blocking item fires on its own', () => {
     expect(await codes(f)).toEqual(NONE);
   });
 
+  it('no approver (T-612): a SUSPENDED manager with a live PIN and the grant is not an approver; reinstated, they are', async () => {
+    const f = await ready();
+    // Mutant: no account_status test in personMaySignInAtStore, listOpenEmploymentsAtStore, personIdsWithLivePin and authorize -> the suspended manager still approves (red).
+    await sql`update persons set account_status = 'suspended' where id = ${f.managerId}`;
+    expect((await codes(f)).blocking, 'a paused account is no approver').toContain('no_approver');
+    await sql`update persons set account_status = 'active' where id = ${f.managerId}`;
+    expect(await codes(f)).toEqual(NONE);
+  });
+
   it('no approver (T-601 S6): the only approver is also the only seller (the cashier left), so they cannot approve their own close', async () => {
     const f = await ready();
     await sql`update employments set ended_on = '2025-06-01', employment_status = 'resigned' where person_id = ${f.counterId}`;
