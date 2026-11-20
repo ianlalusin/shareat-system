@@ -74,7 +74,7 @@ export interface DeliveryDetail {
 
 export async function deliveryDetail(orgId: string, id: string): Promise<DeliveryDetail | null> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const doc = await deliveriesRepo.getDeliveryDocument(tx, id);
+    const doc = await deliveriesRepo.getDeliveryDocument(tx, orgId, id);
     // ⭐ The RLS principal already confines the read to this org, but a stray delivery from another
     // org's id space returning `undefined` above is the same "not found" a wrong id would be —
     // never a 500, never a cross-org leak of "it exists, you just can't see it."

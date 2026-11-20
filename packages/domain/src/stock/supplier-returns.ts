@@ -145,7 +145,7 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
 
   // ⭐ Invariant 11 — a return may not name a supplier the linked delivery did not come from.
   if (input.deliveryId) {
-    const delivery = await deliveriesRepo.getDelivery(tx, input.deliveryId);
+    const delivery = await deliveriesRepo.getDelivery(tx, orgId, input.deliveryId);
     if (!delivery) return { ok: false, reason: `delivery ${input.deliveryId} does not exist` };
     if (delivery.supplierId !== input.supplierId) {
       return { ok: false, reason: `delivery ${input.deliveryId} was not from supplier ${input.supplierId}` };
@@ -166,7 +166,7 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
     if (deliveryLine.itemId !== line.itemId) {
       return { ok: false, reason: `${await itemLabel(tx, orgId, line.itemId)} is not the item on the delivery line that this return names.` };
     }
-    const lineDelivery = await deliveriesRepo.getDelivery(tx, deliveryLine.deliveryId);
+    const lineDelivery = await deliveriesRepo.getDelivery(tx, orgId, deliveryLine.deliveryId);
     if (!lineDelivery) return { ok: false, reason: `delivery ${deliveryLine.deliveryId} does not exist` };
     const elsewhere = await otherStoreSentence(tx, orgId, lineDelivery.storeId, input.storeId);
     if (elsewhere) return { ok: false, reason: elsewhere };

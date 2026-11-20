@@ -503,3 +503,58 @@ describe('T-603 - a closed (retired) store stays workable for the people who hol
     });
   }
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// S4 - the staff picker follows store scope (DEF-915)
+// ---------------------------------------------------------------------------------------------------------------------
+
+describe('T-603 S4 - staff pickers list the people employed at the store', () => {
+  async function employed(w: World, storeId: string, name: string): Promise<string> {
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${w.orgId}, ${name}) returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${w.orgId}, 'staff')`;
+    await sql`
+      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, created_by)
+      values (${w.orgId}, ${storeId}, ${p!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e9)}`}, 'regular', '2025-01-01', ${w.A.personId})`;
+    return p!.id;
+  }
+
+  it('listActingPersons(orgId, S1) has the S1 person, not the S2-only one; alsoIds keeps a cited name; no store = everyone', async () => {
+    const w = await world();
+    const { listActingPersons } = await import('../../src/app/expenses/lib');
+    const here = await employed(w, w.s1, 'Heron Hereperson');
+    const there = await employed(w, w.s2, 'Sandpiper Elsewhere');
+    const names = async (...args: [string, string?, string[]?]) => (await listActingPersons(...args)).map((p) => p.displayName);
+    const atS1 = await names(w.orgId, w.s1);
+    expect(atS1).toContain('Heron Hereperson');
+    expect(atS1).not.toContain('Sandpiper Elsewhere');
+    expect(await names(w.orgId, w.s1, [there])).toContain('Sandpiper Elsewhere');
+    expect(await names(w.orgId)).toEqual(expect.arrayContaining(['Heron Hereperson', 'Sandpiper Elsewhere']));
+    expect(here).not.toBe(there);
+  });
+
+  it('every page that offers the picker passes its store (the picker is only drawn for a chargeable variance or a handover, so the call site is what is checked)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const pages = ['till/page.tsx', 'remittance/page.tsx', 'expenses/[id]/page.tsx', 'sales-days/[id]/page.tsx'];
+    for (const f of pages) {
+      const src = readFileSync(new URL(`../../src/app/${f}`, import.meta.url), 'utf8');
+      expect(/listActingPersons\([^)]*(storeId|\.storeId)/.test(src), `${f} passes a store to listActingPersons`).toBe(true);
+    }
+  });
+});
+
+describe('T-603 S4 - by-id repo reads take the organisation (DEF-918)', () => {
+  it('a delivery, a delivery document and a count session are not found under another org id, found under the right one', async () => {
+    const w = await world();
+    const r = await records();
+    const { deliveriesRepo, countSessionsRepo } = await import('@shareat/db');
+    const other = FORGED;
+    await asOrg(w.orgId, async (tx) => {
+      expect(await deliveriesRepo.getDelivery(tx, w.orgId, r.delivery.s1)).toBeDefined();
+      expect(await deliveriesRepo.getDelivery(tx, other, r.delivery.s1)).toBeUndefined();
+      expect(await deliveriesRepo.getDeliveryDocument(tx, w.orgId, r.delivery.s1)).toBeDefined();
+      expect(await deliveriesRepo.getDeliveryDocument(tx, other, r.delivery.s1)).toBeUndefined();
+      expect(await countSessionsRepo.getCountSession(tx, w.orgId, r.count.s1)).toBeDefined();
+      expect(await countSessionsRepo.getCountSession(tx, other, r.count.s1)).toBeUndefined();
+    });
+  });
+});
