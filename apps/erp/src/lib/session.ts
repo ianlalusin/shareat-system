@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { flashCookieName } from '@/lib/flash';
+import { requestMemo } from './request-memo';
 import { POS_PROMOTE_COOKIE } from '@/app/pos/_shell/constants';
 import { transaction } from '@shareat/db';
 import {
@@ -102,8 +103,11 @@ export async function readSessionToken(): Promise<string | null> {
  * ⚠️ **An expired session and an absent one return the same thing**, because they need the same
  * action from the user. v1 reached the same conclusion the hard way: *"a missing cookie now means
  * re-authenticate, not 'trust me'."*
+ *
+ * T-602 S3: memoised for ONE render of ONE request (React `cache`), so the shell, the page gate and the page share one token lookup.
+ * Not a gate: every domain service still calls `authorize()` itself. Actions and route handlers must not rely on this memo to see a change made earlier in the same request.
  */
-export async function currentSession(): Promise<ResolvedSession | null> {
+export const currentSession = requestMemo(async (): Promise<ResolvedSession | null> => {
   const token = await readSessionToken();
   if (!token) return null;
   try {
@@ -115,7 +119,7 @@ export async function currentSession(): Promise<ResolvedSession | null> {
     if (err instanceof AuthenticationError) return null;
     throw err;
   }
-}
+});
 
 /**
  * The actor behind a session token the server just issued (sign-in's landing decision). The cookie set in the same
