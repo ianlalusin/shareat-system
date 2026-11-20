@@ -2,6 +2,7 @@ import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../lib/page-access';
+import { listStoreIds } from '@/lib/store-scope';
 import type { PickerOption } from '../../components/two-way-picker';
 import { voidMoneyTransferAction } from './actions';
 import { RecordTransferForm } from './RecordTransferForm';
@@ -34,13 +35,15 @@ export default async function MoneyTransfersPage({
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
 
+  const storeIds = await listStoreIds(actor, '/money-transfers');
   const [stores, accounts, transfers] = await Promise.all([
     listStores(actor.orgId),
-    listAccountBalances(actor.orgId),
-    listRecentTransfers(actor.orgId),
+    listAccountBalances(actor.orgId, storeIds),
+    listRecentTransfers(actor.orgId, storeIds),
   ]);
   // Balances are read once; the usable set is those at stores where the viewer may move money.
-  const usable = await listTransferableAccounts(actor, accounts);
+  // A store-limited viewer's balances are already narrowed; the movable set is read on its own (a transfer_funds store may not be a reports store).
+  const usable = await listTransferableAccounts(actor, storeIds ? undefined : accounts);
   // T-369 S9: the pairs of stores where one owes the other, only where this person holds `transfer_funds` at both.
   const settlementPairs = await listSettlementPairs(actor, usable);
   const storeById = new Map(stores.map((s) => [s.id, s]));

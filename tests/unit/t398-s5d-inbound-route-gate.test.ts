@@ -44,9 +44,12 @@ describe('G1 /inventory/deliveries/inbound is gated by receive_delivery', () => 
     expect(navHrefAllowed(INBOUND, new Set(['receive_delivery']))).toBe(true);
   });
 
-  it('G1d. the siblings are unchanged: /inventory/deliveries and /inventory/stock stay open (the longer key wins, it does not widen)', () => {
-    expect(capabilitiesForRoute('/inventory/deliveries')).toEqual([]);
-    expect(capabilitiesForRoute('/inventory/stock')).toEqual([]);
+  it('G1d. the siblings inherit /inventory, not the inbound key (the longer key wins, it does not widen)', () => {
+    const inventory = capabilitiesForRoute('/inventory');
+    expect(inventory.length, 'the /inventory key must carry a word list').toBeGreaterThan(0);
+    expect(capabilitiesForRoute('/inventory/deliveries')).toEqual(inventory);
+    expect(capabilitiesForRoute('/inventory/stock')).toEqual(inventory);
+    expect(ROUTE_CAPABILITY[INBOUND]).not.toEqual(ROUTE_CAPABILITY['/inventory']);
   });
 
   it('G1e. both pages exist and call requirePageAccess in code, not in a comment (RED today: neither page exists)', () => {

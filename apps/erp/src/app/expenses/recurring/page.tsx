@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { RECURRING_INTERVALS } from '@shareat/db/schema';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import {
   createTemplateAction,
   deleteTemplateAction,
@@ -15,7 +15,6 @@ import {
   periodsBehind,
   suppliersFor,
   categories,
-  listStores,
   listTemplates,
   peso,
   today,
@@ -61,11 +60,10 @@ export default async function RecurringExpensesPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/expenses/recurring');
+  const scope = await storePageScope('/expenses/recurring', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
   const orgId = actor.orgId;
-
-  const stores = await listStores(orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : (stores[0]?.id ?? '');
   const [templates, cats, accounts, suppliers] = storeId
     ? await Promise.all([
         listTemplates(orgId, storeId),
