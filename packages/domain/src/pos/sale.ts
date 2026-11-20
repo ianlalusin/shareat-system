@@ -6,6 +6,8 @@
  * tolerance), takes the payments (change only from cash), writes one statutory row per senior/PWD diner, freezes lines / discounts / payments and
  * ends the session `paid` - all in the caller's ONE transaction (migration 0240 refuses a child appended under an earlier transaction's receipt).
  */
+import { toBusinessDate } from '@shareat/core/datetime';
+import { readReceiptLookupDays } from '../business-rules/pos-rules';
 import { add, compare, fromCentavos, money, subtract, toCentavos, type Money } from '@shareat/core/money';
 import { authorize, can, verifyPosManagerApproval, POS_TERMINAL_NOT_REGISTERED, type Actor } from '@shareat/auth';
 import { advisoryLocksRepo, posV1Repo, posV2Repo, statutoryDiscountsRepo, type Tx } from '@shareat/db';
@@ -443,17 +445,17 @@ export async function listTodaysSalesReceipts(tx: Tx, actor: Actor, input: { sto
 /**
  * T-613 D4 (DEF-937): "Find a receipt" - one receipt by its printed number (<store code>-<till, 2 digits>-<6 digits>; the store code may be left off), among the store's last
  * `RECEIPT_LOOKUP_DAYS` days, in the SAME shape as the list so the Refund dialog opens on it unchanged. A number that is not found (or is older) answers an empty list, not an error.
- * Shortcut: the 30-day limit is a constant, Ian's ruling in the task spec; it has no settings screen yet (standing rule: every business value gets a door).
+ * T-614 S2: the window is the business rule `pos.receipt_lookup_days` (default 30, set on Settings > Business rules); the Receipts screen reads the same rule to say it.
  */
-export const RECEIPT_LOOKUP_DAYS = 30;
 export async function findSalesReceiptByNo(tx: Tx, actor: Actor, input: { storeId: string; receiptNo: string; now?: Date }) {
   await requireStoreScope(tx, actor, input.storeId);
+  const lookupDays = await readReceiptLookupDays(tx, actor.orgId, toBusinessDate(input.now ?? new Date()));
   const parts = String(input.receiptNo ?? '').trim().toUpperCase().split('-');
   const seq = /^\d{1,6}$/.test(parts.at(-1) ?? '') ? Number(parts.at(-1)) : null;
   const till = /^\d{1,2}$/.test(parts.at(-2) ?? '') ? Number(parts.at(-2)) : null;
   const code = parts.slice(0, -2).join('-');
   const storeCode = ((await posV2Repo.getStoreCode(tx, actor.orgId, input.storeId)) ?? '').toUpperCase();
-  const since = new Date((input.now ?? new Date()).getTime() - RECEIPT_LOOKUP_DAYS * 86_400_000);
+  const since = new Date((input.now ?? new Date()).getTime() - lookupDays * 86_400_000);
   const rows = seq === null || till === null || (code !== '' && code !== storeCode)
     ? []
     : await posV2Repo.listReceiptsSinceForList(tx, actor.orgId, input.storeId, since, { terminalNo: till, terminalSeq: seq });

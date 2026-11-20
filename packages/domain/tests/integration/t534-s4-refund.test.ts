@@ -450,4 +450,18 @@ describe('T-613 D4 - find a receipt of an earlier day by its number', () => {
     expect((await find(w, `${till}-999999`, soon)).receipts).toHaveLength(0);
     expect((await find(w, no, new Date(manila(D1, '12:00').getTime() + 31 * 86_400_000))).receipts).toHaveLength(0);
   });
+  it('T-614 S2: the window is the business rule pos.receipt_lookup_days: 5 loses a 10-day-old receipt, 60 finds a 45-day-old one, no row keeps 30 [kills: reading a constant instead of the rule]', async () => {
+    const w = await world();
+    await thousand(w, '1000.00');
+    const no = (await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }))).receipts[0]!.receiptNo;
+    const day = 86_400_000;
+    const at = (days: number) => new Date(manila(D1, '12:00').getTime() + days * day);
+    expect((await find(w, no, at(10))).receipts, 'default 30: 10 days old is found').toHaveLength(1);
+    expect((await find(w, no, at(45))).receipts, 'default 30: 45 days old is not found').toHaveLength(0);
+    await sql`insert into business_rule_values (org_id, key, value, effective_from, set_by, reason) values (${w.orgId}, 'pos.receipt_lookup_days', '5', '2000-01-01', ${w.managerId}, 'test')`;
+    expect((await find(w, no, at(10))).receipts, 'rule 5: 10 days old is not found').toHaveLength(0);
+    expect((await find(w, no, at(3))).receipts, 'rule 5: 3 days old is found').toHaveLength(1);
+    await sql`insert into business_rule_values (org_id, key, value, effective_from, set_by, reason) values (${w.orgId}, 'pos.receipt_lookup_days', '60', '2000-01-02', ${w.managerId}, 'test')`;
+    expect((await find(w, no, at(45))).receipts, 'rule 60: 45 days old is found').toHaveLength(1);
+  });
 });

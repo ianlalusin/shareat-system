@@ -1653,6 +1653,13 @@
       "when": 1809315107084,
       "tag": "0269_t613_refund_to_corrected_tender",
       "breakpoints": true
+    },
+    {
+      "idx": 273,
+      "version": "7",
+      "when": 1809660707084,
+      "tag": "0273_t614_pos_receipt_lookup_days",
+      "breakpoints": true
     }
   ]
 }
