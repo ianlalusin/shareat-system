@@ -305,8 +305,8 @@ export async function reverseLiabilityEntry(
       const outstanding = money((await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id)).outstanding);
       if (compare(outstanding, removed) < 0) {
         throw refuse(
-          `reverseLiabilityEntry: reversing entry ${entry.id} would take ${liability.id} to ${formatMoney(subtract(outstanding, removed))} owed — payments already cover it`,
-          `Reversing this ${formatMoney(removed)} charge would leave ${liability.name} owing ${formatMoney(subtract(outstanding, removed))}, because payments already cover it. Reverse a payment first.`,
+          `reverseLiabilityEntry: reversing entry ${entry.id} would overpay ${liability.id} by ${formatMoney(subtract(removed, outstanding))} — payments already cover it`,
+          `Reversing this ${formatMoney(removed)} charge would overpay ${liability.name} by ${formatMoney(subtract(removed, outstanding))}, because payments already cover it. Reverse a payment first.`,
         );
       }
     }

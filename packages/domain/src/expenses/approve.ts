@@ -626,7 +626,7 @@ async function runApproveExpense(
   // and those terms are permanent. An expense posted without its asset is worse than an expense
   // not posted at all, because only one of those two states is obvious to anybody.
   const capitalised =
-    category.group === 'CAPEX' ? await capitalizeApprovedExpense(tx, actor, expenseId) : null;
+    category.group === 'CAPEX' ? await capitalizeApprovedExpense(tx, actor, expenseId, detail.belowThreshold) : null;
 
   // T-402 S3 (C4): the approval step's event, same transaction, after the posting and its own writes.
   if (result.created) {
