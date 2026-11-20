@@ -241,7 +241,7 @@ export async function wastageMonitorWithName(
   storeId: string,
 ): Promise<{ personId: string; displayName: string; isActive: boolean } | null> {
   const [row] = (await tx.execute(sql`
-    select p.id, p.display_name, p.is_active
+    select p.id, p.display_name, (p.account_status = 'active') as is_active
       from stores s join persons p on p.id = s.wastage_monitor_person_id
      where s.org_id = ${orgId} and s.id = ${storeId}
   `)) as unknown as Record<string, unknown>[];
@@ -320,6 +320,8 @@ export async function countActiveCredentials(tx: Tx, storeId: string): Promise<n
     join persons p on p.id = c.person_id
     where c.kind = 'pin'
       and c.revoked_at is null
+      -- T-612: a pending / suspended / ended person cannot sign in, so does not make a store's sign-in ready.
+      and p.account_status = 'active'
       and (
         exists (
           select 1 from person_store_scope pss

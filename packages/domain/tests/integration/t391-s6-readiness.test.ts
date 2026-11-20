@@ -195,6 +195,8 @@ async function employ(e: Env, storeCode: string, name: string, positionName: str
   const positionId = await canonicalPositionId(e.orgId, positionName);
   const emp: Any = await withOrgPrincipal(e.orgId, async (tx: Any) =>
     (await dom()).createEmployment(tx, e.superA, { storeId: e.stores[storeCode]!, personId, employmentStatus: 'regular', startedOn: '2026-01-05', positionIds: [positionId] }));
+  // T-612: a hire of a person with no open job starts pending; this fixture person already works
+  await sql`update persons set account_status = 'active' where id = ${personId}`;
   if (over.ended) {
     await withOrgPrincipal(e.orgId, async (tx: Any) =>
       (await dom()).endEmployment(tx, e.superA, { employmentId: emp.id, endedOn: '2026-02-05', employmentStatus: 'resigned' }));

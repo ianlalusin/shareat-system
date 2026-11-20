@@ -17,33 +17,17 @@ export async function countTillsWithLivePairing(tx: Tx, orgId: string, storeId: 
   return rows[0]?.n ?? 0;
 }
 
-/** Of `personIds`, the ones holding a live (not revoked) sign-in PIN. */
+/** Of `personIds`, the ones holding a live (not revoked) sign-in PIN. T-612: only an ACTIVE account counts - a suspended / pending / ended person's PIN is no approver and no sign-in. */
 export async function personIdsWithLivePin(tx: Tx, orgId: string, personIds: readonly string[]): Promise<Set<string>> {
   if (personIds.length === 0) return new Set();
   const rows = (await tx.execute(sql`
     select distinct c.person_id::text as person_id
       from person_credentials c
       join persons p on p.id = c.person_id
-     where p.org_id = ${orgId} and c.kind = 'pin' and c.revoked_at is null
+     where p.org_id = ${orgId} and c.kind = 'pin' and c.revoked_at is null and p.account_status = 'active'
        and c.person_id in (${sql.join(personIds.map((id) => sql`${id}`), sql`, `)})
   `)) as unknown as { person_id: string }[];
   return new Set(rows.map((r) => r.person_id));
-}
-
-/**
- * Active people of the org with an active role above staff (manager, admin, super_admin) and a live PIN. The caller keeps those who may sign in at the
- * store (`accessRepo.personMaySignInAtStore`) and applies the ladder (`isStoreManagerOrAbove`); the role comes back so it can.
- */
-export async function listRoleHoldersWithLivePin(tx: Tx, orgId: string): Promise<{ personId: string; role: string }[]> {
-  const rows = (await tx.execute(sql`
-    select distinct p.id::text as person_id, r.role
-      from person_roles r
-      join persons p on p.id = r.person_id and p.org_id = r.org_id
-     where r.org_id = ${orgId} and r.revoked_at is null and p.is_active
-       and r.role in ('manager', 'admin', 'super_admin')
-       and exists (select 1 from person_credentials c where c.person_id = p.id and c.kind = 'pin' and c.revoked_at is null)
-  `)) as unknown as { person_id: string; role: string }[];
-  return rows.map((r) => ({ personId: r.person_id, role: r.role }));
 }
 
 /**

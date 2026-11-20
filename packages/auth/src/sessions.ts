@@ -20,6 +20,7 @@ import { logger } from '@shareat/core/logger';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import type { Actor } from './authorize';
 import { AuthenticationError } from './errors';
+import { accountNotActive } from './refusal-text';
 import { tabletEmployeeIdToStaffCode } from './tablet-employee-id';
 import {
   enqueueFirebaseSignedIn,
@@ -314,6 +315,12 @@ const BAD_PIN = 'Sign-in failed: that PIN is not valid.';
 export const DUMMY_SCRYPT_HASH =
   'scrypt$25a577ac8242ebd8bb04c51179e2cf6b$6ab9126744ad6ac63983a36311508d1bf72ca0c1db82e7028de01d7b181708d2fc8f9d751bbfb12c90d9b22090239ef85bbd7baff48c05463e68cfecb69f5601';
 
+/** T-612: the sentence for a person whose account is pending or suspended; undefined for any other state (the caller keeps its flat sentence). Only reached after a CORRECT secret. */
+async function accountRefusal(tx: Tx, personId: string): Promise<string | undefined> {
+  const status = await accessRepo.accountStatusOf(tx, personId);
+  return status === 'pending' || status === 'suspended' ? accountNotActive(status) : undefined;
+}
+
 async function runPinSignIn(
   tx: Tx,
   input: { orgId: string; storeId: string; pin: string; deviceId?: string },
@@ -359,6 +366,8 @@ async function runPinSignIn(
   // reading any more.
   const allowed = await accessRepo.personMaySignInAtStore(tx, credential.personId, input.storeId);
   if (!verified || !allowed) {
+    // T-612: a CORRECT PIN on an account that is waiting (pending) or paused (suspended) says so; every other refusal stays the flat sentence.
+    if (verified && !allowed) throw new AuthenticationError((await accountRefusal(tx, credential.personId)) ?? BAD_PIN);
     throw new AuthenticationError(BAD_PIN);
   }
 
@@ -460,7 +469,7 @@ async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promis
   // so the caller is talking about themselves and the sentence is not an oracle.
   if (!(await accessRepo.personMaySignInToOrg(tx, credential.personId, credential.personOrgId))) {
     enqueueSigninRefused(credential.personOrgId, credential.personId, 'employment_ended');
-    throw new AuthenticationError(NO_ACCESS);
+    throw new AuthenticationError((await accountRefusal(tx, credential.personId)) ?? NO_ACCESS);
   }
   // T-438 N8 (row 361): email sign-in is for manager / admin / super_admin; everyone else signs in by PIN. After the employment check (A7).
   if (!(await accessRepo.personMayUseEmailSignIn(tx, credential.personId, credential.personOrgId))) {
@@ -621,7 +630,10 @@ async function runStaffCodeSignIn(
   // ⭐ Exactly one scrypt on every path: a missing employment or a missing PIN burns the dummy hash, so all of them cost the same.
   const verified = await verifyPin(input.pin, credential?.secretHash ?? DUMMY_SCRYPT_HASH);
   const allowed = employment ? await accessRepo.personMaySignInAtStore(tx, employment.personId, input.storeId) : false;
-  if (!employment || !credential || !verified || !allowed) throw new AuthenticationError(BAD_ID_OR_PIN);
+  if (!employment || !credential || !verified || !allowed) {
+    if (employment && credential && verified && !allowed) throw new AuthenticationError((await accountRefusal(tx, employment.personId)) ?? BAD_ID_OR_PIN);
+    throw new AuthenticationError(BAD_ID_OR_PIN);
+  }
   // ⛔ Re-checked under the pairing's row lock before the session exists: an un-pair that landed after `resolvePosTablet` refuses here.
   if (!(await posTabletPairingsRepo.touchLastUsed(tx, input.orgId, input.pairingId))) throw new AuthenticationError(TABLET_NOT_PAIRED);
 

@@ -47,6 +47,11 @@ export const CAPITALISATION_DEFAULTS = {
   salvageValue: '0.00',
 } as const;
 
+/** DEF-891: where a CAPEX purchase below the threshold lands. The chart seeds `6510 Smallwares` as "the below-threshold
+ *  half of the CAPEX/OPEX split" (`packages/db/seed/chart-of-accounts.ts`). A chart code, like 1510 or 2130, not a
+ *  business setting. */
+export const BELOW_THRESHOLD_CAPEX_ACCOUNT = '6510';
+
 export interface CapitalisationPolicy {
   threshold: string;
   defaultSalvageValue: string;

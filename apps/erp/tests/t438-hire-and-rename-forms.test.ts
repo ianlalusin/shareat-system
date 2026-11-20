@@ -60,6 +60,9 @@ vi.mock('../src/app/staff/lib', async (orig) => {
       ...parts(),
       storeName: 'Lipa',
       positions: [],
+      accountStatus: 'active', // T-612
+      canManageAccount: false,
+      isSelf: false,
     })),
   };
 });

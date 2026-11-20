@@ -17,6 +17,7 @@ import {
 import type { CustomerTreatment } from '@shareat/db/schema';
 import { add, compare, money } from '@shareat/core/money';
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { spendableStoreCredit } from '@shareat/domain';
 import type { Tx } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 import type { StoreOption } from '../expenses/lib';
@@ -139,6 +140,19 @@ export async function creditBalance(actor: Actor, customerId: string): Promise<s
   return withOrgPrincipal(actor.orgId, async (tx) => {
     const storeIds = (await heldArStores(tx, actor)).map((s) => s.id);
     return arRepo.creditBalanceOf(tx, actor.orgId, customerId, storeIds);
+  });
+}
+
+/**
+ * DEF-880 (T-595): the store credit the viewer can spend at ONE store - what that store earned, capped by what the customer holds in all (credit is
+ * spent only where it was earned). A store the viewer does not hold is '0.00', never a hint of another store's figure. The header total
+ * (`creditBalance`) stays the viewer's-stores sum; this is only the collection form's figure.
+ */
+export async function spendableCreditAt(actor: Actor, customerId: string, storeId: string): Promise<string> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const held = (await heldArStores(tx, actor)).map((s) => s.id);
+    if (!held.includes(storeId)) return '0.00';
+    return String(await spendableStoreCredit(tx, actor.orgId, customerId, storeId));
   });
 }
 

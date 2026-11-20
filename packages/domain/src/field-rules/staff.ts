@@ -43,6 +43,11 @@ export const STAFF_CREDENTIAL_REVOKE_RULES = defineFieldRules('staff.revokeCrede
   reason: { label: 'The reason', kind: 'text' },
 });
 
+/** T-612: suspend a person's account: a reason is mandatory (the name retype is the destructive tier, checked by the action). */
+export const STAFF_SUSPEND_RULES = defineFieldRules('staff.suspendAccount', {
+  reason: { label: 'The reason', kind: 'text' },
+});
+
 /** Enrol a card by id. */
 export const STAFF_CARD_RULES = defineFieldRules('staff.enrolCard', {
   cardId: { label: 'The card id', kind: 'text', requires: 'A card needs an id — that is the whole credential.' },

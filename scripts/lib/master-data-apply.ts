@@ -8,10 +8,11 @@
  * same transaction rolled back. Anything held refuses the whole apply before the first write.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, auditLogRepo, customersRepo, employmentRepo, itemsRepo, masterLinksRepo, organizationsRepo, storesRepo, withOrgPrincipal, type Tx } from '@shareat/db';
+import { accessRepo, apRepo, auditLogRepo, customersRepo, employmentRepo, itemsRepo, masterLinksRepo, organizationsRepo, storesRepo, withOrgPrincipal, type Tx } from '@shareat/db';
 import { decimal } from '@shareat/core/money';
 import { sql as dsql } from 'drizzle-orm';
 import {
+  activateAccount,
   createCustomer,
   createEmployment,
   createItem,
@@ -493,6 +494,7 @@ async function staffBody(tx: Tx, input: ApplyStaffInput, actor: Actor): Promise<
   let created = 0;
   {
     for (const p of people) {
+      let firstEmploymentId: string | undefined;
       for (const e of p.employments) {
         const ids = e.positions.map((n) => positionId(e.storeCode, n));
         const emp = await createEmployment(tx, actor, {
@@ -505,7 +507,11 @@ async function staffBody(tx: Tx, input: ApplyStaffInput, actor: Actor): Promise<
         });
         created++;
         await link('employment', { v1StoreId: e.v1StoreId, v1Id: e.v1StaffId }, emp.id);
+        firstEmploymentId ??= emp.id;
       }
+      // T-612 (explicit, on purpose): a hire starts `pending`, but this load carries the v1 staff who already work; the script itself activates them so
+      // nobody loaded here is locked out. (The load is an administrator's deliberate act; a person already active/suspended elsewhere is left alone.)
+      if (firstEmploymentId && (await accessRepo.accountStatusOf(tx, p.personId)) === 'pending') await activateAccount(tx, actor, { employmentId: firstEmploymentId });
     }
   }
 

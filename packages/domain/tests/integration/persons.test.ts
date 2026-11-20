@@ -78,7 +78,8 @@ describe('T-202 — createPerson', () => {
     );
     expect(person.displayName).toBe('Maria Santos'); // trimmed
     expect(person.orgId).toBe(f.orgId);
-    expect(person.isActive).toBe(true);
+    expect(person.accountStatus).toBe('pending'); // T-612: a hire starts pending
+    expect(person.isActive).toBe(false); // ... and `isActive` is now derived from the status
 
     const employment = await asOrg(f.orgId, (tx) =>
       createEmployment(tx, f.admin, {

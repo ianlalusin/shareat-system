@@ -24,7 +24,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { closeDb, channelSettlementsRepo, loansRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
-import { forceVerifiedSql } from './_fixtures/sales-day-flow';
+import { makeSettleableDay } from './_fixtures/sales-day-flow';
 import {
   previewChannelSettlement,
   recordChannelSettlement,
@@ -48,7 +48,7 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 
 const actor = (orgId: string, personId: string): Actor => ({ personId, orgId });
 
-async function fixture(hint: string) {
+async function fixture(hint: string, opts: { verified?: boolean } = {}) {
   const code = uid(`cs-${hint}`);
   const [org] = await sql<{ id: string }[]>`
     insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
@@ -86,6 +86,12 @@ async function fixture(hint: string) {
   const [day] = await sql<{ id: string }[]>`
     insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by)
     values (${orgId}, ${storeId}, '2026-01-10', 0, 0, 0, ${p!.id}) returning id`;
+  // DEF-881: a settlement names a verified day that carries the channel.
+  if (opts.verified === false) {
+    await sql`insert into sales_day_channels (sales_day_id, channel_id, amount) values (${day!.id}, ${channel!.id}, 0)`;
+  } else {
+    await makeSettleableDay(sql, day!.id, channel!.id, p!.id);
+  }
 
   return {
     orgId, storeId, otherStoreId, bankId: bank!.id,
@@ -467,12 +473,17 @@ describe('DEF-137 — what the screen needed, and what wiring it found', () => {
   it('⛔ a channel belonging to ANOTHER store is refused — the receivable would land on the wrong books', async () => {
     const f = await fixture('wrongstore');
     await raiseReceivable(f, '10000.00');
+    // DEF-881: the day must itself be the paying store's and carry the channel, or the day check speaks first - so this one does.
+    const [otherDay] = await sql<{ id: string }[]>`
+      insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by)
+      values (${f.orgId}, ${f.otherStoreId}, '2026-01-10', 0, 0, 0, ${f.personId}) returning id`;
+    await makeSettleableDay(sql, otherDay!.id, f.channelId, f.personId);
     await expect(
       asOrg(f.orgId, (tx) =>
         recordChannelSettlement(tx, f.manager, {
           // The manager is scoped to both stores, so authorize() passes — this is the guard that
           // catches a mismatch authorization cannot see.
-          storeId: f.otherStoreId, channelId: f.channelId, salesDayId: f.salesDayId,
+          storeId: f.otherStoreId, channelId: f.channelId, salesDayId: otherDay!.id,
           businessDate: '2026-01-10', grossAmount: '10000.00', netDeposited: '10000.00',
           settledOn: '2026-01-15',
         }),
@@ -635,10 +646,7 @@ describe('DEF-137 — what the screen needed, and what wiring it found', () => {
   it('the queue lists a verified channel-day and drops it once settled', async () => {
     const f = await fixture('queue');
     // A verified day with a channel breakdown — what the screen actually reads.
-    await forceVerifiedSql(sql, f.salesDayId, f.personId);
-    await sql`
-      insert into sales_day_channels (sales_day_id, channel_id, amount, no_sales)
-      values (${f.salesDayId}, ${f.channelId}, 10000, false)`;
+    await sql`update sales_day_channels set amount = 10000 where sales_day_id = ${f.salesDayId}`;
     await raiseReceivable(f, '10000.00');
 
     const before = await asOrg(f.orgId, (tx) =>
@@ -661,11 +669,9 @@ describe('DEF-137 — what the screen needed, and what wiring it found', () => {
   });
 
   it('⛔ an UNVERIFIED day never reaches the queue — it has raised no receivable to clear', async () => {
-    const f = await fixture('unverified');
+    const f = await fixture('unverified', { verified: false });
     // status stays 'open' — the default.
-    await sql`
-      insert into sales_day_channels (sales_day_id, channel_id, amount, no_sales)
-      values (${f.salesDayId}, ${f.channelId}, 10000, false)`;
+    await sql`update sales_day_channels set amount = 10000 where sales_day_id = ${f.salesDayId}`;
     const rows = await asOrg(f.orgId, (tx) =>
       channelSettlementsRepo.listSettleableChannelDays(tx, f.orgId, {}),
     );

@@ -8,7 +8,7 @@
 import { can, type Actor } from '@shareat/auth';
 import { accessRepo, businessRulesRepo, organizationsRepo, posPreflightRepo, posV1Repo, posV2Repo, storesRepo, type Tx } from '@shareat/db';
 import { loadStoreMenu } from '../menu/load-store-menu';
-import { posPreflight, type PreflightDeps, type PreflightResult } from '../pos/preflight';
+import { hasSeparateApprover, posPreflight, type PreflightDeps, type PreflightResult } from '../pos/preflight';
 import { receiptIdentityOf, type ReceiptIdentity } from '../pos/receipt-identity';
 
 export interface SoakCheck {
@@ -69,9 +69,7 @@ export function evaluateSoakChecks(pre: PreflightResult, x: SoakExtra): SoakChec
   add('stands_presets', 'Stands and discount presets', !flagged('no_stands') && !flagged('no_discount_presets'), 'Load the stands and discount presets (pos:load-setup).', null);
   add('tablet_till', 'Tablet paired and linked to a till', !flagged('no_linked_till'), 'Pair the tablet and link it to a till.', '/settings/pos-tablet');
   add('terminal_link', 'Tablet registered for manager approvals', x.terminalLinked, 'The tablet is not registered for manager approvals, so the end-of-day close will fail.', '/admin/pos-tablets');
-  // One approver who is also the only seller cannot approve their own close.
-  const approverOk = x.approvers.size >= 2 || x.sellers.some((p) => !x.approvers.has(p));
-  add('approver', 'Someone besides the cashier can approve the close', x.approvers.size >= 1 && approverOk, "Nobody but the cashier can approve the close. Give a manager 'approve a POS refund or correction' and a PIN.", '/admin/users');
+  add('approver', 'Someone besides the cashier can approve the close', hasSeparateApprover(x.approvers, x.sellers), "Nobody but the cashier can approve the close. Give a manager 'approve a POS refund or correction' and a PIN.", '/admin/users');
   add('rules', 'Business rules saved, line PIN on', !flagged('rules_not_seeded') && x.pinRuleOn, "Save the business rules, and turn on 'manager PIN for line actions'.", '/settings/business-rules');
   add('test_mode', 'Store is in TEST mode', x.mode === 'test', 'The store is not in TEST mode.', `/admin/stores/${id}`);
   add('tenders', 'Cash and a wallet method', x.tenders.some((t) => t.kind === 'cash') && x.tenders.some((t) => t.kind === 'wallet'), 'Add Cash and at least one wallet method (GCash).', `/settings/pos-link?store=${id}`);

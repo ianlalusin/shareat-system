@@ -55,7 +55,7 @@ async function monCtx(hint: string): Promise<MonCtx> {
   const leaver = await person('Leaver');
   const fresh = await person('Fresh Monitor');
   await sql`update stores set wastage_monitor_person_id = ${monitor} where id = ${f.storeId}`;
-  await sql`update persons set is_active = false where id = ${leaver}`; // they left after the page was drawn
+  await sql`update persons set account_status = 'suspended' where id = ${leaver}`; // they left after the page was drawn
   return { f, record: f.storeId, monitor, leaver, fresh };
 }
 

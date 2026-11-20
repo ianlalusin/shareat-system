@@ -82,6 +82,8 @@ async function fixture(hint: string) {
       primaryPositionId: cashierId,
     }),
   );
+  // T-612: a hire of a person with no open job starts pending; this fixture person already works.
+  await sql`update persons set account_status = 'active' where id = ${staffId}`;
   // Scope at B without a job there — the staff person can be checked at B, but holds no position
   // (hence no default) there. Matches the spec's own fixture: "staff target with scope at A and B".
   await asOrg(orgId, (tx) => accessRepo.grantStoreScope(tx, { personId: staffId, storeId: storeBId, grantedBy: adminId, source: 'manual' }));

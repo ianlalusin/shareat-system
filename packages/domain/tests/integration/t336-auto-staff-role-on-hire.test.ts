@@ -57,6 +57,8 @@ describe('(a) a hire with no role gets exactly one active staff role, grantedBy 
     const [worker] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${boot.orgId}, 'W') returning id`;
     const adminActor: Actor = { personId: boot.personId, orgId: boot.orgId };
     await withOrgPrincipal(boot.orgId, (tx) => createEmployment(tx, adminActor, { storeId: boot.storeId, personId: worker!.id, employmentStatus: 'probationary', startedOn: '2026-09-24' }));
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
     const rows = await sql<{ role: string; granted_by: string }[]>`select role, granted_by from person_roles where person_id = ${worker!.id} and org_id = ${boot.orgId} and revoked_at is null`;
     expect(rows).toHaveLength(1);
     expect(rows[0]).toEqual({ role: 'staff', granted_by: adminActor.personId });
@@ -111,6 +113,8 @@ describe('(c) a hired Cashier passes authorize for a ruled capability once staff
     const [worker] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${boot.orgId}, 'Cashier-ish') returning id`;
     const adminActor: Actor = { personId: boot.personId, orgId: boot.orgId };
     await withOrgPrincipal(boot.orgId, (tx) => createEmployment(tx, adminActor, { storeId: boot.storeId, personId: worker!.id, employmentStatus: 'probationary', startedOn: '2026-09-24' }));
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
     await grantOnExistingPrimaryPosition({ orgId: boot.orgId, storeId: boot.storeId, personId: worker!.id, setBy: boot.personId, capability: 'record_sale' });
     const workerActor: Actor = { personId: worker!.id, orgId: boot.orgId };
     await expect(withOrgPrincipal(boot.orgId, (tx) => authorize(tx, workerActor, 'record_sale', { storeId: boot.storeId }))).resolves.toBeUndefined();
@@ -122,6 +126,8 @@ describe('(c) a hired Cashier passes authorize for a ruled capability once staff
     const [storeB] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${boot.orgId}, ${uid('stb')}, 'Store B') returning id`;
     const adminActor: Actor = { personId: boot.personId, orgId: boot.orgId };
     await withOrgPrincipal(boot.orgId, (tx) => createEmployment(tx, adminActor, { storeId: boot.storeId, personId: worker!.id, employmentStatus: 'probationary', startedOn: '2026-09-24' }));
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
     await grantOnExistingPrimaryPosition({ orgId: boot.orgId, storeId: boot.storeId, personId: worker!.id, setBy: boot.personId, capability: 'record_sale' });
     const workerActor: Actor = { personId: worker!.id, orgId: boot.orgId };
 
@@ -147,6 +153,8 @@ describe('(c) a hired Cashier passes authorize for a ruled capability once staff
     const [worker] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${boot.orgId}, 'Cashier-ish') returning id`;
     const adminActor: Actor = { personId: boot.personId, orgId: boot.orgId };
     await withOrgPrincipal(boot.orgId, (tx) => createEmployment(tx, adminActor, { storeId: boot.storeId, personId: worker!.id, employmentStatus: 'probationary', startedOn: '2026-09-24' }));
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
     await grantOnExistingPrimaryPosition({ orgId: boot.orgId, storeId: boot.storeId, personId: worker!.id, setBy: boot.personId, capability: 'record_sale' });
     const workerActor: Actor = { personId: worker!.id, orgId: boot.orgId };
     await expect(
@@ -160,6 +168,8 @@ describe('(c) a hired Cashier passes authorize for a ruled capability once staff
     const [worker] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${boot.orgId}, 'Cashier-ish') returning id`;
     const adminActor: Actor = { personId: boot.personId, orgId: boot.orgId };
     await withOrgPrincipal(boot.orgId, (tx) => createEmployment(tx, adminActor, { storeId: boot.storeId, personId: worker!.id, employmentStatus: 'probationary', startedOn: '2026-09-24' }));
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
     await grantOnExistingPrimaryPosition({ orgId: boot.orgId, storeId: boot.storeId, personId: worker!.id, setBy: boot.personId, capability: 'record_sale' });
     const workerActor: Actor = { personId: worker!.id, orgId: boot.orgId };
     await expect(withOrgPrincipal(boot.orgId, (tx) => authorize(tx, workerActor, 'record_sale', { storeId: boot.storeId }))).resolves.toBeUndefined();
@@ -183,6 +193,8 @@ describe('(d) a second hire of the same person does not duplicate the role', () 
     await sql`insert into person_store_scope (person_id, store_id, source) values (${boot.personId}, ${storeB!.id}, 'manual')`;
     const adminActor: Actor = { personId: boot.personId, orgId: boot.orgId };
     await withOrgPrincipal(boot.orgId, (tx) => createEmployment(tx, adminActor, { storeId: boot.storeId, personId: worker!.id, employmentStatus: 'probationary', startedOn: '2026-09-24' }));
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
     await expect(
       withOrgPrincipal(boot.orgId, async (tx) => {
         // Real code: guarded, sees worker's existing active role, does not insert again — succeeds.
@@ -200,7 +212,11 @@ describe('(d) a second hire of the same person does not duplicate the role', () 
     await sql`insert into person_store_scope (person_id, store_id, source) values (${boot.personId}, ${storeB!.id}, 'manual')`;
     const adminActor: Actor = { personId: boot.personId, orgId: boot.orgId };
     await withOrgPrincipal(boot.orgId, (tx) => createEmployment(tx, adminActor, { storeId: boot.storeId, personId: worker!.id, employmentStatus: 'probationary', startedOn: '2026-09-24' }));
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
     await withOrgPrincipal(boot.orgId, (tx) => createEmployment(tx, adminActor, { storeId: storeB!.id, personId: worker!.id, employmentStatus: 'probationary', startedOn: '2026-09-24' }));
+    // T-612: a hire of a person with no open job starts pending; this fixture person already works
+    await sql`update persons set account_status = 'active' where id = ${worker!.id}`;
     expect(await activeRole(worker!.id, boot.orgId)).toEqual([{ role: 'staff' }]);
   });
 
