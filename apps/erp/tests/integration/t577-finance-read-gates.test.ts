@@ -289,7 +289,8 @@ describe('T-577 - single-record pages: a record outside the viewer\'s stores is 
       const w = await world();
       const r = await records();
       // T-589 B3a: /sales-days is on the route map now, so a person with none of its words gets the refusal card (decided before any record loads, so it still says nothing about the record).
-      if (k.name === 'sales-days/[id]') {
+      // T-603: /wastage is on the route map too, so wastage/[id] answers C with the same card.
+      if (k.name === 'sales-days/[id]' || k.name === 'wastage/[id]') {
         expectRefusalCard(await render(page[k.load], w.C, { params: { id: k.s1(r) } }), `C ${k.name} S1`);
         return;
       }

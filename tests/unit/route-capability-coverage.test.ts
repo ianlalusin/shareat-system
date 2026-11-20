@@ -101,7 +101,7 @@ function staticPrefix(route: string): string {
   return cut === -1 ? route : route.slice(0, cut);
 }
 
-const GATE_MARKERS = ['requirePageAccess(', 'reportScope('];
+const GATE_MARKERS = ['requirePageAccess(', 'reportScope(', 'storePageScope('];
 
 describe('T-288 — ROUTE_CAPABILITY covers what it claims, and only what it can', () => {
   const pages = trackedPages();
@@ -265,7 +265,7 @@ describe('capabilityForRoute — prefix matching', () => {
   });
 
   it('an unmapped route is open to any signed-in person', () => {
-    expect(capabilityForRoute('/till')).toBeNull();
+    expect(capabilityForRoute('/attendance')).toBeNull();
     // T-589 B3a: /sales-days is keyed now (the day list shows every day's totals); `/` stays the one open landing page.
     expect(capabilityForRoute('/')).toBeNull();
   });
@@ -273,7 +273,7 @@ describe('capabilityForRoute — prefix matching', () => {
 
 describe('navHrefAllowed — presentation only', () => {
   it('shows an unmapped link to everyone', () => {
-    expect(navHrefAllowed('/till', new Set())).toBe(true);
+    expect(navHrefAllowed('/attendance', new Set())).toBe(true);
   });
 
   it('hides a mapped link from someone without the capability', () => {

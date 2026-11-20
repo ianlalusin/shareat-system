@@ -3,9 +3,8 @@ import { and, asc, desc, eq, inArray, sql as dsql } from 'drizzle-orm';
 import { schema } from '@shareat/db';
 import { compare, ZERO } from '@shareat/core/money';
 import { isPositiveQuantity, quantity, subtractQuantity, supplierCreditBalance } from '@shareat/domain';
-import { listStores } from '../lib';
 import { recordReturnAction, refundCreditAction, voidReturnAction } from './actions';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
@@ -30,12 +29,12 @@ const BASIS_LABEL: Record<string, string> = { grni: 'Goods not yet billed', supp
 
 export default async function ReturnsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/inventory/returns');
+  const scope = await storePageScope('/inventory/returns', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
   // T-488: minted per render and submitted back, so a double click is a replay of ONE posting and a second genuine
   // transaction on the same day carries its own id (the entry is keyed on it, never on the figures).
   const requestId = crypto.randomUUID();
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
 
   if (!storeId) {
     return (

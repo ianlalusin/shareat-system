@@ -3,9 +3,8 @@ import { and, desc, eq, sql as dsql } from 'drizzle-orm';
 import { schema } from '@shareat/db';
 import { compare, ZERO } from '@shareat/core/money';
 import { customerCreditBalance, isPositiveQuantity, quantity, subtractQuantity } from '@shareat/domain';
-import { listStores } from '../../inventory/lib';
 import { recordReturnAction, voidReturnAction } from './actions';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
@@ -27,9 +26,9 @@ interface SearchParams {
 
 export default async function CustomerReturnsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/trade/returns');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  const scope = await storePageScope('/trade/returns', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
 
   if (!storeId) {
     return (
@@ -78,17 +77,6 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
       })
       .filter((l) => isPositiveQuantity(l.cap));
 
-    const customerRows = await tx
-      .select({ id: schema.customers.id, name: schema.customers.name })
-      .from(schema.customers)
-      .where(eq(schema.customers.orgId, actor.orgId));
-
-    const creditByCustomer = new Map<string, string>();
-    for (const c of customerRows) {
-      const bal = await customerCreditBalance(tx, actor.orgId, c.id);
-      if (compare(bal, ZERO) > 0) creditByCustomer.set(c.id, bal);
-    }
-
     const recentReturns = await tx
       .select({
         id: schema.customerReturns.id,
@@ -103,6 +91,21 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
       .where(eq(schema.customerReturns.storeId, storeId))
       .orderBy(desc(schema.customerReturns.createdAt))
       .limit(15);
+
+    // Only this store's customers (seen on a returnable line or a recent return here); the balance itself stays org-wide per customer.
+    const seen = new Set<string>([...returnable.map((l) => l.customer_id), ...recentReturns.map((r) => r.customerId)]);
+    const customerRows = (
+      await tx
+        .select({ id: schema.customers.id, name: schema.customers.name })
+        .from(schema.customers)
+        .where(eq(schema.customers.orgId, actor.orgId))
+    ).filter((c) => seen.has(c.id));
+
+    const creditByCustomer = new Map<string, string>();
+    for (const c of customerRows) {
+      const bal = await customerCreditBalance(tx, actor.orgId, c.id);
+      if (compare(bal, ZERO) > 0) creditByCustomer.set(c.id, bal);
+    }
 
     const [money] = await tx
       .select({ id: schema.moneyAccounts.id })

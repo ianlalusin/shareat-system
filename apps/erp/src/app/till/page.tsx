@@ -1,4 +1,4 @@
-import { requireSession } from '../../lib/session';
+import { storePageScope } from '../../lib/store-scope';
 import { listActingPersons } from '../expenses/lib';
 import {
   chargeShortageAction,
@@ -8,7 +8,6 @@ import {
 } from './actions';
 import {
   chargeableShortages,
-  listStores,
   nextMomentFor,
   peso,
   tillOverview,
@@ -42,10 +41,9 @@ export default async function TillPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/till');
-
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store || stores[0]?.id;
+  const scope = await storePageScope('/till', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
 
   if (!storeId) {
     return (
