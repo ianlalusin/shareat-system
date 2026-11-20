@@ -6,7 +6,7 @@ import { attestStepAction } from './actions';
 import { PHASE_TITLE, kindLabel, listStores, loadGaps, loadProgress, peso } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, Button, FlashBanner, Input } from '@/components/ui';
+import { Badge, Banner, Button, DisclosureCard, FlashBanner, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Opening balances — Shareat System' };
@@ -15,6 +15,13 @@ export const dynamic = 'force-dynamic';
 interface SearchParams {
   error?: string;
 }
+
+type Step = Awaited<ReturnType<typeof loadProgress>>['steps'][number];
+
+/** One step is one thing to do: the same code can run once per store, so the store id is part of the key. */
+const stepKey = (s: Step): string => `${s.def.code}:${s.storeId ?? ''}`;
+/** The in-page anchor of a step (the "Next:" banner links to it). */
+const stepAnchor = (s: Step): string => `step-${s.def.code}${s.storeId ? `-${s.storeId}` : ''}`;
 
 export default async function CutoverPage({
   searchParams,
@@ -35,6 +42,10 @@ export default async function CutoverPage({
 
   const storeName = (id: string | null) =>
     id ? (stores.find((s) => s.id === id)?.name ?? 'Unknown store') : null;
+
+  // T-599 S3: the first step that is not done and not waiting on another one is the one to do now. It opens; the rest fold.
+  const nextStep = progress.steps.find((s) => !s.done && !s.blockedBy) ?? null;
+  const stepTitle = (s: Step): string => (s.storeId ? `${s.def.title} — ${storeName(s.storeId)}` : s.def.title);
 
   const residual = Number(progress.openingResidual);
   // T-371 C4: balanced is decided in centavos on the minted figure; `residual` is display-only.
@@ -110,6 +121,22 @@ export default async function CutoverPage({
         ))}
       </div>
 
+      {nextStep && (
+        <Banner tone="info">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              <strong>Next:</strong> {stepTitle(nextStep)}
+            </span>
+            <a
+              href={`#${stepAnchor(nextStep)}`}
+              className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
+            >
+              Go to this step
+            </a>
+          </div>
+        </Banner>
+      )}
+
       {/* ── Gaps: what is still needed, computed rather than listed ──────────────────── */}
       {(gaps.countsWithoutCost.length > 0 || gaps.doubleCounted.length > 0) && (
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -155,35 +182,33 @@ export default async function CutoverPage({
             {progress.steps
               .filter((s) => s.def.phase === phase)
               .map((s) => (
-                <article
-                  key={`${s.def.code}:${s.storeId ?? ''}`}
-                  className={`rounded-lg border p-4 ${
+                <DisclosureCard
+                  key={stepKey(s)}
+                  id={stepAnchor(s)}
+                  title={stepTitle(s)}
+                  action={null}
+                  open={nextStep !== null && stepKey(s) === stepKey(nextStep)}
+                  className={
                     s.done
-                      ? 'border-success bg-success-soft'
-                      : s.blockedBy
-                        ? 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40'
-                        : 'border-neutral-200 dark:border-neutral-800'
-                  }`}
+                      ? '!border-success !bg-success-soft'
+                      : nextStep !== null && stepKey(s) === stepKey(nextStep)
+                        ? '!border-ink'
+                        : s.blockedBy
+                          ? '!bg-neutral-50 dark:!bg-neutral-900/40'
+                          : ''
+                  }
+                  meta={
+                    <>
+                      <Badge
+                        tone={s.done ? 'success' : nextStep !== null && stepKey(s) === stepKey(nextStep) ? 'progress' : 'closed'}
+                        label={s.done ? 'Done' : nextStep !== null && stepKey(s) === stepKey(nextStep) ? 'Do this next' : s.blockedBy ? 'Waiting' : 'To do'}
+                        className="shrink-0"
+                      />
+                      {s.done && s.completedAt ? <span className="ml-2">Recorded {formatBusinessDateTime(new Date(s.completedAt))}</span> : null}
+                    </>
+                  }
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <h3 className="font-medium">
-                        {s.def.title}
-                        {s.storeId && (
-                          <span className="ml-2 text-sm font-normal text-neutral-600 dark:text-neutral-400">
-                            — {storeName(s.storeId)}
-                          </span>
-                        )}
-                      </h3>
-                    </div>
-                    <Badge
-                      tone={s.done ? 'success' : 'closed'}
-                      label={s.done ? 'Done' : 'Outstanding'}
-                      className="shrink-0"
-                    />
-                  </div>
-
-                  <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">
+                  <p className="text-xs text-neutral-500 dark:text-neutral-500">
                     {kindLabel(s.def.kind, s.def.cannotVerifyHere)}
                     {/*
                       ⚠️ An attestation must NEVER look like a verified tick. Saying so is the
@@ -195,7 +220,7 @@ export default async function CutoverPage({
                   </p>
 
                   {/* Why the step exists at all — the reasoning, not just the label. */}
-                  <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">{s.def.why}</p>
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400">{s.def.why}</p>
 
                   {s.def.cannotVerifyHere && (
                     <p className="mt-2 rounded border border-neutral-200 bg-neutral-50 p-2 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
@@ -206,7 +231,7 @@ export default async function CutoverPage({
 
                   {/* ⭐ Blocked steps say what to go and do. Hidden steps do not. */}
                   {s.blockedBy && (
-                    <Banner tone="warning" className="mt-2">
+                    <Banner tone="warning">
                       {s.blockedBy}
                     </Banner>
                   )}
@@ -224,7 +249,7 @@ export default async function CutoverPage({
                   {(s.def.code === 'C3' || s.def.code === 'C5') && !s.blockedBy && (
                     <Link
                       href="/opening-balances/balance-sheet"
-                      className="mt-3 inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
+                      className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
                     >
                       {s.def.code === 'C3' ? 'Enter opening balances' : 'Review and post'}
                     </Link>
@@ -233,7 +258,7 @@ export default async function CutoverPage({
                   {s.def.code === 'B3' && s.storeId && !s.done && (
                     <Link
                       href={`/opening-balances/stock-count?store=${s.storeId}`}
-                      className="mt-3 inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
+                      className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
                     >
                       Enter the count
                     </Link>
@@ -242,7 +267,7 @@ export default async function CutoverPage({
                   {/* ⛔ No form on a verified step — a query decides it, and the domain refuses a
                       hand-tick anyway. The absence of a button IS the message. */}
                   {!s.done && !s.blockedBy && s.def.kind !== 'verified' && (
-                    <form action={attestStepAction} className="mt-3 space-y-2">
+                    <form action={attestStepAction} className="space-y-2">
                       <input type="hidden" name="stepCode" value={s.def.code} />
                       <input type="hidden" name="storeId" value={s.storeId ?? ''} />
                       <Input
@@ -260,7 +285,7 @@ export default async function CutoverPage({
                   {/* A step declared verified but cannot be checked here, so it
                       still takes an attestation — and says why above. */}
                   {!s.done && !s.blockedBy && s.def.kind === 'verified' && s.def.cannotVerifyHere && (
-                    <form action={attestStepAction} className="mt-3 space-y-2">
+                    <form action={attestStepAction} className="space-y-2">
                       <input type="hidden" name="stepCode" value={s.def.code} />
                       <input type="hidden" name="storeId" value={s.storeId ?? ''} />
                       <Input
@@ -274,7 +299,7 @@ export default async function CutoverPage({
                       </Button>
                     </form>
                   )}
-                </article>
+                </DisclosureCard>
               ))}
           </div>
         </section>

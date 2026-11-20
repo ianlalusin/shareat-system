@@ -572,7 +572,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1705 -> 1714, T-534 S4 (19 Nov 2026): +9 for the Refund dialog on /pos/receipts (the Refund button, the item minus and plus, the money-back box, the wallet reference box, the reason box, Print slip again, Done, and the Refund save button; all min-h-12 or taller, so FAIL/UNRESOLVED are unmoved); re-measured by runCensus() (merged with T-532 S1 +6; the final merged measure, by runCensus(), is 1714 against 1694 on main b6ee979).
     // 1714 -> 1719, T-611 S1: Copy-from-store dialog +5 (all min-h-11 or taller, so FAIL/UNRESOLVED are unmoved).
     // 1719 -> 1722, T-612 (20 Nov 2026): the staff record's Account row adds Activate, Reinstate and the Suspend dialog trigger (+3 census controls); re-measured by the test after merging main (1719 + 3).
-    expect(results.length).toBe(1722);
+    // 1722 -> 1723, T-599 S3 (21 Nov 2026): +1 the "Go to this step" anchor in the opening-balances Next banner (min-h-11, so FAIL/UNRESOLVED are unmoved); S1 and S2 moved nothing; re-measured by runCensus() (the test reported 1723 against 1722).
+    expect(results.length).toBe(1723);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

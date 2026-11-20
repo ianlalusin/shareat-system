@@ -38,7 +38,7 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /admin/pos-tablets | apps/erp/src/app/admin/pos-tablets/page.tsx | 2026-11-15 | fix | G1 | T-589 B3b, #289, #286, T-589 B6, #298 | good: Clear empty state with an obvious Register tablet button; phone works. |
 | /admin/prerequisite-refusals | apps/erp/src/app/admin/prerequisite-refusals/page.tsx | 2026-11-15 | minor | G1 | T-589 B3b, #286 | good: Clean empty state saying nobody has been stopped yet; fine at both widths. |
 | /admin/stores | apps/erp/src/app/admin/stores/page.tsx | 2026-11-15 | minor | G1 | T-589 B3b, #289, #286 | could improve: Phone store names wrap onto three lines in cramped cards. |
-| /admin/stores/[id] | apps/erp/src/app/admin/stores/[id]/page.tsx | 2026-11-15 | fix | G1 |  | could improve: Phone stacks eight long cards; the readiness list and actions compete for attention. |
+| /admin/stores/[id] | apps/erp/src/app/admin/stores/[id]/page.tsx | 2026-11-15 | fix | G1 | T-599 S1 | could improve: Phone stacks eight long cards; the readiness list and actions compete for attention. |
 | /admin/stores/[id]/pos-preflight | apps/erp/src/app/admin/stores/[id]/pos-preflight/page.tsx | 2026-11-15 | minor | G1 |  | good: Grouped fix list is clear at both widths; phone "Fix this" links are small text targets. |
 | /admin/users | apps/erp/src/app/admin/users/page.tsx | 2026-11-15 | OK | G1 |  | good: Clean table on desktop, readable cards on phone. |
 | /admin/users/[personId] | apps/erp/src/app/admin/users/[personId]/page.tsx | 2026-11-15 | fix | G1 | T-589 B3b, #286, T-589 B4b, #294, T-589 B5, #296 | needs fixing: Raw codes like set_pay_rate shown to users; phone page is very long. |
@@ -68,7 +68,7 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /customers/[customerId] | apps/erp/src/app/customers/[customerId]/page.tsx | 2026-11-15 | minor | G4 | T-589 B3d, #288 | good: Clear balance, empty states and headings at both widths. |
 | /customers/price-lists | apps/erp/src/app/customers/price-lists/page.tsx | 2026-11-15 | minor | G4 | T-589 B3d, #289, #288, T-589 B4b, #294, T-589 B6, #298 | good: Simple list with New price list button; phone intro collapsed behind a chevron. |
 | /customers/price-lists/[id] | apps/erp/src/app/customers/price-lists/[id]/page.tsx | 2026-11-15 | minor | G4 | T-589 B3d, #288, T-589 B4b, #294 | good: Clear empty message and Set rate button at both widths. |
-| /opening-balances | apps/erp/src/app/opening-balances/page.tsx | 2026-11-15 | fix | G4 | T-589 B3d, #288 | could improve: Very long 16-step checklist; the next step is hard to spot. |
+| /opening-balances | apps/erp/src/app/opening-balances/page.tsx | 2026-11-15 | fix | G4 | T-589 B3d, #288, T-599 S3 | could improve: Very long 16-step checklist; the next step is hard to spot. |
 | /opening-balances/stock-count | apps/erp/src/app/opening-balances/stock-count/page.tsx | 2026-11-15 | fix | G4 | T-589 B8, #301 | could improve: Desktop table is clear; phone cards repeat labels and run very long. |
 | /opening-balances/stock-count/sheet | apps/erp/src/app/opening-balances/stock-count/sheet/page.tsx | 2026-11-15 | minor | G4 | #289 | good: Clean printable count sheet at both widths. |
 | /opening-balances/balance-sheet | apps/erp/src/app/opening-balances/balance-sheet/page.tsx | 2026-11-15 | fix | G4 | T-589 B3d, #288, T-589 B5, #296, T-589 B5b, #297 | needs fixing: Red error text shows raw account code 1400 to users, both widths. |
@@ -179,7 +179,7 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /staff | apps/erp/src/app/staff/page.tsx | 2026-11-15 | fix | G3 | #277, T-589 B6, #298 | good: Clear cards and PIN section at both widths; Hire button visible. |
 | /staff/[employmentId] | apps/erp/src/app/staff/[employmentId]/page.tsx | 2026-11-15 | fix | G3 | #278, #279, #285, T-590 A1, #292 | good: Profile sections clear at both widths; Issue PIN action visible. |
 | /staff/[employmentId]/credentials | apps/erp/src/app/staff/[employmentId]/credentials/page.tsx | 2026-11-15 | minor | G3 | T-589 B3d, #288, T-589 B8, #301 | could improve: Testing-only fingerprint block in bright yellow dominates both widths; reads as a developer form. |
-| /staff/hire | apps/erp/src/app/staff/hire/page.tsx | 2026-11-15 | minor | G3 | T-589 B3d, #289, #288 | could improve: Long stacked form on phone; intro text cut off behind a chevron (phone). |
+| /staff/hire | apps/erp/src/app/staff/hire/page.tsx | 2026-11-15 | minor | G3 | T-589 B3d, #289, #288, T-599 S2 | could improve: Long stacked form on phone; intro text cut off behind a chevron (phone). |
 | /statutory-discounts | apps/erp/src/app/statutory-discounts/page.tsx | 2026-11-15 | minor | G4 | T-589 B3d, #289, #288, T-589 B6, #298 | could improve: Phone intro cut off behind a chevron; dense legal warning copy crowds the top of the page. |
 | /till | apps/erp/src/app/till/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c, #289, #287 | good: Clear "Open shift" action and empty state at both widths; layout clean. |
 | /trade/orders | apps/erp/src/app/trade/orders/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c, #289, #287, T-589 B4b, #294 | good: Clear New trade order action and readable list at both widths; phone uses cards. |
