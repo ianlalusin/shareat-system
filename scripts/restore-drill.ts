@@ -19,17 +19,14 @@ import { httpHeartbeat } from './lib/backup/heartbeat';
 import { fsStore, resolveSpacesConfig, spacesStore, type ObjectStore } from './lib/backup/object-store';
 import { redact } from './lib/backup/pg-tools';
 import { drillExitCode, runDrill } from './lib/backup/run-drill';
+import { scriptArg } from './lib/args';
 
 config({ path: '.env.local' });
 
-function arg(name: string): string | undefined {
-  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-  return hit?.slice(name.length + 3);
-}
 const flag = (name: string) => process.argv.includes(`--${name}`);
 
 async function main(): Promise<number> {
-  const storeArg = arg('store');
+  const storeArg = scriptArg('store');
   let store: ObjectStore;
   if (storeArg?.startsWith('fs:')) {
     store = fsStore(path.resolve(storeArg.slice(3)));

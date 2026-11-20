@@ -23,16 +23,12 @@
 import { config } from 'dotenv';
 import { closeDb } from '@shareat/db';
 import { usageAutoPostSweep } from '@shareat/domain';
+import { scriptArg } from './lib/args';
 
 config({ path: '.env.local' });
 
-function arg(name: string): string | undefined {
-  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-  return hit?.split('=')[1];
-}
-
 async function main(): Promise<number> {
-  const orgId = arg('org');
+  const orgId = scriptArg('org');
   const trigger = process.argv.includes('--manual') ? 'manual' : 'cron';
   console.log(`usage-auto-post: running (${trigger})${orgId ? ` for org ${orgId}` : ''}`);
 
