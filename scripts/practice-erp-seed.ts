@@ -114,6 +114,8 @@ async function main() {
       const [found] = (await tx.execute(sql`select id from persons where org_id = ${orgId} and display_name = ${displayName}`)) as unknown as Rows<{ id: string }>;
       if (found) return found.id;
       const person = await createPerson(tx, adminActor, { storeId: ids.storeId, displayName });
+      // T-612 (explicit, on purpose): a hire starts `pending`; the practice people have no employment record, so the seed switches them on itself.
+      await personsRepo.setAccountStatus(tx, orgId, person.id, ['pending'], 'active');
       await assignRoleAsActor(tx, adminActor, { personId: person.id, role });
       await accessRepo.grantStoreScope(tx, { personId: person.id, storeId: ids.storeId, grantedBy: ids.adminId, source: 'manual' });
       await setPin(tx, { orgId, personId: person.id, storeId: ids.storeId, pin, actorPersonId: ids.adminId });

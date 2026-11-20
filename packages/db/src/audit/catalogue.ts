@@ -353,6 +353,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402'),
   // T-609: what ending an employment switched off (counts per kind: store scopes, grants, role, PIN, sessions). No ids, no PIN material.
   def('employment.access_revoked', 'security', 'high', 'store', 'employments', 'T-609'),
+  // T-612: a person's ACCOUNT status moves (entity_id = the person; the store is the employment the button was pressed on). A suspend carries its reason and the sessions it ended.
+  def('account.activated', 'security', 'normal', 'store', 'persons', 'T-612'),
+  def('account.suspended', 'security', 'high', 'store', 'persons', 'T-612'),
+  def('account.reinstated', 'security', 'normal', 'store', 'persons', 'T-612'),
   // T-434: a staff photo is changed on an EMPLOYMENT (the store's ID card). Photo VIEWS are deliberately not logged (every card load would flood it).
   def('staff_photo.set', 'staff', 'normal', 'store', 'employments', 'T-434'),
   def('staff_photo.replaced', 'staff', 'normal', 'store', 'employments', 'T-434'),

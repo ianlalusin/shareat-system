@@ -191,7 +191,7 @@ describe('T-338 - the `manager` readiness check', () => {
       const storeId = await makeStore(f);
       const p = await person(f.orgId, 'Ana Cruz', 'manager');
       await scope(p, storeId);
-      await sql`update persons set is_active = false where id = ${p}`;
+      await sql`update persons set account_status = 'suspended' where id = ${p}`;
       expect((await managerCheck(f, storeId)).ok).toBe(false);
     },
     60_000,

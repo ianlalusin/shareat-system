@@ -54,6 +54,7 @@ const EXEMPT: Record<string, string> = {
 // `<button>` labels written in app/ - they are the `label=` prop of <ConfirmDestructive>, whose own submit button is the one
 // control (apps/erp/tests/t412-destructive-census.test.ts is the guard for those). Their entries left this list with them.
 const COMMANDS: Record<string, string> = {
+  'Activate': 'T-612 (Ian, 19 Nov 2026): a manager or administrator switches a hired person account on (pending -> active) so they can sign in; audited account.activated; who may is decided in the domain',
   'Approve and book': 'T-511 S7b (BOSS approved): approves one settlement day and books its payout (money in the books); audited; the uploader rule and the blockers are re-checked in the domain',
   'Book this charge': 'T-511 S7b (BOSS approved): books one platform charge that belongs to no sales day (money out for good); audited; the uploader rule is applied in the domain',
   'Move to Channel receivable': 'T-606 S4 (Ian, 18 Nov): reclasses a delivery platform channel balance to 1220 Channel receivable and switches the channel (money in the books; admin only; audited sales_channel.receivable_moved)',

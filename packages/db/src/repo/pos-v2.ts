@@ -891,7 +891,7 @@ export async function hasPinSessionOnPairing(
 /** R4 clause 1: the person, if they belong to this organisation (RLS hides another organisation's people too). */
 export async function getPersonOfOrg(tx: Tx, orgId: string, personId: string): Promise<{ id: string; displayName: string; isActive: boolean } | undefined> {
   const [row] = await tx
-    .select({ id: persons.id, displayName: persons.displayName, isActive: persons.isActive })
+    .select({ id: persons.id, displayName: persons.displayName, isActive: sql<boolean>`${persons.accountStatus} = 'active'` })
     .from(persons)
     .where(and(eq(persons.orgId, orgId), eq(persons.id, personId)));
   return row;
@@ -909,7 +909,7 @@ export async function listOpenEmploymentsAtStore(tx: Tx, orgId: string, storeId:
     .select({ personId: employments.personId, displayName: persons.displayName, staffCode: employments.staffCode })
     .from(employments)
     .innerJoin(persons, and(eq(persons.id, employments.personId), eq(persons.orgId, employments.orgId)))
-    .where(and(eq(employments.orgId, orgId), eq(employments.storeId, storeId), isNull(employments.endedOn), eq(persons.isActive, true)))
+    .where(and(eq(employments.orgId, orgId), eq(employments.storeId, storeId), isNull(employments.endedOn), eq(persons.accountStatus, 'active')))
     .orderBy(asc(employments.staffCode));
 }
 
