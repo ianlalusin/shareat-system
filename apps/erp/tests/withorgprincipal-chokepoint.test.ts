@@ -156,6 +156,8 @@ const WRAPPED_NULL_TX_SITES: ReadonlySet<string> = new Set([
  */
 const ALLOWLISTED_UNWRAPPED_NULL_TX_SITES: ReadonlySet<string> = new Set([
   'app/setup/actions.ts:signInWithFirebase',
+  // DEF-355: `signInWithPin` is on this list for a DIFFERENT reason than its neighbours. It passes `null` at the call site (the guard looks at the
+  // call site), but it resolves the organisation itself and opens its own `withOrgPrincipal` beyond that call, so it does carry a principal.
   'app/sign-in/actions.ts:signInWithPin',
   'app/sign-in/actions.ts:signOut',
   // T-304 — the SAME shape and the SAME reason as the four DEF-288 calls above, arrived at from

@@ -38,6 +38,7 @@
  * ⛔ Never logs a value — only a variable NAME and a VERDICT (absent / empty / padded / ok).
  */
 import { REQUIRED_PUBLIC_ENV_KEYS } from '@shareat/core/env';
+import { devOnlyKeysSet } from './lib/dev-only-env';
 
 type Verdict = 'absent' | 'empty' | 'padded' | 'ok';
 
@@ -93,6 +94,12 @@ function main(): void {
     } else {
       console.log(`  ✓ ${key}: ok (optional)`);
     }
+  }
+
+  // DEF-373: a build or deploy carrying an emulator host would point the app at localhost.
+  for (const key of devOnlyKeysSet(process.env)) {
+    failures.push(`${key} (dev-only, must not be set)`);
+    console.error(`  ✗ ${key}: set, but it only belongs on a developer machine`);
   }
 
   if (failures.length > 0) {
