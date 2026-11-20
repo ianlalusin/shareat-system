@@ -7,7 +7,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { sql as db } from './_fixtures/t401-menu';
 import {
-  attempt, baseWorld, dayClose, expectCode, insQ, ins, refundLineRow, refundPaymentRow, refundRow, refusal, sale, sql, underReplica,
+  attempt, baseWorld, correctionRow, dayClose, expectCode, insQ, ins, refundLineRow, refundPaymentRow, refundRow, refusal, sale, sql, underReplica,
   type Q, type Sale, type W,
 } from './_fixtures/t534-s1';
 
@@ -143,7 +143,7 @@ describe('T-534 S1 pos_refunds', () => {
         await insQ(tx, 'pos_refund_lines', refundLineRow(w, s, refundId));
         await insQ(tx, 'pos_refund_payments', refundPaymentRow(w, s, refundId));
         expectCode(await attempt(tx, (q) => insQ(q, 'pos_refund_lines', refundLineRow(w, s, refundId, { qty: 2, amount: '250.00' }))), '23505', 'pos_refund_lines_refund_line_unique');
-        expectCode(await attempt(tx, (q) => insQ(q, 'pos_refund_payments', refundPaymentRow(w, s, refundId, { amount: '10.00' }))), '23505', 'pos_refund_payments_refund_payment_unique');
+        expectCode(await attempt(tx, (q) => insQ(q, 'pos_refund_payments', refundPaymentRow(w, s, refundId, { amount: '10.00' }))), '23505', 'pos_refund_payments_refund_payment_tender_unique');
       });
     });
 
@@ -160,12 +160,18 @@ describe('T-534 S1 pos_refunds', () => {
       });
     });
 
-    it('the money goes back by the payment\'s own tender (ruling 2A): another tender on the row is refused (23503)', async () => {
+    it('the money goes back by the paid row own tender (ruling 2A): another tender on the row is refused (23001) unless a correction of that row moved money to it (T-613 D1)', async () => {
       const w = await baseWorld('r12');
       const s = await sale(w);
       await refundTx(w, s, async ({ tx, refundId }) => {
-        expectCode(await attempt(tx, (q) => insQ(q, 'pos_refund_payments', refundPaymentRow(w, s, refundId, { tender_id: w.wallet, reference_no: 'GC1234567' }))), '23503', 'pos_refund_payments_tender_of_payment_fk');
+        expectCode(await attempt(tx, (q) => insQ(q, 'pos_refund_payments', refundPaymentRow(w, s, refundId, { tender_id: w.wallet, reference_no: 'GC1234567' }))), '23001', 'goes back by the method');
         expect(await attempt(tx, (q) => insQ(q, 'pos_refund_payments', refundPaymentRow(w, s, refundId)))).toBeUndefined();
+      });
+      // After the correction (cash row -> wallet), the wallet is a legitimate method for that paid row, beside its own, in one refund.
+      await ins('pos_tender_corrections', correctionRow(w, s));
+      await refundTx(w, s, async ({ tx, refundId }) => {
+        expect(await attempt(tx, (q) => insQ(q, 'pos_refund_payments', refundPaymentRow(w, s, refundId, { amount: '10.00' })))).toBeUndefined();
+        expect(await attempt(tx, (q) => insQ(q, 'pos_refund_payments', refundPaymentRow(w, s, refundId, { tender_id: w.wallet, reference_no: 'GC1234567', amount: '10.00' })))).toBeUndefined();
       });
     });
 

@@ -388,6 +388,13 @@ export function approvalVerdict(facts: ApprovalFacts, options: ApprovalVerdictOp
         sentence: 'A money account on this expense no longer exists. Edit the payment, then approve it.',
       };
     }
+    // DEF-932 (T-613): money is not paid OUT of a retired account - same words as `assertActiveAccount` (T-597).
+    if (!w.account.isActive) {
+      return {
+        raw: `approveExpense: expense ${expenseId} pays from money account "${w.account.name}", which is retired.`,
+        sentence: `"${w.account.name}" is retired. Choose another account to pay from.`,
+      };
+    }
     if (w.crossStore && !w.transferAllowed) {
       return {
         raw: `approveExpense: expense ${expenseId} (store ${expense.storeId}) draws on money account ${w.id} of store ${w.account.storeId}, and the actor may not ${CAPABILITY_LABEL.transfer_funds} there`,
@@ -619,7 +626,7 @@ async function runApproveExpense(
   // and those terms are permanent. An expense posted without its asset is worse than an expense
   // not posted at all, because only one of those two states is obvious to anybody.
   const capitalised =
-    category.group === 'CAPEX' ? await capitalizeApprovedExpense(tx, actor, expenseId) : null;
+    category.group === 'CAPEX' ? await capitalizeApprovedExpense(tx, actor, expenseId, detail.belowThreshold) : null;
 
   // T-402 S3 (C4): the approval step's event, same transaction, after the posting and its own writes.
   if (result.created) {

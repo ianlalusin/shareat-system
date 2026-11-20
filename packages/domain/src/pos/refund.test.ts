@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { refundAmountsOfLine, refundBlockOf, refundCentsByTender, refundLineCents, refundNoOf, refundableByPayment } from './refund';
+import { refundAmountsOfLine, refundBlockOf, refundCentsByTender, refundLineCents, refundNoOf, refundRoutes } from './refund';
 
 describe('T-534 S4 - the refund figures (pure)', () => {
   it('q of Q units is round-half-up of net x q / Q; the refund that reaches Q takes the exact remainder', () => {
@@ -32,10 +32,15 @@ describe('T-534 S4 - the refund figures (pure)', () => {
     expect(refundAmountsOfLine({ id: 'l', qty: 4, net: '1000.00' }, 3, 75000n)).toEqual(['250.00']);
     expect(refundAmountsOfLine({ id: 'l', qty: 4, net: '1000.00' }, 4, 100000n)).toEqual([]);
   });
-  it('what a paid row can still give back is tendered - change given - already refunded', () => {
-    const left = refundableByPayment([{ id: 'p1', amount: '1500.00', changeGiven: '500.00' }, { id: 'p2', amount: '200.00', changeGiven: '0.00' }], [{ paymentId: 'p1', amount: '300.00' }]);
-    expect(left.get('p1')).toBe(70000n);
-    expect(left.get('p2')).toBe(20000n);
+  it('what a paid row can still give back is tendered - change given - corrected away - already refunded; a correction target takes back what was moved to it (T-613 D1)', () => {
+    const pays = [{ id: 'p1', tenderId: 'c', amount: '1500.00', changeGiven: '500.00' }, { id: 'p2', tenderId: 'c', amount: '200.00', changeGiven: '0.00' }];
+    const plain = refundRoutes(pays, [], [{ paymentId: 'p1', tenderId: 'c', amount: '300.00' }]);
+    expect(plain).toEqual([{ paymentId: 'p1', tenderId: 'c', left: 70000n }, { paymentId: 'p2', tenderId: 'c', left: 20000n }]);
+    // 1,000 kept on p1, 300 corrected to GCash: cash 700, GCash 300; a 100 GCash refund leaves 200.
+    const fixed = refundRoutes([pays[0]!], [{ paymentId: 'p1', toTenderId: 'g', amount: '300.00' }], [{ paymentId: 'p1', tenderId: 'g', amount: '100.00' }]);
+    expect(fixed).toEqual([{ paymentId: 'p1', tenderId: 'c', left: 70000n }, { paymentId: 'p1', tenderId: 'g', left: 20000n }]);
+    // an old refund above the new cap never goes negative
+    expect(refundRoutes([pays[0]!], [{ paymentId: 'p1', toTenderId: 'g', amount: '300.00' }], [{ paymentId: 'p1', tenderId: 'c', amount: '900.00' }])[0]!.left).toBe(0n);
   });
   it('the refund block counts the drawer\'s part (cash tenders) apart from the total', () => {
     const kinds = new Map<string, 'cash' | 'wallet'>([['c', 'cash'], ['g', 'wallet']]);

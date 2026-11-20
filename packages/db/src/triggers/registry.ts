@@ -1672,6 +1672,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'No money-back line is added to a refund written by an earlier transaction (reads the PARENT refund xmin, the 0240 pattern) (0265, T-534 S1).',
   },
+  pos_refund_payment_tender_guard: {
+    table: 'pos_refund_payments',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'A money-back line goes back by the paid row own tender or by the target of a correction of that row (0269, T-613 D1). It reads OTHER rows (the payment and its corrections), so a replay must not re-run it.',
+  },
   issued_document_versions_sequence: {
     table: 'issued_document_versions',
     mode: 'origin',

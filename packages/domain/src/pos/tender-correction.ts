@@ -139,7 +139,11 @@ export async function recordTenderCorrection(tx: Tx, actor: Actor, input: Record
   const payment = payments.find((p) => p.id === paymentId);
   if (!payment) throw gone(`pos: payment ${paymentId} not on receipt ${receiptId}`, 'that payment');
   if (payment.tenderId === toId) throw refuse('pos: correction to the same tender', CORRECTION_SAME_TENDER);
-  const left = availableByPayment(payments, await posV2Repo.listTenderCorrectionsOfReceipts(tx, orgId, [receiptId])).get(paymentId) ?? 0n;
+  // T-613: money already REFUNDED by this row's own method is no longer in the till to move (P1,000 cash, P600 refunded, P700 moved to GCash would leave the drawer short).
+  const refundedOwn = (await posV2Repo.listRefundPaymentsOfReceipts(tx, orgId, [receiptId]))
+    .filter((r) => r.paymentId === paymentId && r.tenderId === payment.tenderId)
+    .reduce((a, r) => a + toCentavos(money(r.amount)), 0n);
+  const left = (availableByPayment(payments, await posV2Repo.listTenderCorrectionsOfReceipts(tx, orgId, [receiptId])).get(paymentId) ?? 0n) - refundedOwn;
   if (toCentavos(amount) > left) {
     throw refuse(`pos: correction ${toCentavos(amount)} over the ${left} centavos left on payment ${paymentId}`, `Only ₱${fromCentavos(left > 0n ? left : 0n)} of this payment can still be moved to another method.`);
   }
