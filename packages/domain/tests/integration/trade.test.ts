@@ -486,9 +486,10 @@ describe('dispatch is the billing event', () => {
     const f = await fixture('revoid');
     const o = await anOrder(f);
     await asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: o.orderId, reason: 'Mistake.' }));
+    // DEF-561: one sentence for the loser of a double void, no id.
     await expect(
       asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: o.orderId, reason: 'Again.' })),
-    ).rejects.toThrow(/already void/);
+    ).rejects.toMatchObject({ userMessage: 'This order has already been voided.' });
   });
 });
 

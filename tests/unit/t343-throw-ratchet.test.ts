@@ -129,7 +129,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/kitchen': 0, // T-508 S2a: new directory, no raw throws (refuse / gone only)
   'packages/domain/src/settlement-intake': 0, // T-511 S3: new directory, no raw throws (SettlementIntakeRefusal only)
   'packages/domain/src/till': 18,
-  'packages/domain/src/trade': 51, // T-343 S5.5r: 53 -> 52, parseQuantityInput converted to refuse(...)
+  'packages/domain/src/trade': 49, // T-598 S5: 51 -> 49 (voidTradeOrder's already-void refusal converted to refuse(...); one earlier slack)
   'packages/domain/src/wastage': 11,
   'packages/auth/src': 0, // T-343 S5a: 7 -> 0, all converted to refuse/gone/AuthorizationError(...,userMessage)
   'packages/db/src/repo': 17, // T-343 S5.2: 20 -> 17, the 3 ap.ts sites converted to refuse(...)
