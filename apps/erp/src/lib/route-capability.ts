@@ -160,6 +160,11 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/remittance': 'accept_remittance',
   '/trade/returns': ['record_customer_return', 'void_customer_return', 'apply_customer_credit'],
   '/wastage': ['record_order_wastage', 'resolve_order_wastage'],
+  // T-603 S3 (DEF-911): the expense list and form are for people who record or approve expenses, at their stores (the same words `expenses/[id]` already reads by). `/expenses/reimbursements` and `/expenses/recurring` keep their longer keys.
+  '/expenses': ['create_expense', 'edit_own_expense', 'approve_expense'],
+  '/expenses/recurring': 'manage_recurring_expenses',
+  // T-603 S3 (DEF-912): the findings feed and the store scorecard. A store-limited viewer sees their stores' findings; org-level ones (trial balance, fiscal runway) and close-readiness are for an org-wide viewer. Children inherit.
+  '/findings': 'view_financial_reports',
   // T-398 S5d: goods another company sent us are received by whoever may receive a delivery. The longer key wins over the open /inventory.
   '/inventory/deliveries/inbound': 'receive_delivery',
   // T-583 S2 (Ian, 2026-11-15, revised 16 Nov: "cooks can read recipes"): the cookbook is READ by whoever may record a cook run

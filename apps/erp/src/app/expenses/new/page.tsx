@@ -2,7 +2,7 @@ import { listStores, listActiveCategoriesGrouped } from '../lib';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { listOpenInvoicesForPicker, peso } from '../../ap/lib';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { createExpenseAction } from '../actions';
 import { budgetsRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../lib';
@@ -31,7 +31,8 @@ interface SearchParams {
 export default async function NewExpensePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
 
-  const { actor } = await requireSession('/expenses/new');
+  const { actor, refusal } = await requirePageAccess('/expenses/new');
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
   const [storeRows, categories] = await Promise.all([listStores(orgId), listActiveCategoriesGrouped(orgId)]);

@@ -5,6 +5,7 @@ import { CheckedForm } from '@/components/forms';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { LIABILITY_CATEGORIES } from '@shareat/db/schema';
 import { requirePageAccess } from '../../lib/page-access';
+import { listStoreIds } from '@/lib/store-scope';
 import { createLiabilityAction } from './actions';
 import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
@@ -30,7 +31,8 @@ export default async function LiabilitiesPage({
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
 
-  const [stores, rows] = await Promise.all([listStores(actor.orgId), listRegister(actor.orgId)]);
+  const storeIds = await listStoreIds(actor, '/liabilities');
+  const [stores, rows] = await Promise.all([listStores(actor.orgId), listRegister(actor.orgId, storeIds)]);
   const storeById = new Map(stores.map((s) => [s.id, s]));
 
   // ⭐ Overdue first. v1 has no due date at all, so it can show what is owed and never what is late

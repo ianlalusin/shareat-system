@@ -123,7 +123,8 @@ describe('T-587 S2 - the View only pill, one test per row', () => {
 
   it('exactly these rows can show the pill today; any other row never does [kills: a route key moved without the hub noticing]', () => {
     expect(HREFS.filter(canBeViewOnly).sort()).toEqual(
-      ['/attendance/terminals', '/expenses/recurring', '/menu/usage-source', '/settings/expense-categories', '/settings/organization'].sort(),
+      // T-603: /expenses/recurring is read-gated by its own write word now, so it can no longer be "view only".
+      ['/attendance/terminals', '/menu/usage-source', '/settings/expense-categories', '/settings/organization'].sort(),
     );
   });
 

@@ -19,7 +19,8 @@ import { M, asOrg, expectAbsent, expectNotAvailable, expectPresent, expectRefusa
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('next/navigation', async () => (await import('../helpers/flash-jar-core')).nextNavigationMock());
 vi.mock('../../src/lib/session', async () => (await import('./t435-fixture')).sessionMock());
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children, PageHeader: () => null }));
+vi.mock('../../src/components/scheduler-status', () => ({ SchedulerStatus: () => null }));
 
 afterAll(async () => {
   const { closeDb } = await import('@shareat/db');
@@ -259,5 +260,207 @@ describe('T-603 S2 - an org-wide admin with no scope rows is never store-filtere
     const html = await render(() => import('../../src/app/inventory/page'), w.G, { search: { store: w.s2 } });
     expect(plain(html)).not.toContain(M.notAvailable);
     expectPresent(html, 'G /inventory?store=S2', w.s2);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// S3 - "all my stores" lists and finance detail pages (loans, owners, liabilities, prepaid, money accounts, transfers, service charge,
+// expenses, recurring expenses, findings, scorecard)
+// ---------------------------------------------------------------------------------------------------------------------
+
+const N = {
+  loan: { s1: 'Loan Zinnia One', s2: 'Loan Yarrow Two' },
+  liability: { s1: 'Liability Zinnia One', s2: 'Liability Yarrow Two' },
+  prepaid: { s1: 'Prepaid Zinnia One', s2: 'Prepaid Yarrow Two' },
+  owner: { s1: 'Ownerperson Zinnia', s2: 'Ownerperson Yarrow' },
+  account: { s1: 'Bank Zinnia One', s2: 'Bank Yarrow Two' },
+  transfer: { s1: 'XFER-S1-ONLY', s2: 'XFER-S2-ONLY', s2to1: 'XFER-S2-TO-S1', s1to2: 'XFER-S1-TO-S2' },
+  expense: { s1: 'Spend Zinnia One', s2: 'Spend Yarrow Two' },
+  orgFinding: 'The opening conversion does not add up',
+} as const;
+
+interface Finance {
+  loan: { s1: string; s2: string };
+  owner: { s1: string; s2: string };
+  liability: { s1: string; s2: string };
+  prepaid: { s1: string; s2: string };
+  recurringWorker: Actor;
+}
+
+let cached3: Promise<Finance> | null = null;
+const finance = (): Promise<Finance> => (cached3 ??= build3());
+
+async function build3(): Promise<Finance> {
+  const w = await world();
+  const { orgId, s1, s2 } = w;
+  const adminId = w.A.personId;
+  const pair = async <T>(make: (storeId: string, tag: 's1' | 's2') => Promise<T>) => ({ s1: await make(s1, 's1'), s2: await make(s2, 's2') });
+
+  const loan = await pair(async (storeId, tag) => {
+    const [r] = await sql<{ id: string }[]>`
+      insert into loans (org_id, store_id, lender_name, name, principal_amount, interest_rate, rate_period, interest_method, payment_frequency, term_periods, start_date, created_by)
+      values (${orgId}, ${storeId}, 'Lender', ${N.loan[tag]}, '1000.00', '1.0000', 'month', 'straight', 'monthly', 12, '2026-01-01', ${adminId}) returning id`;
+    return r!.id;
+  });
+  const owner = await pair(async (storeId, tag) => {
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, ${N.owner[tag]}) returning id`;
+    const [r] = await sql<{ id: string }[]>`insert into owners (org_id, store_id, person_id, created_by) values (${orgId}, ${storeId}, ${p!.id}, ${adminId}) returning id`;
+    return r!.id;
+  });
+  const liability = await pair(async (storeId, tag) => {
+    const [r] = await sql<{ id: string }[]>`
+      insert into liabilities (org_id, store_id, name, category, created_by) values (${orgId}, ${storeId}, ${N.liability[tag]}, 'other', ${adminId}) returning id`;
+    return r!.id;
+  });
+  const prepaid = await pair(async (storeId, tag) => {
+    const [r] = await sql<{ id: string }[]>`
+      insert into prepaid_items (org_id, store_id, name, category, coverage_start_date, coverage_months, total_cost, created_by)
+      values (${orgId}, ${storeId}, ${N.prepaid[tag]}, 'insurance', '2026-01-01', 12, '1200.00', ${adminId}) returning id`;
+    return r!.id;
+  });
+
+  // Money accounts: a second (bank, office) account per store with a name no other store shares, then transfers between accounts.
+  const acct = await pair(async (storeId, tag) => {
+    const [r] = await sql<{ id: string }[]>`
+      insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian) values (${orgId}, ${storeId}, ${N.account[tag]}, 'bank', '1140', 'office') returning id`;
+    return r!.id;
+  });
+  const [f1] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${s1} and id <> ${acct.s1} order by is_foundation desc, id limit 1`;
+  const [f2] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${s2} and id <> ${acct.s2} order by is_foundation desc, id limit 1`;
+  const transfer = (storeId: string, from: string, to: string, reference: string) =>
+    sql`insert into money_transfers (org_id, store_id, from_money_account_id, to_money_account_id, amount_out, amount_in, transfer_date, reference, created_by)
+        values (${orgId}, ${storeId}, ${from}, ${to}, '10.00', '10.00', '2026-01-15', ${reference}, ${adminId})`;
+  await transfer(s1, f1!.id, acct.s1, N.transfer.s1);
+  await transfer(s2, f2!.id, acct.s2, N.transfer.s2);
+  await transfer(s2, f2!.id, f1!.id, N.transfer.s2to1);
+  await transfer(s1, f1!.id, f2!.id, N.transfer.s1to2);
+
+  const [cat] = await sql<{ id: string }[]>`insert into expense_categories (org_id, "group", category, account_code) values (${orgId}, 'OPEX', ${uid('cat')}, null) returning id`;
+  const [supplier] = await sql<{ id: string }[]>`insert into suppliers (org_id, name, created_by) values (${orgId}, ${uid('sup')}, ${adminId}) returning id`;
+  await pair(async (storeId, tag) => {
+    const [inv] = await sql<{ id: string }[]>`
+      insert into supplier_invoices (org_id, store_id, supplier_id, invoice_no, invoice_date, total_amount, status, verified_by, verified_at,
+        attested_supplier, attested_invoice, attested_items, attested_price, created_by)
+      values (${orgId}, ${storeId}, ${supplier!.id}, ${uid('INV')}, '2026-01-10', '500.00', 'verified', ${w.M1.personId}, now(), true, true, true, true, ${adminId}) returning id`;
+    await sql`
+      insert into expenses (org_id, store_id, business_date, total_amount, category_id, supplier_id, supplier_invoice_id, particulars, status, created_by)
+      values (${orgId}, ${storeId}, '2026-01-10', '500.00', ${cat!.id}, ${supplier!.id}, ${inv!.id}, ${N.expense[tag]}, 'draft', ${adminId})`;
+  });
+
+  // Findings: one stale POS sales day per store (a store finding, plus its occurrence for the scorecard) and an unbalanced 3900 (organisation-level).
+  await pair(async (storeId) => {
+    await sql`
+      insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, pos_sourced, pos_sourced_at, status, created_by)
+      values (${orgId}, ${storeId}, '2025-12-01', '100', '60', '40', true, now(), 'open', ${adminId})`;
+    await sql`
+      insert into finding_occurrences (org_id, store_id, finding_key, kind, opened_on, last_seen_on)
+      values (${orgId}, ${storeId}, ${`salesDayUnposted:${storeId}`}, 'salesDayUnposted', current_date, current_date)`;
+  });
+  await sql`insert into finding_occurrences (org_id, store_id, finding_key, kind, opened_on, last_seen_on) values (${orgId}, null, 'openingBalanceEquityNonZero', 'openingBalanceEquityNonZero', current_date, current_date)`;
+  await asOrg(orgId, (tx) =>
+    postEntry(tx, {
+      orgId, entryDate: '2026-01-10', sourceType: 'manual_journal', sourceId: uid('ob'), idempotencyKey: uid('ob'), memo: 'T-603 fixture opening residue', postedBy: adminId,
+      lines: [{ accountCode: '6200', storeId: s1, debit: '99.00' }, { accountCode: '3900', storeId: s1, credit: '99.00' }],
+    }),
+  );
+
+  return { loan, owner, liability, prepaid, recurringWorker: await staffHolding(w, ['manage_recurring_expenses']) };
+}
+
+describe('T-603 S3 - the "all my stores" lists show only the viewer\'s stores', () => {
+  const lists = [
+    { name: '/loans', load: () => import('../../src/app/loans/page'), mark: N.loan },
+    { name: '/owners', load: () => import('../../src/app/owners/page'), mark: 'ids' as const },
+    { name: '/liabilities', load: () => import('../../src/app/liabilities/page'), mark: N.liability },
+    { name: '/prepaid', load: () => import('../../src/app/prepaid/page'), mark: N.prepaid },
+    { name: '/money-accounts', load: () => import('../../src/app/money-accounts/page'), mark: N.account },
+    { name: '/expenses', load: () => import('../../src/app/expenses/page'), mark: N.expense },
+  ];
+  for (const l of lists) {
+    it(`${l.name}: M1 sees the S1 row and never the S2 row; admin G (no scope rows) and A see both`, async () => {
+      const w = await world();
+      await finance();
+      // owners: the person picker lists every person by name, so the row is told apart by its link (the record id)
+      const f = await finance();
+      const mark = l.mark === 'ids' ? f.owner : l.mark;
+      const m1 = await render(l.load, w.M1);
+      expectPresent(m1, `M1 ${l.name}`, mark.s1);
+      expectAbsent(m1, `M1 ${l.name}`, mark.s2);
+      for (const [who, actor] of [['G', w.G], ['A', w.A]] as const) expectPresent(await render(l.load, actor), `${who} ${l.name}`, mark.s1, mark.s2);
+    });
+  }
+
+  it('/expenses: C (no expense capability) gets the access card', async () => {
+    const w = await world();
+    expectRefusalCard(await render(() => import('../../src/app/expenses/page'), w.C), 'C /expenses');
+  });
+
+  it('/money-transfers: M1 sees a transfer when either side is S1 and not the S2-only one; A sees all four', async () => {
+    const w = await world();
+    await finance();
+    const transfers = () => import('../../src/app/money-transfers/page');
+    const m1 = await render(transfers, w.M1);
+    expectPresent(m1, 'M1 /money-transfers', N.transfer.s1, N.transfer.s2to1, N.transfer.s1to2);
+    expectAbsent(m1, 'M1 /money-transfers', N.transfer.s2, N.account.s2);
+    expectPresent(await render(transfers, w.A), 'A /money-transfers', ...Object.values(N.transfer));
+  });
+
+  it('/service-charge and /expenses/recurring: a forged ?store=<S2> is the one sentence; the holder works; admin sees S2; C gets the card', async () => {
+    const w = await world();
+    const f = await finance();
+    for (const [route, load, who] of [
+      ['/service-charge', () => import('../../src/app/service-charge/page'), w.M1],
+      ['/expenses/recurring', () => import('../../src/app/expenses/recurring/page'), f.recurringWorker],
+    ] as const) {
+      expectNotAvailable(await render(load, who, { search: { store: w.s2 } }), `${route}?store=S2`);
+      expect(plain(await render(load, who, { search: { store: w.s1 } })), `${route} own store`).not.toContain(M.notAvailable);
+      expect(plain(await render(load, w.A, { search: { store: w.s2 } })), `A ${route}?store=S2`).not.toContain(M.notAvailable);
+      expectRefusalCard(await render(load, w.C), `C ${route}`);
+    }
+  });
+});
+
+describe('T-603 S3 - the finance detail pages: the other store\'s record is the same not-found as a forged id', () => {
+  const kinds = [
+    { name: 'loans/[id]', load: () => import('../../src/app/loans/[id]/page'), pick: (f: Finance) => f.loan, mark: N.loan },
+    { name: 'owners/[id]', load: () => import('../../src/app/owners/[id]/page'), pick: (f: Finance) => f.owner, mark: N.owner },
+    { name: 'liabilities/[id]', load: () => import('../../src/app/liabilities/[id]/page'), pick: (f: Finance) => f.liability, mark: N.liability },
+    { name: 'prepaid/[id]', load: () => import('../../src/app/prepaid/[id]/page'), pick: (f: Finance) => f.prepaid, mark: N.prepaid },
+  ];
+  for (const k of kinds) {
+    it(`${k.name}: M1 sees S1, not-found for S2; A sees both`, async () => {
+      const w = await world();
+      const ids = k.pick(await finance());
+      expectPresent(await render(k.load, w.M1, { params: { id: ids.s1 } }), `M1 ${k.name} S1`, k.mark.s1);
+      const forged = await pageError(() => render(k.load, w.M1, { params: { id: FORGED } }));
+      expect(forged, 'a forged id is a not-found').toBe(NOT_FOUND);
+      expect(await pageError(() => render(k.load, w.M1, { params: { id: ids.s2 } })), `M1 ${k.name} S2`).toBe(forged);
+      expectPresent(await render(k.load, w.A, { params: { id: ids.s2 } }), `A ${k.name} S2`, k.mark.s2);
+    });
+  }
+});
+
+describe('T-603 S3 - /findings and the scorecard', () => {
+  const findings = () => import('../../src/app/findings/page');
+  const scorecard = () => import('../../src/app/findings/scorecard/page');
+
+  it('/findings: M1 sees S1\'s finding and no other store\'s, and not the organisation-level one; A sees all; C gets the card', async () => {
+    const w = await world();
+    await finance();
+    const m1 = await render(findings, w.M1);
+    expectPresent(m1, 'M1 /findings', `${M.s1Name} has`);
+    expectAbsent(m1, 'M1 /findings', `${M.s2Name} has`, N.orgFinding);
+    expectPresent(await render(findings, w.A), 'A /findings', `${M.s1Name} has`, `${M.s2Name} has`, N.orgFinding);
+    expectRefusalCard(await render(findings, w.C), 'C /findings');
+  });
+
+  it('/findings/scorecard: M1 sees only the S1 row (no other store, no organisation row); A sees every row; C gets the card', async () => {
+    const w = await world();
+    await finance();
+    const m1 = await render(scorecard, w.M1);
+    expectPresent(m1, 'M1 scorecard', M.s1Name);
+    expectAbsent(m1, 'M1 scorecard', M.s2Name, 'Organisation-wide');
+    expectPresent(await render(scorecard, w.A), 'A scorecard', M.s1Name, M.s2Name, 'Organisation-wide');
+    expectRefusalCard(await render(scorecard, w.C), 'C scorecard');
   });
 });
