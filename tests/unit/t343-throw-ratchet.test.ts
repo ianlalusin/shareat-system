@@ -42,10 +42,11 @@
  * (except `repo/`, which keeps its own key regardless), so the NEXT new one fails closed the same
  * way a new `packages/domain/src` subdirectory already does.
  */
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { censusWriting, needsApproval } from '../helpers/census-write';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..');
@@ -57,101 +58,13 @@ const DOMAIN_ROOT_LOOSE = 'packages/domain/src/*';
 const DB_SRC_OUTSIDE_REPO = 'packages/db/src/*';
 
 /**
- * Per-directory raw `throw new Error(` counts, measured at HEAD `22475b1` (2026-09-26, T-346 S3 —
- * T-346 landed in full; see header). One entry per top-level directory under `packages/domain/src`,
- * plus the two non-domain trees the original R8 ratchet also covered. Never raised; each S5 group
- * lowers only its OWN directories' entries here, recording the before/after count in its commit
- * message (R1.2).
+ * Per-directory raw `throw new Error(` ceilings, in `t343-throw-ceilings.json` (one entry per top-level directory under
+ * `packages/domain/src`, plus the non-domain trees the original R8 ratchet also covered, plus the two synthetic "loose contents"
+ * keys). Never raised. `npm run census:write` lowers a ceiling to the measured count and adds a new directory only at 0; a raise
+ * prints NEEDS APPROVAL (T-604 S4). The history of each ceiling is in git log for that file.
  */
-const CEILINGS: Record<string, number> = {
-  'packages/domain/src/franchise': 0, // T-398 S6: new directory, no raw throws
-  'packages/domain/src/store-channel-settlement': 0, // T-564: new directory, no raw throws (refuse/internalFault only)
-  'packages/domain/src/documents': 0, // T-584: new directory, no raw throws (refuse / internalFault only)
-  'packages/db/src/audit': 0, // T-402 S1b: new directory (catalogue, redact, canonical-json), ceiling = count at birth
-  'packages/db/src/pos-v1': 0, // T-375 S1: new directory enters at its measured count (wire.ts + fixtures.ts, no throws)
-  'packages/domain/src/dual-run': 3, // T-392 S4 (2026-10-12): new directory, ceiling = count at birth
-  'packages/domain/src/menu': 0, // T-401 S2: new directory, ceiling = count at birth (refuse/gone/internalFault only, no bare throw)
-  'packages/domain/src/activity': 0, // T-402 S3: new directory, no raw throws (client-events.ts uses refuse(...))
-  'packages/domain/src/leave': 0, // T-436: new directory, no raw throws (refuse/gone only), ceiling = count at birth
-  'packages/domain/src/ap': 0, // T-343 S5.2: 39 -> 0, all converted to refuse/gone/internalFault
-  'packages/domain/src/business-rules': 0, // T-475: a client-safe leaf; it returns verdicts and never throws
-  'packages/domain/src/ar': 30, // T-595 S4 (DEF-880): 31 -> 30, recordCollection's credit-does-not-fit throw converted to refuse(...); T-343 S5.5p: 35 -> 34, recordCollection's negative-credit throw converted to refuse(...); T-367 S1 + DEF-546 (2026-10-01): 34 -> 31, writeOffCharge, voidCharge and voidCollection not-found throws folded into the uniform AuthorizationError
-  'packages/domain/src/attendance': 1,
-  'packages/domain/src/budgets': 4,
-  'packages/domain/src/cash-requests': 15, // T-415: 19 -> 16, settleCashRequest's three touched throws converted (gone, refuse x2); T-597: 16 -> 15, cancel's status throw is a refuse
-  // T-350 (RULED EDIT, red until BUILDER lands it): 12 -> 8. ⚠️ Contract item 3(b) calls these
-  // "the three throw new Error( refusals" but then lists FOUR resulting human sentences — measured
-  // against the actual source (`setChannelPayoutDestination`, index.ts:656/662/669/675), there are
-  // four separate raw `throw new Error(` call sites (channel-not-found, account-not-found,
-  // belongs-to-another-store, retired), not three: the doc's own line-range "(:595-601)" spans two
-  // adjacent throws, not one. All four carry a named human sentence in the same item, so all four
-  // are in scope; the ceiling is measured against that, not the miscounted "three".
-  'packages/domain/src/channel-settlements': 8,
-  'packages/domain/src/commissary': 46, // T-343 S5.3: 64 -> 48, catalogue.ts converted to refuse/gone/internalFault
-  'packages/domain/src/customers': 0, // T-343 S5.2: 11 -> 0, all converted to refuse/gone/internalFault
-  'packages/domain/src/cutover': 3, // T-343 S5.5w (RULED EDIT, red until BUILDER lands it): 4 -> 3, recordOpeningCount's quantity < 0 guard converted to refuse(...)
-  'packages/domain/src/deliveries': 1, // T-343 S5.3: 11 -> 1, documents.ts converted to refuse/gone/internalFault
-  'packages/domain/src/expenses': 0, // T-343 S5.1: 40 -> 0, all converted to refuse/gone/internalFault
-  'packages/domain/src/files': 9,
-  'packages/domain/src/findings': 1,
-  'packages/domain/src/field-rules': 1, // T-440: defineFieldRules refuses a rule named 'form' at definition time (a programmer error, never user-facing)
-  'packages/domain/src/fiscal-periods': 15,
-  'packages/domain/src/fixed-assets': 17,
-  'packages/domain/src/items': 24,
-  'packages/domain/src/ledger': 10,
-  'packages/domain/src/liabilities': 14, // T-343 S5.5v: 16 -> 14, chargeLiability's and payLiability's <= 0 guards converted to refuse(...)
-  'packages/domain/src/loans': 11, // T-343 S5.5v: 13 -> 11, disburseLoan's and recordLoanPayment's <= 0 guards converted to refuse(...)
-  'packages/domain/src/missed-months': 13,
-  'packages/domain/src/money-accounts': 7, // T-343 S5.5s: 10 -> 9, renameMoneyAccount's overdraftLimit converted to parseMoneyInput
-  'packages/domain/src/money-transfers': 11,
-  'packages/domain/src/organizations': 12,
-  'packages/domain/src/owners': 24, // T-343 S5.5v: 27 -> 24, recordDrawing's, assertWithinReceivable's and recordContribution's <= 0 guards converted to refuse(...)
-  'packages/domain/src/payroll': 34,
-  'packages/domain/src/people': 0,
-  'packages/domain/src/pos': 7,
-  'packages/domain/src/pos-soak': 0, // T-601 S1: new directory, ceiling = count at birth (no throw at all; it only reads)
-  'packages/domain/src/prepaid': 17, // T-343 S5.5p: 20 -> 17, writeOffPrepaidItem's negative/no-account/over-refund throws converted to refuse(...)
-  'packages/domain/src/production': 7,
-  'packages/domain/src/recurring-expenses': 13,
-  'packages/domain/src/remittance': 17,
-  'packages/domain/src/reports': 0,
-  'packages/domain/src/sales-channels': 10,
-  'packages/domain/src/sales-days': 0, // T-343 S5.1: 16 -> 0, all converted to refuse/gone/internalFault
-  'packages/domain/src/scheduler': 0,
-  'packages/domain/src/service-charge': 6,
-  'packages/domain/src/shared': 8, // T-343 S5.3b: 9 -> 8, money-input.ts's parseMoneyInput converted to refuse(...)
-  'packages/domain/src/statutory-discounts': 3,
-  'packages/domain/src/stock': 8,
-  'packages/domain/src/stock-locations': 16,
-  'packages/domain/src/stores': 12,
-  'packages/domain/src/sync': 0,
-  'packages/domain/src/lobby': 0, // T-455 S2: new directory, no raw throws (lobbyRefusal only)
-  'packages/domain/src/kitchen': 0, // T-508 S2a: new directory, no raw throws (refuse / gone only)
-  'packages/domain/src/settlement-intake': 0, // T-511 S3: new directory, no raw throws (SettlementIntakeRefusal only)
-  'packages/domain/src/till': 18,
-  'packages/domain/src/trade': 49, // T-598 S5: 51 -> 49 (voidTradeOrder's already-void refusal converted to refuse(...); one earlier slack)
-  'packages/domain/src/wastage': 11,
-  'packages/auth/src': 0, // T-343 S5a: 7 -> 0, all converted to refuse/gone/AuthorizationError(...,userMessage)
-  'packages/db/src/repo': 17, // T-343 S5.2: 20 -> 17, the 3 ap.ts sites converted to refuse(...)
-  'packages/db/src/rls': 0,
-  // T-347 (DEF-437), own commit — measured independently against `packages/db/src/cutover/purge.ts`
-  // (`classification.ts` has none): `derivePurgeOrder`'s cycle guard (:161) and `applyPurge`'s
-  // post-condition failure (:380). Both are test/operator-only diagnostics inside a script/engine
-  // that only ever runs by hand against a single pre-cutover database, never a user-facing path —
-  // the header's own rule: T-347's tester adds this key at T-347's commit, measured at ITS OWN HEAD.
-  'packages/db/src/cutover': 2,
-  // T-354 (DEF-487), own commit — `packages/db/src/triggers/registry.ts` is a pure classification
-  // table (TRIGGER_REGISTRY) with no raw throws at all.
-  'packages/db/src/triggers': 0,
-  // /code-review, S5.0 (2026-09-26): the two covered roots' own LOOSE contents — everything the
-  // per-subdirectory entries above do not reach. Without these, a raw throw added directly at
-  // `packages/domain/src/index.ts` escaped both the ceiling and the "new directory" fail-closed
-  // check below — `currentTargetDirs()` only ever walked SUBDIRECTORIES.
-  [DOMAIN_ROOT_LOOSE]: 0,
-  // Loose files ONLY (round 2 above) — client.ts (0), index.ts (0), refusal.ts (1, its own
-  // empty-sentence guard at :42). `cutover/` is deliberately absent; see the header.
-  [DB_SRC_OUTSIDE_REPO]: 1,
-};
+const CEILINGS_FILE = resolve(here, 't343-throw-ceilings.json');
+const CEILINGS: Record<string, number> = JSON.parse(readFileSync(CEILINGS_FILE, 'utf8')) as Record<string, number>;
 
 /**
  * T-346 (S1 `1ac1bca`, S2 `78350ce`, S3 `22475b1`) landed in full before this file's own commit —
@@ -230,6 +143,27 @@ function currentTargetDirs(): string[] {
     .map((e) => `packages/db/src/${e.name}`)
     .sort();
   return [...domainDirs, DOMAIN_ROOT_LOOSE, 'packages/auth/src', 'packages/db/src/repo', ...dbDirs, DB_SRC_OUTSIDE_REPO];
+}
+
+// T-604 S4 (`npm run census:write`): lower each ceiling to the measured count; a new directory enters only at 0; a raise is not written.
+if (censusWriting()) {
+  const next: Record<string, number> = { ...CEILINGS };
+  for (const dir of Object.keys(CEILINGS)) {
+    const count = measure(dir);
+    const ceiling = CEILINGS[dir] ?? 0;
+    if (count < ceiling) next[dir] = count;
+    else if (count > ceiling) needsApproval(CEILINGS_FILE, dir, ceiling, count);
+  }
+  for (const dir of currentTargetDirs()) {
+    if (next[dir] !== undefined) continue;
+    const count = measure(dir);
+    if (count === 0) next[dir] = 0;
+    else needsApproval(CEILINGS_FILE, dir, 'absent', count);
+  }
+  const text = `${JSON.stringify(next, null, 2)}
+`;
+  if (text !== readFileSync(CEILINGS_FILE, 'utf8')) writeFileSync(CEILINGS_FILE, text);
+  Object.assign(CEILINGS, next);
 }
 
 describe('T-343 R1.2 — the raw throw-new-Error ratchet, per directory, never rises', () => {
