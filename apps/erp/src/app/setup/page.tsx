@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { currentSession, readSetupIdentity } from '../../lib/session';
 import { createFirstRunAction } from './actions';
 import { setupView, systemIsAlreadySetUp } from './lib';
-import { SubmitButton } from './SubmitButton';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { Field, FlashBanner, Input } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { SETUP_FIRST_RUN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -148,7 +148,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
           {/* ⛔ Disables itself on submit. First run takes a second or two, and a second click
               would land the "already set up" refusal on a screen the person is still filling in —
               which reads like a failure when it was a success. See SubmitButton.tsx. */}
-          <SubmitButton pendingLabel="Creating…">Create the organisation</SubmitButton>
+          <SubmitButton pendingLabel="Creating…" className="w-full justify-center" icon={null}>Create the organisation</SubmitButton>
         </CheckedForm>
 
         <p className="text-xs text-neutral-500 dark:text-neutral-400">

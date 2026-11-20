@@ -22,13 +22,9 @@
 import { config } from 'dotenv';
 import { closeDb } from '@shareat/db';
 import { posDayImportSweep } from '@shareat/domain';
+import { scriptArg } from './lib/args';
 
 config({ path: '.env.local' });
-
-function arg(name: string): string | undefined {
-  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-  return hit?.split('=')[1];
-}
 
 /**
  * Dead-man's switch: tells the healthcheck service how the run went. Never throws, never changes the exit code, and never
@@ -55,7 +51,7 @@ async function heartbeat(failed: boolean, lines: string[]): Promise<void> {
 }
 
 async function main(): Promise<number> {
-  const orgId = arg('org');
+  const orgId = scriptArg('org');
   const trigger = process.argv.includes('--manual') ? 'manual' : 'cron';
   const dryRun = process.argv.includes('--dry-run');
   console.log(`pos-day-import: running (${trigger}${dryRun ? ', dry run' : ''})${orgId ? ` for org ${orgId}` : ''}`);

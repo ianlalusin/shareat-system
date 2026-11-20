@@ -36,7 +36,7 @@ import type {
   SupplierVatStatus,
 } from '@shareat/db/schema';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
-import { authorize, can, type Actor } from '@shareat/auth';
+import { authorize, can, type Actor, type Capability } from '@shareat/auth';
 import { add, compare, formatMoney, isZero, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { addDays, parseBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
@@ -68,7 +68,7 @@ import {
   vatCheck,
   verifySupplierActiveCheck,
 } from '../business-rules';
-import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
+import { CREATE_EXPENSE_CAPABILITIES, createExpense, type CreateExpensePaymentInput } from '../expenses/create';
 import { approveExpense, type ApproveExpenseResult } from '../expenses/approve';
 import { voidExpense } from '../expenses/void';
 import { deleteExpenseDraft } from '../expenses/delete';
@@ -998,6 +998,10 @@ export interface RecordExpenseForInvoiceResult extends ApproveExpenseResult {
  * T-361 / DEF-492 — the cash-on-delivery rule reaches this function through `createExpense`,
  * which it calls below; there is no separate copy of it here.
  */
+/** DEF-533: what `recordExpenseForInvoice` requires (the stronger gate first, then what `createExpense` needs). The screens pre-gate on this list. */
+const RECORD_EXPENSE_FIRST_GATE: Capability = 'approve_expense';
+export const RECORD_EXPENSE_FOR_INVOICE_CAPABILITIES: readonly Capability[] = [RECORD_EXPENSE_FIRST_GATE, ...CREATE_EXPENSE_CAPABILITIES];
+
 export async function recordExpenseForInvoice(
   tx: Tx,
   actor: Actor,
@@ -1005,7 +1009,7 @@ export async function recordExpenseForInvoice(
 ): Promise<RecordExpenseForInvoiceResult> {
   const run = async (trx: Tx) => {
     // DEF-505: the stronger gate first, so a person who cannot approve is told so before any of the form is judged.
-    await authorize(trx, actor, 'approve_expense', { storeId: input.storeId });
+    await authorize(trx, actor, RECORD_EXPENSE_FIRST_GATE, { storeId: input.storeId });
     const { id: expenseId } = await createExpense(trx, actor, {
       storeId: input.storeId,
       businessDate: '', // ignored — createExpense forces this from the invoice's own date

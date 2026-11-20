@@ -468,6 +468,8 @@ domain argument to also set up Caddy + automatic TLS on 80/443 (no traefik confl
 | **Restore drill (T-393)** | `npm run restore-drill -- --production` | **Weekly, Sunday 05:30 Manila** | An hour after that night's backup. Restores the newest complete dump into a scratch database and compares the trial balance with the manifest. A platform job, not a `SCHEDULER_JOBS` entry. Not switched on; see *Switching backups on*. |
 | **Customer-lobby purge (T-455 S9a)** | `npm run lobby-nightly` | **Daily, 05:30 Manila** | After the 05:00 day roll. Loops every org with a `lobby_stores` row: expires stale entries, sweeps stale pending discount claims, NULLs personal columns of entries closed over 24 h. A platform job (not a `SCHEDULER_JOBS` entry). Arming steps and the customer app's own unit (`shareat-customer.service`, port 9010): [`customer-lobby-runbook.md`](./customer-lobby-runbook.md) |
 
+**Running one of these by hand on the box:** `env NODE_ENV=production npm run <job> -- --manual` (DEF-634). Without `NODE_ENV=production` the process counts as development and used to die loading `pino-pretty`, which the shipped bundle does not carry; the logger now falls back to plain JSON when it cannot find it, but production behaviour (and the log format the timers expect) still depends on `NODE_ENV`.
+
 ⛔⛔ **WHICH UNITS ARE ARMED IS NOT RECORDED HERE, DELIBERATELY — IT IS A FACT THAT MOVES.**
 This paragraph used to name four jobs as *"NOT YET ARMED"*. **That claim went stale and then
 misled three readers in a row** (DEF-354): Ian armed the last of them on 2026-09-12, the
@@ -932,6 +934,22 @@ rollback;
 ```
 
 All expected 0. Any row: show Ian; nothing is changed without his ruling.
+
+## ⛔ Rotating `SESSION_SECRET` — revoke, deploy, sign in again (DEF-335)
+
+`SESSION_SECRET` is not only the session signing key. Every key is derived from it (`credentials.ts`), and the **PIN lookup hash is
+written once and read forever**. After a rotation no typed PIN can ever match again, and it looks like the routine sign-out that a
+rotation is expected to cause: the person just sees "that PIN is not valid". Browser sessions, the setup cookie and email/Firebase
+sign-in all recover by themselves; **PINs do not.** Do not "fix" it by making the hash unkeyed or storing a PIN you can read back.
+
+Do this in one sitting, with an admin who signs in **by email** (Firebase), never by PIN:
+
+1. **Count and note the live PIN credentials** (who, which store). Production held 2 when this was written; the list is the checklist for step 4.
+2. **Revoke.** Unlink or end the PIN sign-ins you are about to invalidate (`/admin/users`, see [cutting off someone's access](./access-revocation.md)) so no one is left believing an old PIN still works.
+3. **Deploy.** Put the new value in `/srv/shareat-shared/.env.local`, then restart through the normal pipeline (never build on the droplet).
+4. **Sign in again** as the email admin and **re-issue every PIN** from step 1, the same way each one was first issued. Test one clock or POS PIN before you leave.
+
+If a leak forces a rotation, run the same four steps without waiting; the order is the point: rotate, then immediately re-issue.
 
 ## ⚠️ Traps on the box — each has bitten once; recorded so it bites nobody twice
 

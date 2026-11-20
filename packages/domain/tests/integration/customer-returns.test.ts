@@ -625,6 +625,18 @@ describe('void', () => {
     expect(onHandAfter).toBe('17.000');
   });
 
+  it('DEF-561: a second void reads the one shared already-voided sentence, the same as a supplier return', async () => {
+    const f = await fixture('voidtwice');
+    const s = await aSale(f, { qty: '3', rate: '500', stockQty: '20', unitCost: '90' });
+    const res = await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Wrong item.', lines: [{ tradeOrderLineId: s.lineId, quantity: '3' }], actor: f.manager }),
+    );
+    if (!res.ok) throw new Error('fixture');
+    await asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, res.returnId, 'Recorded in error.'));
+    const again = await asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, res.returnId, 'Again.'));
+    expect(again).toEqual({ ok: false, reason: 'This return has already been voided.' });
+  });
+
   it('void after redemption is refused', async () => {
     const f = await fixture('voidafterspend');
     const s = await aSale(f, { qty: '2', rate: '500' });

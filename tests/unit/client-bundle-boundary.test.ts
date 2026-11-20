@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -73,6 +73,16 @@ function importsOf(source: string): string[] {
   return out;
 }
 
+/** As `importsOf`, minus `import type` / `export type` statements (erased at build). */
+function valueImportsOf(source: string): string[] {
+  const out: string[] = [];
+  for (const m of source.matchAll(IMPORT_RE)) {
+    if (/^\s*(?:import|export)\s+type\b/.test(m[0])) continue;
+    out.push(m[1]!);
+  }
+  return out;
+}
+
 function isClientFile(source: string): boolean {
   // The directive must be at the very top to count — a `'use client'` inside a string or a
   // comment further down does not make a module a client module.
@@ -110,7 +120,7 @@ function resolveRelative(fromRel: string, spec: string): string | null {
  * ("you were made to use a subpath you did not strictly need") is cheap while the false-negative
  * direction ships a database driver to a browser.
  */
-function reachesDb(startRel: string): string[] | null {
+function reachesDb(startRel: string, opts: { clientBundle?: boolean } = {}): string[] | null {
   const seen = new Set<string>();
   const walk = (rel: string, chain: string[]): string[] | null => {
     if (seen.has(rel)) return null;
@@ -121,7 +131,11 @@ function reachesDb(startRel: string): string[] | null {
     } catch {
       return null;
     }
-    for (const spec of importsOf(source)) {
+    // DEF-455, client rule only: a `'use server'` module is replaced by an RPC stub in the browser bundle, so what IS imports never
+    // ships; and an `import type` is erased. Both are skipped there. The domain-leaf rule keeps its stricter reading.
+    if (opts.clientBundle && /^\s*(?:\/\*[\s\S]*?\*\/\s*)?['"]use server['"]/.test(source)) return null;
+    const specs = opts.clientBundle ? valueImportsOf(source) : importsOf(source);
+    for (const spec of specs) {
       if (spec === '@shareat/db' || spec.startsWith('@shareat/db/')) {
         return [...chain, rel, spec];
       }
@@ -156,11 +170,30 @@ describe("T-266 — a 'use client' file may not reach the database driver", () =
     expect(clientFiles.length).toBeGreaterThan(5);
   });
 
-  it('⛔ none imports @shareat/db, directly or through a subpath', () => {
-    const offenders = clientFiles
-      .filter((f) => importsOf(read(f)).some((s) => s === '@shareat/db' || s.startsWith('@shareat/db/')))
-      .map((f) => `${f} imports @shareat/db — a browser bundle cannot open a TCP connection`);
-    expect(offenders).toEqual([]);
+  /** DEF-455: a client file reaches the driver if ANY module on its relative-import chain imports `@shareat/db`, not only if it does so itself. */
+  const dbOffenders = (files: readonly string[]): string[] =>
+    files.flatMap((f) => {
+      const chain = reachesDb(f, { clientBundle: true });
+      return chain ? [`${f} reaches @shareat/db (${chain.join(' -> ')}) — a browser bundle cannot open a TCP connection`] : [];
+    });
+
+  it('⛔ none imports @shareat/db, directly, through a subpath, or through a module it imports', () => {
+    expect(dbOffenders(clientFiles)).toEqual([]);
+  });
+
+  // DEF-455. MUTANT: make `dbOffenders` look at the file's own imports only -> the planted client below is not found.
+  it('⭐ a client file that imports ./lib, which imports @shareat/db, is found (DEF-455)', () => {
+    const dir = mkdtempSync(join(root, 'tests', 'unit', '.planted-455-'));
+    try {
+      writeFileSync(join(dir, 'lib.ts'), "import { transaction } from '@shareat/db';\nexport const x = transaction;\n");
+      writeFileSync(join(dir, 'Client.tsx'), "'use client';\nimport { x } from './lib';\nexport const y = x;\n");
+      const rel = (n: string) => join(dir, n).slice(root.length + 1).split('\\').join('/');
+      const found = dbOffenders([rel('Client.tsx')]);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain('lib.ts');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('⛔ none imports the bare @shareat/domain barrel — it re-exports modules that reach the driver', () => {
