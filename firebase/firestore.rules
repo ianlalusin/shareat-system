@@ -64,6 +64,10 @@ service cloud.firestore {
                     && request.resource.data.keys().hasAll(
                          ['clientPunchId', 'occurredAt', 'deviceId', 'storeId', 'method', 'assertedIntent',
                           'credentialKind', 'credentialRef'])
+                    // DEF-863: and nothing else -- an extra or smuggled field is refused.
+                    && request.resource.data.keys().hasOnly(
+                         ['clientPunchId', 'occurredAt', 'deviceId', 'storeId', 'method', 'assertedIntent',
+                          'credentialKind', 'credentialRef'])
                     && request.resource.data.clientPunchId is string
                     // The idempotency key IS the document id, so the SDK's own retry writes to the
                     // same path instead of creating a second event. Defence in depth, ahead of the

@@ -26,13 +26,13 @@ import { closeDb, filesRepo, transaction, APP_ROLE, type Tx } from '@shareat/db'
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   inMemoryDriver,
-  readFileUrl,
   runOrphanFileSweep,
   setStorageDriver,
   sweepOrphanedFiles,
   uploadFile,
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { readFileUrl } from './_fixtures/read-file-url';
 
 const sql = postgres(url, { max: 5 });
 let driver = inMemoryDriver();

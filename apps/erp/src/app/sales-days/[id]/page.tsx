@@ -384,7 +384,7 @@ export default async function SalesDayDetailPage({
         </section>
       )}
 
-      {isFeedDay && day.status !== 'voided' && can.verify && (
+      {isFeedDay && day.status !== 'voided' && can.verify && storeLink && (
         <form action={recheckPosDayAction} className="space-y-2 text-sm">
           {hiddenIds}
           <Button type="submit" variant="secondary">

@@ -20,7 +20,7 @@ ExecStart=/usr/bin/npm run usage-auto-post
 User=shareat
 Group=shareat
 
-# NEVER build here. This is a 2 GB droplet; a build OOMs it. This unit runs an already-installed tree shipped by CI - bible 2.10.
+# NEVER build here. This is a 4 GB droplet; a build OOMs it. This unit runs an already-installed tree shipped by CI - bible 2.10.
 Environment=NODE_ENV=production
 
 # The exit code is load-bearing: non-zero when any draft was left unposted (a room under count, a closed stock month, a short item)

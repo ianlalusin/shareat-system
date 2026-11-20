@@ -358,7 +358,7 @@ export function MoneyLines({
               ) : (
                 <p className="self-end pb-1.5 text-xs text-neutral-500 dark:text-neutral-400">
                   {line.method === 'credit' && supplierCreditTermsDays !== null
-                    ? `On account — ${supplierCreditTermsDays} day terms`
+                    ? `On account — ${supplierCreditTermsDays === 0 ? 'due on the invoice date' : `${supplierCreditTermsDays} day terms`}`
                     : 'On account'}
                 </p>
               )}

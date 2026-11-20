@@ -2,6 +2,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { requirePageAccess, StoreNotAvailable } from '../../../lib/page-access';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { post13thMonthRunAction, void13thMonthRunAction } from './actions';
+import { parseYearParam } from './year';
 import { cashAccountsFor, payrollStoresFor, payoutsFor, peso, preview, runsFor } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -39,7 +40,16 @@ export default async function ThirteenthMonthPage({
   // T-435: a requested store the actor does not hold is one sentence — never a fallback to another store.
   if (sp.store && !stores.some((s) => s.id === sp.store)) return <StoreNotAvailable />;
   const storeId = sp.store || stores[0]?.id;
-  const year = Number(sp.year) || Number(toBusinessDate().slice(0, 4));
+  const parsedYear = parseYearParam(sp.year, Number(toBusinessDate().slice(0, 4)));
+  if ('error' in parsedYear) {
+    return (
+      <Page density="table" className="space-y-4">
+        <h1 className="text-2xl font-semibold">13th-month pay</h1>
+        <Banner tone="error">{parsedYear.error}</Banner>
+      </Page>
+    );
+  }
+  const { year } = parsedYear;
 
   if (!storeId) {
     return (

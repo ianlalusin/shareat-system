@@ -33,8 +33,8 @@ describe('TopBar (phone, <768) — the "Signed in" slot is now a sign-out contro
     expect(topBarSource).not.toMatch(/<span[^>]*>Signed in<\/span>/);
   });
 
-  it('the button says "Sign out"', () => {
-    expect(topBarSource).toMatch(/<button[^>]*type="submit"[^>]*>\s*Sign out\s*<\/button>/);
+  it('the button says "Sign out" and names who is signed in (DEF-271)', () => {
+    expect(topBarSource).toMatch(/<button[^>]*type="submit"[^>]*>\s*\{signOutLabel\(signedInAs\)\}\s*<\/button>/);
   });
 });
 
@@ -52,7 +52,7 @@ describe('Sidebar, expanded (>=768) — same replacement, not an added control',
     const expandedBlock = sidebarSource.slice(formStart, formStart + 500);
     expect(expandedBlock).toContain('shell-sidebar-expanded-only');
     expect(expandedBlock).toMatch(/type="submit"/);
-    expect(expandedBlock).toMatch(/>\s*Sign out\s*</);
+    expect(expandedBlock).toMatch(/>\s*\{signOutLabel\(signedInAs\)\}\s*</);
     expect(sidebarSource).not.toMatch(/shell-sidebar-expanded-only">Signed in<\/span>/);
   });
 });
@@ -71,12 +71,12 @@ describe('Sidebar, collapsed to the rail — the decorative dot becomes an acces
     const collapsedBlock = sidebarSource.slice(secondFormIdx, secondFormIdx + 1400);
     expect(collapsedBlock).toContain('shell-sidebar-collapsed-only');
     expect(collapsedBlock).toMatch(/type="submit"/);
-    expect(collapsedBlock).toMatch(/aria-label="Sign out"/);
+    expect(collapsedBlock).toMatch(/aria-label=\{signOutLabel\(signedInAs\)\}/);
     expect(collapsedBlock).toContain('<SignOutIcon');
   });
 
   it('reuses .shell-nav-row for the rail button, matching the Collapse button\'s touch target rather than an arbitrary new size', () => {
-    const collapsedButtonBlock = sidebarSource.slice(sidebarSource.indexOf('shell-sidebar-collapsed-only', sidebarSource.indexOf('Sign out')));
+    const collapsedButtonBlock = sidebarSource.slice(sidebarSource.indexOf('shell-sidebar-collapsed-only', sidebarSource.indexOf('signOutLabel(signedInAs)')));
     expect(collapsedButtonBlock.slice(0, 400)).toMatch(/shell-nav-row/);
   });
 });
@@ -125,5 +125,20 @@ describe('icons.tsx — the one new export the placement decision approved', () 
     expect(match).not.toBeNull();
     const iconName = match![1]!;
     expect(sidebarSource).toContain(iconName);
+  });
+});
+
+describe('T-598 S8 / DEF-271 - every sign-out control says who is signed in', () => {
+  it('the label names the person, and stays plain "Sign out" when no name is known', async () => {
+    const { signOutLabel } = await import('../src/components/shell/sign-out-label');
+    expect(signOutLabel('Ian')).toBe('Sign out (Ian)');
+    expect(signOutLabel(null)).toBe('Sign out');
+  });
+
+  it('AppShell reads the name in its own transaction and hands it to both shells', () => {
+    const shell = readFileSync(resolve(shellDir, 'AppShell.tsx'), 'utf8');
+    expect(shell).toMatch(/personsRepo\.getPersonById/);
+    expect(shell).toMatch(/<Sidebar allowedHrefs=\{allowedHrefs\} signedInAs=\{signedInAs\} \/>/);
+    expect(shell).toMatch(/<TopBar signedInAs=\{signedInAs\} \/>/);
   });
 });

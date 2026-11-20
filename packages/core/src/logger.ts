@@ -11,6 +11,7 @@
  *   - Never log a secret, token, password, or biometric template.
  *   - Background jobs use `jobResult()` so "it ran" is always accompanied by "it did N".
  */
+import { createRequire } from 'node:module';
 import pino from 'pino';
 
 const level = process.env.LOG_LEVEL ?? 'info';
@@ -67,18 +68,32 @@ export const REDACT_PATHS = SENSITIVE_KEYS.flatMap(keyVariants).flatMap((key) =>
   Array.from({ length: REDACT_DEPTH + 1 }, (_, depth) => joinPath(depth, key)),
 );
 
-export const logger = pino({
-  level,
-  redact: { paths: REDACT_PATHS, censor: REDACT_CENSOR },
-  base: { app: 'shareat-system' },
-  ...(isDev
+/** DEF-634: `pino-pretty` is a dev dependency, so a dev-mode process on a server installed without dev dependencies must log JSON, not die on a missing module. */
+function prettyResolves(): boolean {
+  try {
+    createRequire(import.meta.url).resolve('pino-pretty');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function pickTransport(dev: boolean, prettyAvailable: boolean) {
+  return dev && prettyAvailable
     ? {
         transport: {
           target: 'pino-pretty',
           options: { colorize: true, translateTime: 'SYS:HH:MM:ss', ignore: 'pid,hostname,app' },
         },
       }
-    : {}),
+    : {};
+}
+
+export const logger = pino({
+  level,
+  redact: { paths: REDACT_PATHS, censor: REDACT_CENSOR },
+  base: { app: 'shareat-system' },
+  ...pickTransport(isDev, prettyResolves()),
 });
 
 /**
