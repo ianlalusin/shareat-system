@@ -814,13 +814,12 @@ export async function maxSeqForPairing(tx: Tx, orgId: string, storeId: string, p
   return Number(row?.m ?? 0);
 }
 
-/** The highest receipt number printed on this store's terminal; 0 before the first sale. */
-export async function maxTerminalSeq(tx: Tx, orgId: string, storeId: string, terminalNo: number): Promise<number> {
+/** The highest receipt number printed on this terminal; 0 before the first sale. T-602: keyed on the terminal id (no join), so UNIQUE (terminal_id, receipt_seq) answers with one backward index step. */
+export async function maxTerminalSeq(tx: Tx, orgId: string, terminalId: string): Promise<number> {
   const [row] = await tx
     .select({ m: sql<string>`coalesce(max(${posSalesReceipts.terminalSeq}), 0)::text` })
     .from(posSalesReceipts)
-    .innerJoin(posTerminals, eq(posTerminals.id, posSalesReceipts.terminalId))
-    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), eq(posTerminals.terminalNo, terminalNo)));
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.terminalId, terminalId)));
   return Number(row?.m ?? 0);
 }
 

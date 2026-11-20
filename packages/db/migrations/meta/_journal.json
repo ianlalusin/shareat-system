@@ -1660,6 +1660,13 @@
       "when": 1809401507084,
       "tag": "0270_t600_journal_entry_date_in_period",
       "breakpoints": true
+    },
+    {
+      "idx": 272,
+      "version": "7",
+      "when": 1809574307084,
+      "tag": "0272_t602_performance_indexes",
+      "breakpoints": true
     }
   ]
 }
