@@ -378,6 +378,26 @@ describe('settlement — §3\'s table and invariant 9\'s split', () => {
   });
 });
 
+describe('T-613 DEF-932 — a cash refund is not paid from a retired account', () => {
+  it('is refused in words; the same account live refunds', async () => {
+    const f = await fixture('refund-retired');
+    const s = await aSale(f, { qty: '2', rate: '500' });
+    const refund = () =>
+      asOrg(f.orgId, (tx) =>
+        recordCustomerReturn(tx, {
+          tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Refund requested.',
+          lines: [{ tradeOrderLineId: s.lineId, quantity: '1' }], refund: true, moneyAccountId: f.cashAccountId, actor: f.manager,
+        }),
+      );
+    await sql`update money_accounts set is_active = false where id = ${f.cashAccountId}`;
+    const refused = await refund();
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.reason).toMatch(/is retired/);
+    await sql`update money_accounts set is_active = true where id = ${f.cashAccountId}`;
+    expect((await refund()).ok).toBe(true);
+  });
+});
+
 describe('the credit is spendable — Ian\'s actual requirement', () => {
   it('7. redeeming credit against a later order posts Dr 2140/Cr 1210, and the balance returns to zero', async () => {
     const f = await fixture('spend');

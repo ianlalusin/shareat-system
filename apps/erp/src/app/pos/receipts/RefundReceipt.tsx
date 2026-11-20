@@ -28,7 +28,7 @@ export type PostRefund = (body: {
   requestId: string;
   receiptId: string;
   lines: { receiptLineId: string; qty: number }[];
-  payments: { paymentId: string; amount: string; referenceNo: string }[];
+  payments: { paymentId: string; tenderId: string; amount: string; referenceNo: string }[];
   reason: string;
   pin: string;
 }) => Promise<{ ok: boolean; error?: string; slip?: RefundSlipJson }>;
@@ -76,7 +76,7 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
   const requestId = useRef<string | null>(null);
 
   // The pad types into one money-back row at a time: the one tapped, else the first (cash first).
-  const active = order.find((p) => p.paymentId === activeId)?.paymentId ?? order[0]?.paymentId ?? '';
+  const active = order.find((p) => p.slotId === activeId)?.slotId ?? order[0]?.slotId ?? '';
   const typeInto = (next: (v: string) => string) => {
     if (active === '') return;
     setEdited(true);
@@ -140,7 +140,7 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
         requestId: requestId.current,
         receiptId,
         lines: open.filter((l) => (qtys[l.lineId] ?? 0) > 0).map((l) => ({ receiptLineId: l.lineId, qty: qtys[l.lineId]! })),
-        payments: order.filter((p) => amountCents(split[p.paymentId]) > 0n).map((p) => ({ paymentId: p.paymentId, amount: split[p.paymentId]!.replace(/\.$/, ''), referenceNo: (references[p.paymentId] ?? '').trim() })),
+        payments: order.filter((p) => amountCents(split[p.slotId]) > 0n).map((p) => ({ paymentId: p.paymentId, tenderId: p.tenderId, amount: split[p.slotId]!.replace(/\.$/, ''), referenceNo: (references[p.slotId] ?? '').trim() })),
         reason: reasonText,
         pin,
       });
@@ -207,26 +207,26 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
             <div className="space-y-2" role="group" aria-label="Money back">
               <p className="text-base font-semibold text-ink">Money back</p>
               {order.map((p) => (
-                <div key={p.paymentId} className="space-y-2">
+                <div key={p.slotId} className="space-y-2">
                   <button
                     type="button"
                     data-erp-size="free"
-                    className={p.paymentId === active ? ROW_ACTIVE : ROW}
+                    className={p.slotId === active ? ROW_ACTIVE : ROW}
                     aria-label={`${p.tenderName} money back`}
-                    aria-pressed={p.paymentId === active}
-                    data-amount={split[p.paymentId] ?? ''}
+                    aria-pressed={p.slotId === active}
+                    data-amount={split[p.slotId] ?? ''}
                     disabled={busy}
-                    onClick={() => setActiveId(p.paymentId)}
+                    onClick={() => setActiveId(p.slotId)}
                   >
                     <span className="text-sm text-muted">
                       {p.tenderName} <span className="text-muted">(up to {peso(p.left)})</span>
                     </span>
-                    <span className="text-xl font-semibold tabular-nums">{(split[p.paymentId] ?? '') === '' ? '₱0.00' : `₱${split[p.paymentId]}`}</span>
+                    <span className="text-xl font-semibold tabular-nums">{(split[p.slotId] ?? '') === '' ? '₱0.00' : `₱${split[p.slotId]}`}</span>
                   </button>
-                  {p.kind === 'wallet' && amountCents(split[p.paymentId]) > 0n ? (
+                  {p.kind === 'wallet' && amountCents(split[p.slotId]) > 0n ? (
                     <label className="block space-y-1">
                       <span className="text-sm text-muted">Reference number of the money sent back</span>
-                      <input type="text" data-erp-size="free" className={FIELD} value={references[p.paymentId] ?? ''} onChange={(e) => setReferences({ ...references, [p.paymentId]: e.target.value.slice(0, 40) })} />
+                      <input type="text" data-erp-size="free" className={FIELD} value={references[p.slotId] ?? ''} onChange={(e) => setReferences({ ...references, [p.slotId]: e.target.value.slice(0, 40) })} />
                     </label>
                   ) : null}
                 </div>

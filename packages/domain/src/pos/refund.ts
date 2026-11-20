@@ -13,8 +13,8 @@
  * refunded in any number of pieces add up to exactly what the customer paid for it. The old design refunded gross (ignoring the discount); a test pins that this does not.
  *
  * ## Rules that are easy to get wrong
- *  - Caps are judged under the receipt's row lock, after the store's Z lock: sum of refunded qty per line <= sold; sum refunded per original paid row <= amount tendered - change given;
- *    sum of the money-back rows = the refund total = the sum of its lines. A paid row's own corrections (S3) are NOT subtracted: the refund goes back to the row the money was handed over on.
+ *  - Caps are judged under the receipt's row lock, after the store's Z lock: sum of refunded qty per line <= sold; per route (`refundRoutes`) <= what the till kept of that paid row, less what
+ *    corrections moved off it, less what was refunded (T-613 D1: a correction's TARGET method takes back what was moved to it); sum of the money-back rows = the refund total = the sum of its lines.
  *  - A refund and ALL its children are written in the TOP-LEVEL transaction (the 0240-style append guard compares the parent's xmin to the current transaction id; a savepoint would refuse them).
  *  - The refund number is per store (`refund_seq`, from 1) taken under the Z lock; printed as <store code>-R-<6 digits> by the app.
  *  - A wallet money-back row needs the reference of the money sent back (4 to 40 characters), as a wallet payment does.
@@ -66,14 +66,38 @@ export function refundAmountsOfLine(line: LineRow, refundedQty: number, refunded
   return out;
 }
 
-/** What each paid row still has to give back: tendered - change given - already refunded (centavos, by payment id). */
-export function refundableByPayment(
-  payments: readonly { id: string; amount: string; changeGiven: string }[],
-  refunded: readonly { paymentId: string; amount: string }[],
-): Map<string, bigint> {
-  const left = new Map(payments.map((p) => [p.id, keptOf(p)]));
-  for (const r of refunded) left.set(r.paymentId, (left.get(r.paymentId) ?? 0n) - toCentavos(money(r.amount)));
-  return left;
+/** One way money can go back on a receipt: the paid row's own method, or (T-613 D1) a method a wrong-payment-method correction of that row moved money to. */
+export interface RefundRoute {
+  paymentId: string;
+  tenderId: string;
+  /** Centavos still free to give back by this route (never below zero). */
+  left: bigint;
+}
+
+/**
+ * What each way of refunding a receipt can still give back (T-613 D1). A paid row's OWN method: what the till kept (tendered - change given) - what corrections moved OFF it - what was
+ * already refunded by it. Each correction's TARGET method, on the same paid row: what was moved to it - what was already refunded by it. So 1,000 cash with 300 corrected to GCash
+ * refunds at most 700 cash and 300 GCash, and the drawer never pays out money it never took. Routes are in payment order, a row's own method first.
+ */
+export function refundRoutes(
+  payments: readonly { id: string; tenderId: string; amount: string; changeGiven: string }[],
+  corrections: readonly { paymentId: string; toTenderId: string; amount: string }[],
+  refunded: readonly { paymentId: string; tenderId: string; amount: string }[],
+): RefundRoute[] {
+  const refundedBy = (paymentId: string, tenderId: string): bigint =>
+    refunded.filter((r) => r.paymentId === paymentId && r.tenderId === tenderId).reduce((a, r) => a + toCentavos(money(r.amount)), 0n);
+  const atLeastZero = (n: bigint): bigint => (n > 0n ? n : 0n);
+  const routes: RefundRoute[] = [];
+  for (const p of payments) {
+    const mine = corrections.filter((c) => c.paymentId === p.id);
+    const away = mine.reduce((a, c) => a + toCentavos(money(c.amount)), 0n);
+    routes.push({ paymentId: p.id, tenderId: p.tenderId, left: atLeastZero(keptOf(p) - away - refundedBy(p.id, p.tenderId)) });
+    for (const tenderId of [...new Set(mine.map((c) => c.toTenderId))]) {
+      const moved = mine.filter((c) => c.toTenderId === tenderId).reduce((a, c) => a + toCentavos(money(c.amount)), 0n);
+      routes.push({ paymentId: p.id, tenderId, left: atLeastZero(moved - refundedBy(p.id, tenderId)) });
+    }
+  }
+  return routes;
 }
 
 /** What a Z, an X or a handover shows for refunds: the total, the part paid out of the drawer, and how many. */
@@ -108,7 +132,7 @@ export interface RecordRefundInput {
   receiptId: string;
   lines: { receiptLineId: string; qty: number }[];
   /** The original paid rows the money goes back to. `referenceNo` is required for a wallet. */
-  payments: { paymentId: string; amount: string; referenceNo?: string | null }[];
+  payments: { paymentId: string; amount: string; referenceNo?: string | null; /** Omitted: the paid row's own method. T-613 D1: the method a correction moved money to. */ tenderId?: string }[];
   reason: string;
   /** The manager's PIN. Not needed when the signed-in person already holds `approve_pos_correction` at the store. */
   approval?: { pin: string };
@@ -169,12 +193,14 @@ export async function recordRefund(tx: Tx, actor: Actor, input: RecordRefundInpu
   for (const l of wantLines) if (!Number.isInteger(l.qty) || l.qty <= 0) throw refuse('pos: refund quantity not a whole number above zero', 'The quantity must be a whole number above zero.');
   if (new Set(wantLines.map((l) => l.lineId)).size !== wantLines.length) throw refuse('pos: refund names a line twice', REFUND_LINE_ONCE);
   if (!Array.isArray(input.payments) || input.payments.length === 0) throw refuse('pos: refund without payments', 'Say how the money goes back.');
+  // An omitted method means the paid row's own; resolved here so "omitted" and "its own" are one thing for the duplicate check and the replay comparison.
+  const ownTender = new Map((await posV2Repo.listPaymentRowsOfReceipts(tx, orgId, [receiptId])).map((r) => [r.id, r.tenderId]));
   const wantPays = input.payments.map((p) => {
     const amount = parseMoneyInput(String(p.amount ?? ''), 'recordRefund: payment amount', 'The amount');
     if (compare(amount, ZERO) <= 0) throw refuse('pos: refund payment not above zero', 'The amount must be above zero.');
-    return { paymentId: uuidInput(p.paymentId, 'The payment'), cents: toCentavos(amount), amount, referenceNo: p.referenceNo ?? null };
+    return { paymentId: uuidInput(p.paymentId, 'The payment'), tenderId: p.tenderId === undefined ? (ownTender.get(String(p.paymentId)) ?? null) : uuidInput(p.tenderId, 'The payment method'), cents: toCentavos(amount), amount, referenceNo: p.referenceNo ?? null };
   });
-  if (new Set(wantPays.map((p) => p.paymentId)).size !== wantPays.length) throw refuse('pos: refund names a payment twice', REFUND_PAYMENT_ONCE);
+  if (new Set(wantPays.map((p) => `${p.paymentId}:${p.tenderId ?? ''}`)).size !== wantPays.length) throw refuse('pos: refund names a payment twice', REFUND_PAYMENT_ONCE);
   const { reason } = assertFieldRules(POS_REASON_RULES, { reason: input.reason });
 
   const storeCode = (await posV2Repo.getStoreCode(tx, orgId, storeId)) ?? '';
@@ -184,7 +210,7 @@ export async function recordRefund(tx: Tx, actor: Actor, input: RecordRefundInpu
     const ls = await posV2Repo.listRefundLines(tx, orgId, r.id);
     const ps = await posV2Repo.listRefundPayments(tx, orgId, r.id);
     return ls.length === wantLines.length && ls.every((l) => wantLines.some((w) => w.lineId === l.receiptLineId && w.qty === l.qty))
-      && ps.length === wantPays.length && ps.every((p) => wantPays.some((w) => w.paymentId === p.paymentId && w.cents === toCentavos(money(p.amount))));
+      && ps.length === wantPays.length && ps.every((p) => wantPays.some((w) => w.paymentId === p.paymentId && w.tenderId === p.tenderId && w.cents === toCentavos(money(p.amount))));
   };
   const replay = async (r: Refund): Promise<RecordRefundResult> => {
     if (!(await same(r))) throw recordedDifferently();
@@ -224,20 +250,22 @@ export async function recordRefund(tx: Tx, actor: Actor, input: RecordRefundInpu
     total += cents;
   }
   const payments = await posV2Repo.listPaymentRowsOfReceipts(tx, orgId, [receiptId]);
-  const left = refundableByPayment(payments, await posV2Repo.listRefundPaymentsOfReceipts(tx, orgId, [receiptId]));
+  const routes = refundRoutes(payments, await posV2Repo.listTenderCorrectionsOfReceipts(tx, orgId, [receiptId]), await posV2Repo.listRefundPaymentsOfReceipts(tx, orgId, [receiptId]));
   const tenders = new Map((await posV1Repo.listTendersByStore(tx, orgId, storeId)).map((t) => [t.id, t]));
   const refundPayments: posV2Repo.NewRefundPayment[] = [];
   let paid = 0n;
   for (const w of wantPays) {
     const pay = payments.find((p) => p.id === w.paymentId);
     if (!pay) throw gone(`pos: payment ${w.paymentId} not on receipt ${receiptId}`, 'that payment');
-    const room = left.get(pay.id) ?? 0n;
-    if (w.cents > room) {
-      throw refuse(`pos: refund ${w.cents} over the ${room} centavos left on payment ${pay.id}`, `Only ₱${fromCentavos(room > 0n ? room : 0n)} can still be refunded to ${tenders.get(pay.tenderId)?.name ?? 'that payment method'}.`);
+    const tenderId = w.tenderId ?? pay.tenderId;
+    const route = routes.find((r) => r.paymentId === pay.id && r.tenderId === tenderId);
+    if (!route) throw refuse(`pos: payment ${pay.id} was not paid or corrected to tender ${tenderId}`, 'The money can only go back by the way it was paid.');
+    if (w.cents > route.left) {
+      throw refuse(`pos: refund ${w.cents} over the ${route.left} centavos left on payment ${pay.id} by tender ${tenderId}`, `Only ₱${fromCentavos(route.left)} can still be refunded to ${tenders.get(tenderId)?.name ?? 'that payment method'}.`);
     }
-    const wallet = tenders.get(pay.tenderId)?.kind === 'wallet';
+    const wallet = tenders.get(tenderId)?.kind === 'wallet';
     const referenceNo = wallet ? assertFieldRules(POS_PAYMENT_REFERENCE_RULES, { referenceNo: w.referenceNo ?? '' }).referenceNo! : null;
-    refundPayments.push({ orgId, refundId: '', receiptId, paymentId: pay.id, tenderId: pay.tenderId, amount: w.amount, referenceNo });
+    refundPayments.push({ orgId, refundId: '', receiptId, paymentId: pay.id, tenderId, amount: w.amount, referenceNo });
     paid += w.cents;
   }
   if (paid !== total) throw refuse(`pos: refund payments ${paid} != lines ${total} centavos`, `The money going back (₱${fromCentavos(paid)}) must equal the refund total (₱${fromCentavos(total)}).`);
