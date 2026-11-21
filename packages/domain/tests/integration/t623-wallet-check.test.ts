@@ -17,8 +17,8 @@ if (!isTestDatabaseUrl(url)) {
 
 import { AuthorizationError } from '@shareat/auth';
 import { RefusalError } from '@shareat/db';
-import { checkWalletPayment, listWalletPaymentsToCheck } from '../../src/pos';
-import { D1, addDays, asOrg, auditsOf, closeAll, manila, porkSale, reading, sell, sql, world, type World } from './_fixtures/t531-day-close';
+import { checkWalletPayment, listWalletPaymentsToCheck, recordTenderCorrection } from '../../src/pos';
+import { D1, addDays, asOrg, auditsOf, closeAll, manila, porkSale, reading, sell, sql, uuid, world, type World } from './_fixtures/t531-day-close';
 
 afterAll(closeAll);
 
@@ -32,6 +32,11 @@ async function toCheck(w: World, at: Date = AT) {
 }
 const check = (w: World, paymentId: string, who: World['manager'] = w.manager, storeId: string = w.storeId) =>
   asOrg(w.orgId, (tx) => checkWalletPayment(tx, who, { storeId, paymentId }));
+/** The manager moves the wallet payment to Cash (Correct payment): it never arrived. */
+const moveToCash = (w: World, r: { receiptId: string; paymentId: string }) =>
+  asOrg(w.orgId, (tx) =>
+    recordTenderCorrection(tx, w.manager, { storeId: w.storeId, pairingId: w.pairingId, requestId: uuid(), receiptId: r.receiptId, paymentId: r.paymentId, toTenderId: w.cash, amount: '250.00', reason: 'Never arrived' }),
+  );
 const stored = async (paymentId: string) =>
   (await sql<{ checked_by: string | null; checked_at: Date | null }[]>`select checked_by, checked_at from pos_sales_receipt_payments where id = ${paymentId}`)[0]!;
 
@@ -45,7 +50,7 @@ async function expectRefusal(p: Promise<unknown>, sentence: string | RegExp) {
 }
 
 describe('T-623 - checkWalletPayment', () => {
-  it('a manager checks a to-check payment: the columns are set, one audit row names receipt, amount and reference [kills: nothing written]', async () => {
+  it('a manager checks a to-check payment: the columns are set, one audit row names receipt, amount and tender, never the reference [kills: nothing written]', async () => {
     const w = await world();
     const r = await toCheck(w);
     expect(await stored(r.paymentId)).toEqual({ checked_by: null, checked_at: null });
@@ -55,7 +60,8 @@ describe('T-623 - checkWalletPayment', () => {
     expect(after.checked_at).toBeInstanceOf(Date);
     const audits = await auditsOf(w, 'pos.payment_checked');
     expect(audits).toHaveLength(1);
-    expect(audits[0]).toMatchObject({ actor_person_id: w.managerId, store_id: w.storeId, entity_id: r.paymentId, after: { amount: '250.00', referenceNo: 'GC-0001234' } });
+    expect(audits[0]).toMatchObject({ actor_person_id: w.managerId, store_id: w.storeId, entity_id: r.paymentId, after: { amount: '250.00', tender: 'GCash' } });
+    expect(JSON.stringify(audits[0]!.after)).not.toContain('GC-0001234');
     expect((audits[0]!.after as { receiptNo: string }).receiptNo).toMatch(/^.+-01-\d{6}$/);
   });
 
@@ -132,5 +138,18 @@ describe('T-623 - the list and the Z', () => {
     const x = await reading(w, at);
     expect(x.toCheckCount).toBe(1);
     expect(x.byTender.find((t: { tenderId: string }) => t.tenderId === w.gcash)).toMatchObject({ amount: '500.00' });
+  });
+
+  it('a payment a correction moved is handled: not listed, not counted by the Z, and refused with the plain sentence [kills: dropping the correction exclusion]', async () => {
+    const w = await world();
+    const moved = await toCheck(w, manila(D1, '12:00'));
+    const open = await toCheck(w, manila(D1, '13:00'));
+    await moveToCash(w, moved);
+    const list = await asOrg(w.orgId, (tx) => listWalletPaymentsToCheck(tx, w.manager, { storeId: w.storeId, now: manila(D1, '18:00') }));
+    expect(list.payments.map((p) => p.paymentId)).toEqual([open.paymentId]);
+    expect((await reading(w, manila(D1, '22:00'))).toCheckCount).toBe(1);
+    await expectRefusal(check(w, moved.paymentId), 'This payment was moved to another payment method, so there is nothing to check.');
+    expect(await stored(moved.paymentId)).toEqual({ checked_by: null, checked_at: null });
+    expect(await auditsOf(w, 'pos.payment_checked')).toHaveLength(0);
   });
 });

@@ -1131,7 +1131,7 @@ export interface ReceiptFigures {
   discountByKind: Record<'senior' | 'pwd' | 'preset' | 'custom', string>;
   /** Distinct statutory rows (senior / PWD diners). */
   statutoryDiners: number;
-  /** Per tender: Σ amount, Σ change given, and how many payments are offline wallet payments still to check (T-623: not yet checked by a manager). */
+  /** Per tender: Σ amount, Σ change given, and how many payments are offline wallet payments still to check (T-623: not yet checked by a manager and not moved by a correction). */
   byTender: { tenderId: string; amount: string; change: string; toCheck: number }[];
   /** Package sessions (a receipt with a package line): their count and the Σ of their billed heads (the larger of the cashier's and the server's count). */
   packageSessions: number;
@@ -1171,7 +1171,7 @@ export async function receiptFigures(tx: Tx, orgId: string, receiptIds: string[]
       join pos_sales_receipt_lines l on l.id = d.receipt_line_id
      where d.org_id = ${orgId} and l.receipt_id in (${ids})`)) as unknown as { n: number }[];
   const pays = (await tx.execute(sql`
-    select p.tender_id as tender_id, sum(p.amount)::text as amount, sum(p.change_given)::text as change, (count(*) filter (where p.to_check and p.checked_at is null))::int as to_check
+    select p.tender_id as tender_id, sum(p.amount)::text as amount, sum(p.change_given)::text as change, (count(*) filter (where p.to_check and p.checked_at is null and not exists (select 1 from pos_tender_corrections c where c.payment_id = p.id)))::int as to_check
       from pos_sales_receipt_payments p
      where p.org_id = ${orgId} and p.receipt_id in (${ids})
      group by p.tender_id`)) as unknown as { tender_id: string; amount: string; change: string; to_check: number }[];
@@ -1559,9 +1559,13 @@ export interface PaymentCheckRow {
   referenceNo: string | null;
   toCheck: boolean;
   checkedAt: Date | null;
+  /** A wrong-payment-method correction moved (some of) it: the manager already said it never arrived, so there is nothing to check. */
+  corrected: boolean;
   /** The first name (display name when the parts are empty) of the person who checked it. */
   checkedByName: string | null;
 }
+// T-623 (BOSS ruling): pos_tender_corrections is append-only (no status or reversal column), so any row for the payment is a live correction.
+const hasCorrection = sql<boolean>`exists (select 1 from pos_tender_corrections c where c.payment_id = ${posSalesReceiptPayments.id})`;
 const paymentCheckFields = {
   paymentId: posSalesReceiptPayments.id,
   terminalNo: posTerminals.terminalNo,
@@ -1572,6 +1576,7 @@ const paymentCheckFields = {
   referenceNo: posSalesReceiptPayments.referenceNo,
   toCheck: posSalesReceiptPayments.toCheck,
   checkedAt: posSalesReceiptPayments.checkedAt,
+  corrected: hasCorrection,
   checkedByName: sql<string | null>`coalesce(${persons.firstName}, ${persons.displayName})`,
 };
 const paymentCheckFrom = (tx: Tx) =>
@@ -1588,7 +1593,7 @@ export async function getPaymentForCheck(tx: Tx, orgId: string, storeId: string,
   return row;
 }
 
-/** T-623: the payments still "to check" (to_check, not yet checked) of receipts issued since `since`, newest first. */
+/** T-623: the payments still "to check" (to_check, not yet checked, no correction moved them) of receipts issued since `since`, newest first. */
 export async function listPaymentsToCheck(tx: Tx, orgId: string, storeId: string, since?: Date): Promise<PaymentCheckRow[]> {
   return paymentCheckFrom(tx)
     .where(
@@ -1597,6 +1602,7 @@ export async function listPaymentsToCheck(tx: Tx, orgId: string, storeId: string
         eq(posSalesReceipts.storeId, storeId),
         eq(posSalesReceiptPayments.toCheck, true),
         isNull(posSalesReceiptPayments.checkedAt),
+        sql`not ${hasCorrection}`,
         since ? gte(posSalesReceipts.issuedAtDevice, since) : undefined,
       ),
     )
@@ -1617,6 +1623,7 @@ export async function markPaymentChecked(tx: Tx, input: { orgId: string; storeId
         eq(posSalesReceiptPayments.id, input.paymentId),
         eq(posSalesReceiptPayments.toCheck, true),
         isNull(posSalesReceiptPayments.checkedAt),
+        sql`not ${hasCorrection}`,
         inArray(posSalesReceiptPayments.receiptId, tx.select({ id: posSalesReceipts.id }).from(posSalesReceipts).where(and(eq(posSalesReceipts.orgId, input.orgId), eq(posSalesReceipts.storeId, input.storeId)))),
       ),
     )
