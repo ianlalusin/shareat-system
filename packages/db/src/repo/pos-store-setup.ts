@@ -62,6 +62,16 @@ export async function updatePresetValue(
     .where(and(eq(posDiscountPresets.id, presetId), eq(posDiscountPresets.orgId, orgId), eq(posDiscountPresets.storeId, storeId)));
 }
 
+/** Retire an ACTIVE preset (the row is kept: past sales name it). Returns whether a row changed. */
+export async function retirePreset(tx: Tx, orgId: string, storeId: string, presetId: string): Promise<boolean> {
+  const rows = await tx
+    .update(posDiscountPresets)
+    .set({ status: 'retired', updatedAt: new Date() })
+    .where(and(eq(posDiscountPresets.id, presetId), eq(posDiscountPresets.orgId, orgId), eq(posDiscountPresets.storeId, storeId), eq(posDiscountPresets.status, 'active')))
+    .returning({ id: posDiscountPresets.id });
+  return rows.length > 0;
+}
+
 /** The store's POS id in v1 (Firestore store id) through its LIVE link, or undefined when the store is not linked. */
 export async function getLivePosStoreId(tx: Tx, orgId: string, storeId: string): Promise<string | undefined> {
   const [row] = await tx

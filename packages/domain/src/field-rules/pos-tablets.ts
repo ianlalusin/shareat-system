@@ -23,3 +23,12 @@ export const POS_TILL_ADD_RULES = defineFieldRules('posTablets.addTill', {
     requires: 'The cash register number must be a whole number from 1 to 99.', rangeSays: 'The cash register number must be a whole number from 1 to 99.',
   },
 });
+
+/**
+ * T-622: adding or changing a named discount (`upsertPosDiscountPreset` checks the same limits again and owns the sentences). The value is a percent (1 to 100)
+ * or pesos off each item, so only the amount shape and "above 0" are checked here; "a percent over 100" is the domain's sentence.
+ */
+export const POS_DISCOUNT_RULES = defineFieldRules('posTablets.discount', {
+  name: { label: 'The discount name', kind: 'text', min: 1, max: 40, requires: 'A discount name must be 1 to 40 characters.' },
+  value: { label: 'The discount value', kind: 'money', min: 0.01, requires: 'The discount value must be more than 0.', rangeSays: 'The discount value must be more than 0.' },
+});
