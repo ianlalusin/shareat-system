@@ -22,7 +22,7 @@ import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { APP_ROLE, closeDb, transaction, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { makeSettleableDay } from './_fixtures/sales-day-flow';
-import { recordOrderWastage } from '../../src/wastage/orders';
+import { recordOrderWastage, resolveOrderWastage } from '../../src/wastage/orders';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -128,5 +128,27 @@ describe('DEF-925 - the wastage credit goes to the channel own receivable', () =
     const rec = await record(f);
     const credit = (await legsOf(rec.journalEntryId!)).filter((l) => Number(l.credit) > 0);
     expect(credit.map((l) => l.code)).toEqual(['1220']);
+  });
+
+  const PAID_DAILY = "This channel is paid daily, so there's nothing owed to adjust. Record the loss as an expense instead.";
+  const payDaily = (f: Fixture) => sql`update sales_channels set is_remitted_daily = true, receivable_account_code = null where id = ${f.channelId}`;
+
+  it('a channel paid daily (no receivable) refuses a new wastage in words - Mutant: drop the null-receivable check in recordOrderWastage -> it records, red', async () => {
+    const f = await fixture('daily-rec');
+    await payDaily(f);
+    const err = await record(f).then(() => null, (e: { userMessage?: string }) => e);
+    expect(err?.userMessage).toBe(PAID_DAILY);
+  });
+
+  it('and refuses to resolve one opened before - Mutant: drop the check in resolveOrderWastage -> it posts to 1220, red', async () => {
+    const f = await fixture('daily-res');
+    const rec = await asOrg(f.orgId, (tx) =>
+      recordOrderWastage(tx, f.manager, { storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', amount: '100.00', reason: 'remade order', openedOn: '2026-01-10' }),
+    );
+    await payDaily(f);
+    const out = await asOrg(f.orgId, (tx) =>
+      resolveOrderWastage(tx, f.manager, { wastageId: rec.id, storeId: f.storeId, disposition: 'absorbed', resolvedOn: '2026-01-11' }),
+    );
+    expect(out).toEqual({ ok: false, reason: PAID_DAILY });
   });
 });

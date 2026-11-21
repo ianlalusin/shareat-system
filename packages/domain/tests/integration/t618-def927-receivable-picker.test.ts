@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 
 /**
- * T-618 / DEF-927 - the sales-channel receivable is a receivable: the picker lists only 12xx assets, and the server refuses a cash, payable or equity account.
+ * T-618 / DEF-927 - the sales-channel receivable is a receivable: the picker lists only 1210 and 1220, and the server refuses a cash, payable or equity account.
  * World: the t511-s6b fixture (an org with the seeded chart and a Foodpanda channel at Lipa).
  */
 config({ path: '.env.local' });
@@ -26,8 +26,8 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-// A cash account (1120), an e-wallet (1140), a payable (2110) and an equity account (3200): all four carry a party, so only the type and group keep them out.
-const NOT_RECEIVABLES = ['1120', '1140', '2110', '3200'];
+// Cash (1120), e-wallet (1140), advances (1230, 1240), due from store (1250), due from owners (1260), a payable (2110) and equity (3200): all carry a party, so only the allow-list (1210, 1220) keeps them out.
+const NOT_RECEIVABLES = ['1120', '1140', '1230', '1240', '1250', '1260', '2110', '3200'];
 
 describe('DEF-927 - the receivable picker and the server check', () => {
   it('the picker offers receivables only - Mutant: drop the type/group filter -> cash, payable and equity are listed, red', async () => {

@@ -275,19 +275,20 @@ export async function lockChannel(tx: Tx, orgId: string, channelId: string): Pro
 }
 
 /**
- * T-618 (DEF-927): the chart's receivables are the 12xx asset accounts. The cash (11xx), payable (2xxx) and equity (3xxx) accounts also carry a party, so "postable and party-bearing" alone
+ * T-618 (DEF-927): a channel's sales are owed on 1210 (customer receivable) or 1220 (channel receivable) only. Cash, clearing, advances, due-from-store, payable and equity accounts also carry a party or sit near them, so "postable and party-bearing" alone
  * offered them. One definition for the picker (`receivableAccountOptions`) and the server check (`validateWiring`).
- * shortcut: a code range, not a flag on the account; upgrade if the chart ever puts a receivable outside 12xx.
+ * Chart constants, not business settings: an explicit list, extended here if the chart ever gains another channel receivable.
  */
+export const CHANNEL_RECEIVABLE_CODES = ['1210', '1220'] as const;
 export function isReceivableAccount(account: { code: string; type: string }): boolean {
-  return account.type === 'asset' && account.code.startsWith('12');
+  return account.type === 'asset' && (CHANNEL_RECEIVABLE_CODES as readonly string[]).includes(account.code);
 }
 
 /** The receivable picker's list — postable, active, party-bearing (invariant 4), and a receivable (DEF-927). */
 export async function receivableAccountOptions(tx: Tx, orgId: string): Promise<{ code: string; name: string }[]> {
   const rows = (await tx.execute(sql`
     select code, name from accounts
-     where org_id = ${orgId} and is_postable and requires_party and status = 'active' and type = 'asset' and code like '12%'
+     where org_id = ${orgId} and is_postable and requires_party and status = 'active' and type = 'asset' and code in (${sql.join(CHANNEL_RECEIVABLE_CODES.map((c) => sql`${c}`), sql`, `)})
      order by code
   `)) as unknown as Record<string, unknown>[];
   return rows.map((r) => ({ code: String(r.code), name: String(r.name) }));
