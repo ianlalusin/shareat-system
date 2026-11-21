@@ -9,9 +9,9 @@
 | **Fallback / soak #2** | **Sat 28 Nov 2026, 2-4 pm** (also used if #1 finds a blocker) |
 | **Where** | **Chrome on the tablet** at `erp2.shareat.net/pos` |
 | **Mode** | Lipa set to **TEST** on `/admin/stores/[id]`. **No sales day is booked. Nothing goes to v1.** |
-| **Printer** | **None in this soak.** Chrome cannot use the Bluetooth printer. Steps that print are marked "printing check, T-532" and are **skipped here** |
+| **Printer** | **None in this soak.** Chrome cannot use the Bluetooth printer. Steps that print are marked "printing check, T-532" and are **skipped here**. The printing is built (the Android app is ready); it is tested separately on the real tablet (T-532 S5) |
 
-This is the first of the two go-live gates. The other is the **printing check** with the APK shell (T-532, not built yet), described in `pos-lipa-switch.md` section B. Lipa goes live only when **both** pass. The 24-hour two-tablet offline soak (0 sales lost, 0 doubled, row 431) is in `docs/ops/pos2-soak.md`; this script is the shorter, scripted Lipa run and does not replace it.
+This is the first of the two go-live gates. The other is the **printing check** with the Android app `net.shareat.erppos` (T-532 S5: built, but not yet tried on the real Lipa tablet), described in `pos-lipa-switch.md` section B. Lipa goes live only when **both** pass. The 24-hour two-tablet offline soak (0 sales lost, 0 doubled, row 431) is in `docs/ops/pos2-soak.md`; this script is the shorter, scripted Lipa run and does not replace it.
 
 ## Before you start (check each)
 1. Open `erp2.shareat.net/pos` in Chrome on the tablet and confirm it loads.
@@ -53,6 +53,7 @@ Tabs on the tablet: **Orders, Kitchen, Refills, Receipts, Till**.
 | 18 | **Cancel a line** after it was sent. | A reason is asked; the line is removed; the kitchen sees it cancelled |
 | 19 | **Split pay** a bill: **GCash** (with a reference number) plus **Cash**. | The two payments add up to the total; the sale is saved; GCash shows as "to check" |
 | 20 | **Remove a discount** that was added by mistake. | A manager PIN is asked; the discount goes; total is right |
+| 20a | **Void a table that was never paid** (T-620): seat a spare table, add a dish, then **Void**. Enter a reason. A cashier needs the manager's Employee ID + PIN; a manager signed in does not. | The table leaves the grid; the kitchen sees it cancelled; nothing appears under Receipts |
 
 ### Part 3. Internet down for 10 minutes (about 20 minutes)
 Do not close or reload the Chrome tab while offline. If the tab closes or reloads and the POS will not open offline, record that as a **finding** and note the time.
@@ -77,7 +78,7 @@ Do not close or reload the Chrome tab while offline. If the tab closes or reload
 | 32 | **Un-pair and re-pair** the tablet: in the ERP, **Settings > POS tablet**: remove the tablet from the till, pair it again, link it to the till, sign in again on the tablet. | The tablet signs in again, and the till number series continues (no repeated receipt number) |
 | 33 | **Last, only if time allows: wrong manager PIN 5 times** on the Z screen (or any manager-approval screen). | After 5 wrong PINs the tablet is **capped** with a message to see the store manager. **This locks approvals on that tablet for 24 hours.** An admin can clear it in the ERP (`manage_users`, on the till's terminal person), so do this step **last**, and have an admin ready |
 
-That is 33 numbered actions; 4 are "printing check, T-532" and are skipped in this soak.
+That is 33 numbered actions (plus 20a); 4 are "printing check, T-532" and are skipped in this soak.
 
 ## What to record (use the table below, one line per problem)
 | Step # | What happened | What should have happened | Time | Blocker? |
