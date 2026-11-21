@@ -20,6 +20,7 @@ if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 
 import { arRepo, type Tx } from '@shareat/db';
+import { pinPlan } from './_fixtures/plan-pins';
 
 const pg = postgres(url, { max: 1 });
 const db = drizzle(pg);
@@ -82,9 +83,19 @@ async function seed(tx: Tx) {
 
 /** The exact text the repo runs, EXPLAINed, captured by wrapping the executor so the test cannot drift from the repo. */
 async function planOf(tx: Tx, run: (spy: Tx) => Promise<unknown>): Promise<string> {
-  await tx.execute(dsql`analyze ar_collection_allocations`);
-  await tx.execute(dsql`analyze ar_write_offs`);
-  await tx.execute(dsql`set local enable_seqscan = off`);
+  // T-624: 1,000 OTHER customers' charges, each with a posted collection, an allocation and a write-off (foreign keys are off in this tx), so walking any of these
+  // tables end to end is decisively dearer than probing it per charge. Without them every table holds a handful of rows and the planner's choice among
+  // equally valid plans is a coin toss that moves with the rows CI's other tests leave in the shared database.
+  await tx.execute(dsql`
+    with n as (select gen_random_uuid() as ch, gen_random_uuid() as col, gen_random_uuid() as org, gen_random_uuid() as cust from generate_series(1, 1000)),
+    c1 as (insert into ar_charges (id, org_id, store_id, customer_id, charge_date, due_date, total_amount, revenue_account_code, created_by, status)
+           select ch, org, gen_random_uuid(), cust, '2026-02-01', null, 10.00, '4150', gen_random_uuid(), 'posted' from n returning 1),
+    c2 as (insert into ar_collections (id, org_id, store_id, customer_id, collection_date, amount, money_account_id, created_by, status)
+           select col, org, gen_random_uuid(), cust, '2026-02-02', 5.00, gen_random_uuid(), gen_random_uuid(), 'posted' from n returning 1),
+    c3 as (insert into ar_collection_allocations (ar_collection_id, ar_charge_id, amount_applied) select col, ch, 5.00 from n returning 1)
+    insert into ar_write_offs (org_id, ar_charge_id, amount, reason, journal_entry_id, written_off_by)
+    select org, ch, 1.00, 'noise', gen_random_uuid(), gen_random_uuid() from n`);
+  await pinPlan((s) => tx.execute(dsql.raw(s)), ['ar_collection_allocations', 'ar_write_offs', 'ar_charges', 'ar_collections']);
   const seen: string[] = [];
   const spy = new Proxy(tx, {
     get(target, prop, recv) {
