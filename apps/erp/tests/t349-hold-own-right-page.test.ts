@@ -151,6 +151,7 @@ function baseDetail(grants: unknown[], stores: { id: string; name: string; code:
     stores: stores.map((s) => ({ ...s, inScope: true })),
     grants,
     credentials: [] as never[],
+    openJobs: [] as never[],
   };
 }
 
@@ -169,7 +170,7 @@ function stripTags(html: string): string {
 }
 
 function liBlocks(html: string): string[] {
-  return html.match(/<li\b[^>]*>[\s\S]*?<\/li>/g) ?? [];
+  return html.match(/<(?:li|tr)\b[^>]*>[\s\S]*?<\/(?:li|tr)>/g) ?? [];
 }
 
 function formsIn(html: string): string[] {
@@ -196,7 +197,7 @@ function hiddenFieldsOf(formHtml: string): HiddenField[] {
 }
 
 function rowsCarryingCapability(html: string): string[] {
-  return liBlocks(html).filter((li) => li.includes(`>${CAP_TITLE}<`));
+  return liBlocks(html).filter((li) => li.includes(`>${CAP_TITLE}<`) && !li.includes('type="checkbox"'));
 }
 
 let UserAccessPage: typeof import('../src/app/admin/users/[personId]/page').default;

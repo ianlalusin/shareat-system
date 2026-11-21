@@ -105,6 +105,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/trade/returns/page.tsx',
   // Read-only detail lines with nowhere to go (16)
   'app/admin/prerequisite-refusals/page.tsx',
+  'app/admin/users/[personId]/page.tsx', // store access, sign-in and grant tables: each row's own buttons, no row destination
   'app/customers/price-lists/[id]/page.tsx',
   'app/opening-balances/stock-count/page.tsx', // T-591 B: a count table; the row's one action is its own Edit, no row destination
   'app/opening-balances/stock-count/sheet/page.tsx',

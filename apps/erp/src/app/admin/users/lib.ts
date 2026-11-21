@@ -8,6 +8,7 @@
  */
 import {
   accessRepo,
+  employmentRepo,
   personsRepo,
   positionDefaultsRepo,
   sessionsRepo,
@@ -57,6 +58,8 @@ export interface UserDetail {
    * a screen forever for no decision anyone makes from it.
    */
   credentials: SignInCredential[];
+  /** The person's open staff records (id and store), so the screen can link to them. */
+  openJobs: { id: string; storeId: string }[];
 }
 
 /** One way in, as the screen needs it. ⛔ No `secretHash` and no `lookupHash` — the row carries
@@ -78,10 +81,11 @@ export async function userDetail(orgId: string, personId: string): Promise<UserD
     const person = rows.find((r) => r.id === personId);
     if (!person) return null;
 
-    const [scopedIds, grants, credentials, pinResetPending] = await Promise.all([
+    const [scopedIds, grants, credentials, openJobs, pinResetPending] = await Promise.all([
       accessRepo.storeIdsForPerson(tx, personId),
       accessRepo.grantsForPerson(tx, personId),
       sessionsRepo.listLiveForPerson(tx, personId),
+      employmentRepo.listOpenForPerson(tx, personId),
       sessionsRepo.pinResetPendingForPerson(tx, personId),
     ]);
     const held = new Set(scopedIds);
@@ -104,6 +108,7 @@ export async function userDetail(orgId: string, personId: string): Promise<UserD
       pinResetPending,
       stores: stores.map((s) => ({ ...s, inScope: held.has(s.id) })),
       grants: grantsWithSource.sort((a, b) => a.grantName.localeCompare(b.grantName)),
+      openJobs: openJobs.map((j) => ({ id: j.id, storeId: j.storeId })),
       credentials: credentials.map((c) => ({
         id: c.id,
         kind: c.kind,
