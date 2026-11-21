@@ -11,8 +11,8 @@ import { readPosTabletToken } from '@/lib/session';
 /** The three words that open a POS tab (Receipts and Till ride on `record_sale`). */
 export const POS_CAPABILITIES: readonly Capability[] = ['record_sale', 'serve_pos_ticket', 'request_pos_refill'];
 
-/** T-529: the words the shell hands to the tabs. `confirm_pos_heads` is not a tab of its own (Refills opens on `request_pos_refill`) but the Refills tab draws its Heads control by it. */
-export const POS_SHELL_CAPABILITIES: readonly Capability[] = [...POS_CAPABILITIES, 'confirm_pos_heads'];
+/** T-529: the words the shell hands to the tabs. `confirm_pos_heads` is not a tab of its own (Refills opens on `request_pos_refill`) but the Refills tab draws its Heads control by it. T-620: `approve_pos_correction` likewise opens no tab; the Orders tab asks for a manager PIN on a void only when it is absent. */
+export const POS_SHELL_CAPABILITIES: readonly Capability[] = [...POS_CAPABILITIES, 'confirm_pos_heads', 'approve_pos_correction'];
 
 /** What the shell shows beside the tabs: the stores this person works at, and their own name (names, never ids: bible row 229). */
 export async function posShellFacts(tx: Tx, actor: Actor): Promise<{ stores: { id: string; name: string; mode: 'off' | 'test' | 'live' }[]; displayName: string }> {

@@ -90,7 +90,7 @@ describe('G8 - the sales day form keeps its save in view', () => {
   // MUTANT: remove the sticky wrapper -> Save sits at the bottom of a very long phone form.
   it('the submit button sits in a sticky bottom bar', () => {
     const form = src('app/sales-days/SalesDayForm.tsx');
-    expect(form).toMatch(/sticky bottom-0[^"]*">\s*<Button type="submit" variant="primary">\s*\{submitLabel\}/);
+    expect(form).toMatch(/<SaveBar>\s*<Button type="submit" variant="primary">\s*\{submitLabel\}/);
   });
 });
 

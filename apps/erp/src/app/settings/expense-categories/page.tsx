@@ -13,7 +13,7 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK, NAV_LINK } from '@/components/action-link';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_EXPENSE_CATEGORY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Card, ConfirmDestructive, DialogActions, EmptyState, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
+import { Button, ConfirmDestructive, DialogActions, DisclosureCard, EmptyState, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -87,11 +87,61 @@ export default async function ExpenseCategoriesSettingsPage({
   }
   const groups = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
 
+  /** T-599 S9: a group opens by itself when a typed refill is waiting in it. */
+  const anyTypedInGroup = (rows: typeof filtered) =>
+    rows.some(
+      (c) =>
+        typedFor(sp, EXPENSE_CATEGORY_RENAME, c.id, actor.personId) !== null ||
+        typedFor(sp, EXPENSE_CATEGORY_ACCOUNT, c.id, actor.personId) !== null ||
+        subcategories.some((x) => x.categoryId === c.id && typedFor(sp, EXPENSE_SUBCATEGORY_RENAME, x.id, actor.personId) !== null),
+    );
+  const groupMeta = (rows: typeof filtered) => {
+    const none = rows.filter((c) => c.accountCode === null).length;
+    return `${rows.length} ${rows.length === 1 ? 'category' : 'categories'} · ${none === 0 ? 'all mapped' : `${none} with no account`}`;
+  };
+
   return (
     <Page
       density="table"
       crumb={<><a href="/settings" className={NAV_LINK}>Settings</a> / Expense categories</>}
       title="Expense categories"
+      actions={
+      <FormModal trigger="+ Add category" title="Add a category" size="md">
+        <CheckedForm rules={SETTINGS_EXPENSE_CATEGORY_RULES} action={createCategoryAction} className="space-y-3 text-sm">
+          <FormGrid layout="fields">
+            <Field label="Name" width="name" rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
+              <Input {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)} placeholder="Scooter rental" className="w-full" />
+            </Field>
+            <Field label="Group" width="name">
+              <Select name="group" defaultValue="OPEX" className="w-full">
+                <option value="OPEX">{GROUP_WORDS.OPEX}</option>
+                <option value="COGS">{GROUP_WORDS.COGS}</option>
+                <option value="CAPEX">{GROUP_WORDS.CAPEX}</option>
+                <option value="PERSONAL">{GROUP_WORDS.PERSONAL}</option>
+              </Select>
+            </Field>
+            <Field label="Posts to" width="name">
+              <Select name="accountCode" defaultValue="" className="w-full">
+                <option value="">No account (blocks posting)</option>
+                {accounts.map((a) => (
+                  <option key={a.code} value={a.code}>
+                    {a.code} · {a.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </FormGrid>
+          <p className="text-xs text-muted">
+            A category is <strong>retired, never deleted</strong>, so everything already recorded in it keeps working.
+          </p>
+          <DialogActions>
+            <Button type="submit" variant="primary">
+              Save
+            </Button>
+          </DialogActions>
+        </CheckedForm>
+      </FormModal>
+      }
       description={
         <>
           Which account each kind of spend goes to. A category with{' '}
@@ -147,19 +197,20 @@ export default async function ExpenseCategoriesSettingsPage({
           body="Clear the group or search to see the rest."
         />
       ) : (
-        <div className="space-y-7">
+        <div className="space-y-3">
           {groups.map(([groupName, rows]) => (
-            <section key={groupName} className="space-y-2">
-              <div className="flex items-baseline gap-2">
-                <h2 className="text-sm font-semibold">{groupWord(groupName)}</h2>
-                <span className="text-xs tabular-nums text-muted">{rows.length}</span>
-              </div>
+            <DisclosureCard
+              key={groupName}
+              id={`group-${groupName}`}
+              title={groupWord(groupName)}
+              action={null}
+              meta={groupMeta(rows)}
+              open={rows.some((c) => c.accountCode === null) || groupFilter !== '' || (sp.q ?? '') !== '' || anyTypedInGroup(rows)}
+            >
               <Table card={{ title: 'Category', subtitle: 'Posts to' }}>
                 <thead>
                   <tr>
                     <Th>Category</Th>
-                    <Th>Group</Th>
-                    <Th>Blocking</Th>
                     <Th>Posts to</Th>
                     <Th className="w-28" />
                   </tr>
@@ -180,6 +231,11 @@ export default async function ExpenseCategoriesSettingsPage({
                           {isUnmapped && (
                             <span className="ml-2 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-ink">
                               no account
+                            </span>
+                          )}
+                          {c.blockedDraftCount > 0 && (
+                            <span className="ml-2 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-ink">
+                              Holding up {c.blockedDraftCount} {c.blockedDraftCount === 1 ? 'draft' : 'drafts'}
                             </span>
                           )}
                           {!c.isActive && (
@@ -208,7 +264,7 @@ export default async function ExpenseCategoriesSettingsPage({
                                 </form>
                               </div>
                             ))}
-                            <FormModal trigger="+ Sub-category" title={`Add a sub-category to ${c.category}`} size="sm">
+                            <FormModal trigger="+ Sub-category" triggerVariant="ghost" title={`Add a sub-category to ${c.category}`} size="sm">
                               <form action={createSubcategoryAction} className="space-y-3">
                                 <input type="hidden" name="categoryId" value={c.id} />
                                 <FormGrid layout="fields">
@@ -223,16 +279,6 @@ export default async function ExpenseCategoriesSettingsPage({
                             </FormModal>
                           </div>
                         </Td>
-                        <Td className="text-xs text-muted">{groupWord(c.group)}</Td>
-                        <Td className="text-xs">
-                          {c.blockedDraftCount === 0 ? (
-                            '—'
-                          ) : (
-                            <span className="font-medium text-warning-ink">
-                              {c.blockedDraftCount} draft{c.blockedDraftCount === 1 ? '' : 's'} held up
-                            </span>
-                          )}
-                        </Td>
                         <Td>
                           {mapped ? (
                             <span>
@@ -243,7 +289,7 @@ export default async function ExpenseCategoriesSettingsPage({
                           )}
                         </Td>
                         <Td className="text-right whitespace-nowrap">
-                          <div data-card-ignore className="flex flex-wrap items-center justify-end gap-1">
+                          <div data-card-ignore className="flex flex-wrap items-center justify-end gap-1 md:flex-nowrap">
                             {!c.isSystem && (
                               <EditableRecord
                                 action={renameCategoryAction}
@@ -346,55 +392,11 @@ export default async function ExpenseCategoriesSettingsPage({
                   })}
                 </tbody>
               </Table>
-            </section>
+            </DisclosureCard>
           ))}
         </div>
       )}
 
-
-      {/* ⭐ T-229 slice 2. The database change this paragraph used to promise is migration 0134:
-          uniqueness moved to `lower(trim(category))`, so a hand-typed name can no longer collide
-          with a seeded one by case or spacing — bible §4.4 rule 3, DEF-205. */}
-      <Card>
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="font-semibold">Add a category</h2>
-          <FormModal trigger="+ Add category" title="Add a category" size="md">
-            <CheckedForm rules={SETTINGS_EXPENSE_CATEGORY_RULES} action={createCategoryAction} className="space-y-3 text-sm">
-              <FormGrid layout="fields">
-                <Field label="Name" width="name" rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
-                  <Input {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)} placeholder="Scooter rental" className="w-full" />
-                </Field>
-                <Field label="Group" width="name">
-                  <Select name="group" defaultValue="OPEX" className="w-full">
-                    <option value="OPEX">{GROUP_WORDS.OPEX}</option>
-                    <option value="COGS">{GROUP_WORDS.COGS}</option>
-                    <option value="CAPEX">{GROUP_WORDS.CAPEX}</option>
-                    <option value="PERSONAL">{GROUP_WORDS.PERSONAL}</option>
-                  </Select>
-                </Field>
-                <Field label="Posts to" width="name">
-                  <Select name="accountCode" defaultValue="" className="w-full">
-                    <option value="">No account (blocks posting)</option>
-                    {accounts.map((a) => (
-                      <option key={a.code} value={a.code}>
-                        {a.code} · {a.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </FormGrid>
-              <DialogActions>
-                <Button type="submit" variant="primary">
-                  Save
-                </Button>
-              </DialogActions>
-            </CheckedForm>
-          </FormModal>
-        </div>
-        <p className="mt-3 text-xs text-muted">
-          A category is <strong>retired, never deleted</strong>, so everything already recorded in it keeps working.
-        </p>
-      </Card>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
         Stuck drafts show up on the{' '}

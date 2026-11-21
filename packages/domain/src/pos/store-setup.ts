@@ -1,7 +1,7 @@
 /**
  * T-533 S2 - the store's stands and discount presets, written one at a time and audited. docs/tasks/533-pos-lipa-switch.md R2.
  *
- * Callers: the one-time load from v1 (`packages/etl/src/pos-v2/load-store-setup.ts`) and T-611 S3 (copy presets from another store, `store-copy.ts`); T-535 puts a screen on the presets.
+ * Callers: the one-time load from v1 (`packages/etl/src/pos-v2/load-store-setup.ts`) and T-611 S3 (copy presets from another store, `store-copy.ts`) and T-622 (the ERP screen on `/admin/pos-tablets`: add, change, retire).
  * Every function is `(tx, actor, input)` and calls `authorize` FIRST: `manage_store_settings` (admin, manager) at the STORE.
  * Idempotent: the same input a second time writes nothing, audits nothing and does not bump `pos_stores.state_version`.
  * A stand is never resurrected: a retired number stays retired (retired numbers are never reused, T-523 R2).
@@ -108,4 +108,28 @@ export async function upsertPosDiscountPreset(tx: Tx, actor: Actor, input: Prese
   });
   await bump(tx, actor.orgId, storeId);
   return { presetId: existing.id, outcome: 'updated' };
+}
+
+/**
+ * T-622: retire a named discount from the ERP screen. Authorize FIRST (same capability, at the store). The row is kept (past sales name it) and the
+ * snapshot stops carrying it. Retiring one that is already retired writes nothing. A rename is retire + add: the name is the key.
+ */
+export async function retirePosDiscountPreset(tx: Tx, actor: Actor, input: { storeId: string; presetId: string }): Promise<{ outcome: 'retired' | 'unchanged' }> {
+  const storeId = uuidInput(input.storeId, 'That store');
+  await authorize(tx, actor, CAPABILITY, { storeId });
+  const presetId = uuidInput(input.presetId, 'That discount');
+  const existing = await posV2Repo.getPreset(tx, actor.orgId, storeId, presetId);
+  if (!existing) throw refuse(`retirePosDiscountPreset: preset ${presetId} not at store ${storeId}`, 'That discount does not exist any more.');
+  if (!(await posStoreSetupRepo.retirePreset(tx, actor.orgId, storeId, presetId))) return { outcome: 'unchanged' };
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'pos.discount_preset_retired',
+    storeId,
+    entityId: presetId,
+    before: { name: existing.name, valueType: existing.valueType, value: existing.value },
+    after: null,
+    source: 'web',
+  });
+  await bump(tx, actor.orgId, storeId);
+  return { outcome: 'retired' };
 }
