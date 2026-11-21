@@ -55,6 +55,8 @@ export { recordConversion, voidConversion, listOpenConversions } from './convert
 export type { ConvertBlock, OpenConversion, RecordConversionInput, VoidConversionInput } from './convert';
 export { recordTenderCorrection, CORRECTION_CLOSED } from './tender-correction';
 export type { RecordTenderCorrectionInput } from './tender-correction';
+export { checkWalletPayment, listWalletPaymentsToCheck, PAYMENT_CHECK_DAYS } from './payment-check';
+export type { WalletPaymentToCheck } from './payment-check';
 export { recordRefund } from './refund';
 export type { RecordRefundInput, RecordRefundResult, RefundBlock, RefundSlipData } from './refund';
 export { buildV1BridgePayload, V1_BRIDGE_LAST_DATE, v1BridgeDateAllowed } from './v1-bridge-payload';
