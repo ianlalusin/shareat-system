@@ -200,7 +200,8 @@ async function postDisposition(trx: Tx, p: PostDispositionParams): Promise<{ jou
   }
 
   lines.push({
-    accountCode: CHANNEL_RECEIVABLE_CODE,
+    // DEF-925: the account the channel's own sales sit on (a wholesale buyer on 1210); 1220 only when it has none.
+    accountCode: channelRow.receivableAccountCode ?? CHANNEL_RECEIVABLE_CODE,
     storeId: p.storeId,
     credit: amount,
     partyType: CHANNEL_PARTY_TYPE,
