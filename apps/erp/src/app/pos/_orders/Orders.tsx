@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PosEvent } from '@/lib/pos-device';
 import { Banner } from '@/components/ui';
-import { enqueue, reserveTerminalSeq } from '@/lib/pos-device';
+import { enqueue, reserveSeq, reserveTerminalSeq } from '@/lib/pos-device';
 import { printLines, type PrintResult } from '@/lib/pos-print/adapter';
 import { formatReceipt } from '@/lib/pos-print/receipt-text';
 import type { PrintLayout, ReceiptView } from '@/lib/pos-print/types';
@@ -22,10 +22,10 @@ import { usePos } from '../_shell/pos-context';
 import { OutageBanner } from '../_kitchen/outage-jobs';
 import { useOutagePrint } from '../_kitchen/use-outage-print';
 import { newDeviceId } from './ids';
-import { OrderDialog, CancelLineDialog, type OrderDialogMode, type OrderSend } from './OrderDialogs';
+import { OrderDialog, CancelLineDialog, VoidStandDialog, type OrderDialogMode, type OrderSend } from './OrderDialogs';
 import type { MenuLike } from './menu-filter';
 import { OrdersView } from './OrdersView';
-import { actingPersonId, addLinesEvent, cancelLineEvent, ordersAccess, seatEvent, setHeadsEvent, submitPosEvent, takeOutEvent, HEADS_MAX, HEADS_MIN } from './payloads';
+import { actingPersonId, addLinesEvent, cancelLineEvent, ordersAccess, seatEvent, sendVoidNow, setHeadsEvent, submitPosEvent, takeOutEvent, voidAccess, voidSessionEvent, HEADS_MAX, HEADS_MIN, VOID_OFFLINE_NOTE } from './payloads';
 import { projectOrders, type GhostLine, type ServerStand, type SessionBody } from './project';
 import { droppedEvents, SETTLE_MAX_MS, stillSettling, type Settling } from './settle';
 
@@ -40,6 +40,7 @@ export function Orders() {
   const [selected, setSelected] = useState<string | null>(null);
   const [dialog, setDialog] = useState<OrderDialogMode | null>(null);
   const [cancelling, setCancelling] = useState<{ lineId: string; name: string } | null>(null);
+  const [voiding, setVoiding] = useState<{ sessionId: string; label: string } | null>(null);
   const [landed, setLanded] = useState<Record<string, number | null>>({});
   const [settling, setSettling] = useState<Settling[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
@@ -210,6 +211,20 @@ export function Orders() {
     return build(() => addLinesEvent({ ...base, sessionId: dialog.sessionId, heads: o.heads }));
   };
 
+  // T-620: who may void a table, as the server decides it: a person who may approve corrections (no PIN, works offline), else a manager's PIN online, else not at all.
+  const voidMode = voidAccess({ canApprove: pos.held?.has('approve_pos_correction') === true, online: pos.online });
+  const confirmVoid = async (v: { sessionId: string }, reason: string, pin: string): Promise<string | null> => {
+    const event = voidSessionEvent({ personId, sessionId: v.sessionId, reason, now: new Date(), offline: !pos.online, ...(pin ? { pin } : {}) });
+    if (!pin) return build(() => event);
+    // A typed PIN goes to the server at once and never into the outbox. The sent copy has no PIN; it keeps the table off the list until the poll catches up.
+    const sent = await sendVoidNow({ reserveSeq, fetch: (...x) => fetch(...x) }, event);
+    if (!sent.ok) return sent.message;
+    const { approval: _pin, ...payload } = sent.event.payload;
+    setSettling((cur) => [...cur, { event: { ...sent.event, payload }, sessionId: v.sessionId, versionAtDrop: version, droppedAtMs: Date.now() }]);
+    setProblem(null);
+    return null;
+  };
+
   const payment = snapshot?.payment ?? null;
   const payingTile = paying ? tileOf(paying) : undefined;
   const reprint = async () => {
@@ -299,12 +314,14 @@ export function Orders() {
           onPay={(id) => setPaying(id)}
           canReprint={lastReceipt !== null}
           onReprint={() => void reprint()}
+          voidTable={{ onVoid: (id) => setVoiding({ sessionId: id, label: labelOf(id) }), blockedNote: voidMode === 'blocked' ? VOID_OFFLINE_NOTE : null }}
           onCancelLine={(lineId) => {
             const line = Object.values(view.sessions).flatMap((s) => s.lines).find((l) => l.id === lineId);
             setCancelling({ lineId, name: line ? `${line.qty} × ${line.name}` : 'This line' });
           }}
         />
       </div>
+      {voiding && voidMode !== 'blocked' ? <VoidStandDialog label={voiding.label} access={voidMode} onClose={() => setVoiding(null)} onConfirm={(reason, pin) => confirmVoid(voiding, reason, pin)} /> : null}
       {cancelling ? (
         <CancelLineDialog
           lineName={cancelling.name}

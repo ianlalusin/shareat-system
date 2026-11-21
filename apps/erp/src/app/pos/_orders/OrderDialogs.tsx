@@ -223,3 +223,58 @@ export function CancelLineDialog({ lineName, approvalMode = 'none', onClose, onC
     </Dialog>
   );
 }
+
+/**
+ * T-620: void a whole unpaid table. `access` is `voidAccess()` without `blocked` (a blocked till never opens this): `pin` adds the manager PIN box and the confirm needs it;
+ * `direct` (the signed-in person may approve) has none. The server's refusal sentence (wrong PIN, table already paid) comes back from `onConfirm` and the table stays.
+ */
+export function VoidStandDialog({ label, access, onClose, onConfirm }: { label: string; access: 'direct' | 'pin'; onClose: () => void; onConfirm: (reason: string, pin: string) => Promise<string | null> }) {
+  const [pin, setPin] = useState('');
+  const [pick, setPick] = useState<string | null>(null);
+  const [other, setOther] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const typed = other.trim();
+  const reason = pick === 'Other' ? typed : pick;
+  const ready = reason !== null && reason.length >= CANCEL_REASON_MIN && !(access === 'pin' && pin === '');
+  const confirm = async () => {
+    if (!reason) return;
+    setBusy(true);
+    const message = await onConfirm(reason, access === 'pin' ? pin : '');
+    setBusy(false);
+    if (message) setError(message);
+    else onClose();
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Void ${label}?`}
+      description="Its unsent kitchen lines are cancelled. This cannot be undone."
+      size="sm"
+      footer={
+        <div className="space-y-2">
+          {error ? <p role="alert" className="text-sm font-semibold text-danger">{error}</p> : null}
+          <button type="button" data-erp-size="free" className={SEND} disabled={!ready || busy} aria-disabled={!ready || busy} onClick={confirm}>
+            {busy ? 'Saving…' : 'Void table'}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-2" role="group" aria-label="Reason">
+        {CANCEL_REASONS.map((r) => (
+          <button key={r} type="button" data-erp-size="free" aria-pressed={pick === r} className={`${REASON} ${pick === r ? chosen : idle}`} onClick={() => setPick(r)}>
+            {r}
+          </button>
+        ))}
+        {pick === 'Other' ? (
+          <label className="block space-y-2 text-sm font-semibold text-muted">
+            <span className="block">Reason</span>
+            <input type="text" data-erp-size="free" className={FIELD} value={other} onChange={(e) => setOther(e.target.value.slice(0, CANCEL_REASON_MAX))} />
+          </label>
+        ) : null}
+        <LineApprovalField mode={access === 'pin' ? 'pin' : 'none'} pin={pin} onPin={setPin} />
+      </div>
+    </Dialog>
+  );
+}
