@@ -61,5 +61,5 @@ export { buildV1BridgePayload, V1_BRIDGE_LAST_DATE, v1BridgeDateAllowed } from '
 export type { V1BridgeClose, V1BridgeTender, V1BridgePayload } from './v1-bridge-payload';
 export { exportPosData, POS_EXPORT_MAX_DAYS } from './data-export';
 export type { PosDataExport } from './data-export';
-export { upsertPosStand, upsertPosDiscountPreset, checkPreset } from './store-setup';
+export { upsertPosStand, upsertPosDiscountPreset, retirePosDiscountPreset, checkPreset } from './store-setup';
 export type { StandOutcome, PresetOutcome, PresetInput, CheckedPreset } from './store-setup';
