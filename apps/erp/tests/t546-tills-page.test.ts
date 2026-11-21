@@ -24,7 +24,7 @@ vi.mock('../src/lib/page-access', () => ({
 }));
 vi.mock('../src/app/staff/lib', async () => ({ staffStoresFor: vi.fn(async () => [STORE]) }));
 vi.mock('../src/app/admin/pos-tablets/actions', () => ({
-  registerTabletAction: vi.fn(), revokeTabletAction: vi.fn(), clearLockAction: vi.fn(), createTillAction: vi.fn(), linkTillAction: vi.fn(), setTillPrinterAction: vi.fn(),
+  registerTabletAction: vi.fn(), revokeTabletAction: vi.fn(), clearLockAction: vi.fn(), createTillAction: vi.fn(), linkTillAction: vi.fn(), setTillPrinterAction: vi.fn(), savePresetAction: vi.fn(), retirePresetAction: vi.fn(),
 }));
 vi.mock('../src/app/admin/pos-tablets/lib', async (orig) => {
   const actual = await orig<typeof import('../src/app/admin/pos-tablets/lib')>();
@@ -32,6 +32,7 @@ vi.mock('../src/app/admin/pos-tablets/lib', async (orig) => {
     ...actual,
     loadPosTablets: vi.fn(async () => ({ active: null, revoked: [], terminals: [] })),
     loadCopyStores: vi.fn(async () => null), // T-611 S3
+    loadDiscounts: vi.fn(async () => ({ presets: [], canManage: false })), // T-622
     loadTills: vi.fn(async () => {
       H.calls += 1;
       return H.tills;
