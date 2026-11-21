@@ -53,6 +53,13 @@ const ACCESS_DEFAULTS_LINK = (
   </a>
 );
 
+/** Like the link above: a pointer to another screen inside a grant row, not a row destination (T-411). */
+const EMPLOYMENT_LINK = (
+  <a href="/staff" className="inline-block py-1 text-xs underline underline-offset-2">
+    employment
+  </a>
+);
+
 export default async function UserAccessPage({
   params,
   searchParams,
@@ -425,9 +432,7 @@ export default async function UserAccessPage({
                             {/* T-262 / DEF-269 — an inline text link this small needs its own padding to
                                 clear the 24px touch-target floor (`inline-block` so the padding grows the
                                 tappable box). */}
-                            <a href="/staff" className="inline-block py-1 text-xs underline underline-offset-2">
-                              employment
-                            </a>
+                            {EMPLOYMENT_LINK}
                             .
                           </span>
                           {/* T-291 §C3 — Ian's decision 5: a hand-grant of a capability already held via a
