@@ -31,6 +31,9 @@ import { useUpdateGate } from './use-update-gate';
 import { useOfflineXSlip } from './use-offline-xslip';
 import { useOutageReplay } from '../_kitchen/use-outage-replay';
 
+
+/** One stable empty list, so the memo below does not recompute on every render. */
+const NO_EVENTS: never[] = [];
 export interface PosShellProps {
   person: { personId: string; displayName: string };
   /** The POS capabilities the signed-in person holds (from the server). Offline, the offline actor's own list replaces them. */
@@ -70,7 +73,8 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   // T-529 R3: orders saved in the ~6 s before the poll says Offline still print, once.
   useOutageReplay({ paired: pairedStoreId !== null, online: state.online, snapshot: sync.ordersSnapshot, pending: sync.pendingEvents, loaded: sync.pendingLoaded, openStands: state.body?.openStands ?? null });
   // T-621 S1: a deploy's new code waits until nothing is waiting to send, no payment screen is open and the till is online.
-  const updateHeld = useUpdateGate({ waiting: sync.sendableEvents.length, online: state.online });
+  const sendable = sync.sendableEvents ?? NO_EVENTS; // test doubles of useDeviceSync may omit it
+  const updateHeld = useUpdateGate({ waiting: sendable.length, online: state.online });
   const [switching, setSwitching] = useState(false);
   const [offlineSince, setOfflineSince] = useState<number | null>(null);
   const [now, setNow] = useState(0);
@@ -135,7 +139,7 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
 
   const sinceMs = state.failingSinceMs ?? offlineSince;
   // T-621 S3: the sales waiting to send, in exact centavos; offline at or above the rule, everyone at the till sees the warning (the manager is the one called).
-  const unsentCentavos = useMemo(() => unsentSalesCentavos(sync.sendableEvents), [sync.sendableEvents]);
+  const unsentCentavos = useMemo(() => unsentSalesCentavos(sendable), [sendable]);
   const unsentWarn = showUnsentWarning({ online: state.online, unsentCentavos, warnCentavos: sync.ordersSnapshot?.offlineUnsentWarnCentavos ?? null });
   // T-621 S4: an offline X-slip every N hours offline, once per period (remembered in the device meta store, so a reload never reprints).
   const xslip = useOfflineXSlip({ paired: pairedStoreId !== null, online: state.online, offlineSinceMs: offline ? sinceMs : null, hours: sync.ordersSnapshot?.offlineXSlipHours ?? null, pendingEvents: sync.pendingEvents, payment: sync.ordersSnapshot?.payment, printer });
