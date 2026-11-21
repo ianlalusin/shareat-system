@@ -534,4 +534,23 @@ describe('T-606 - a POS correction of a day whose platform line was posted on 12
     const text = lineText(await lines(c.journal_entry_id));
     expect(text.filter((l) => /\b12[12]0\b/.test(l))).toEqual(['Dr 1220 50.00']);
   });
+
+  it('T-618 DEF-930: a correction that ZEROES the platform line credits the channel current account (1220), not the 1210 the day first posted on - Mutant: keep the old lines account when no routed line names the channel -> Cr 1210 200 (1210 negative, 1220 still 200), red', async () => {
+    const { f, dayId } = await movedDay('t618z');
+    await sql.begin(async (t) => {
+      await t`set local session_replication_role = replica`;
+      await t`update sales_day_channels set amount = '0.00' where sales_day_id = ${dayId} and channel_id = ${f.foodpandaId}`;
+    });
+    const feedId = (await recheck(f, DAY)).ids.sales!;
+    await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: OPEN_DATE });
+    const c = (await corrections(dayId))[0]!;
+    const text = lineText(await lines(c.journal_entry_id));
+    expect(text.filter((l) => /\b12[12]0\b/.test(l))).toEqual(['Cr 1220 200.00']);
+    const bal = async (code: string) =>
+      Number((await sql<{ b: string | null }[]>`
+        select sum(jl.debit - jl.credit)::text b from journal_lines jl join accounts a on a.id = jl.account_id join journal_entries je on je.id = jl.entry_id
+         where je.org_id = ${f.orgId} and a.code = ${code} and jl.party_type = 'channel' and jl.party_id = ${f.foodpandaId}`)[0]!.b ?? 0);
+    expect(await bal('1210'), '1210 is not left negative').toBe(0);
+    expect(await bal('1220'), 'nothing is left owed by the channel').toBe(0);
+  });
 });

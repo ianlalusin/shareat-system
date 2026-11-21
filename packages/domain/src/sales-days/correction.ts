@@ -219,6 +219,13 @@ export async function postPosCorrection(tx: Tx, actor: Actor, input: PostPosCorr
       `POS's new figures for ${when} can't be posted: ${routed.reason}.`,
     );
   }
+  // DEF-930 (T-618): a channel's difference posts on the channel's CURRENT receivable even when no routed line names it - a correction that zeroes the platform line routes none, and
+  // the old lines' account (1210, before the move) would take the credit and leave 1220 holding what the channel no longer owes.
+  const currentReceivable = new Map(dayChannels.map((c) => [c.channelId, c.receivableAccountCode]));
+  for (const [k, e] of net) {
+    const current = e.partyType === 'channel' && e.partyId ? currentReceivable.get(e.partyId) : null;
+    if (current) net.set(k, { ...e, accountCode: current });
+  }
   for (const l of routed.lines) {
     const k = keyOf(l.accountCode, l.partyType, l.partyId);
     const cur = net.get(k) ?? { accountCode: l.accountCode, partyType: l.partyType ?? null, partyId: l.partyId ?? null, amount: money('0') };
