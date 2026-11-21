@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { ROUTE_CAPABILITY, capabilityForRoute, navHrefAllowed } from '../../apps/erp/src/lib/route-capability';
+import { APPROVED_OPEN_ROUTES, ROUTES_AWAITING_A_DECISION, hasMapEntry } from '../../apps/erp/src/lib/route-open-lists';
 
 /**
  * T-288 — the guard that stops the nav filter and the read gate drifting apart.
@@ -149,46 +150,8 @@ describe('T-288 — ROUTE_CAPABILITY covers what it claims, and only what it can
 // =====================================================================================================================
 // T-603 S5 / bible section 7 rule 11 - the route map is deny-by-default. Generalises T-497 S1 (which covered /admin and /settings only):
 // EVERY page, and the folder of EVERY 'use server' file, needs a map entry or a place on one of the two lists below. A new unmapped page
-// or action file fails here until someone records a decision. Nothing at runtime changes: `requirePageAccess` is untouched.
+// or action file fails here until someone records a decision. T-616 enforces the same rule at runtime: `requirePageAccess` refuses an unmapped route (lists in `route-open-lists.ts`).
 // =====================================================================================================================
-
-/**
- * Routes open to any signed-in person (or to nobody signed in) BY RECORDED DECISION. Each entry cites the decision.
- * ⛔ Add a route here only when a bible row / task says it is open - never to make this guard green. An unmapped page with no
- * decision is a defect to report, not an entry to add.
- */
-const APPROVED_OPEN_ROUTES: Readonly<Record<string, string>> = {
-  '/': 'T-589 B3a: everyone lands here; the page shows a plain welcome',
-  '/sign-in': 'T-232: no session exists yet',
-  '/setup': 'T-232: first-run setup, no session exists yet',
-  '/clock': 'Firebase kiosk terminal: no ERP session',
-};
-
-/**
- * ⚠️ KNOWN GAP, reported not hidden: routes that are unmapped and have no decision that they are open. Ian decides each (map it to a
- * capability and gate the page, or record a decision that it is open). The guard FAILS for any route not here or in the map, and a
- * separate assertion fails when an entry here is mapped or gone, so this list can only shrink.
- */
-const ROUTES_AWAITING_A_DECISION: readonly string[] = [
-  '/attendance',
-  '/attendance/leave',
-  '/channel-settlements',
-  '/channel-settlements/record',
-  '/commissary/catalogue',
-  '/commissary/discrepancies',
-  '/commissary/orders',
-  '/franchise',
-  '/items',
-  '/items/import',
-  '/opening-balances',
-  '/statutory-discounts',
-  '/trade/orders',
-];
-
-/** Has the permission map an entry (any value, `null` included - an explicit open entry is still an entry) for this route? */
-function hasMapEntry(route: string): boolean {
-  return Object.keys(ROUTE_CAPABILITY).some((k) => route === k || route.startsWith(`${k}/`));
-}
 
 const USE_SERVER = /^\s*(?:\/\*[\s\S]*?\*\/\s*|\/\/[^\n]*\n\s*)*['"]use server['"]/;
 
