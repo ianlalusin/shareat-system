@@ -143,6 +143,13 @@ async function validateWiring(
         'so a sales day posting this channel to it would be refused. Use a receivable control account such as 1220.',
     );
   }
+  // T-618 DEF-927: a cash, payable or equity account is not somewhere a channel's sales can be owed (the picker lists receivables only; this is the server's own check).
+  if (!salesDaysRepo.isReceivableAccount(account)) {
+    throw refuse(
+      `Account ${account.code} is a ${account.type} account, not a receivable.`,
+      `Account ${account.code} ${account.name} is not a receivable account, so a channel's sales cannot be owed on it. Pick a receivable such as 1210 or 1220.`,
+    );
+  }
   // T-606: last, so the refusals above keep their messages.
   if (onPlatform && account.code !== PLATFORM_RECEIVABLE_CODE) {
     throw refuse(

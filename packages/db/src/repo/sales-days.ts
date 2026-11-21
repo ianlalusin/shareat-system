@@ -249,15 +249,16 @@ export async function receivableAccountFor(
   tx: Tx,
   orgId: string,
   code: string,
-): Promise<{ code: string; name: string; isPostable: boolean; requiresParty: boolean; status: string } | null> {
+): Promise<{ code: string; name: string; type: string; isPostable: boolean; requiresParty: boolean; status: string } | null> {
   const [row] = (await tx.execute(sql`
-    select code, name, is_postable, requires_party, status from accounts
+    select code, name, type, is_postable, requires_party, status from accounts
      where org_id = ${orgId} and code = ${code} limit 1
   `)) as unknown as Record<string, unknown>[];
   if (!row) return null;
   return {
     code: String(row.code),
     name: String(row.name),
+    type: String(row.type),
     isPostable: Boolean(row.is_postable),
     requiresParty: Boolean(row.requires_party),
     status: String(row.status),
@@ -273,11 +274,20 @@ export async function lockChannel(tx: Tx, orgId: string, channelId: string): Pro
   return channelById(tx, orgId, channelId);
 }
 
-/** The receivable picker's list — postable, active, and party-bearing (invariant 4). */
+/**
+ * T-618 (DEF-927): the chart's receivables are the 12xx asset accounts. The cash (11xx), payable (2xxx) and equity (3xxx) accounts also carry a party, so "postable and party-bearing" alone
+ * offered them. One definition for the picker (`receivableAccountOptions`) and the server check (`validateWiring`).
+ * shortcut: a code range, not a flag on the account; upgrade if the chart ever puts a receivable outside 12xx.
+ */
+export function isReceivableAccount(account: { code: string; type: string }): boolean {
+  return account.type === 'asset' && account.code.startsWith('12');
+}
+
+/** The receivable picker's list — postable, active, party-bearing (invariant 4), and a receivable (DEF-927). */
 export async function receivableAccountOptions(tx: Tx, orgId: string): Promise<{ code: string; name: string }[]> {
   const rows = (await tx.execute(sql`
     select code, name from accounts
-     where org_id = ${orgId} and is_postable and requires_party and status = 'active'
+     where org_id = ${orgId} and is_postable and requires_party and status = 'active' and type = 'asset' and code like '12%'
      order by code
   `)) as unknown as Record<string, unknown>[];
   return rows.map((r) => ({ code: String(r.code), name: String(r.name) }));
