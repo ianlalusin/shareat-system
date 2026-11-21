@@ -767,7 +767,7 @@ export async function recordChannelSettlement(
 
     // T-594 DEF-904: lock the sales day and re-check it is not voided BEFORE the first write, so a day void in flight is waited out and
     // this is refused instead of committing against a voided day. After every config/figure refusal, so those keep their sentences (a
-    // channel of another store is refused as such, not as a day of another store). Lock order: channel advisory, loan rows, day (a void takes the day alone).
+    // channel of another store is refused as such, not as a day of another store). Lock order: channel advisory, day (already taken `for share` by `salesDayForSettlement` above, BEFORE any loan row: DEF-922, pinned by t618-def922), loan rows, this re-check (a void takes the day alone).
     await lockLiveSalesDay(trx, actor.orgId, { salesDayId: input.salesDayId, storeId: input.storeId, doing: 'a payout settlement' });
 
     const {
