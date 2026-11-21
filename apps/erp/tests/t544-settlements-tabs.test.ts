@@ -16,6 +16,11 @@ vi.mock('next/navigation', async (importOriginal) => ({
 }));
 
 const requireSessionMock = vi.fn();
+// T-617: the page now asks the route gate first; this file is about rendering, so the gate is stubbed open (the gate itself is proved in t617-gate-awaiting-routes.test.ts).
+vi.mock('../src/lib/page-access', () => ({
+  requirePageAccess: async (route: string) => ({ actor: (await requireSessionMock(route)).actor, refusal: null }),
+  StoreNotAvailable: () => null,
+}));
 vi.mock('../src/lib/session', () => ({
   requireSession: (...a: unknown[]) => requireSessionMock(...a),
   requireActor: async (...a: unknown[]) => (await requireSessionMock(...a)).actor,
@@ -36,10 +41,10 @@ const read = (p: string): string => readFileSync(join(ROOT, p), 'utf8');
 const labels = (held: string[]) => visibleSettlementTabs(new Set(held)).map((t) => t.label);
 
 describe('T-544 - which tabs an actor is shown', () => {
-  it('everyone gets Overview; Upload files needs upload_settlement_files; Review days needs record_ar_collection [kills: a tab shown to someone the route refuses]', () => {
-    expect(labels([])).toEqual(['Overview']);
+  it('Overview and Review days need record_ar_collection (T-617); Upload files needs upload_settlement_files [kills: a tab shown to someone the route refuses]', () => {
+    expect(labels([])).toEqual([]);
     expect(labels(['record_ar_collection'])).toEqual(['Overview', 'Review days']);
-    expect(labels(['upload_settlement_files'])).toEqual(['Overview', 'Upload files']);
+    expect(labels(['upload_settlement_files'])).toEqual(['Upload files']);
     expect(labels(['upload_settlement_files', 'record_ar_collection'])).toEqual(['Overview', 'Upload files', 'Review days']);
   });
 
@@ -47,7 +52,7 @@ describe('T-544 - which tabs an actor is shown', () => {
     const rc = read('apps/erp/src/lib/route-capability.ts');
     expect(rc).toMatch(/'\/channel-settlements\/upload': 'upload_settlement_files'/);
     expect(rc).toMatch(/'\/channel-settlements\/review': 'record_ar_collection'/);
-    expect(rc).not.toMatch(/'\/channel-settlements(\/record)?':/); // the overview and the record page stay open to a signed-in actor
+    expect(rc).toMatch(/'\/channel-settlements': 'record_ar_collection'/); // T-617: the overview and the record page need the word that records
   });
 });
 
@@ -70,10 +75,10 @@ describe('T-544 - the tab strip', () => {
   });
 
   it('on the overview, only the Overview tab is current; a hidden tab is not in the markup', async () => {
-    const html = await strip('/channel-settlements', []);
+    const html = await strip('/channel-settlements', ['record_ar_collection']);
     expect(html).toMatch(/aria-current="page"[^>]*>Overview</);
-    expect(html).not.toContain('Upload files');
-    expect(html).not.toContain('Review days');
+    expect(html).not.toContain('Upload files'); // T-617: Overview and Review days share record_ar_collection, so only the upload tab can be hidden from this holder
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1);
   });
 });
 

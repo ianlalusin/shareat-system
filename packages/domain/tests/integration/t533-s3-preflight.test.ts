@@ -16,6 +16,7 @@ import { AuthorizationError } from '@shareat/auth';
 import { RefusalError } from '@shareat/db';
 import { asOrg, closeAll, fixture, pinOf, sql, stateVersionOf, uuid, type Fx } from './_fixtures/t525-pos';
 import { posPreflight } from '../../src/pos/preflight';
+import { employManager } from './_fixtures/t533-store-ready';
 
 afterAll(closeAll);
 
@@ -37,6 +38,7 @@ async function ready(o: { rules?: boolean } = {}): Promise<Fx> {
   }
   await sql`update tenders set pos_v1_alias = lower(name) where store_id = ${f.storeId} and is_active`; // the inactive Maya keeps NO alias: inactive tenders are not counted
   for (const id of [f.managerId, f.counterId, f.kitchenId]) await pinOf(f, id);
+  await employManager(f); // T-601 S6: the approver must be on the tablet's sign-in list
   return f;
 }
 
@@ -117,19 +119,42 @@ describe('R3 posPreflight - each blocking item fires on its own', () => {
     expect(r.blocking[0]!.sentence).toContain('Senior citizen and PWD discount');
   });
 
-  it('no person at the store who may sell (record_sale): the only seller\'s employment ended', async () => {
+  it('no person at the store who may sell (record_sale): the cashier and the manager (who sells by role) have both left', async () => {
     const f = await ready();
-    await sql`update employments set ended_on = '2025-06-01', employment_status = 'resigned' where person_id = ${f.counterId}`;
-    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_record_sale_person'] });
+    await sql`update employments set ended_on = '2025-06-01', employment_status = 'resigned' where person_id in (${f.counterId}, ${f.managerId})`;
+    // No approver either: nobody is left on the sign-in list who has a PIN and the grant.
+    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_record_sale_person', 'no_approver'] });
   });
 
-  it('no manager or above with a PIN: a revoked PIN, a manager of another store, and a staff PIN do not count; an admin with a PIN does', async () => {
+  it('no tablet registered for approvals (T-601 S6): no active pos_terminal_links row; a revoked one does not count', async () => {
+    const f = await ready();
+    await sql`update pos_terminal_links set revoked_at = now(), revoked_by = ${f.adminId} where store_id = ${f.storeId}`;
+    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_terminal_link'] });
+  });
+
+  it('no approver (T-601 S6): a revoked PIN, a manager of another store, and a staff PIN do not count; the manager with a live PIN does', async () => {
     const f = await ready();
     await pinOf(f, f.managerOtherId);
     await sql`update person_credentials set revoked_at = now(), revoke_reason = 'test' where person_id = ${f.managerId} and kind = 'pin'`;
-    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_manager_with_pin'] });
-    await pinOf(f, f.adminId);
+    // The manager is on the sign-in list and now has no PIN, so the staff_without_pin warning fires too.
+    expect(await codes(f)).toEqual({ blocking: ['no_approver'], warnings: ['staff_without_pin'] });
+    await sql`update person_credentials set revoked_at = null, revoke_reason = null where person_id = ${f.managerId} and kind = 'pin'`;
     expect(await codes(f)).toEqual(NONE);
+  });
+
+  it('no approver (T-612): a SUSPENDED manager with a live PIN and the grant is not an approver; reinstated, they are', async () => {
+    const f = await ready();
+    // Mutant: no account_status test in personMaySignInAtStore, listOpenEmploymentsAtStore, personIdsWithLivePin and authorize -> the suspended manager still approves (red).
+    await sql`update persons set account_status = 'suspended' where id = ${f.managerId}`;
+    expect((await codes(f)).blocking, 'a paused account is no approver').toContain('no_approver');
+    await sql`update persons set account_status = 'active' where id = ${f.managerId}`;
+    expect(await codes(f)).toEqual(NONE);
+  });
+
+  it('no approver (T-601 S6): the only approver is also the only seller (the cashier left), so they cannot approve their own close', async () => {
+    const f = await ready();
+    await sql`update employments set ended_on = '2025-06-01', employment_status = 'resigned' where person_id = ${f.counterId}`;
+    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_approver'] });
   });
 
   it('the bridge key file not configured, from the injected probe only', async () => {

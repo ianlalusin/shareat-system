@@ -39,6 +39,11 @@ export async function readPosRules(tx: Tx, orgId: string, onDate: string): Promi
  * T-575: how many business days back a senior/PWD card number counts as "used before" (`pos.senior_id_repeat_days`: whole days, 1 = the same business day). Its own reader,
  * not a `PosRules` field: only the server uses it (the tablet never enforces it), so it stays out of the snapshot and out of the injectable `readRules`.
  */
+export async function readReceiptLookupDays(tx: Tx, orgId: string, onDate: string): Promise<number> {
+  return (await ruleValue(tx, orgId, 'pos.receipt_lookup_days', onDate)).days();
+}
+
+/** T-575 reader, see above. */
 export async function readSeniorIdRepeatDays(tx: Tx, orgId: string, onDate: string): Promise<number> {
   return (await ruleValue(tx, orgId, 'pos.senior_id_repeat_days', onDate)).days();
 }

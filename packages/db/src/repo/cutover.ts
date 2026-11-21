@@ -32,7 +32,7 @@ export async function purgeComplete(
   const remaining: { table: string; rows: number }[] = [];
   for (const table of tables) {
     const [row] = (await tx.execute(
-      sql.raw(`select count(*)::text as n from "${table}" where org_id = '${orgId}'`),
+      sql`select count(*)::text as n from ${sql.identifier(table)} where org_id = ${orgId}`,
     )) as unknown as Record<string, string>[];
     const n = Number(row?.n ?? 0);
     if (n > 0) remaining.push({ table, rows: n });

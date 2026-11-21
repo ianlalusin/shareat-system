@@ -21,10 +21,10 @@ export const STATUS_TONE: Readonly<Record<string, Tone>> = Object.fromEntries([
     'resolved', 'succeeded', 'completed', 'active', 'liquidated', 'fully_amortised', 'paid_off', 'final', 'paid', 'applied', 'served',
   ]),
   ...group('progress', ['counting', 'reviewing', 'preparing', 'running', 'in_transit', 'dispatched', 'ready', 'called']),
-  ...group('danger', ['void', 'voided', 'overdue', 'rejected', 'declined', 'failed', 'aborted', 'defaulted', 'written_off']),
+  ...group('danger', ['void', 'voided', 'overdue', 'rejected', 'declined', 'failed', 'aborted', 'defaulted', 'written_off', 'suspended']),
   ...group('closed', [
     'closed', 'cancelled', 'removed', 'expired', 'reversed', 'disposed', 'merged', 'archived', 'inactive', 'locked', 'charged', 'income',
-    'resigned', 'terminated', 'retired', 'withdrawn', 'superseded_by_work', 'gone',
+    'resigned', 'terminated', 'retired', 'withdrawn', 'superseded_by_work', 'gone', 'ended',
   ]),
 ]);
 

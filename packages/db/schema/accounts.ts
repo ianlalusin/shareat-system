@@ -51,6 +51,9 @@ export const accounts = pgTable(
     // subledger) or MUST NOT (every other account). Enforced both directions by a
     // trigger, not by TypeScript — see this file's top comment.
     requiresParty: boolean('requires_party').notNull().default(false),
+    // T-608 (migration 0267): when set, a line on this account MAY carry a party, but only of exactly this type (7200 interest -> 'loan').
+    // Never both this and requires_party (accounts_party_mode_check). Read by the same trigger as requires_party.
+    optionalPartyType: text('optional_party_type'),
     isSystem: boolean('is_system').notNull().default(false),
     legacyCode: text('legacy_code'),
     status: text('status', { enum: ['active', 'reserved', 'archived'] })
@@ -70,6 +73,7 @@ export const accounts = pgTable(
     ),
     check('accounts_normal_balance_check', sql`${t.normalBalance} in ('debit', 'credit')`),
     check('accounts_status_check', sql`${t.status} in ('active', 'reserved', 'archived')`),
+    check('accounts_party_mode_check', sql`not (${t.requiresParty} and ${t.optionalPartyType} is not null)`),
     // NOTE: "a postable account may not have children" is cross-row — it depends on the
     // parent's state, not just the row being written — so it cannot be a plain CHECK. It
     // is hand-added in the generated migration as a BEFORE INSERT OR UPDATE trigger

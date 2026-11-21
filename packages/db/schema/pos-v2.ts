@@ -494,6 +494,16 @@ export const posSalesReceipts = pgTable(
     // NOTE: pos_sales_receipts_store_id_id_unique UNIQUE (store_id, id) - hand-added in migration 0265 (T-534); the target of the (store_id, receipt_id) composites on the correction and refund tables, so they cannot name another store's receipt.
     unique('pos_sales_receipts_store_id_id_unique').on(t.storeId, t.id),
     unique('pos_sales_receipts_terminal_seq_unique').on(t.terminalId, t.terminalSeq),
+    // NOTE: hand-added in migration 0272 (T-602): the receipt list indexes. Column order follows the ORDER BY of the query each one serves (see the migration header).
+    index('pos_sales_receipts_store_issued_idx').on(t.storeId, t.issuedAtDevice.desc(), t.id.desc()),
+    // NOTE: hand-added in migration 0272 (T-602): one close is one store, so no store_id; partial on closed receipts.
+    index('pos_sales_receipts_day_close_idx')
+      .on(t.dayCloseId, t.issuedAtDevice, t.id)
+      .where(sql`${t.dayCloseId} is not null`),
+    // NOTE: hand-added in migration 0272 (T-602): partial on the unclosed day only, so it stays tiny forever.
+    index('pos_sales_receipts_open_idx')
+      .on(t.terminalId, t.issuedAtDevice, t.id)
+      .where(sql`${t.dayCloseId} is null`),
     unique('pos_sales_receipts_table_session_unique').on(t.tableSessionId),
     // NOTE: the trigger pos_sales_receipts_session_guard (INSERT for a voided session refused, 23001) is hand-added in migration 0238, ENABLE ALWAYS.
     // NOTE: the trigger pos_sales_receipts_frozen (every column frozen, day_close_id set once; DELETE refused; 23001) is hand-added in migration 0238, ENABLE ALWAYS.
@@ -908,7 +918,7 @@ export const posRefundPayments = pgTable(
     receiptId: uuid('receipt_id').notNull(),
     /** The original paid row the money goes back to. Composite FK (receipt_id, payment_id) -> pos_sales_receipt_payments(receipt_id, id). */
     paymentId: uuid('payment_id').notNull(),
-    /** Equals that payment's tender: composite FK (payment_id, tender_id) -> pos_sales_receipt_payments(id, tender_id). A refund goes back the way it was paid (ruling 2A). */
+    /** That payment's own tender, OR (T-613 D1) the tender a wrong-payment-method correction of that same paid row moved money to: a refund goes back the way the money really was paid (ruling 2A). Trigger pos_refund_payment_tender_guard, migration 0269. */
     tenderId: uuid('tender_id').notNull(),
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
     /** For a wallet, the reference of the money sent back. */
@@ -916,7 +926,7 @@ export const posRefundPayments = pgTable(
   },
   (t) => [
     check('pos_refund_payments_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
-    unique('pos_refund_payments_refund_payment_unique').on(t.refundId, t.paymentId),
+    unique('pos_refund_payments_refund_payment_tender_unique').on(t.refundId, t.paymentId, t.tenderId),
     // NOTE: pos_refund_payments_payment_idx (payment_id) - hand-added in migration 0265 (the cap read: refunded money per original payment).
     index('pos_refund_payments_payment_idx').on(t.paymentId),
     // NOTE: the triggers pos_refund_payments_append_only (UPDATE / DELETE refused, 23001) and pos_refund_payments_append_guard (a payment is inserted only in the transaction that wrote its refund, 23001) are hand-added in migration 0265, ENABLE ALWAYS.
@@ -925,7 +935,8 @@ export const posRefundPayments = pgTable(
     twin('pos_refund_payments_refund_id_same_org_fk', t.orgId, t.refundId, posRefunds.orgId, posRefunds.id),
     foreignKey({ columns: [t.refundId, t.receiptId], foreignColumns: [posRefunds.id, posRefunds.parentReceiptId], name: 'pos_refund_payments_refund_receipt_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.receiptId, t.paymentId], foreignColumns: [posSalesReceiptPayments.receiptId, posSalesReceiptPayments.id], name: 'pos_refund_payments_payment_of_receipt_fk' }).onDelete('restrict'),
-    foreignKey({ columns: [t.paymentId, t.tenderId], foreignColumns: [posSalesReceiptPayments.id, posSalesReceiptPayments.tenderId], name: 'pos_refund_payments_tender_of_payment_fk' }).onDelete('restrict'),
+    // NOTE: the old (payment_id, tender_id) FK was replaced in migration 0269 by this same-org tenders FK plus the BEFORE INSERT trigger pos_refund_payment_tender_guard (own tender, or the target of a correction of that paid row).
+    twin('pos_refund_payments_tender_id_same_org_fk', t.orgId, t.tenderId, tenders.orgId, tenders.id),
   ],
 );
 

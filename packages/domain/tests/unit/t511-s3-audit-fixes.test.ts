@@ -13,6 +13,7 @@ import {
   STORE_A,
   fixture,
   fp34Order,
+  fpChargeRow,
   fpWorkbook,
   getCell,
   grabHeaders,
@@ -121,6 +122,52 @@ describe('readFoodpandaInvoice: a row with no Order Code', () => {
   it('the real workbooks, which end in the uncached SUBTOTAL row, still read', async () => {
     const { workbook } = await openSettlementZip(fixture('foodpanda-malvar-oct12-34col.zip'));
     expect((await readFoodpandaInvoice(workbook)).orders).toHaveLength(57);
+  });
+});
+
+/* ---------------------------------------------------------------- DEF-899: Appendix B amounts with no Category */
+
+describe('DEF-899 readFoodpandaInvoice: an Appendix B row with amounts and no Category', () => {
+  const cpc = fpChargeRow('Organic Placement (CPC)', 'Organic Placement (CPC)  2026-10-08  : ZZ99', 10);
+  // Appendix B columns: ..., Category(3), Description(4), ..., Net Total(9), EWT(10).
+  const noCategory = (over: Record<number, Cell>): Cell[] => {
+    const row: Cell[] = [null, null, null, '', null, null, null, null, null, null, null];
+    for (const [i, v] of Object.entries(over)) row[Number(i)] = v;
+    return row;
+  };
+
+  it('a Net Total and no Category is refused FOODPANDA_BAD_VALUE naming the sheet row', async () => {
+    const r = await refusalOf(() => readFoodpandaInvoice(fpWorkbook({ chargeRows: [cpc, noCategory({ 9: 50 })] })));
+    expect(r.code).toBe('FOODPANDA_BAD_VALUE');
+    expect(mentionsNumber(r.userMessage, 3)).toBe(true);
+  });
+
+  it('an EWT alone and no Category is refused too', async () => {
+    const r = await refusalOf(() => readFoodpandaInvoice(fpWorkbook({ chargeRows: [cpc, noCategory({ 10: 5 })] })));
+    expect(r.code).toBe('FOODPANDA_BAD_VALUE');
+  });
+
+  it('an all-blank row is skipped and the charges are unchanged', async () => {
+    const inv = await readFoodpandaInvoice(fpWorkbook({ chargeRows: [cpc, noCategory({})] }));
+    expect(inv.charges).toHaveLength(1);
+  });
+});
+
+/* ---------------------------------------------------------------- DEF-903: a repeated Appendix A row */
+
+describe('DEF-903 readFoodpandaInvoice: a repeated order row', () => {
+  it('two identical rows are refused, naming both sheet rows and never the Order Code', async () => {
+    const rows = [fp34Order('zz99-0001-aa'), fp34Order('zz99-0001-aa')];
+    const r = await refusalOf(() => readFoodpandaInvoice(fpWorkbook({ orderRows: rows })));
+    expect(r.code).toBe('FOODPANDA_BAD_VALUE');
+    expect(mentionsNumber(r.userMessage, 2)).toBe(true);
+    expect(mentionsNumber(r.userMessage, 3)).toBe(true);
+    expect(r.userMessage).not.toContain('zz99-0001-aa');
+  });
+
+  it('the same Order Code with different figures (a reversal shape) is accepted', async () => {
+    const rows = [fp34Order('zz99-0001-aa'), fp34Order('zz99-0001-aa', { 6: 'X', 33: -74.5 })];
+    expect((await readFoodpandaInvoice(fpWorkbook({ orderRows: rows }))).orders).toHaveLength(2);
   });
 });
 

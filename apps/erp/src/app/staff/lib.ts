@@ -11,6 +11,7 @@
 import { toBusinessDate } from '@shareat/core/datetime';
 import { accessRepo, deductionAgreementsRepo, employmentRepo, personsRepo, sessionsRepo, statutoryRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow, type Tx } from '@shareat/db';
 import { authorize, can, type Actor, type Capability } from '@shareat/auth';
+import type { AccountStatus } from '@shareat/db/schema';
 import { deductionCapPercent, listIssuedDocuments, searchPersons, staffMediaView, type IssuedDocumentSummary } from '@shareat/domain';
 import { listStores, withOrgPrincipal, type StoreOption } from '../expenses/lib';
 import { heldStoresFor } from '../../lib/held-stores';
@@ -69,6 +70,12 @@ export async function positionsForStore(orgId: string, storeId: string): Promise
 
 export interface EmploymentDetail {
   role?: string | null;
+  /** T-612: the person's account status (pending / active / suspended / ended). */
+  accountStatus: AccountStatus;
+  /** T-612: whether the viewer may activate / suspend / reinstate this person (staff: `enrol_staff` here; manager or above: `manage_users`). The domain re-decides, with the rank rule. */
+  canManageAccount: boolean;
+  /** T-612: the viewer is looking at their own record (nobody suspends themself). */
+  isSelf: boolean;
   employment: EmploymentRow;
   personName: string;
   /** T-438: the stored parts; all null for a legacy person (never guessed, spec N3) - the Name form then shows empty boxes. */
@@ -93,8 +100,13 @@ export async function employmentDetail(actor: Actor, employmentId: string): Prom
     const store = stores.find((s) => s.id === employment.storeId);
     const positionRows = await employmentRepo.listEmploymentPositions(tx, employmentId);
     const role = await accessRepo.activeRoleForPerson(tx, employment.personId, orgId);
+    const staffTarget = !role || role.role === 'staff';
+    const canManageAccount = employment.endedOn === null && (staffTarget ? await can(tx, actor, 'enrol_staff', { storeId: employment.storeId }) : await can(tx, actor, 'manage_users', {}));
     return {
       role: role?.role ?? null,
+      accountStatus: person?.accountStatus ?? 'ended',
+      canManageAccount,
+      isSelf: actor.personId === employment.personId,
       employment,
       personName: person?.displayName ?? '(unknown person)',
       nameParts,
@@ -141,6 +153,15 @@ export async function livePinFor(actor: Actor, personId: string): Promise<{ issu
     const rows = await sessionsRepo.listLiveForPerson(tx, personId);
     const pin = rows.find((r) => r.kind === 'pin');
     return pin ? { issuedAt: pin.createdAt } : null;
+  });
+}
+
+/** T-619 / DEF-920: true while a promotion has retired this person's PIN and no new one is set. Same read gate as `livePinFor`. */
+export async function pinResetPendingFor(actor: Actor, personId: string): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const held = (await heldStoresFor(tx, actor, STAFF_READ)).map((st) => st.id);
+    if (!(await employmentRepo.personHasEmploymentAtStores(tx, personId, held))) return false;
+    return sessionsRepo.pinResetPendingForPerson(tx, personId);
   });
 }
 

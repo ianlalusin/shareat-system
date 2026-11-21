@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { compare, money, subtract, ZERO } from '@shareat/core/money';
+import { compare, fromCentavos, money, subtract, ZERO } from '@shareat/core/money';
+import { leftToPay, loanSchedule } from '@shareat/domain';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
+import { recordInScope } from '@/lib/store-scope';
 import { disburseLoanAction, recordPaymentAction, reverseEntryAction, updateLoanRepaymentAmountAction } from '../actions';
 import { METHOD_LABEL, getDetail, moneyAccounts, peso, repaymentAmountFor, today } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
@@ -36,7 +38,7 @@ export default async function LoanPage({
   if (refusal) return refusal;
 
   const loan = await getDetail(actor.orgId, id);
-  if (!loan) notFound();
+  if (!loan || !(await recordInScope(actor, '/loans', loan.storeId))) notFound();
   // T-488: minted per render and submitted back, so a double click is a replay of ONE posting and a second genuine
   // transaction on the same day carries its own id (the entry is keyed on it, never on the figures).
   const requestId = crypto.randomUUID();
@@ -47,6 +49,9 @@ export default async function LoanPage({
   // T-371 R4/C4: re-minted database values, ordered in exact centavos — no float tolerance needed.
   const undrawn = subtract(money(loan.principalAmount), money(loan.position.disbursed));
   const owes = compare(money(loan.position.outstanding), ZERO) > 0;
+  // T-608: a scheduled loan's "left to pay" (principal + interest). It is worked from the repayment amount, so it is shown only to someone who may see that figure.
+  const schedule = repayment.amount === null ? null : loanSchedule({ principalAmount: loan.principalAmount, repaymentAmount: repayment.amount, termPeriods: loan.termPeriods });
+  const leftToPayNow = schedule ? fromCentavos(leftToPay(schedule, loan.position)) : null;
 
   return (
     <Page view="detail" density="table">
@@ -78,6 +83,9 @@ export default async function LoanPage({
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Interest paid so far: <strong>{peso(loan.position.interestPaid)}</strong>.
+              {leftToPayNow !== null && (
+                <> Left to pay, principal and interest together: <strong>{peso(leftToPayNow)}</strong>.</>
+              )}
             </p>
           </section>
         }

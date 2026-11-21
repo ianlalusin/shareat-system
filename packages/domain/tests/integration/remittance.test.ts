@@ -412,6 +412,19 @@ describe('the refusals', () => {
     ).rejects.toThrow(/from the cashier to the office/);
   });
 
+  it('⛔ T-613 DEF-932: a retired account is refused on either side of a remittance, before anything is written', async () => {
+    const f = await fixture('retired');
+    const remit = () =>
+      asOrg(f.orgId, (tx) =>
+        createRemittance(tx, f.admin, { storeId: f.storeId, remittedOn: '2026-01-02', lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '1000.00' }] }),
+      );
+    for (const id of [f.till, f.safe]) {
+      await sql`update money_accounts set is_active = false where id = ${id}`;
+      await expect(remit()).rejects.toThrow(/is retired/);
+      await sql`update money_accounts set is_active = true where id = ${id}`;
+    }
+  });
+
   it('⛔ DEF-052: accept_remittance actually denies — in v1 it enforced nothing', async () => {
     const f = await fixture('deny');
     const staffId = await person(f.orgId, f.storeId, 'Staff', 'staff');

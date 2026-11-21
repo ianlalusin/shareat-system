@@ -23,7 +23,7 @@ export const NO_TILL_NUMBER = 'This tablet has no till number yet. Ask a manager
 
 export interface PosSnapshot {
   body: {
-    store: { storeId: string; name: string; mode: string; terminalNo: number; vatRegistered: boolean; receiptPaperMm: number; receiptCopies: number; /** T-585: who the receipt says issued it (legal name, TIN + branch, address, contact); an older cached snapshot lacks it. */ identity: ReceiptIdentity };
+    store: { storeId: string; /** T-601 S5: the store code the server puts in the receipt number; an older cached snapshot lacks it. */ code: string; name: string; mode: string; terminalNo: number; vatRegistered: boolean; receiptPaperMm: number; receiptCopies: number; /** T-585: who the receipt says issued it (legal name, TIN + branch, address, contact); an older cached snapshot lacks it. */ identity: ReceiptIdentity };
     menu: Awaited<ReturnType<typeof loadStoreMenu>>;
     stands: { id: string; number: number }[];
     tenders: { id: string; name: string; kind: string }[];
@@ -60,7 +60,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
   }
 
   const body: PosSnapshot['body'] = {
-    store: { storeId, name: storeRow?.name ?? '', mode: store.mode, terminalNo: terminal.terminalNo, receiptPaperMm: terminal.receiptPaperMm, receiptCopies: terminal.receiptCopies, vatRegistered: (await posV2Repo.getOrgTaxType(tx, orgId)) === 'vat', identity: receiptIdentityOf((await organizationsRepo.identityOf(tx, orgId)) ?? { name: '', legalName: null, tin: null }, storeRow ?? { tinBranchCode: null, address: null, contactNumber: null }) }, // T-528 R1: the tablet prices with the org's own VAT status
+    store: { storeId, code: storeRow?.code ?? '', name: storeRow?.name ?? '', mode: store.mode, terminalNo: terminal.terminalNo, receiptPaperMm: terminal.receiptPaperMm, receiptCopies: terminal.receiptCopies, vatRegistered: (await posV2Repo.getOrgTaxType(tx, orgId)) === 'vat', identity: receiptIdentityOf((await organizationsRepo.identityOf(tx, orgId)) ?? { name: '', legalName: null, tin: null }, storeRow ?? { tinBranchCode: null, address: null, contactNumber: null }) }, // T-528 R1: the tablet prices with the org's own VAT status
     menu,
     stands: (await posV2Repo.listActiveStands(tx, orgId, storeId)).map((s) => ({ id: s.id, number: s.number })),
     tenders: (await posV1Repo.listTendersByStore(tx, orgId, storeId)).filter((t) => t.isActive).map((t) => ({ id: t.id, name: t.name, kind: t.kind })),
@@ -77,7 +77,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
     device: {
       pairingId,
       lastSeq: await posV2Repo.maxSeqForPairing(tx, orgId, storeId, pairingId),
-      lastTerminalSeq: await posV2Repo.maxTerminalSeq(tx, orgId, storeId, terminal.terminalNo),
+      lastTerminalSeq: await posV2Repo.maxTerminalSeq(tx, orgId, terminal.id),
     },
     businessDate,
   };

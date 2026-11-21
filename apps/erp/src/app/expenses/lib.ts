@@ -14,7 +14,7 @@
  * always took `(tx, actor, …)` and never asked where the actor came from — which is exactly why
  * swapping a dropdown for a real session was a boundary change and not a rewrite.
  */
-import { asc, and, eq, isNull } from 'drizzle-orm';
+import { asc, and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import {
   moneyAccountsRepo, schema, expensesRepo, journalRepo,
   withOrgPrincipal as dbWithOrgPrincipal, type Tx,
@@ -74,8 +74,14 @@ export async function listStores(orgId: string): Promise<StoreOption[]> {
 }
 
 /** Everyone in the org who currently holds an active role — the pool "acting as" picks
- *  from. See this file's top comment: this is a stand-in for a real signed-in session. */
-export async function listActingPersons(orgId: string): Promise<PersonOption[]> {
+ *  from. See this file's top comment: this is a stand-in for a real signed-in session.
+ *  With `storeId`, only people employed there (DEF-915) plus `alsoIds` (names a page must still resolve, e.g. who approved). */
+export async function listActingPersons(orgId: string, storeId?: string, alsoIds: readonly (string | null | undefined)[] = []): Promise<PersonOption[]> {
+  const extra = alsoIds.filter((id): id is string => !!id);
+  const employedHere = storeId
+    ? sql`exists (select 1 from ${schema.employments} where ${schema.employments.personId} = ${schema.persons.id} and ${schema.employments.storeId} = ${storeId} and ${schema.employments.endedOn} is null)`
+    : undefined;
+  const atStore = employedHere && (extra.length ? or(employedHere, inArray(schema.persons.id, extra)) : employedHere);
   const rows = await withOrgPrincipal(orgId, (tx) =>
     tx
       .select({ id: schema.persons.id, displayName: schema.persons.displayName, role: schema.personRoles.role })
@@ -84,7 +90,7 @@ export async function listActingPersons(orgId: string): Promise<PersonOption[]> 
       schema.personRoles,
       and(eq(schema.personRoles.personId, schema.persons.id), isNull(schema.personRoles.revokedAt)),
     )
-      .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.isActive, true)))
+      .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.accountStatus, 'active'), eq(schema.persons.kind, 'person'), atStore))
       .orderBy(asc(schema.persons.displayName)),
   );
   return rows;
@@ -103,7 +109,7 @@ export async function listActivePersons(orgId: string): Promise<Omit<PersonOptio
     tx
       .select({ id: schema.persons.id, displayName: schema.persons.displayName })
       .from(schema.persons)
-      .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.isActive, true)))
+      .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.accountStatus, 'active'), eq(schema.persons.kind, 'person')))
       .orderBy(asc(schema.persons.displayName)),
   );
 }

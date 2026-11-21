@@ -16,12 +16,12 @@ import type { LiabilityCategory } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { reverseEntry } from '../ledger/reverse-entry';
-import { checkDraw } from '../money-accounts/overdraft';
+import { assertActiveAccount, checkDraw } from '../money-accounts/overdraft';
 import { refuse } from '../shared/refusal';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { LIABILITY_ADD_RULES, LIABILITY_CHARGE_RULES, LIABILITY_PAY_RULES } from '../field-rules/liabilities';
-import { compare, isZero, money, ZERO } from '@shareat/core/money';
+import { add, compare, formatMoney, isZero, money, subtract, ZERO } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 
 export const LIABILITY_CONTROL_CODE = '2500';
@@ -187,13 +187,18 @@ export async function payLiability(
     const amount = parseMoneyInput(input.amount, 'payLiability: the amount', 'The payment amount');
     if (compare(amount, ZERO) <= 0) throw refuse('payLiability: a payment has to be greater than zero.', 'A payment has to be greater than zero.');
 
+    // DEF-934 (T-613): a re-sent form is looked up BEFORE the retired, overpay and cash checks - after the first click committed the
+    // account may be retired or lower, and a double click must get the original answer. `postEntryOnce` below still refuses a reused id with other figures.
+    const idempotencyKey = `liability:${liability.id}:payment:${requestId}`;
+    const replay = !!(await journalRepo.findEntryByIdempotencyKey(trx, actor.orgId, idempotencyKey));
+
     // R4 — the ledger's figure is re-minted, never cast; it is always a 2-place string.
     const before = money(
       (await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id)).outstanding,
     );
     // ⛔ Overpaying would turn a liability into a receivable with nobody deciding to — the same
     // ceiling `assertWithinReceivable` puts on an owner settlement.
-    if (compare(amount, before) > 0) {
+    if (!replay && compare(amount, before) > 0) {
       throw new Error(
         `payLiability: that is more than the ₱${before} still owed on this obligation.`,
       );
@@ -201,17 +206,18 @@ export async function payLiability(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
     if (!account) throw new Error('payLiability: that money account does not exist.');
+    if (!replay) assertActiveAccount(account, 'payLiability'); // DEF-905
     if (account.storeId !== liability.storeId) {
       throw new Error('payLiability: that account belongs to another store.');
     }
-    const warning = await checkDraw(trx, actor.orgId, account, amount, 'payLiability');
+    const warning = replay ? null : await checkDraw(trx, actor.orgId, account, amount, 'payLiability');
 
     const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'liability_payment',
       sourceId: liability.id,
-      idempotencyKey: `liability:${liability.id}:payment:${requestId}`,
+      idempotencyKey,
       memo: input.memo?.trim() || `Payment — ${liability.name}`,
       postedBy: actor.personId,
       lines: [
@@ -287,6 +293,23 @@ export async function reverseLiabilityEntry(
 
     const reason = input.reason.trim();
     if (!reason) throw new Error('reverseLiabilityEntry: say why this is being reversed.');
+    // DEF-893: reversing a charge that payments already cover would take 2500 below zero. Only a live entry is judged
+    // (an already-reversed one is a no-op); a payment's net is negative, so reversing a payment always passes.
+    if (entry.status === 'posted') {
+      let removed = ZERO;
+      for (const l of await journalRepo.findLinesForEntryWithAccountCodes(trx, entry.id)) {
+        if (l.accountCode === LIABILITY_CONTROL_CODE && l.partyId === liability.id) {
+          removed = add(removed, subtract(money(l.credit), money(l.debit)));
+        }
+      }
+      const outstanding = money((await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id)).outstanding);
+      if (compare(outstanding, removed) < 0) {
+        throw refuse(
+          `reverseLiabilityEntry: reversing entry ${entry.id} would overpay ${liability.id} by ${formatMoney(subtract(removed, outstanding))} — payments already cover it`,
+          `Reversing this ${formatMoney(removed)} charge would overpay ${liability.name} by ${formatMoney(subtract(removed, outstanding))}, because payments already cover it. Reverse a payment first.`,
+        );
+      }
+    }
     const result = await reverseEntry(trx, {
       entryId: input.entryId,
       reason,

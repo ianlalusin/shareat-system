@@ -41,7 +41,8 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
     const org = await organizationsRepo.identityOf(tx, actor.orgId);
     const identity = org && store ? receiptIdentityOf(org, store) : undefined; // T-585: the issuer on every slip, read once per page load
     const till = await posV2Repo.getTerminalForPairing(tx, actor.orgId, storeId, pairing.pairingId);
-    return { storeId, reading, closes, conversions, tenders, receiptPaperMm: till?.receiptPaperMm === 80 ? (80 as const) : (58 as const), receiptCopies: till?.receiptCopies ?? 1, storeName: store?.name ?? 'Store', vatRegistered: taxType === 'vat', identity, cashierName: me?.displayName?.trim() || 'Signed in', isManager };
+    const mode = (await posV2Repo.getPosStore(tx, actor.orgId, storeId))?.mode; // T-601 S4: a TEST store prints TEST - NOT A SALE on its slips
+    return { storeId, mode, reading, closes, conversions, tenders, receiptPaperMm: till?.receiptPaperMm === 80 ? (80 as const) : (58 as const), receiptCopies: till?.receiptCopies ?? 1, storeName: store?.name ?? 'Store', vatRegistered: taxType === 'vat', identity, cashierName: me?.displayName?.trim() || 'Signed in', isManager };
   });
   if (!data) {
     return (
@@ -52,7 +53,7 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
   }
 
   const print = printSettingsOf({ receiptPaperMm: data.receiptPaperMm, receiptCopies: data.receiptCopies });
-  const ctx = { storeName: data.storeName, vatRegistered: data.vatRegistered, identity: data.identity, printedBy: data.cashierName };
+  const ctx = { storeName: data.storeName, vatRegistered: data.vatRegistered, identity: data.identity, mode: data.mode, printedBy: data.cashierName };
   const history = data.closes.map((c) => ({
     id: c.id,
     zNo: c.zNo,
@@ -68,7 +69,7 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
         reading={JSON.parse(JSON.stringify(data.reading)) as ReadingJson}
         history={history}
         isManager={data.isManager}
-        store={{ name: data.storeName, vatRegistered: data.vatRegistered, identity: data.identity, receiptPaperMm: data.receiptPaperMm, receiptCopies: data.receiptCopies }}
+        store={{ name: data.storeName, vatRegistered: data.vatRegistered, identity: data.identity, mode: data.mode, receiptPaperMm: data.receiptPaperMm, receiptCopies: data.receiptCopies }}
         cashierName={data.cashierName}
         tillCountsHref={`/till?store=${encodeURIComponent(data.storeId)}`}
         tenders={data.tenders}

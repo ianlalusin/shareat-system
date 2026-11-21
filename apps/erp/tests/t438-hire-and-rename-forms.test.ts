@@ -46,6 +46,7 @@ vi.mock('../src/app/staff/lib', async (orig) => {
     positionsForStore: vi.fn(async () => []),
     searchPersonsFor: vi.fn(async () => H.results),
     livePinFor: vi.fn(async () => null),
+    pinResetPendingFor: vi.fn(async () => false), // T-619
     otherOpenBranchesFor: vi.fn(async () => ({ branches: [], hiddenCount: 0 })),
     governmentIdsFor: vi.fn(async () => null),
     deductionAgreementsFor: vi.fn(async () => null),
@@ -60,6 +61,9 @@ vi.mock('../src/app/staff/lib', async (orig) => {
       ...parts(),
       storeName: 'Lipa',
       positions: [],
+      accountStatus: 'active', // T-612
+      canManageAccount: false,
+      isSelf: false,
     })),
   };
 });

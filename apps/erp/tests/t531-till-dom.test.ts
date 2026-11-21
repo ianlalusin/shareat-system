@@ -90,6 +90,15 @@ async function type(label: string, value: string) {
 const NL = String.fromCharCode(10);
 
 describe('the reading so far (R6 X-reading)', () => {
+  it('T-613 D3: "no sales to close" shows only when nothing was sold, refunded or converted', async () => {
+    const NONE = 'There are no sales to close since the last Z.';
+    await render({ reading: { ...READING, receiptCount: 0, refunds: { total: '0.00', cash: '0.00', count: 0 }, convert: { cashIn: '0.00', cashOut: '0.00', count: 0 } } });
+    expect(host.textContent).toContain(NONE);
+    await render({ reading: { ...READING, receiptCount: 0, refunds: { total: '250.00', cash: '250.00', count: 1 }, convert: { cashIn: '0.00', cashOut: '0.00', count: 0 } } });
+    expect(host.textContent).not.toContain(NONE);
+    await render({ reading: { ...READING, receiptCount: 0, refunds: { total: '0.00', cash: '0.00', count: 0 }, convert: { cashIn: '500.00', cashOut: '0.00', count: 1 } } });
+    expect(host.textContent).not.toContain(NONE);
+  });
   it('shows receipts, gross, discounts by kind, tenders, the to-check count and the late count', async () => {
     await render();
     const text = host.textContent ?? '';

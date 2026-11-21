@@ -94,6 +94,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('destructive.approved', 'security', 'high', 'either', 'persons', 'T-412', { actor: 'either' }),
   def('set_supplier_credit_terms', 'money', 'normal', 'org', 'suppliers', 'T-362'),
   def('set_supplier_status', 'money', 'normal', 'org', 'suppliers', 'T-391'),
+  def('supplier.renamed', 'money', 'normal', 'org', 'suppliers', 'T-598'),
   def('set_supplier_bank_account', 'money', 'high', 'org', 'suppliers', 'T-365'),
   def('set_supplier_counterparty_store', 'money', 'normal', 'org', 'suppliers', 'T-391'),
   def('set_channel_payout', 'money', 'high', 'store', 'sales_channels', 'T-350'),
@@ -157,6 +158,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu_daypart.created', 'settings', 'high', 'store', 'menu_dayparts', 'T-510'),
   def('menu_daypart.edited', 'settings', 'high', 'store', 'menu_dayparts', 'T-510'),
   def('menu_daypart.retired', 'settings', 'high', 'store', 'menu_dayparts', 'T-510'),
+  // T-611 S1: an administrator copied one store's menu hours or prices onto another (one row per target store; payload = kind, source store, counts, approver; no personal data). Dotted: new.
+  def('settings.copied', 'settings', 'high', 'store', 'stores', 'T-611'),
   // T-511 S4: one file ingested into the staging tables (nothing is booked); store-scoped to the MATCHED store.
   def('settlement_upload.ingested', 'data', 'normal', 'store', 'settlement_uploads', 'T-511'),
   // T-511 S5b: the review stage. A day rejected / reopened and an admin's loan re-allocation; entity = the staged day line. Nothing here posts.
@@ -338,6 +341,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('credential.linked', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
   def('credential.unlinked', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
   def('credential.pin_set', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
+  // T-619 / DEF-920: a raised role retires the person's PIN; the system writes it when the role was assigned with no actor.
+  def('credential.pin_reset_on_promotion', 'security', 'high', 'org', 'persons', 'T-619', { ...ADMIN, actor: 'either' }),
   // T-603 S1: a refused PIN set carries the employment's store, so it is store-scoped (an org-scoped row may not carry one).
   def('credential.pin_set_refused', 'security', 'high', 'store', 'persons', 'T-603', ADMIN),
   def('role.assigned', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
@@ -351,6 +356,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402'),
   // T-609: what ending an employment switched off (counts per kind: store scopes, grants, role, PIN, sessions). No ids, no PIN material.
   def('employment.access_revoked', 'security', 'high', 'store', 'employments', 'T-609'),
+  // T-612: a person's ACCOUNT status moves (entity_id = the person; the store is the employment the button was pressed on). A suspend carries its reason and the sessions it ended.
+  def('account.activated', 'security', 'normal', 'store', 'persons', 'T-612'),
+  def('account.suspended', 'security', 'high', 'store', 'persons', 'T-612'),
+  def('account.reinstated', 'security', 'normal', 'store', 'persons', 'T-612'),
   // T-434: a staff photo is changed on an EMPLOYMENT (the store's ID card). Photo VIEWS are deliberately not logged (every card load would flood it).
   def('staff_photo.set', 'staff', 'normal', 'store', 'employments', 'T-434'),
   def('staff_photo.replaced', 'staff', 'normal', 'store', 'employments', 'T-434'),

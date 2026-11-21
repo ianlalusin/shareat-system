@@ -636,7 +636,7 @@ export interface ReceiptListRow {
  * till number, the table and the tenders - in ONE query. Money stays text. `terminalId`'s till row, the session's stand and the payments are
  * joined without multiplying a receipt (payments fold into one `string_agg`).
  */
-export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: string, since: Date | undefined): Promise<ReceiptListRow[]> {
+export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: string, since: Date | undefined, match?: { terminalNo: number; terminalSeq: number }): Promise<ReceiptListRow[]> {
   const rows = await tx
     .select({
       receiptId: posSalesReceipts.id,
@@ -665,6 +665,8 @@ export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: s
         eq(posSalesReceipts.orgId, orgId),
         eq(posSalesReceipts.storeId, storeId),
         since ? gte(posSalesReceipts.issuedAtDevice, since) : undefined,
+        // T-613 D4: one printed number (till + sequence on that till).
+        match ? and(eq(posTerminals.terminalNo, match.terminalNo), eq(posSalesReceipts.terminalSeq, match.terminalSeq)) : undefined,
       ),
     )
     .groupBy(
@@ -812,13 +814,12 @@ export async function maxSeqForPairing(tx: Tx, orgId: string, storeId: string, p
   return Number(row?.m ?? 0);
 }
 
-/** The highest receipt number printed on this store's terminal; 0 before the first sale. */
-export async function maxTerminalSeq(tx: Tx, orgId: string, storeId: string, terminalNo: number): Promise<number> {
+/** The highest receipt number printed on this terminal; 0 before the first sale. T-602: keyed on the terminal id (no join), so UNIQUE (terminal_id, receipt_seq) answers with one backward index step. */
+export async function maxTerminalSeq(tx: Tx, orgId: string, terminalId: string): Promise<number> {
   const [row] = await tx
     .select({ m: sql<string>`coalesce(max(${posSalesReceipts.terminalSeq}), 0)::text` })
     .from(posSalesReceipts)
-    .innerJoin(posTerminals, eq(posTerminals.id, posSalesReceipts.terminalId))
-    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), eq(posTerminals.terminalNo, terminalNo)));
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.terminalId, terminalId)));
   return Number(row?.m ?? 0);
 }
 
@@ -891,7 +892,7 @@ export async function hasPinSessionOnPairing(
 /** R4 clause 1: the person, if they belong to this organisation (RLS hides another organisation's people too). */
 export async function getPersonOfOrg(tx: Tx, orgId: string, personId: string): Promise<{ id: string; displayName: string; isActive: boolean } | undefined> {
   const [row] = await tx
-    .select({ id: persons.id, displayName: persons.displayName, isActive: persons.isActive })
+    .select({ id: persons.id, displayName: persons.displayName, isActive: sql<boolean>`${persons.accountStatus} = 'active'` })
     .from(persons)
     .where(and(eq(persons.orgId, orgId), eq(persons.id, personId)));
   return row;
@@ -909,7 +910,7 @@ export async function listOpenEmploymentsAtStore(tx: Tx, orgId: string, storeId:
     .select({ personId: employments.personId, displayName: persons.displayName, staffCode: employments.staffCode })
     .from(employments)
     .innerJoin(persons, and(eq(persons.id, employments.personId), eq(persons.orgId, employments.orgId)))
-    .where(and(eq(employments.orgId, orgId), eq(employments.storeId, storeId), isNull(employments.endedOn), eq(persons.isActive, true)))
+    .where(and(eq(employments.orgId, orgId), eq(employments.storeId, storeId), isNull(employments.endedOn), eq(persons.accountStatus, 'active')))
     .orderBy(asc(employments.staffCode));
 }
 

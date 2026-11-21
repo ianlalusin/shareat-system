@@ -27,7 +27,7 @@ import { closeDb, systemTransaction, withOrgPrincipal, accessRepo } from '@share
 import { authorize, assignRoleAsActor, AuthorizationError, type Actor } from '@shareat/auth';
 import { bootstrapOrganization } from '../../src/organizations';
 import { createStore } from '../../src/stores/service';
-import { createEmployment, endEmployment } from '../../src/people';
+import { activateAccount, createEmployment, endEmployment } from '../../src/people';
 
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
@@ -104,7 +104,9 @@ describe('2 — hire at A, terminate, hire at B as Cashier: authorised at B, ref
     const empA = await hire(boot.orgId, adminActor, boot.storeId, worker!.id, [cashierA!.id]);
     await terminate(boot.orgId, adminActor, empA.id);
     const [cashierB] = await sql<{ id: string }[]>`select id from positions where org_id = ${boot.orgId} and name = 'Cashier'`;
-    await hire(boot.orgId, adminActor, storeB.storeId, worker!.id, [cashierB!.id]);
+    const empB = await hire(boot.orgId, adminActor, storeB.storeId, worker!.id, [cashierB!.id]);
+    // T-612: the re-hire after a terminated last job is pending; a manager activates it before the new job can act.
+    await withOrgPrincipal(boot.orgId, (tx) => activateAccount(tx, adminActor, { employmentId: empB.id }));
 
     const workerActor: Actor = { personId: worker!.id, orgId: boot.orgId };
     await expect(

@@ -24,13 +24,14 @@
  * `fulfilledQuantity`/`quantity` (what was actually sold) — reported here, not silently assumed.
  */
 import { advisoryLocksRepo, arRepo, commissaryRepo, customerReturnsRepo, customersRepo, interEntityRepo, itemsRepo, journalRepo, moneyAccountsRepo, moneyTransfersRepo, stockLayersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import type {
   CustomerReturnSettlement,
   CustomerReturnTreatment,
   StockMovementKind,
 } from '@shareat/db/schema';
 import { add, compare, decimal, money, multiply, subtract, ZERO, type Money } from '@shareat/core/money';
+import { logger } from '@shareat/core/logger';
 import { parseMoneyInput } from '../shared/money-input';
 import { perBaseUnit } from '../deliveries/receive';
 import { refuse } from '../shared/refusal';
@@ -40,11 +41,12 @@ import { consume, reverseConsumption } from '../stock/consume';
 import { postWastage } from '../stock/consumption-posting';
 import type { ConsumedLine } from '../stock/layers';
 import { compareQuantity, isPositiveQuantity, quantity, subtractQuantity, type Quantity } from '../stock/quantity';
-import { recordCollection } from '../ar';
+import { recordCollection, spendableStoreCredit } from '../ar';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { RETURN_RECORD_RULES } from '../field-rules/trade';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from '../stock/period-guard';
+import { RETURN_ALREADY_VOIDED } from '../stock/supplier-returns';
 
 export const RETURN_REVENUE_CODE = '4950';
 export const CUSTOMER_RETURN_UNSELLABLE_REASON = 'customer_return_unsellable' as const;
@@ -116,6 +118,11 @@ export async function customerReturnableQuantity(tx: Tx, orgId: string, tradeOrd
 export async function customerCreditBalance(tx: Tx, orgId: string, customerId: string): Promise<Money> {
   // T-371 R4 — a database figure is re-minted, never cast.
   return money(await arRepo.creditBalanceOf(tx, orgId, customerId));
+}
+
+/** T-602 S6-4: `customerCreditBalance` for every customer with a `2140` line, in one query (a customer not in the map holds 0). */
+export async function customerCreditBalances(tx: Tx, orgId: string): Promise<Map<string, Money>> {
+  return new Map([...(await arRepo.creditBalancesByCustomer(tx, orgId))].map(([id, bal]) => [id, money(bal)]));
 }
 
 // -----------------------------------------------------------------------------------------
@@ -261,6 +268,7 @@ async function recordExternalReturn(
     if (!input.moneyAccountId) return { ok: false, reason: 'a cash refund needs a money account.' };
     refundAccount = await moneyAccountsRepo.getById(tx, input.orgId, input.moneyAccountId);
     if (!refundAccount) return { ok: false, reason: 'that money account does not exist.' };
+    if (!refundAccount.isActive) return { ok: false, reason: `"${refundAccount.name}" is retired. Choose another account to refund from.` };
     if (refundAccount.storeId !== order.storeId) {
       return { ok: false, reason: "That money account belongs to another store. A refund is paid from this store's own cash." };
     }
@@ -549,6 +557,8 @@ export interface VoidCustomerReturnOutcome {
   readonly reason?: string;
 }
 
+const RETURN_VOID_OUT_OF_REACH = 'That return does not exist, or it is not at a store where you may void it.';
+
 /**
  * ⭐ Invariant 13 — reverses every leg in one transaction, refused once the credit has been
  * redeemed or refunded. ⚠️ "Redeemed" is checked the same way T-170's `voidReturn` checks it:
@@ -562,10 +572,27 @@ export async function voidCustomerReturn(
   reason: string,
 ): Promise<VoidCustomerReturnOutcome> {
   const run = async (trx: Tx): Promise<VoidCustomerReturnOutcome> => {
-    const ret = await customerReturnsRepo.getReturn(trx, returnId);
-    if (!ret) return { ok: false, reason: `return ${returnId} does not exist.` };
-    await authorize(trx, actor, 'void_customer_return', { storeId: ret.storeId });
-    if (ret.status === 'void') return { ok: false, reason: 'this return is already void.' };
+    const ret = await customerReturnsRepo.getReturn(trx, actor.orgId, returnId);
+    // T-615 (the twin of DEF-562, DEF-546's shape): a missing return and one the caller may not void are ONE refusal,
+    // so the answer is no oracle for which return ids exist. The lookup stays first only to find the gate's store.
+    if (!ret) {
+      const raw = `voidCustomerReturn: no return ${returnId}`;
+      logger.warn({ returnId, actorOrgId: actor.orgId }, raw);
+      throw new AuthorizationError(raw, 'void_customer_return', RETURN_VOID_OUT_OF_REACH);
+    }
+    try {
+      await authorize(trx, actor, 'void_customer_return', { storeId: ret.storeId });
+    } catch (err) {
+      if (!(err instanceof AuthorizationError)) throw err;
+      const uniform = new AuthorizationError(`voidCustomerReturn: ${err.message}`, 'void_customer_return', RETURN_VOID_OUT_OF_REACH);
+      uniform.cause = err;
+      throw uniform;
+    }
+    // DEF-880 (T-595 audit): the customer row lock first (same order as applyCredit and recordCollection: customer, then the rest), and the return re-read
+    // under it, so a concurrent spend of this return's credit or a second void queues instead of reading a stale balance.
+    await customersRepo.lockForCredit(trx, ret.orgId, ret.customerId);
+    const current = (await customerReturnsRepo.getReturn(trx, actor.orgId, returnId)) ?? ret;
+    if (current.status === 'void') return { ok: false, reason: RETURN_ALREADY_VOIDED };
 
     const trimmed = reason.trim();
     if (!trimmed) return { ok: false, reason: 'say why this return is being voided.' };
@@ -580,7 +607,8 @@ export async function voidCustomerReturn(
 
     if (ret.settlement === 'store_credit' || ret.settlement === 'mixed') {
       // T-371 R4/C4 — both sides minted from the database and compared in scaled bigint.
-      const balance = money(await arRepo.creditBalanceOf(trx, ret.orgId, ret.customerId));
+      // Credit is spent only where it was earned (DEF-880): this return's 2140 sits at ITS store, so that is the figure that must still cover it.
+      const balance = await spendableStoreCredit(trx, ret.orgId, ret.customerId, ret.storeId);
       const lines = await customerReturnsRepo.getReturnLines(trx, returnId);
       const contribution = add(...lines.map((l) => money(l.amount)));
       // ⚠️ A rough but honest check, matching T-170's own: if the live balance is already below
@@ -693,6 +721,8 @@ export async function applyCredit(
     // T-371 — parsed AFTER authorize() (R5), so a typo is refused in a sentence that QUOTES what was typed; it was
     // `Number(input.amount)`, which turned 'abc' into NaN, slipped past both guards and was forwarded as the text "NaN".
     const amount = parseMoneyInput(input.amount, 'applyCredit: the amount', 'The amount');
+    // DEF-879 (T-595): the customer row first - `recordCollection` below takes it when credit is spent - so the order is customer, THEN charge, as in a direct collection.
+    await customersRepo.lockForCredit(trx, orgId, order.customerId);
     // ⛔ T-494 (F27): lock the charge before reading what is owed on it (`recordCollection` below takes the same lock again, in this transaction).
     await arRepo.lockChargesForAllocation(trx, orgId, [order.arChargeId]);
     const outstanding = money(await arRepo.outstandingForCharge(trx, orgId, order.arChargeId));

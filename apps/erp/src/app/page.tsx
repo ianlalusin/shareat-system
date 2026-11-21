@@ -86,7 +86,7 @@ export default async function DashboardPage({
         getSalesRollup(tx, { orgId, storeId, fromDate, toDate, groupBy: 'day', channelDays: true }),
         getSalesRollup(tx, { orgId, storeId, fromDate: prev.from, toDate: prev.to, groupBy: 'day' }),
         showByStore ? getSalesRollup(tx, { orgId, storeId, fromDate, toDate, groupBy: 'store' }) : Promise.resolve(null),
-        Promise.all(storesInScope.map((s) => lowStockRepo.lowStock(tx, orgId, s.id))),
+        lowStockRepo.lowStockForStores(tx, orgId, storesInScope.map((s) => s.id)), // T-602 S6-7: one query for every store, not one per store
         cashRequestsRepo.openFloats(tx, orgId),
         attendanceDaysRepo.countOpenToday(tx, orgId, storeIdList),
         // ⭐ T-212. No per-store loop: these take `storeId: null` as "org-wide" in one query, and
@@ -106,7 +106,7 @@ export default async function DashboardPage({
         salesNow,
         salesPrev,
         salesByStore,
-        lowStock: lowStockRows.reduce((n, rows) => n + rows.length, 0),
+        lowStock: lowStockRows.length,
         openFloats: floats.filter((f) => inScope.has(f.storeId)).length,
         onShift,
         inFlight,

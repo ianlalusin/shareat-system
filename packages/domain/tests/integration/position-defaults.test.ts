@@ -779,3 +779,24 @@ describe('T-318 — a position decides what a person may do', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('T-598 S7 / DEF-367 — a holder whose net access did not change is not counted as affected', () => {
+  it('two positions default one capability: switching off the one the grant points at changes nothing (affected 0), the person still holds it', async () => {
+    const f = await fixture('def367');
+    const holder = await hireStaff(f, { storeId: f.storeAId, positionIds: [f.cashierId, f.cookId], primaryPositionId: f.cashierId });
+    await setDefault(f.orgId, f.admin, f.cashierId, f.storeAId, 'adjust_inventory', true);
+    await setDefault(f.orgId, f.admin, f.cookId, f.storeAId, 'adjust_inventory', true);
+    const [grant] = await activeGrants(holder.personId);
+    const [pointedAt] = await sql<{ position_id: string }[]>`select position_id from position_capability_defaults where id = ${grant!.source_ref}`;
+
+    const result = await setDefault(f.orgId, f.admin, pointedAt!.position_id, f.storeAId, 'adjust_inventory', false);
+
+    expect(result.affected, 'the other position still wants it: nothing changed for the person').toBe(0);
+    expect((await activeGrants(holder.personId)).map((g) => g.grant_name)).toEqual(['adjust_inventory']);
+
+    // Control: switching off the last position that wants it really does change access.
+    const other = pointedAt!.position_id === f.cashierId ? f.cookId : f.cashierId;
+    expect((await setDefault(f.orgId, f.admin, other, f.storeAId, 'adjust_inventory', false)).affected).toBe(1);
+    expect(await activeGrants(holder.personId)).toHaveLength(0);
+  });
+});

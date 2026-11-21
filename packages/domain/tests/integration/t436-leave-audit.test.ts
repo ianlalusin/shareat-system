@@ -26,6 +26,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedStatutoryRates } from './_fixtures/statutory-rates';
+import { fundAccount } from './_fixtures/fund-account';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
@@ -77,6 +78,8 @@ async function fixture(hint: string) {
   await asOrg(orgId, (tx) => seedAttendanceConfig(tx, { orgId, storeId, effectiveFrom: '2025-01-01' }));
   const [office] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
+  // T-597: payroll follows the draw rule - an office safe that cannot cover the run refuses - so the paying account holds cash.
+  await fundAccount(sql, { orgId, storeId, code: '1130', amount: '10000000.00' });
   const officeId = office!.id;
   const mk = async (name: string, role: string) => {
     const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, ${name}) returning id`;

@@ -78,11 +78,13 @@ export const clockTerminals = pgTable(
     /** The health query (T-183): live terminals, oldest-seen first. */
     index('clock_terminals_last_seen_idx').on(t.storeId, t.lastSeenAt),
 
-    /** Revocation is a triple or none of it — a revoked row nobody can explain is not an audit trail. */
+    /** Revocation is a triple or none of it — a revoked row nobody can explain is not an audit trail.
+     *  T-598 S10 / DEF-415, migration 0271: the reason must also be non-blank. The explicit `is not null` before
+     *  `btrim` is load-bearing — `btrim(NULL) <> ''` is NULL and a CHECK passes on NULL (see 0158's header). */
     check(
       'clock_terminals_revoked_triple_check',
       sql`(${t.revokedAt} is null and ${t.revokedBy} is null and ${t.revokeReason} is null)
-          or (${t.revokedAt} is not null and ${t.revokedBy} is not null and ${t.revokeReason} is not null)`,
+          or (${t.revokedAt} is not null and ${t.revokedBy} is not null and ${t.revokeReason} is not null and btrim(${t.revokeReason}) <> '')`,
     ),
     check('clock_terminals_label_not_blank_check', sql`length(trim(${t.label})) > 0`),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs

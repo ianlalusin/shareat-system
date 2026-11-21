@@ -7,6 +7,9 @@ import { Banner, FlashBanner, Select } from '@/components/ui';
 import { staffStoresFor } from '../../staff/lib';
 import { daypartsForStore } from '../../admin/stores/lib';
 import { DaypartsSection } from '../DaypartsSection';
+import { CopyFromStoreDialog } from '../../copy-from-store/CopyFromStoreDialog';
+import { copyChoicesFor } from '../../copy-from-store/lib';
+import { withOrgPrincipal } from '../lib';
 
 export const metadata = { title: 'Menu hours - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -33,6 +36,8 @@ export default async function MenuHoursPage({ searchParams }: { searchParams: Pr
   const store = sp.store ? stores.find((s) => s.id === sp.store) : stores[0];
   if (!store) return <StoreNotAvailable />;
   const hours = await daypartsForStore(actor, store.id);
+  // T-611 S1: the copy button, for an administrator only (the domain and a PIN gate the write; this is presentation).
+  const copyStores = await withOrgPrincipal(actor.orgId, (tx) => copyChoicesFor(tx, actor, store.id));
 
   return (
     <Page density="table">
@@ -57,6 +62,8 @@ export default async function MenuHoursPage({ searchParams }: { searchParams: Pr
           </label>
         </FilterRow>
       )}
+
+      {copyStores && <CopyFromStoreDialog kind="hours" currentStoreId={store.id} stores={copyStores} />}
 
       <DaypartsSection storeId={store.id} dayparts={hours.dayparts} canManage={hours.canManage} from="hours" />
     </Page>

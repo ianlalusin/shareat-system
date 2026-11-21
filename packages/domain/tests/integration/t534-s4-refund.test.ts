@@ -20,10 +20,10 @@ if (!isTestDatabaseUrl(url)) {
 
 import { AuthenticationError, POS_APPROVAL_REFUSED } from '@shareat/auth';
 import { RefusalError, goneSentence } from '@shareat/db';
-import { listTodaysSalesReceipts, recordRefund, verifySalesDay } from '../../src';
+import { findSalesReceiptByNo, listTodaysSalesReceipts, recordRefund, verifySalesDay } from '../../src';
 import { CORRECTION_NEEDS_PIN } from '../../src/pos/tender-correction';
 import { RECORDED_DIFFERENTLY } from '../../src/pos/shared';
-import { sendV1Bridge } from '../../src/pos';
+import { recordTenderCorrection, sendV1Bridge } from '../../src/pos';
 import { D1, D2, asOrg, auditsOf, close, closeAll, fakeWriter, journalLines, manila, pinOf, reading, salesDaysOf, sell, sql, tenderMap, uuid, world, type World } from './_fixtures/t531-day-close';
 
 afterAll(closeAll);
@@ -346,5 +346,122 @@ describe('T-534 S4 - the December v1 bridge sends the day net of its refunds', (
     expect(res.results).toEqual([{ businessDate: D1, status: 'sent' }]);
     const data = f.calls[0]!.data as { payments: { totalGross: number; byMethod: Record<string, number> } };
     expect(data.payments).toMatchObject({ totalGross: 750, byMethod: { cash: 750 } });
+  });
+});
+
+describe('T-613 D1 - the refund cap follows an S3 tender correction', () => {
+  const tenThousand = (w: World) => made(w, { at: manila(D1, '12:00'), items: [{ item: w.menu.pork, qty: 4 }], expectTotal: '1000.00', pay: [{ tenderId: w.cash, amount: '1000.00' }] });
+  const correct = (w: World, m: Made, amount = '300.00') =>
+    asOrg(w.orgId, (tx) =>
+      recordTenderCorrection(tx, w.manager, {
+        storeId: w.storeId, pairingId: w.pairingId, requestId: uuid(), receiptId: m.receiptId, paymentId: m.pays[0]!.id, toTenderId: w.gcash, amount, referenceNo: 'GC-0001234', reason: 'Customer paid by GCash',
+      }),
+    );
+  const refundBy = (w: World, m: Made, pays: { tenderId?: string; amount: string; ref?: string }[], qty = 4) =>
+    asOrg(w.orgId, (tx) =>
+      recordRefund(tx, w.manager, {
+        storeId: w.storeId, pairingId: w.pairingId, requestId: uuid(), receiptId: m.receiptId, lines: [{ receiptLineId: m.lines[0]!.id, qty }],
+        payments: pays.map((p) => ({ paymentId: m.pays[0]!.id, amount: p.amount, ...(p.tenderId ? { tenderId: p.tenderId } : {}), ...(p.ref ? { referenceNo: p.ref } : {}) })), reason: 'Customer returned it',
+      }),
+    );
+
+  it('P1,000 cash with P300 corrected to GCash: cash can give back at most P700, GCash P300; the list says so; the two refunds net the Z to zero [kills: a cap that ignores corrections, a refund that cannot go to the corrected method]', async () => {
+    const w = await world();
+    const m = await tenThousand(w);
+    await correct(w, m);
+    await expectRefusal(refundBy(w, m, [{ amount: '1000.00' }]), 'Only ₱700.00 can still be refunded to Cash.');
+    await expectRefusal(refundBy(w, m, [{ amount: '700.00' }, { tenderId: w.gcash, amount: '300.01', ref: 'GC-REFUND-9' }]), 'Only ₱300.00 can still be refunded to GCash.');
+    const list = await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }));
+    expect(list.receipts[0]!.refundPayments).toMatchObject([{ tenderId: w.cash, left: '700.00' }, { tenderId: w.gcash, left: '300.00' }]);
+    await refundBy(w, m, [{ amount: '700.00' }, { tenderId: w.gcash, amount: '300.00', ref: 'GC-REFUND-9' }]);
+    expect(await sql`select tender_id, amount::text from pos_refund_payments where org_id = ${w.orgId} order by amount desc`).toEqual([{ tender_id: w.cash, amount: '700.00' }, { tender_id: w.gcash, amount: '300.00' }]);
+    const after = await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }));
+    expect(after.receipts[0]!.refundPayments).toMatchObject([{ left: '0.00' }, { left: '0.00' }]);
+    expect(tenderMap(await reading(w, AT))).toEqual({ [w.cash]: '0.00', [w.gcash]: '0.00' });
+  });
+  it('money already refunded by the paid row own method cannot also be moved off it by a correction: P1,000 cash, P500 refunded, correcting P600 is refused at correction time [kills: a correction cap that ignores refunds]', async () => {
+    const w = await world();
+    const m = await tenThousand(w);
+    await refundBy(w, m, [{ amount: '500.00' }], 2);
+    await expectRefusal(correct(w, m, '600.00'), 'Only ₱500.00 of this payment can still be moved to another method.');
+    await correct(w, m, '500.00');
+  });
+  it('an omitted method and the paid row own method are one thing: naming both is a duplicate, and a replay with the other spelling is the same refund [kills: comparing raw input]', async () => {
+    const w = await world();
+    const m = await tenThousand(w);
+    await expectRefusal(refundBy(w, m, [{ amount: '100.00' }, { tenderId: w.cash, amount: '150.00' }], 1), 'Each payment can only be used once.');
+    const requestId = uuid();
+    const send = (tenderId?: string) =>
+      asOrg(w.orgId, (tx) =>
+        recordRefund(tx, w.manager, {
+          storeId: w.storeId, pairingId: w.pairingId, requestId, receiptId: m.receiptId, lines: [{ receiptLineId: m.lines[0]!.id, qty: 1 }],
+          payments: [{ paymentId: m.pays[0]!.id, amount: '250.00', ...(tenderId ? { tenderId } : {}) }], reason: 'Customer returned it',
+        }),
+      );
+    expect((await send()).wrote).toBe(true);
+    expect((await send(w.cash)).wrote).toBe(false);
+  });
+  it('a method the receipt was neither paid nor corrected to is refused in words', async () => {
+    const w = await world();
+    const m = await tenThousand(w);
+    await expectRefusal(refundBy(w, m, [{ tenderId: w.gcash, amount: '1000.00', ref: 'GC-REFUND-9' }]), 'The money can only go back by the way it was paid.');
+  });
+});
+
+describe('T-613 D3 - a Z of only refunds is no longer "nothing to close"', () => {
+  it('a refund of an earlier day with no new sales reaches the Z, which now CLOSES (T-614 S1: the refund is all excess, so it posts as its own entry and there is no sales day) instead of "no sales to close" or a refusal [kills: the receipt-count gate]', async () => {
+    const w = await world();
+    const m = await thousand(w, '1000.00');
+    await close(w, AT, await pinOf(w, w.managerId));
+    await refund(w, m, { lines: [[0, 1]], pays: [[0, '250.00']] });
+    expect(((await reading(w, AT2)) as unknown as { refunds: { count: number } }).refunds.count).toBe(1);
+    const z = await close(w, AT2, await pinOf(w, w.managerId));
+    expect(z.wrote).toBe(true);
+    expect(z.salesDayId).toBeNull();
+    expect((await sql<{ n: number }[]>`select count(*)::int n from journal_entries where org_id = ${w.orgId} and idempotency_key like 'pos_refund_excess:%'`)[0]!.n).toBe(1);
+  });
+});
+
+describe('T-613 D4 - find a receipt of an earlier day by its number', () => {
+  const find = (w: World, receiptNo: string, now: Date) => asOrg(w.orgId, (tx) => findSalesReceiptByNo(tx, w.counter, { storeId: w.storeId, receiptNo, now }));
+
+  it('a receipt already in a Z is not in the list, is found by its number (store code optional, any case), in the list shape, and refunds through the same dialog data [kills: no lookup]', async () => {
+    const w = await world();
+    const m = await thousand(w, '1000.00');
+    const no = (await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }))).receipts[0]!.receiptNo;
+    await close(w, AT, await pinOf(w, w.managerId));
+    expect((await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }))).receipts).toHaveLength(0);
+    const found = await find(w, no.toLowerCase(), manila(D2, '10:00'));
+    expect(found.receipts).toHaveLength(1);
+    expect(found.receipts[0]).toMatchObject({ receiptId: m.receiptId, receiptNo: no, canCorrect: false, lines: [{ left: 4 }], refundPayments: [{ left: '1000.00' }] });
+    expect((await find(w, no.split('-').slice(-2).join('-'), manila(D2, '10:00'))).receipts).toHaveLength(1);
+    const out = await refund(w, m, { receiptId: found.receipts[0]!.receiptId, lines: [[0, 1]], pays: [[0, '250.00']] });
+    expect(out.wrote).toBe(true);
+  });
+  it('a wrong store code, a malformed number, an unknown number and a receipt older than 30 days answer an empty list [kills: a lookup with no age limit or no store-code check]', async () => {
+    const w = await world();
+    await thousand(w, '1000.00');
+    const no = (await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }))).receipts[0]!.receiptNo;
+    const [, till, seq] = no.split('-').slice(-3).length === 3 ? no.split('-').slice(-3) : ['', '', ''];
+    const soon = manila(D2, '10:00');
+    expect((await find(w, no, soon)).receipts).toHaveLength(1);
+    expect((await find(w, `ZZZ-${till}-${seq}`, soon)).receipts).toHaveLength(0);
+    expect((await find(w, 'hello', soon)).receipts).toHaveLength(0);
+    expect((await find(w, `${till}-999999`, soon)).receipts).toHaveLength(0);
+    expect((await find(w, no, new Date(manila(D1, '12:00').getTime() + 31 * 86_400_000))).receipts).toHaveLength(0);
+  });
+  it('T-614 S2: the window is the business rule pos.receipt_lookup_days: 5 loses a 10-day-old receipt, 60 finds a 45-day-old one, no row keeps 30 [kills: reading a constant instead of the rule]', async () => {
+    const w = await world();
+    await thousand(w, '1000.00');
+    const no = (await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }))).receipts[0]!.receiptNo;
+    const day = 86_400_000;
+    const at = (days: number) => new Date(manila(D1, '12:00').getTime() + days * day);
+    expect((await find(w, no, at(10))).receipts, 'default 30: 10 days old is found').toHaveLength(1);
+    expect((await find(w, no, at(45))).receipts, 'default 30: 45 days old is not found').toHaveLength(0);
+    await sql`insert into business_rule_values (org_id, key, value, effective_from, set_by, reason) values (${w.orgId}, 'pos.receipt_lookup_days', '5', '2000-01-01', ${w.managerId}, 'test')`;
+    expect((await find(w, no, at(10))).receipts, 'rule 5: 10 days old is not found').toHaveLength(0);
+    expect((await find(w, no, at(3))).receipts, 'rule 5: 3 days old is found').toHaveLength(1);
+    await sql`insert into business_rule_values (org_id, key, value, effective_from, set_by, reason) values (${w.orgId}, 'pos.receipt_lookup_days', '60', '2000-01-02', ${w.managerId}, 'test')`;
+    expect((await find(w, no, at(45))).receipts, 'rule 60: 45 days old is found').toHaveLength(1);
   });
 });

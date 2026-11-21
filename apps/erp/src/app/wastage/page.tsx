@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { ORDER_WASTAGE_DISPOSITION_LABEL, orderWastageDispositionLabel, orderWastageRepo, salesDaysRepo, schema, storesRepo } from '@shareat/db';
 import { listPostedSettlementsForStore, matchWastagesToSettlement, type SettleableOrderWastage } from '@shareat/domain';
+import { can } from '@shareat/auth';
 import { inArray } from 'drizzle-orm';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { peso } from '../../lib/format';
-import { requireSession } from '../../lib/session';
-import { listStores, withOrgPrincipal } from '../expenses/lib';
+import { storePageScope } from '../../lib/store-scope';
+import { withOrgPrincipal } from '../expenses/lib';
 import { recordOrderWastageAction } from './actions';
 import { WASTAGE_RECORD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
@@ -26,9 +27,9 @@ interface SearchParams {
 
 export default async function WastagePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/wastage');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  const scope = await storePageScope('/wastage', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
 
   if (!storeId) {
     return (
@@ -65,7 +66,8 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
       : [];
     return {
       businessDates: new Map(days.map((d) => [d.id, d.businessDate])),
-      settlements: await listPostedSettlementsForStore(tx, actor, { storeId }),
+      // the match hints are for whoever may record a settlement here; a recorder of wastage alone gets none (and not the error page)
+      settlements: (await can(tx, actor, 'record_ar_collection', { storeId })) ? await listPostedSettlementsForStore(tx, actor, { storeId }) : [],
     };
   });
   // ⚠️ **The map's return type is annotated, and the filter carries NO type predicate.** That is

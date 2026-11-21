@@ -2,6 +2,7 @@ import { OWNERS_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
 import Link from 'next/link';
 import { requirePageAccess } from '../../lib/page-access';
+import { listStoreIds } from '@/lib/store-scope';
 import { createOwnerAction } from './actions';
 import {
   AGED_DAYS,
@@ -33,10 +34,11 @@ export default async function OwnersPage({
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
 
+  const storeIds = await listStoreIds(actor, '/owners');
   const [stores, persons, owners] = await Promise.all([
     listStores(actor.orgId),
     listActivePersons(actor.orgId),
-    listRegister(actor.orgId),
+    listRegister(actor.orgId, storeIds),
   ]);
   const storeById = new Map(stores.map((s) => [s.id, s]));
   const personById = new Map(persons.map((p) => [p.id, p]));

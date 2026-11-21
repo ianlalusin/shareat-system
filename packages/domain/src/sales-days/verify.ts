@@ -175,6 +175,8 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string, options?: Ver
     }
   }
 
+  // DEF-926: wait for a channel edit or retire in flight, then read the receivable it left.
+  await salesDaysRepo.shareLockChannelsOfDay(tx, salesDayId);
   const channels = await salesDaysRepo.getChannelsForDay(tx, salesDayId);
   const tenders = await salesDaysRepo.getTendersForDay(tx, salesDayId);
 

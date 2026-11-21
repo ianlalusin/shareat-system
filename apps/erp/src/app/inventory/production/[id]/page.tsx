@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '../../../../lib/page-access';
+import { recordInScope } from '../../../../lib/store-scope';
 import { postProductionAction, voidProductionAction } from '../actions';
 import { productionRecordDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
@@ -31,9 +32,10 @@ export default async function ProductionRecordPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/inventory/production/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/inventory/production/${id}`);
+  if (refusal) return refusal;
   const detail = await productionRecordDetail(actor.orgId, id);
-  if (!detail) notFound();
+  if (!detail || !(await recordInScope(actor, `/inventory/production/${id}`, detail.record.storeId))) notFound();
 
   const { record, locationName, lines } = detail;
   const inputs = lines.filter((l) => l.direction === 'out');

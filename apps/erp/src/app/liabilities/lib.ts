@@ -27,13 +27,14 @@ export interface LiabilityListRow extends LiabilityRow {
   overdue: boolean;
 }
 
-export async function listRegister(orgId: string): Promise<LiabilityListRow[]> {
+/** `storeIds`: only these stores' liabilities; `undefined` = the viewer is not store-limited (T-603). */
+export async function listRegister(orgId: string, storeIds?: readonly string[]): Promise<LiabilityListRow[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const [rows, positions] = await Promise.all([
       liabilitiesRepo.listLiabilities(tx, orgId),
       liabilitiesRepo.positionsByLiability(tx, orgId),
     ]);
-    return rows.map((l) => {
+    return rows.filter((l) => !storeIds || storeIds.includes(l.storeId)).map((l) => {
       const position = positions.get(l.id) ?? ZERO;
       return { ...l, position, overdue: isOverdue(l.dueOn, position.outstanding) };
     });

@@ -5,16 +5,19 @@
  * SQL in `scripts/dev-seed.ts:102` — `createEmployment` (T-154) requires an existing `personId`,
  * so a real onboarding screen could not work without this closing first (docs/tasks/202-*.md).
  */
-import { and, asc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
-import { persons } from '../../schema/persons';
+import { persons, type AccountStatus } from '../../schema/persons';
 import { personGrants, personRoles, personStoreScope } from '../../schema/access';
 
 export interface PersonRow {
   id: string;
   orgId: string;
   displayName: string;
+  /** T-612: derived from `accountStatus` (`accountStatus = 'active'`); the old `persons.is_active` column is no longer read. */
   isActive: boolean;
+  /** ⭐ T-612: pending / active / suspended / ended. */
+  accountStatus: AccountStatus;
   /** ⭐ T-304 — explicit, read wherever a caller must not treat a terminal as a person (a role
    *  grant, a staff listing, a headcount). Never inferred from a proxy column. */
   kind: 'person' | 'terminal';
@@ -37,18 +40,24 @@ function displayNameFor(n: PersonNameParts): string {
   return `${n.lastName}, ${n.firstName}${initial}`;
 }
 
+/** T-612: the old `isActive` field, now derived from the one account status. */
+const ACTIVE_NOW = sql<boolean>`${persons.accountStatus} = 'active'`;
+
 export async function insertPerson(
   tx: Tx,
   /** ⭐ T-304 — `kind` defaults to `'person'`; every existing caller is unaffected. Only
    *  `scripts/provision-terminal.ts` ever passes `'terminal'`.
    *  ⭐ T-438 — pass `displayName` (legacy / single-string callers, parts stay NULL) OR `name` (the parts; `displayName` is derived here). */
   input:
-    | { orgId: string; displayName: string; kind?: 'person' | 'terminal'; name?: undefined }
-    | { orgId: string; name: PersonNameParts; kind?: 'person'; displayName?: undefined },
+    | { orgId: string; displayName: string; kind?: 'person' | 'terminal'; name?: undefined; accountStatus?: AccountStatus }
+    | { orgId: string; name: PersonNameParts; kind?: 'person'; displayName?: undefined; accountStatus?: AccountStatus },
 ): Promise<PersonRow> {
+  // ⭐ T-612: omitted = the column default 'active' (the founding admin, a franchise owner, a terminal, the usage author); the hire path passes 'pending'.
+  const status = input.accountStatus === undefined ? {} : { accountStatus: input.accountStatus };
   const values =
     input.name !== undefined
       ? {
+          ...status,
           orgId: input.orgId,
           displayName: displayNameFor(input.name),
           lastName: input.name.lastName,
@@ -56,7 +65,7 @@ export async function insertPerson(
           middleName: input.name.middleName,
           kind: 'person' as const,
         }
-      : { orgId: input.orgId, displayName: input.displayName, kind: input.kind ?? 'person' };
+      : { ...status, orgId: input.orgId, displayName: input.displayName, kind: input.kind ?? 'person' };
   const [row] = await tx
     .insert(persons)
     .values(values)
@@ -64,7 +73,8 @@ export async function insertPerson(
       id: persons.id,
       orgId: persons.orgId,
       displayName: persons.displayName,
-      isActive: persons.isActive,
+      isActive: ACTIVE_NOW,
+      accountStatus: persons.accountStatus,
       kind: persons.kind,
     });
   if (!row) throw new Error('insertPerson: insert returned no row');
@@ -103,7 +113,7 @@ function likeLiteral(s: string): string {
  */
 export async function nameCandidates(tx: Tx, input: { orgId: string }): Promise<PersonRow[]> {
   return tx
-    .select({ id: persons.id, orgId: persons.orgId, displayName: persons.displayName, isActive: persons.isActive, kind: persons.kind })
+    .select({ id: persons.id, orgId: persons.orgId, displayName: persons.displayName, isActive: ACTIVE_NOW, accountStatus: persons.accountStatus, kind: persons.kind })
     .from(persons)
     .where(and(eq(persons.orgId, input.orgId), eq(persons.kind, 'person')))
     .orderBy(asc(persons.displayName));
@@ -140,7 +150,8 @@ export async function listWithAccessForOrg(tx: Tx, orgId: string): Promise<Perso
       id: persons.id,
       orgId: persons.orgId,
       displayName: persons.displayName,
-      isActive: persons.isActive,
+      isActive: ACTIVE_NOW,
+      accountStatus: persons.accountStatus,
       kind: persons.kind,
       role: personRoles.role,
       grantedAt: personRoles.grantedAt,
@@ -167,7 +178,8 @@ export async function getPersonById(tx: Tx, orgId: string, id: string): Promise<
       id: persons.id,
       orgId: persons.orgId,
       displayName: persons.displayName,
-      isActive: persons.isActive,
+      isActive: ACTIVE_NOW,
+      accountStatus: persons.accountStatus,
       kind: persons.kind,
     })
     .from(persons)
@@ -201,7 +213,8 @@ export async function searchPersons(
       id: persons.id,
       orgId: persons.orgId,
       displayName: persons.displayName,
-      isActive: persons.isActive,
+      isActive: ACTIVE_NOW,
+      accountStatus: persons.accountStatus,
       kind: persons.kind,
     })
     .from(persons)
@@ -271,4 +284,26 @@ export async function setSignatureFileId(tx: Tx, orgId: string, personId: string
  */
 export async function insertEmailIdentity(tx: Tx, personId: string, email: string): Promise<void> {
   await tx.execute(sql`insert into person_identities (person_id, kind, value) values (${personId}, 'email', ${email.trim()})`);
+}
+
+/**
+ * ⭐ T-612: take the person's row `for no key update` and return its account status (undefined = no such person in this org). Every writer of the status
+ * (activate, suspend, reinstate, hire, end) calls this FIRST, so they queue behind a sign-in that holds the row `for share` and behind each other.
+ * Lock order everywhere: persons -> employments -> org advisory lock (`accessRepo.lockOrgAccess`).
+ */
+export async function lockAccountStatus(tx: Tx, orgId: string, personId: string): Promise<AccountStatus | undefined> {
+  const [row] = (await tx.execute(sql`
+    select account_status from persons where id = ${personId} and org_id = ${orgId} for no key update
+  `)) as unknown as { account_status: AccountStatus }[];
+  return row?.account_status;
+}
+
+/** ⭐ T-612: move the status from one of `from` to `to`. Returns false when the person was not in one of those states (a lost race, a wrong click). */
+export async function setAccountStatus(tx: Tx, orgId: string, personId: string, from: readonly AccountStatus[], to: AccountStatus): Promise<boolean> {
+  const rows = await tx
+    .update(persons)
+    .set({ accountStatus: to, updatedAt: sql`now()` })
+    .where(and(eq(persons.id, personId), eq(persons.orgId, orgId), inArray(persons.accountStatus, [...from])))
+    .returning({ id: persons.id });
+  return rows.length > 0;
 }

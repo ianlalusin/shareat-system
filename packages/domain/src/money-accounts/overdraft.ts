@@ -44,6 +44,17 @@ import { refuse } from '../shared/refusal';
 import { judgeDraw } from './draw-verdict';
 export { judgeDraw, type DrawVerdict, type DrawableAccount } from './draw-verdict';
 
+/**
+ * DEF-895 / DEF-905 (T-597): money is not paid OUT of a retired account. The picker hides retired accounts, so this closes a
+ * crafted POST and a page that went stale. Call it right after the not-found check, before any cross-store `authorize` or
+ * balance read. Never on a void: a void reads the ORIGINAL account and must still work after it is retired.
+ */
+export function assertActiveAccount(account: { name: string; isActive: boolean }, fn: string): void {
+  if (!account.isActive) {
+    throw refuse(`${fn}: money account "${account.name}" is retired.`, `"${account.name}" is retired. Choose another account to pay from.`);
+  }
+}
+
 export async function checkDraw(
   tx: Tx,
   orgId: string,

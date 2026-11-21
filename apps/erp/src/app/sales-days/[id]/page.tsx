@@ -52,10 +52,9 @@ export default async function SalesDayDetailPage({
   // T-577 (DEF-834): a sales day outside the viewer's stores is the same not-found as a forged id. The page's own actions are submit/verify.
   if (!day || !(await withOrgPrincipal(orgId, (tx) => canReadAtStore(tx, actor, day.storeId, ['submit_sales_day', 'verify_sales_day'])))) notFound();
 
-  const [channels, stores, persons] = await Promise.all([
+  const [channels, stores] = await Promise.all([
     withOrgPrincipal(orgId, (tx) => salesDaysRepo.getChannelsForDay(tx, day.id)),
     listStores(orgId),
-    listActingPersons(orgId),
   ]);
 
   // Shown whenever an entry EXISTS, not only while verified — a void is a REVERSAL and both
@@ -137,6 +136,8 @@ export default async function SalesDayDetailPage({
     isFeedDay
       ? await withOrgPrincipal(orgId, (tx) => posV1Repo.listCorrectionsForDay(tx, orgId, day.id))
       : [];
+  // The picker pool is this store's people; the names this page cites (who created, submitted, verified, voided, posted a correction) are kept.
+  const persons = await listActingPersons(orgId, day.storeId, [day.createdBy, day.submittedBy, day.verifiedBy, day.voidedBy, ...corrections.map((c) => c.postedBy)]);
   const drift =
     isFeedDay && day.status === 'verified'
       ? (await withOrgPrincipal(orgId, (tx) => posV1Repo.feedDrift(tx, orgId, day.id)))[0]
@@ -383,7 +384,7 @@ export default async function SalesDayDetailPage({
         </section>
       )}
 
-      {isFeedDay && day.status !== 'voided' && can.verify && (
+      {isFeedDay && day.status !== 'voided' && can.verify && storeLink && (
         <form action={recheckPosDayAction} className="space-y-2 text-sm">
           {hiddenIds}
           <Button type="submit" variant="secondary">

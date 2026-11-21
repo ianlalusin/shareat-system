@@ -128,7 +128,7 @@ export async function insertCountSession(
   return session;
 }
 
-export async function getCountSession(tx: Tx, id: string): Promise<CountSessionRow | undefined> {
+export async function getCountSession(tx: Tx, orgId: string, id: string): Promise<CountSessionRow | undefined> {
   const [session] = await tx
     .select({
       id: countSessions.id,
@@ -145,7 +145,7 @@ export async function getCountSession(tx: Tx, id: string): Promise<CountSessionR
       closedAt: countSessions.closedAt,
     })
     .from(countSessions)
-    .where(eq(countSessions.id, id));
+    .where(and(eq(countSessions.id, id), eq(countSessions.orgId, orgId)));
   if (!session) return undefined;
 
   const locations = await tx

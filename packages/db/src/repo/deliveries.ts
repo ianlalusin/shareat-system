@@ -42,11 +42,11 @@ export interface DeliveryRow {
 }
 
 /** ⭐ T-170 invariant 11: a return may not name a supplier the linked delivery did not come from. */
-export async function getDelivery(tx: Tx, id: string): Promise<DeliveryRow | undefined> {
+export async function getDelivery(tx: Tx, orgId: string, id: string): Promise<DeliveryRow | undefined> {
   const [row] = await tx
     .select({ id: deliveries.id, orgId: deliveries.orgId, storeId: deliveries.storeId, supplierId: deliveries.supplierId })
     .from(deliveries)
-    .where(eq(deliveries.id, id));
+    .where(and(eq(deliveries.id, id), eq(deliveries.orgId, orgId)));
   return row;
 }
 
@@ -257,7 +257,7 @@ export interface DeliveryDocument {
 
 /** Header + lines, joined out to what a screen (and `receiveDeliveryDocument`) needs to show or
  *  act on — item code/name/kind/base unit, supplier name. */
-export async function getDeliveryDocument(tx: Tx, id: string): Promise<DeliveryDocument | undefined> {
+export async function getDeliveryDocument(tx: Tx, orgId: string, id: string): Promise<DeliveryDocument | undefined> {
   const [header] = await tx
     .select({
       id: deliveries.id,
@@ -279,7 +279,7 @@ export async function getDeliveryDocument(tx: Tx, id: string): Promise<DeliveryD
     })
     .from(deliveries)
     .leftJoin(suppliers, eq(suppliers.id, deliveries.supplierId))
-    .where(eq(deliveries.id, id));
+    .where(and(eq(deliveries.id, id), eq(deliveries.orgId, orgId)));
   if (!header) return undefined;
 
   const lines = await tx

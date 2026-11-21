@@ -35,6 +35,7 @@ import { closeDb } from '@shareat/db';
 import { postPayRun, previewPayRun, setPayRate } from '@shareat/domain';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { asOrg, mkPg, type Pg } from '../../../../packages/domain/tests/integration/_fixtures/t500-pg';
+import { fundAccount } from '../../../../packages/domain/tests/integration/_fixtures/fund-account';
 import { captureRedirect, outcomeOf } from '../helpers/flash-jar';
 import { plain } from './t435-fixture';
 
@@ -208,6 +209,8 @@ describe('M3 / H5 - a payroll runs on the rows PG entered', () => {
     expect((pv as { slips: unknown[] }).slips.length, 'one slip for the one worker').toBe(1);
     const [office] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${pg.storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
     expect(office, 'PG store has its office cash account').toBeDefined();
+    // T-597: payroll follows the draw rule - an office safe that cannot cover the run refuses - so the paying account holds cash.
+    await fundAccount(sql, { orgId: pg.pgOrgId, storeId: pg.storeId, code: '1130', amount: '10000000.00' });
     await asOrg(pg.pgOrgId, (tx) => postPayRun(tx, pg.pgAdmin, { storeId: pg.storeId, ...P, moneyAccountId: office!.id }));
     const [run] = await sql<{ n: number }[]>`select count(*)::int n from payslips where org_id = ${pg.pgOrgId}`;
     expect(run!.n).toBe(1);

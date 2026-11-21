@@ -22,8 +22,17 @@
 //    constraint-refusal counter lives; a direct import silently bypasses it.
 import { withOrgPrincipal } from '../app/expenses/lib';
 import { CAPABILITY_LABEL, heldCapabilities, type Actor, type Capability } from '@shareat/auth';
+import { requestMemo } from './request-memo';
 import { requireSession } from './session';
 import { capabilitiesForRoute } from './route-capability';
+import { routeHasNoRule } from './route-open-lists';
+import { isOrgWideRole } from './can-read-at-store';
+
+/**
+ * T-602 S3: the person's held capability set, read ONCE per request (React `cache`, keyed on the two primitive ids, never an object).
+ * Page-level READ gate and nav filter only; `authorize()` / `can()` in domain services and actions are never memoised.
+ */
+export const heldFor = requestMemo((orgId: string, personId: string) => withOrgPrincipal(orgId, (tx) => heldCapabilities(tx, { orgId, personId })));
 
 export interface PageAccess {
   actor: Actor;
@@ -41,6 +50,11 @@ export interface PageAccess {
  */
 export async function requirePageAccess(route: string): Promise<PageAccess> {
   const { actor } = await requireSession(route);
+  // T-616: deny by default. A route with no map entry, not approved-open and not awaiting Ian's decision, is refused (CI also fails it).
+  if (routeHasNoRule(route)) {
+    const isAdmin = await withOrgPrincipal(actor.orgId, (tx) => isOrgWideRole(tx, actor));
+    return { actor, refusal: <NoRuleRefused isAdmin={isAdmin} /> };
+  }
   const accepted = capabilitiesForRoute(route);
   if (accepted.length === 0) return { actor, refusal: null };
 
@@ -49,7 +63,7 @@ export async function requirePageAccess(route: string): Promise<PageAccess> {
   //    database is switched off for the query. This one reads `person_roles` and `person_grants`,
   //    which are org-scoped: unprincipalled, a read gate would have been consulting rows across
   //    tenancy boundaries. Caught by `tests/unit/no-direct-transaction-in-erp.test.ts`.
-  const held = await withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor));
+  const held = await heldFor(actor.orgId, actor.personId);
   if (accepted.some((c) => held.has(c))) return { actor, refusal: null };
 
   return { actor, refusal: <AccessRefused accepted={accepted} /> };
@@ -57,13 +71,32 @@ export async function requirePageAccess(route: string): Promise<PageAccess> {
 
 /** True when `actor` holds ANY of `capabilities` (org-wide union, the same read the route gate makes). For a page that must degrade, not refuse. */
 export async function holdsAny(actor: Actor, capabilities: readonly Capability[]): Promise<boolean> {
-  const held = await withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor));
+  const held = await heldFor(actor.orgId, actor.personId);
   return capabilities.some((c) => held.has(c));
 }
 
 /** "a", "a or b", "a, b or c" - the plain-words list of what opens a screen. */
 function orList(items: readonly string[]): string {
   return items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
+}
+
+/** T-616: the existing no-access card, plus a line for admins (who can fix it) saying why. */
+function NoRuleRefused({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <div className="mx-auto max-w-xl p-8" data-no-rule="true">
+      <div className="rounded-lg border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+        <h1 className="text-base font-semibold">You do not have access to this screen</h1>
+        <p className="mt-2">Ask an administrator to give you access under Users and roles.</p>
+        {isAdmin && <p className="mt-2 font-medium">This page has no access rule yet.</p>}
+        <a
+          href="/"
+          className="mt-4 inline-flex min-h-[44px] items-center rounded border border-amber-400 px-4 py-2 font-medium hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900"
+        >
+          Back to the dashboard
+        </a>
+      </div>
+    </div>
+  );
 }
 
 function AccessRefused({ accepted }: { accepted: readonly Capability[] }) {

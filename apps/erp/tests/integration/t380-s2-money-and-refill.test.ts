@@ -66,6 +66,7 @@ import {
 } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedStatutoryRates } from '../../../../packages/domain/tests/integration/_fixtures/statutory-rates';
+import { fundAccount } from '../../../../packages/domain/tests/integration/_fixtures/fund-account';
 import { captureRedirect, outcomeOf, pageParamsOf } from '../helpers/flash-jar';
 import { givePin } from '../helpers/approval-pin';
 
@@ -527,6 +528,8 @@ describe('W-S2 (B2) - posting a pay run keeps the net total out of the URL; the 
         values (${orgId}, ${workerId}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${adminId}) returning id`;
       const [office] = await sql<{ id: string }[]>`
         select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
+      // T-597: payroll follows the draw rule - an office safe that cannot cover the run refuses - so the paying account holds cash.
+      await fundAccount(sql, { orgId, storeId, code: '1130', amount: '10000000.00' });
       const admin = actor(orgId, adminId);
       await seedStatutoryRates(orgId, admin, [storeId]);
       await asOrg(orgId, (tx) =>

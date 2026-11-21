@@ -63,7 +63,7 @@ vi.mock('@shareat/db', async (importOriginal) => {
       ...actual.accessRepo,
       revokeGrantById: vi.fn(async () => {}),
       storeBelongsToOrg: vi.fn(async () => true),
-      activeRoleForPerson: vi.fn(async () => ({ role: 'admin' })),
+      activeRoleForPerson: vi.fn(async () => ({ role: 'admin', accountStatus: 'active' })),
     },
   };
 });

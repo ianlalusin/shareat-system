@@ -5,7 +5,7 @@ import { auditLogRepo } from '@shareat/db';
 import { logger } from '@shareat/core/logger';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import Link from 'next/link';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import {
   setPayoutDestinationAction,
   voidSettlementAction,
@@ -67,7 +67,8 @@ export default async function ChannelSettlementsPage({
     });
   }
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/channel-settlements');
+  const { actor, refusal } = await requirePageAccess('/channel-settlements');
+  if (refusal) return refusal;
 
   const [channels, waiting, settlements, loans, accounts] = await Promise.all([
     listChannels(actor.orgId),

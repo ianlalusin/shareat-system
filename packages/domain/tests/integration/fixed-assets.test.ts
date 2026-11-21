@@ -933,6 +933,9 @@ describe('the capitalisation threshold (bible row 141)', () => {
       approveExpense(tx, actor(f.orgId, f.managerId), under),
     );
     expect(underPosted.assetId).toBeNull();
+    // DEF-891 (T-596): below the threshold the cost is expensed to 6510, not parked in 1510.
+    expect(await ledgerTotal(f.orgId, under, '6510')).toBe('-4999.99');
+    expect(await ledgerTotal(f.orgId, under, '1510')).toBe('0');
 
     const at = await capexExpense(f, '5000.00');
     const atPosted = await asPerson(f.orgId, (tx) =>

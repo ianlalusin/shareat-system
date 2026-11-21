@@ -19,6 +19,8 @@ import { ORDER_WASTAGE_DISPOSITION_LABEL } from '../../../packages/db/schema/ord
 
 const ACTOR = { orgId: 'org-1', personId: 'actor-1' };
 
+// T-603: wastage/[id] asks the route gate now; this harness stubs the session, so the gate is stubbed open.
+vi.mock('../src/lib/page-access', () => ({ requirePageAccess: async () => ({ actor: ACTOR, refusal: null }) }));
 vi.mock('../src/lib/session', () => ({
   requireSession: vi.fn(async () => ({ actor: ACTOR })),
 }));

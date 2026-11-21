@@ -27,12 +27,12 @@
  * fixed first and both the stock movements and the entry carry it from the start.
  */
 import { add, compare, decimal, money, multiplyToMoney, ZERO, type Decimal, type Money } from '@shareat/core/money';
-import { advisoryLocksRepo, apRepo, deliveriesRepo, moneyAccountsRepo, stockLayersRepo, storesRepo, supplierReturnsRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, apRepo, deliveriesRepo, itemsRepo, moneyAccountsRepo, stockLayersRepo, storesRepo, supplierReturnsRepo, type Tx } from '@shareat/db';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { INVENTORY_REFUND_RULES } from '../field-rules/inventory';
 import { refuse } from '../shared/refusal';
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { consume, reverseConsumption } from './consume';
 import { repeatedItemSentence } from './usage';
 import { postEntry } from '../ledger/post-entry';
@@ -89,6 +89,11 @@ async function otherStoreSentence(tx: Tx, orgId: string, deliveryStoreId: string
   return `That delivery was received at ${await name(deliveryStoreId)}, not ${await name(returnStoreId)}.`;
 }
 
+/** DEF-608: a line is named by its item in every sentence a person reads, never by its id (the id scrubber turned it into "[hidden]"). */
+async function itemLabel(tx: Tx, orgId: string, itemId: string): Promise<string> {
+  return (await itemsRepo.getItemById(tx, orgId, itemId))?.name ?? 'That item';
+}
+
 export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<RecordReturnOutcome> {
   await authorize(tx, input.actor, 'record_supplier_return', { storeId: input.storeId });
   // ⭐ The org comes from the session-resolved actor. `authorize` above has just proven the store
@@ -140,7 +145,7 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
 
   // ⭐ Invariant 11 — a return may not name a supplier the linked delivery did not come from.
   if (input.deliveryId) {
-    const delivery = await deliveriesRepo.getDelivery(tx, input.deliveryId);
+    const delivery = await deliveriesRepo.getDelivery(tx, orgId, input.deliveryId);
     if (!delivery) return { ok: false, reason: `delivery ${input.deliveryId} does not exist` };
     if (delivery.supplierId !== input.supplierId) {
       return { ok: false, reason: `delivery ${input.deliveryId} was not from supplier ${input.supplierId}` };
@@ -157,11 +162,11 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
   for (const line of lines) {
     if (!line.deliveryLineId) continue;
     const deliveryLine = await deliveriesRepo.getDeliveryLine(tx, line.deliveryLineId);
-    if (!deliveryLine) return { ok: false, reason: `delivery line ${line.deliveryLineId} does not exist` };
+    if (!deliveryLine) return { ok: false, reason: `${await itemLabel(tx, orgId, line.itemId)} is not on a delivery line that exists.` };
     if (deliveryLine.itemId !== line.itemId) {
-      return { ok: false, reason: `delivery line ${line.deliveryLineId} is for a different item than ${line.itemId}` };
+      return { ok: false, reason: `${await itemLabel(tx, orgId, line.itemId)} is not the item on the delivery line that this return names.` };
     }
-    const lineDelivery = await deliveriesRepo.getDelivery(tx, deliveryLine.deliveryId);
+    const lineDelivery = await deliveriesRepo.getDelivery(tx, orgId, deliveryLine.deliveryId);
     if (!lineDelivery) return { ok: false, reason: `delivery ${deliveryLine.deliveryId} does not exist` };
     const elsewhere = await otherStoreSentence(tx, orgId, lineDelivery.storeId, input.storeId);
     if (elsewhere) return { ok: false, reason: elsewhere };
@@ -194,7 +199,7 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
     if (compareQuantity(total, cap) > 0) {
       return {
         ok: false,
-        reason: `delivery line ${line.deliveryLineId}: only ${cap} is still returnable (received ${received}, already returned ${alreadyReturned})`,
+        reason: `${await itemLabel(tx, orgId, line.itemId)}: only ${cap} is still returnable (received ${received}, already returned ${alreadyReturned})`,
       };
     }
   }
@@ -229,7 +234,9 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
       sourceId: returnId,
       createdBy: input.actor.personId,
     });
-    if (!result.ok) return result;
+    // DEF-888: THROWN, not returned. By now earlier lines have already written their stock movements in this transaction, and a
+    // returned `{ok:false}` lets the caller commit them with no return row. The throw rolls the whole return back; same sentence.
+    if (!result.ok) throw refuse(`recordReturn: ${result.reason}`, result.reason);
 
     const creditBasis = await deriveLineCreditBasis(tx, input.deliveryId, line.itemId);
     const unitCost = perBaseUnit(result.totalCost, line.quantity);
@@ -328,7 +335,10 @@ export interface VoidReturnOutcome {
 }
 
 /** What the loser of a double void reads — no id (I7); said above the lock and again below it. */
-const ALREADY_VOIDED = 'This return has already been voided.';
+const RETURN_VOID_OUT_OF_REACH = 'That return does not exist, or it is not at a store where you may void it.';
+
+export const RETURN_ALREADY_VOIDED = 'This return has already been voided.';
+const ALREADY_VOIDED = RETURN_ALREADY_VOIDED;
 
 export async function voidReturn(
   tx: Tx,
@@ -336,9 +346,15 @@ export async function voidReturn(
   returnId: string,
   reason: string,
 ): Promise<VoidReturnOutcome> {
+  // DEF-562 (DEF-546's shape): a missing return and one the caller may not act on are ONE refusal, carrying no id.
   const ret = await supplierReturnsRepo.getReturn(tx, returnId);
-  if (!ret) return { ok: false, reason: `return ${returnId} does not exist` };
-  await authorize(tx, actor, 'void_supplier_return', { storeId: ret.storeId });
+  if (!ret) throw new AuthorizationError(`voidReturn: no return ${returnId}`, 'void_supplier_return', RETURN_VOID_OUT_OF_REACH);
+  try {
+    await authorize(tx, actor, 'void_supplier_return', { storeId: ret.storeId });
+  } catch (err) {
+    if (err instanceof AuthorizationError) throw new AuthorizationError(`voidReturn: ${err.message}`, 'void_supplier_return', RETURN_VOID_OUT_OF_REACH);
+    throw err;
+  }
 
   if (ret.status === 'void') return { ok: false, reason: ALREADY_VOIDED };
   if (!reason.trim()) return { ok: false, reason: 'a void needs a reason' };
@@ -428,6 +444,11 @@ export async function supplierCreditBalance(tx: Tx, orgId: string, supplierId: s
   return money(await apRepo.advancesPositionOf(tx, orgId, supplierId));
 }
 
+/** T-602 S6-3: `supplierCreditBalance` for every supplier with a `1240` line, in one query (a supplier not in the map holds 0). */
+export async function supplierCreditBalances(tx: Tx, orgId: string): Promise<Map<string, Money>> {
+  return new Map([...(await apRepo.advancesBySupplier(tx, orgId))].map(([id, bal]) => [id, money(bal)]));
+}
+
 export interface RefundCreditInput {
   /** ⛔ NO `orgId` — see `RecordReturnInput`. T-231/DEF-210. */
   readonly storeId: string;
@@ -474,6 +495,17 @@ export async function refundSupplierCredit(tx: Tx, input: RefundCreditInput): Pr
   const supplierName = supplier?.name ?? input.supplierId;
   const account = await moneyAccountsRepo.getById(tx, orgId, input.moneyAccountId);
   if (!account) return { ok: false, reason: `money account ${input.moneyAccountId} does not exist` };
+  // DEF-888: the refund lands in one of THIS store's live accounts (the page picks one, but a crafted POST can name any).
+  if (account.storeId !== input.storeId) {
+    return { ok: false, reason: "That money account belongs to another store. Choose one of this store's accounts for the refund." };
+  }
+  if (!account.isActive) {
+    return { ok: false, reason: `"${account.name}" is retired and cannot receive the refund. Choose another account.` };
+  }
+  // DEF-933 (T-613): a staff cash float belongs to one person through a cash request, so no refund lands in it - refused here, not left to the page filter.
+  if (account.glAccountCode === '1120') {
+    return { ok: false, reason: 'That account is a staff cash float, which belongs to one person through a cash request. A supplier refund cannot land in it. Choose an office or e-wallet account.' };
+  }
 
   const posted = await postEntryOnce(tx, {
     orgId,

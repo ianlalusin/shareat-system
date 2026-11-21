@@ -4,6 +4,7 @@ import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 
 /**
  * T-179 — customer returns. Sibling of T-170's `supplier-returns.test.ts`, pointing the other
@@ -34,11 +35,13 @@ import {
   customerReturnableQuantity,
   customerCreditBalance,
   applyCredit,
+  recordCollection,
 } from '@shareat/domain';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import { testItemCode } from './_fixtures/item-code';
 import { heldRace } from './_fixtures/held-race';
+import { postEntry } from '../../src/ledger/post-entry';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -188,6 +191,29 @@ afterAll(async () => {
 });
 
 describe('external return — §3, the full posting', () => {
+  it('DEF-900: a return against the SECOND line of an item sold on two lines succeeds', async () => {
+    const f = await fixture('twolinesret');
+    const itemId = await wholesaleItem(f, 'Rice');
+    await stock(f, f.storeId, f.locationId, itemId, '20', '50.0000');
+    const customerId = await buyer(f);
+    const order = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, {
+        storeId: f.storeId, customerId, orderDate: '2026-01-10',
+        lines: [{ itemId, quantity: '5', rate: '50.00' }, { itemId, quantity: '3', rate: '40.00' }],
+      }),
+    );
+    await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: order.orderId }));
+    const lines = await asOrg(f.orgId, (tx) => tradeRepo.linesFor(tx, f.orgId, order.orderId));
+    const second = lines.find((l) => l.quantity === '3.000')!;
+    const res = await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, {
+        tradeOrderId: order.orderId, returnedOn: '2026-01-15', reason: 'Wrong grade.',
+        lines: [{ tradeOrderLineId: second.id, quantity: '2' }], actor: f.manager,
+      }),
+    );
+    expect(res.ok).toBe(true);
+  });
+
   it('1. a full resaleable return: Dr 4950/Cr 1210, Dr 1310/Cr 5100, on-hand rises, trial balance ties', async () => {
     const f = await fixture('full');
     const s = await aSale(f, { qty: '10', rate: '500', stockQty: '50', unitCost: '90' });
@@ -376,6 +402,26 @@ describe('settlement — §3\'s table and invariant 9\'s split', () => {
   });
 });
 
+describe('T-613 DEF-932 — a cash refund is not paid from a retired account', () => {
+  it('is refused in words; the same account live refunds', async () => {
+    const f = await fixture('refund-retired');
+    const s = await aSale(f, { qty: '2', rate: '500' });
+    const refund = () =>
+      asOrg(f.orgId, (tx) =>
+        recordCustomerReturn(tx, {
+          tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Refund requested.',
+          lines: [{ tradeOrderLineId: s.lineId, quantity: '1' }], refund: true, moneyAccountId: f.cashAccountId, actor: f.manager,
+        }),
+      );
+    await sql`update money_accounts set is_active = false where id = ${f.cashAccountId}`;
+    const refused = await refund();
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.reason).toMatch(/is retired/);
+    await sql`update money_accounts set is_active = true where id = ${f.cashAccountId}`;
+    expect((await refund()).ok).toBe(true);
+  });
+});
+
 describe('the credit is spendable — Ian\'s actual requirement', () => {
   it('7. redeeming credit against a later order posts Dr 2140/Cr 1210, and the balance returns to zero', async () => {
     const f = await fixture('spend');
@@ -412,6 +458,33 @@ describe('the credit is spendable — Ian\'s actual requirement', () => {
     await expect(
       asOrg(f.orgId, (tx) => applyCredit(tx, f.manager, { tradeOrderId: s.orderId, amount: '999999.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId })),
     ).resolves.toMatchObject({ ok: false });
+  });
+});
+
+describe('T-595 DEF-880 — return credit is spent only at the store that earned it', () => {
+  it('8b. credit earned at the first store cannot pay a trade order at the OTHER store: applyCredit refuses, nothing posts', async () => {
+    const f = await fixture('b-trade');
+    const s = await aSale(f, { qty: '2', rate: '500' });
+    await asOrg(f.orgId, (tx) => recordCollection(tx, f.manager, {
+      storeId: f.storeId, customerId: s.customerId, collectionDate: '2026-01-12', amount: '1000.00',
+      moneyAccountId: f.cashAccountId, allocations: [{ chargeId: s.arChargeId, amountApplied: '1000.00' }],
+    }));
+    await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '2' }], actor: f.manager }),
+    );
+    expect(await asOrg(f.orgId, (tx) => customerCreditBalance(tx, f.orgId, s.customerId))).toBe('1000.00'); // earned at f.storeId
+
+    // A second order for the same customer, but at the OTHER store.
+    const s2 = await aSale(f, { qty: '1', rate: '600', stockQty: '5' });
+    await sql`update trade_orders set customer_id = ${s.customerId}, store_id = ${f.otherStoreId} where id = ${s2.orderId}`;
+    await sql`update ar_charges set customer_id = ${s.customerId}, store_id = ${f.otherStoreId} where id = ${s2.arChargeId}`;
+    const collectionsBefore = (await sql<{ n: string }[]>`select count(*)::text n from ar_collections where org_id = ${f.orgId}`)[0]!.n;
+
+    await expect(
+      asOrg(f.orgId, (tx) => applyCredit(tx, f.manager, { tradeOrderId: s2.orderId, amount: '600.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId })),
+    ).rejects.toMatchObject({ userMessage: expect.stringMatching(/can only be spent at the store where it was earned/) });
+    expect((await sql<{ n: string }[]>`select count(*)::text n from ar_collections where org_id = ${f.orgId}`)[0]!.n).toBe(collectionsBefore);
+    expect(await asOrg(f.orgId, (tx) => customerCreditBalance(tx, f.orgId, s.customerId))).toBe('1000.00');
   });
 });
 
@@ -552,6 +625,18 @@ describe('void', () => {
     expect(onHandAfter).toBe('17.000');
   });
 
+  it('DEF-561: a second void reads the one shared already-voided sentence, the same as a supplier return', async () => {
+    const f = await fixture('voidtwice');
+    const s = await aSale(f, { qty: '3', rate: '500', stockQty: '20', unitCost: '90' });
+    const res = await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Wrong item.', lines: [{ tradeOrderLineId: s.lineId, quantity: '3' }], actor: f.manager }),
+    );
+    if (!res.ok) throw new Error('fixture');
+    await asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, res.returnId, 'Recorded in error.'));
+    const again = await asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, res.returnId, 'Again.'));
+    expect(again).toEqual({ ok: false, reason: 'This return has already been voided.' });
+  });
+
   it('void after redemption is refused', async () => {
     const f = await fixture('voidafterspend');
     const s = await aSale(f, { qty: '2', rate: '500' });
@@ -574,6 +659,60 @@ describe('void', () => {
 
     const voided = await asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, res.returnId, 'Too late.'));
     expect(voided.ok).toBe(false);
+  });
+
+  /** A paid sale of 2 x 500 at the first store, returned: 1000.00 of credit earned at f.storeId, owed by s.customerId. */
+  async function returnedWithCredit(f: Fixture) {
+    const s = await aSale(f, { qty: '2', rate: '500' });
+    await asOrg(f.orgId, (tx) => recordCollection(tx, f.manager, {
+      storeId: f.storeId, customerId: s.customerId, collectionDate: '2026-01-12', amount: '1000.00',
+      moneyAccountId: f.cashAccountId, allocations: [{ chargeId: s.arChargeId, amountApplied: '1000.00' }],
+    }));
+    const res = await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'x', lines: [{ tradeOrderLineId: s.lineId, quantity: '2' }], actor: f.manager }),
+    );
+    if (!res.ok) throw new Error('fixture: return refused');
+    return { s, returnId: res.returnId };
+  }
+  async function laterOrderFor(f: Fixture, customerId: string, rate: string) {
+    const s2 = await aSale(f, { qty: '1', rate, stockQty: '5' });
+    await sql`update trade_orders set customer_id = ${customerId} where id = ${s2.orderId}`;
+    await sql`update ar_charges set customer_id = ${customerId} where id = ${s2.arChargeId}`;
+    return s2;
+  }
+
+  it('T-595 DEF-880: this return credit was spent at its own store; credit the customer holds at ANOTHER store does not let the void through', async () => {
+    const f = await fixture('void-xstore');
+    const { s, returnId } = await returnedWithCredit(f);
+    // 1000.00 of credit also sits at the OTHER store (a raw entry: Dr cash / Cr 2140, same customer).
+    await asOrg(f.orgId, (tx) => postEntry(tx, {
+      orgId: f.orgId, entryDate: '2026-01-13', sourceType: 'manual_journal', sourceId: uid('x'), idempotencyKey: uid('x'), memo: 'credit at the other store', postedBy: f.manager.personId,
+      lines: [
+        { accountCode: '1110', storeId: f.otherStoreId, debit: '1000.00' },
+        { accountCode: '2140', storeId: f.otherStoreId, credit: '1000.00', partyType: 'customer', partyId: s.customerId },
+      ],
+    }));
+    const s2 = await laterOrderFor(f, s.customerId, '1000');
+    await asOrg(f.orgId, (tx) => applyCredit(tx, f.manager, { tradeOrderId: s2.orderId, amount: '1000.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId }));
+    // org-wide the customer still holds 1000.00 (the other store's), so an org-wide check would let this void reverse the first store's credit into -1000.00.
+    const voided = await asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, returnId, 'Too late.'));
+    expect(voided.ok).toBe(false);
+    const [st] = await sql<{ status: string }[]>`select status from customer_returns where id = ${returnId}`;
+    expect(st!.status).not.toBe('void');
+  });
+
+  it('T-595: a spend of this return credit and the void of that return serialise - the void waits, then is refused', async () => {
+    const f = await fixture('void-race');
+    const { s, returnId } = await returnedWithCredit(f);
+    const s2 = await laterOrderFor(f, s.customerId, '600');
+    const [spent, voided] = await heldRace(
+      asOrg, f.orgId,
+      (tx) => applyCredit(tx, f.manager, { tradeOrderId: s2.orderId, amount: '600.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId }),
+      (tx) => voidCustomerReturn(tx, f.manager, returnId, 'Race.'),
+    );
+    expect(spent.ok).toBe(true);
+    expect(voided.ok, 'the void must see the spend, not a stale 1000.00').toBe(false);
+    expect(await asOrg(f.orgId, (tx) => customerCreditBalance(tx, f.orgId, s.customerId))).toBe('400.00');
   });
 });
 
@@ -681,5 +820,34 @@ describe('T-231 / DEF-210 — a customer return is stamped with the actor’s or
       }),
     );
     expect(res.ok, res.ok ? '' : `refused — it read the wrong org’s ledger: ${res.reason}`).toBe(true);
+  });
+});
+
+describe('T-615 void is no existence oracle (the twin of DEF-562 / DEF-546)', () => {
+  it('a caller who may not void gets the SAME refusal for a random id and a real return; no id in it', async () => {
+    const f = await fixture('voidoracle');
+    const s = await aSale(f, { qty: '3', rate: '500', stockQty: '20', unitCost: '90' });
+    const res = await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Wrong item.', lines: [{ tradeOrderLineId: s.lineId, quantity: '1' }], actor: f.manager }),
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const fakeId = randomUUID();
+    const refusal = (id: string, who: Actor) =>
+      asOrg(f.orgId, (tx) => voidCustomerReturn(tx, who, id, 'nope')).then(
+        () => { throw new Error('expected a refusal, but the call resolved'); },
+        (e: unknown) => e as { name: string; userMessage?: string },
+      );
+    const fake = await refusal(fakeId, f.staff);
+    const real = await refusal(res.returnId, f.staff);
+    expect(fake.name).toBe('AuthorizationError');
+    expect(fake.userMessage).toBeTruthy();
+    expect(fake.userMessage).toBe(real.userMessage);
+    expect(fake.userMessage).not.toContain(fakeId);
+    expect(fake.userMessage).not.toContain(res.returnId);
+    // an allowed caller with a random id reads the same sentence, so the answer never says which ids exist
+    expect((await refusal(randomUUID(), f.manager)).userMessage).toBe(real.userMessage);
+    // the real return is untouched
+    expect((await sql<{ status: string }[]>`select status from customer_returns where id = ${res.returnId}`)[0]!.status).not.toBe('void');
   });
 });

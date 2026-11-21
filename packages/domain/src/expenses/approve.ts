@@ -30,6 +30,7 @@ import { postEntry } from '../ledger/post-entry';
 import { withInterStoreLegs } from '../ledger/inter-store';
 import { routeExpense } from './routing';
 import { capitalizeApprovedExpense } from '../fixed-assets/capitalize';
+import { BELOW_THRESHOLD_CAPEX_ACCOUNT, readPolicyOrRefuse } from '../fixed-assets/policy';
 import { logger } from '@shareat/core/logger';
 import { refuse, gone, internalFault } from '../shared/refusal';
 
@@ -93,6 +94,8 @@ export interface ApprovalFacts {
     drawers: Array<{ account: MoneyAccountT; available: Money; drawn: Money }>;
     owner: OwnerT | null;
     period: PeriodT;
+    /** DEF-891: a CAPEX purchase under the capitalisation threshold gets no register row, so it posts to 6510, not 1510. */
+    belowThreshold: boolean;
   } | null;
 }
 
@@ -262,7 +265,12 @@ export async function gatherApprovalFacts(
     ? await journalRepo.findPeriodForDate(tx, actor.orgId, expense.businessDate)
     : undefined;
 
-  return { expense, canApprove, detail: { capacity, category, payments, requests, wallets, drawers, owner: owner ?? null, period } };
+  // DEF-891: read the policy only for a CAPEX category (it refuses when unreadable, same as capitalising does).
+  const belowThreshold =
+    category?.group === 'CAPEX' &&
+    compare(money(expense.totalAmount), money((await readPolicyOrRefuse(tx, actor.orgId)).threshold)) < 0;
+
+  return { expense, canApprove, detail: { capacity, category, payments, requests, wallets, drawers, owner: owner ?? null, period, belowThreshold } };
 }
 
 /** The routing of a gathered draft (pure). Shared by the verdict and by the posting, so both route the same facts. */
@@ -274,7 +282,8 @@ function routeFacts(facts: ApprovalFacts & { detail: NonNullable<ApprovalFacts['
     totalAmount: money(expense.totalAmount),
     supplierId: expense.supplierId,
     categoryName: category!.category,
-    categoryAccountCode: category!.accountCode,
+    // DEF-891 (T-596 R1): below the threshold a CAPEX purchase is expensed the day it is bought, as T-124 and v1 do.
+    categoryAccountCode: facts.detail.belowThreshold ? BELOW_THRESHOLD_CAPEX_ACCOUNT : category!.accountCode,
     // ⭐ T-127: a PERSONAL expense belongs to an owner, and that owner's policy decides whether it is a receivable (1260)
     // or a drawing (3200). Resolved at gather because `routeExpense` is pure.
     owner: owner && { id: owner.id, treatment: owner.personalExpenseTreatment },
@@ -377,6 +386,13 @@ export function approvalVerdict(facts: ApprovalFacts, options: ApprovalVerdictOp
       return {
         raw: `approveExpense: expense ${expenseId} names money account ${w.id}, which does not exist in this org`,
         sentence: 'A money account on this expense no longer exists. Edit the payment, then approve it.',
+      };
+    }
+    // DEF-932 (T-613): money is not paid OUT of a retired account - same words as `assertActiveAccount` (T-597).
+    if (!w.account.isActive) {
+      return {
+        raw: `approveExpense: expense ${expenseId} pays from money account "${w.account.name}", which is retired.`,
+        sentence: `"${w.account.name}" is retired. Choose another account to pay from.`,
       };
     }
     if (w.crossStore && !w.transferAllowed) {
@@ -610,7 +626,7 @@ async function runApproveExpense(
   // and those terms are permanent. An expense posted without its asset is worse than an expense
   // not posted at all, because only one of those two states is obvious to anybody.
   const capitalised =
-    category.group === 'CAPEX' ? await capitalizeApprovedExpense(tx, actor, expenseId) : null;
+    category.group === 'CAPEX' ? await capitalizeApprovedExpense(tx, actor, expenseId, detail.belowThreshold) : null;
 
   // T-402 S3 (C4): the approval step's event, same transaction, after the posting and its own writes.
   if (result.created) {

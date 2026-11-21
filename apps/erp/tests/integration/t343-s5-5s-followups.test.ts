@@ -3,6 +3,7 @@ import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
+import { makeSettleableDay } from '../../../../packages/domain/tests/integration/_fixtures/sales-day-flow';
 import { sql as dsql } from 'drizzle-orm';
 
 /**
@@ -422,7 +423,7 @@ describe('C1 (DEF-470) — returnedAmount "1,00" (comma), shortAmount "100": the
     let caught: unknown;
     try {
       await asOrg(f.orgId, (tx) =>
-        settleCashRequest(tx, f.admin, {
+        settleCashRequest(tx, f.admin, { settleId: crypto.randomUUID(),
           requestId,
           returnedAmount: '1,00',
           shortAmount: '100',
@@ -449,7 +450,7 @@ describe('C2 (DEF-470) — returnedAmount "1,00" (comma) alone: nothing posted, 
     let caught: unknown;
     try {
       await asOrg(f.orgId, (tx) =>
-        settleCashRequest(tx, f.admin, { requestId, returnedAmount: '1,00', toMoneyAccountId: f.till, on: '2026-01-10' }),
+        settleCashRequest(tx, f.admin, { settleId: crypto.randomUUID(), requestId, returnedAmount: '1,00', toMoneyAccountId: f.till, on: '2026-01-10' }),
       );
     } catch (err) {
       caught = err;
@@ -468,7 +469,7 @@ describe('C3 (DEF-470) — returnedAmount "100", shortAmount "-5": the return po
     let caught: unknown;
     try {
       await asOrg(f.orgId, (tx) =>
-        settleCashRequest(tx, f.admin, {
+        settleCashRequest(tx, f.admin, { settleId: crypto.randomUUID(),
           requestId,
           returnedAmount: '100',
           shortAmount: '-5',
@@ -494,7 +495,7 @@ describe('C4 (DEF-470) — returnedAmount "-5" alone: today\'s message is "nothi
     let caught: unknown;
     try {
       await asOrg(f.orgId, (tx) =>
-        settleCashRequest(tx, f.admin, { requestId, returnedAmount: '-5', toMoneyAccountId: f.till, on: '2026-01-10' }),
+        settleCashRequest(tx, f.admin, { settleId: crypto.randomUUID(), requestId, returnedAmount: '-5', toMoneyAccountId: f.till, on: '2026-01-10' }),
       );
     } catch (err) {
       caught = err;
@@ -597,6 +598,7 @@ async function channelSettlementFixture(hint: string) {
   const [day] = await sql<{ id: string }[]>`
     insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by)
     values (${f.orgId}, ${f.storeId}, '2026-01-10', 0, 0, 0, ${manager!.id}) returning id`;
+  await makeSettleableDay(sql, day!.id, channel!.id, manager!.id); // DEF-881: a settlement names a verified day carrying the channel
   const manager_ = actor(f.orgId, manager!.id);
   return { ...f, manager: manager_, channelId: channel!.id, salesDayId: day!.id, bankId: bank!.id };
 }
@@ -856,7 +858,7 @@ describe.each(['blank', 'spaces-only'])('shortAmount %s alongside a real returne
   it('the return alone posts, no shortage row', async () => {
     const f = await cashRequestFixture(`short-${_label}`);
     const requestId = await released(f);
-    await asOrg(f.orgId, (tx) => settleCashRequest(tx, f.admin, { requestId, returnedAmount: '100', toMoneyAccountId: f.till, on: '2026-01-10' }));
+    await asOrg(f.orgId, (tx) => settleCashRequest(tx, f.admin, { settleId: crypto.randomUUID(), requestId, returnedAmount: '100', toMoneyAccountId: f.till, on: '2026-01-10' }));
     expect(await returnRowCount(f.orgId, requestId), 'the return must have posted').toBe(1);
     expect(await shortageRowCount(f.orgId, requestId), 'no shortage — blank means none').toBe(0);
   });

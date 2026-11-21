@@ -32,7 +32,7 @@ afterAll(async () => {
 const MIGRATIONS = join(__dirname, '..', '..', '..', 'db', 'migrations');
 const KEY = 'pos.senior_id_repeat_days';
 const FILE = '0255_t575_pos_senior_id_repeat_days.sql';
-const SEEDS = ['0239_', '0241_', '0245_', '0248_', '0255_', '0256_'];
+const SEEDS = ['0239_', '0241_', '0245_', '0248_', '0255_', '0256_', '0273_'];
 
 const fileOf = (prefix: string): string => {
   const f = readdirSync(MIGRATIONS).find((n) => n.startsWith(prefix));

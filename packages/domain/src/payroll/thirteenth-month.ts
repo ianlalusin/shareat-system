@@ -21,6 +21,7 @@ import { reverseEntry } from '../ledger/reverse-entry';
 import { refuse } from '../shared/refusal';
 import { advanceToRecover } from './compute';
 import { assertPayrollMoneyAccount, PAYROLL_ADVANCE_ACCOUNT, payrollMoneyParty } from './index';
+import { assertActiveAccount, checkDraw } from '../money-accounts/overdraft';
 import { agreedRecoverable, applyDeductionRecovery, reopenAfterVoid } from './deduction-agreements';
 
 /** `6140 13th month pay` — provisioned in Phase 1, unused until now. */
@@ -155,7 +156,7 @@ export async function post13thMonthRun(
     entryDate?: string;
     notes?: string | null;
   },
-): Promise<{ runId: string; payouts: number; totalNet: string }> {
+): Promise<{ runId: string; payouts: number; totalNet: string; warning?: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_payroll', { storeId: input.storeId });
     assertRunYear('post13thMonthRun', input.year);
@@ -182,6 +183,10 @@ export async function post13thMonthRun(
       throw new Error('post13thMonthRun: that money account belongs to another store.');
     }
     assertPayrollMoneyAccount(account, 'post13thMonthRun');
+    // DEF-889 (T-597, option A): see postPayRun. The cash out is the sum of the positive net payouts.
+    assertActiveAccount(account, 'post13thMonthRun');
+    const cashOut = preview.payouts.reduce<Money>((sum, p) => (compare(p.netPay, ZERO) > 0 ? add(sum, p.netPay) : sum), ZERO);
+    const warning = compare(cashOut, ZERO) > 0 ? await checkDraw(trx, actor.orgId, account, cashOut, 'post13thMonthRun') : null;
 
     const entryDate = input.entryDate ?? `${input.year}-12-24`;
     const runId = (
@@ -260,6 +265,7 @@ export async function post13thMonthRun(
       runId,
       payouts: preview.payouts.length,
       totalNet: formatMoney(preview.totalNet),
+      ...(warning ? { warning } : {}),
     };
   };
   return run(tx);

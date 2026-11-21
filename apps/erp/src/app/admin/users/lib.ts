@@ -41,6 +41,8 @@ export async function listUsers(orgId: string): Promise<PersonWithAccessRow[]> {
 
 export interface UserDetail {
   person: PersonWithAccessRow;
+  /** T-619: a promotion retired this person's PIN and no new one is set yet. */
+  pinResetPending: boolean;
   /** Every store in the org, each flagged with whether this person holds scope for it. */
   stores: (StoreOption & { inScope: boolean })[];
   /** Active and revoked both — invariant 11 requires a revoked grant to stay queryable with
@@ -79,11 +81,12 @@ export async function userDetail(orgId: string, personId: string): Promise<UserD
     const person = rows.find((r) => r.id === personId);
     if (!person) return null;
 
-    const [scopedIds, grants, credentials, openJobs] = await Promise.all([
+    const [scopedIds, grants, credentials, openJobs, pinResetPending] = await Promise.all([
       accessRepo.storeIdsForPerson(tx, personId),
       accessRepo.grantsForPerson(tx, personId),
       sessionsRepo.listLiveForPerson(tx, personId),
       employmentRepo.listOpenForPerson(tx, personId),
+      sessionsRepo.pinResetPendingForPerson(tx, personId),
     ]);
     const held = new Set(scopedIds);
 
@@ -102,6 +105,7 @@ export async function userDetail(orgId: string, personId: string): Promise<UserD
 
     return {
       person,
+      pinResetPending,
       stores: stores.map((s) => ({ ...s, inScope: held.has(s.id) })),
       grants: grantsWithSource.sort((a, b) => a.grantName.localeCompare(b.grantName)),
       openJobs: openJobs.map((j) => ({ id: j.id, storeId: j.storeId })),

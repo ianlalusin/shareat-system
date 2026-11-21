@@ -163,6 +163,7 @@ export * from './dual-run/pack';
 // T-401 S2 - the ERP menu and catalog master: categories, items, variants, option groups, depletion rules, and the
 // append-only effective-dated offers (a store's price). Nothing reads it in production until the POS v2 carrier (P1).
 export * from './menu';
+export * from './store-copy'; // T-611: copy settings between stores (hours, prices, kitchen, discounts); lives outside menu/ because it also reaches pos/ (t401 I16)
 
 // T-402 S3 - the R10 offline envelope: recordClientEvents (no caller until the POS v2 receipts spec, ADR-015 P2).
 export * from './activity/client-events';
@@ -208,4 +209,4 @@ export { buildRuleBook } from './business-rules/book';
 export type { RuleBook, RuleValue } from './business-rules/book';
 export { listBusinessRules, loadRuleBook, ruleValue, setBusinessRule } from './business-rules/rules';
 export type { BusinessRuleChange, BusinessRuleItem, SetBusinessRuleInput } from './business-rules/rules';
-export { readPosRules } from './business-rules/pos-rules';
+export { readPosRules, readReceiptLookupDays } from './business-rules/pos-rules';

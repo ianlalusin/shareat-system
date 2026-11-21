@@ -20,20 +20,17 @@ import { httpHeartbeat } from './lib/backup/heartbeat';
 import { BACKUP_PREFIX, fsStore, resolveSpacesConfig, spacesStore, type ObjectStore } from './lib/backup/object-store';
 import { redact } from './lib/backup/pg-tools';
 import { runBackup } from './lib/backup/run-backup';
+import { scriptArg } from './lib/args';
 
 config({ path: '.env.local' });
 
-function arg(name: string): string | undefined {
-  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-  return hit?.slice(name.length + 3);
-}
 const flag = (name: string) => process.argv.includes(`--${name}`);
 
 async function main(): Promise<number> {
-  if (flag('production') && arg('now') !== undefined) {
+  if (flag('production') && scriptArg('now') !== undefined) {
     throw new Error('--now cannot be combined with --production: a faked clock would write a production backup under the wrong date');
   }
-  const storeArg = arg('store');
+  const storeArg = scriptArg('store');
   let store: ObjectStore;
   if (storeArg?.startsWith('fs:')) {
     store = fsStore(path.resolve(storeArg.slice(3)));
@@ -55,7 +52,7 @@ async function main(): Promise<number> {
   const heartbeatUrl = process.env.BACKUP_HEARTBEAT_URL;
   if (flag('production') && !heartbeatUrl) throw new Error('BACKUP_HEARTBEAT_URL is required with --production');
 
-  const nowArg = arg('now');
+  const nowArg = scriptArg('now');
   const fixed = nowArg ? new Date(nowArg) : undefined;
   if (fixed && Number.isNaN(fixed.getTime())) throw new Error(`--now=${nowArg} is not a date`);
 

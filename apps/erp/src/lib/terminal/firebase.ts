@@ -99,7 +99,8 @@ export function terminalFirebase(): { app: FirebaseApp; db: Firestore; auth: Aut
   const auth = getAuth(app);
 
   const host = emulatorHost();
-  if (host) {
+  // DEF-372: never in a production build, even if the variable leaked into one -- a real terminal must not point at localhost.
+  if (host && process.env.NODE_ENV !== 'production') {
     const [name, port] = host.split(':');
     connectFirestoreEmulator(db, name!, Number(port ?? 8182));
     // `disableWarnings` only silences the console banner; the emulator is still obvious on screen.

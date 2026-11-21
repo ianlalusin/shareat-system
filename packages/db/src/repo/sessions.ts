@@ -157,6 +157,21 @@ export async function listLiveForPerson(
   return rows as (CredentialRow & { createdAt: Date })[];
 }
 
+/**
+ * T-619 / DEF-920 - true while a promotion has retired this person's PIN and no new one has been set: no live PIN, and
+ * the latest retired PIN was retired because the role was raised. Read by the staff and user pages for the note.
+ */
+export async function pinResetPendingForPerson(tx: Tx, personId: string): Promise<boolean> {
+  const pins = await tx
+    .select({ revokedAt: personCredentials.revokedAt, revokeReason: personCredentials.revokeReason })
+    .from(personCredentials)
+    .where(and(eq(personCredentials.personId, personId), eq(personCredentials.kind, 'pin')))
+    .orderBy(desc(personCredentials.createdAt))
+    .limit(1);
+  const latest = pins[0];
+  return !!latest && latest.revokedAt !== null && (latest.revokeReason ?? '').startsWith('role raised to ');
+}
+
 export async function insertCredential(tx: Tx, input: InsertCredentialInput): Promise<{ id: string }> {
   const [row] = await tx
     .insert(personCredentials)

@@ -1,8 +1,8 @@
-import { listStores, listActiveCategoriesGrouped } from '../lib';
+import { listActiveCategoriesGrouped } from '../lib';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { listOpenInvoicesForPicker, peso } from '../../ap/lib';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import { createExpenseAction } from '../actions';
 import { budgetsRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../lib';
@@ -31,11 +31,13 @@ interface SearchParams {
 export default async function NewExpensePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
 
-  const { actor } = await requireSession('/expenses/new');
+  // T-603: only the stores where the viewer records or approves expenses; a foreign ?store= is the one sentence (invoices, budget caps and accounts follow the store).
+  const scope = await storePageScope('/expenses/new', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores: storeRows, storeId } = scope;
   const orgId = actor.orgId;
 
-  const [storeRows, categories] = await Promise.all([listStores(orgId), listActiveCategoriesGrouped(orgId)]);
-  const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : (storeRows[0]?.id ?? '');
+  const categories = await listActiveCategoriesGrouped(orgId);
   // T-414 (ruling 2): the invoice list follows the store, as the action already requires (it refuses another store's invoice).
   const invoices = await listOpenInvoicesForPicker(orgId, storeId || undefined);
   // T-475 E1-E3 (R8): the facts the live lines read come from the same builder the domain uses; C2: the picked invoice's supplier feeds Credit.

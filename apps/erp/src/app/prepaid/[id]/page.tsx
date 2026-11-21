@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../../lib/page-access';
+import { recordInScope } from '@/lib/store-scope';
 import {
   amortiseAction,
   confirmTermAction,
@@ -59,7 +60,7 @@ export default async function PrepaidItemPage({
   if (refusal) return refusal;
 
   const item = await getDetail(actor.orgId, id);
-  if (!item) notFound();
+  if (!item || !(await recordInScope(actor, '/prepaid', item.storeId))) notFound();
 
   const active = item.status === 'active';
 
@@ -211,7 +212,7 @@ export default async function PrepaidItemPage({
                       period. It is nearly free here because the balance is derived: reversing the
                       entry IS the fix, with no column to repair.
                     */}
-                    {p.posted && (
+                    {p.posted && item.status !== 'written_off' && (
                       <CheckedForm rules={PREPAID_MONTH_REVERSE_RULES} action={reverseMonthAction} className="flex justify-end gap-1">
                         <input type="hidden" name="prepaidItemId" value={item.id} />
                         <input type="hidden" name="period" value={p.period} />

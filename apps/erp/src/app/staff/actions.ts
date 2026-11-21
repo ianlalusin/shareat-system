@@ -13,9 +13,12 @@ import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { STAFF_POSITIONS, STAFF_RENAME } from './typed-forms';
 import {
+  activateAccount,
   createEmployment,
   createPerson,
   endEmployment,
+  reinstateAccount,
+  suspendAccount,
   removeStaffPhoto,
   removeStaffSignature,
   renamePerson,
@@ -35,6 +38,7 @@ import {
   STAFF_HIRE_RULES,
   STAFF_PIN_RULES,
   STAFF_POSITION_RULES,
+  STAFF_SUSPEND_RULES,
 } from '@shareat/domain/field-rules';
 import type { EmploymentStatus } from '@shareat/db/schema';
 import { authorize, can, isStoreManagerOrAbove, reopenPinSignIn, setPin, type Actor } from '@shareat/auth';
@@ -45,7 +49,8 @@ import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { isPresentable } from '../../lib/error-shape';
 import { verifyAdminApproval } from '@shareat/auth';
-import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
+import { loadDestructiveTarget, recordApproval, retypeRefusalError } from '@/lib/destructive';
+import { retypeMatches } from '@/lib/retype';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -218,6 +223,46 @@ export async function endEmploymentAction(formData: FormData): Promise<void> {
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Employment ended. The record stays visible.' });
+}
+
+/** T-612: pending -> active. A plain step (nothing is lost by it); who may do it is `activateAccount`'s own decision. */
+export async function activateAccountAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => activateAccount(tx, actor, { employmentId }));
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Account activated. They can sign in with their PIN.' });
+}
+
+/** T-612: active -> suspended. T-412 Tier R: the person's name is retyped; the server compares it with the name IT loads. Ends every open session in the same transaction. */
+export async function suspendAccountAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  const reason = str(formData, 'reason');
+  try {
+    const target = await loadDestructiveTarget(actor, 'employment', employmentId, ['enrol_staff', 'manage_users']);
+    assertFieldRules(STAFF_SUSPEND_RULES, formData);
+    if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
+    await withOrgPrincipal(actor.orgId, (tx) => suspendAccount(tx, actor, { employmentId, reason }));
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Account suspended. Their role and access are kept, paused, and they are signed out.' });
+}
+
+/** T-612: suspended -> active, with exactly the rights they had. */
+export async function reinstateAccountAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => reinstateAccount(tx, actor, { employmentId }));
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Account reinstated.' });
 }
 
 /**

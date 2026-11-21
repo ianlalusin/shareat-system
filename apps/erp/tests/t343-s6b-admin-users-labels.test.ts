@@ -80,7 +80,7 @@ vi.mock('@shareat/db', async (importOriginal) => {
       // A6's revoke branch calls the REAL authorize() (grantCapabilityAsActor is the only
       // @shareat/auth override) — 'grant_capability' is org-scoped and CAPABILITY_MATRIX grants it
       // to 'admin', so this is the only DB lookup authorize()'s success path needs here.
-      activeRoleForPerson: vi.fn(async () => ({ role: 'admin' })),
+      activeRoleForPerson: vi.fn(async () => ({ role: 'admin', accountStatus: 'active' })),
     },
     // T-412: revoking a grant asks for its title to be retyped; the server loads the grant's name (stubbed here: 'void_expense').
     destructiveTargetsRepo: { targetOf: vi.fn(async () => ({ storeId: null, name: 'void_expense', status: null })) },

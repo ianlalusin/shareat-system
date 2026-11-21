@@ -439,7 +439,8 @@ async function reconcileHolders(
     const result = await reconcilePositionGrants(tx, actor, { personId, storeId });
     if (result.skippedSelf) {
       skippedSelf = true;
-    } else if (result.granted.length > 0 || result.revoked.length > 0) {
+    } else if (result.granted.some((c) => !result.revoked.includes(c)) || result.revoked.some((c) => !result.granted.includes(c))) {
+      // DEF-367: a capability both revoked and re-granted in one reconcile (a second position still wants it) changed nothing for the person.
       affected++;
     }
   }

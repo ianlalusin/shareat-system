@@ -154,6 +154,7 @@ export const stockMovements = pgTable(
       .where(sql`${t.reversalOfId} is not null`),
     index('stock_movements_item_location_idx').on(t.itemId, t.locationId, t.movedAt),
     index('stock_movements_store_moved_idx').on(t.orgId, t.storeId, t.movedAt),
+    // NOTE: stock_movements_store_item_qty_idx (org_id, store_id, item_id) INCLUDE (quantity) - hand-added in migration 0272 (T-602); drizzle cannot say INCLUDE. Serves lowStock and the findings on-hand sums (index-only).
     check('stock_movements_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
     // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a

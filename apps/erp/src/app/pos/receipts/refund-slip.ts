@@ -22,11 +22,13 @@ export interface RefundSlipContext {
   vatRegistered: boolean;
   /** T-585: the issuer identity (legal name, address, TIN); absent = the store name alone. */
   identity?: unknown;
+  /** T-601 S4: the POS mode of the store; `test` puts TEST - NOT A SALE on the slip. */
+  mode?: string;
 }
 
 export function refundSlipView(slip: RefundSlipJson, ctx: RefundSlipContext, reprint = false): RefundSlipView {
   return {
-    header: receiptHeaderOf({ name: ctx.storeName, vatRegistered: ctx.vatRegistered, identity: ctx.identity }),
+    header: receiptHeaderOf({ name: ctx.storeName, vatRegistered: ctx.vatRegistered, identity: ctx.identity, mode: ctx.mode }),
     refundNo: slip.refundNo,
     receiptNo: slip.receiptNo,
     refundedAtLocal: formatBusinessDateTime(new Date(slip.recordedAt), { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', ''),

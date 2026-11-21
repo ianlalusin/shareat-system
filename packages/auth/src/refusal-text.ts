@@ -25,6 +25,13 @@ export function noActiveRole(orgName: string | undefined): string {
   return `Your account has no active role in ${orgName ?? 'this organization'}, so you can't use this yet. Ask an admin to give you one.`;
 }
 
+/** T-612 — the person's account is pending, suspended or ended (their role rows may still exist; the account is what is switched off). */
+export function accountNotActive(status: string | undefined): string {
+  if (status === 'pending') return `Your account isn't active yet. Ask your manager.`;
+  if (status === 'suspended') return `Your account is suspended. Ask your manager.`;
+  return `Your access has ended. Ask your manager if this is wrong.`;
+}
+
 /** Row 5 — the role/grant check failed outright. */
 export function roleMayNot(role: Role, capability: Capability): string {
   return `Your role (${ROLE_LABEL[role]}) can't ${CAPABILITY_LABEL[capability]}. Ask an admin if you need to.`;

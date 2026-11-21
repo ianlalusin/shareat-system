@@ -140,7 +140,10 @@ export async function moveChannelReceivableAction(fd: FormData): Promise<void> {
     // Never a negative peso amount: a credit balance is "in its favour"; amounts carry the thousands comma.
     const total = money(result.total);
     const amount = compare(total, ZERO) < 0 ? `${formatMoney(negate(total))} in its favour` : formatMoney(total);
-    ok = result.moved
+    ok = result.replayed
+      ? // DEF-929: this press was already recorded (a stale tab or a second submit); what it left is whatever sits on another account now, not "nothing".
+        `That press was already recorded, so nothing was posted twice. ${amount} is on another account again. Reload the page and press Move once more.`
+      : result.moved
       ? result.entryId
         ? `Moved. The balance of ${amount} is now on Channel receivable and the channel uses it from now on.`
         : 'Moved. Nothing was owed on the old account, so only the setting changed. The channel uses Channel receivable from now on.'

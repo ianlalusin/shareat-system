@@ -24,10 +24,10 @@
  * needs no client boundary — this file stays a Server Component, matching prior art already in
  * this codebase (`app/budgets/page.tsx`). docs/tasks/257-def-259-sign-out.md, "Placement decision".
  */
-import { signOutAction } from '../../app/sign-in/actions';
-import { MenuButton } from './Sidebar';
+import { MenuButton, SignOutForm } from './Sidebar';
+import { signOutLabel } from './sign-out-label';
 
-export function TopBar() {
+export function TopBar({ signedInAs }: { signedInAs: string | null }) {
   return (
     <header className="shell-nav-row sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-neutral-200 bg-surface px-2 dark:border-neutral-800 md:hidden">
       <MenuButton />
@@ -37,14 +37,14 @@ export function TopBar() {
       </span>
       {/* The page-title slot — empty until slice 2 wires a real value through. */}
       <span className="flex-1 truncate text-sm text-neutral-500" />
-      <form action={signOutAction}>
+      <SignOutForm>
         <button
           type="submit"
           className="shell-nav-row rounded-md px-2 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
         >
-          Sign out
+          {signOutLabel(signedInAs)}
         </button>
-      </form>
+      </SignOutForm>
     </header>
   );
 }

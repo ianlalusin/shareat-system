@@ -58,7 +58,7 @@ export interface TillPanelProps {
   /** A store manager or above who may approve corrections: only they can use Close day by day and Resend. */
   isManager: boolean;
   layout: PrintLayout;
-  store: { name: string; vatRegistered?: boolean; identity?: unknown };
+  store: { name: string; vatRegistered?: boolean; identity?: unknown; mode?: string };
   cashierName: string;
   tillCountsHref: string;
   /** T-534 S2: the store's active tenders and its Converts not yet in a Z. */
@@ -121,7 +121,7 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
   const onClear = () => (field === 'id' ? setEmployeeId('') : setPin(''));
 
   const printX = async () => {
-    const lines = formatXSlip(readingSlipView(reading, { storeName: store.name, vatRegistered: store.vatRegistered ?? true, printedBy: cashierName, identity: store.identity }), layout);
+    const lines = formatXSlip(readingSlipView(reading, { storeName: store.name, vatRegistered: store.vatRegistered ?? true, printedBy: cashierName, identity: store.identity, mode: store.mode }), layout);
     const result = await deps.print(lines, { copies: 1 });
     setNotice(result === 'failed' ? 'The slip did not print. Try again.' : null);
   };
@@ -177,7 +177,7 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
   };
 
   const ready = employeeId.trim() !== '' && pin !== '';
-  const hasSales = reading.receiptCount > 0;
+  const hasSales = reading.receiptCount > 0 || (reading.refunds?.count ?? 0) > 0 || (reading.convert?.count ?? 0) > 0; // T-613 D3: refunds and Converts are closed too
   return (
     <div className="grid gap-4 pb-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="rounded-2xl border border-surface-border bg-surface p-5 space-y-6">

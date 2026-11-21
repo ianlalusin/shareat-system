@@ -251,5 +251,10 @@
     "app/staff/StaffViews.tsx": [
       "ancestry truncated — no font size resolvable"
     ]
+  },
+  "_totals": {
+    "fail": 50,
+    "unresolved": 50,
+    "total": 1725
   }
 }

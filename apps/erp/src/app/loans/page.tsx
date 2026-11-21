@@ -2,6 +2,7 @@ import { LOAN_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/fie
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { INTEREST_METHODS, PAYMENT_FREQUENCIES, RATE_PERIODS } from '@shareat/db';
 import { requirePageAccess } from '../../lib/page-access';
+import { listStoreIds } from '@/lib/store-scope';
 import { createLoanAction } from './actions';
 import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
@@ -26,7 +27,8 @@ export default async function LoansPage({
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
 
-  const [stores, loans] = await Promise.all([listStores(actor.orgId), listRegister(actor.orgId)]);
+  const storeIds = await listStoreIds(actor, '/loans');
+  const [stores, loans] = await Promise.all([listStores(actor.orgId), listRegister(actor.orgId, storeIds)]);
   const storeById = new Map(stores.map((s) => [s.id, s]));
 
   const owed = loans
@@ -181,6 +183,7 @@ export default async function LoansPage({
                 <Th>Terms</Th>
                 <Th numeric>Drawn</Th>
                 <Th numeric>Repaid</Th>
+                <Th numeric>Interest paid</Th>
                 <Th numeric>Outstanding</Th>
                 <Th>State</Th>
               </tr>
@@ -206,6 +209,7 @@ export default async function LoansPage({
                   </Td>
                   <NumTd className="font-mono">{peso(l.position.disbursed)}</NumTd>
                   <NumTd className="font-mono">{peso(l.position.principalPaid)}</NumTd>
+                  <NumTd className="font-mono">{peso(l.position.interestPaid)}</NumTd>
                   <NumTd className="font-mono">{peso(l.position.outstanding)}</NumTd>
                   <Td className="text-xs"><Badge status={l.status} /></Td>
                 </LinkRow>

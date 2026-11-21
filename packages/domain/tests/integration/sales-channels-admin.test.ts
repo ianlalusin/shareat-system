@@ -534,7 +534,8 @@ describe('T-230 — the channel decides tracked vs instant (bible §13 row 180)'
       }),
     );
 
-    await asOrg(f.orgId, (tx) => setSalesChannelActive(tx, f.admin, { channelId: ids.tracked, isActive: false }));
+    // T-618 DEF-926: the channel holds 500 here, and retiring through `setSalesChannelActive` is now refused while it does; the retire is written raw so this test stays about the wastage.
+    await sql`update sales_channels set is_active = false where id = ${ids.tracked}`;
 
     await expect(
       asOrg(f.orgId, (tx) =>

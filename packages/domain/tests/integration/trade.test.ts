@@ -447,6 +447,31 @@ describe('dispatch is the billing event', () => {
     expect(reread!.arChargeId).toBe(result.chargeId);
   });
 
+  it('⭐ DEF-900: one item on two lines dispatches as ONE stock withdrawal, COGS at FIFO cost, AR at the order total', async () => {
+    const f = await fixture('twolines');
+    const itemId = await wholesaleItem(f, 'Rice');
+    await stock(f, f.storeId, f.locationId, itemId, '20');
+    const customerId = await buyer(f);
+    const order = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, {
+        storeId: f.storeId, customerId, orderDate: '2026-01-10',
+        lines: [{ itemId, quantity: '5', rate: '50.00' }, { itemId, quantity: '3', rate: '0.01' }],
+      }),
+    );
+    const result = await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: order.orderId }));
+
+    const moves = await sql<{ quantity: string }[]>`
+      select quantity::text from stock_movements
+      where source_type = 'trade_order_dispatch' and source_id = ${order.orderId} and item_id = ${itemId}`;
+    expect(moves.map((m) => m.quantity)).toEqual(['-8.000']);
+    const cogs = await sql<{ debit: string }[]>`
+      select jl.debit::text from journal_lines jl join journal_entries je on je.id = jl.entry_id join accounts a on a.id = jl.account_id
+      where je.org_id = ${f.orgId} and je.source_id = ${`${order.orderId}:1310`} and a.code = '5100'`;
+    expect(cogs[0]!.debit).toBe('400.00'); // 8 kg x 50.00 FIFO
+    const [charge] = await sql<{ amount: string }[]>`select total_amount::text as amount from ar_charges where id = ${result.chargeId}`;
+    expect(charge!.amount).toBe('250.03'); // 5 x 50.00 + 3 x 0.01
+  });
+
   it('dispatching twice posts once', async () => {
     const f = await fixture('idem');
     const o = await anOrder(f);
@@ -486,9 +511,10 @@ describe('dispatch is the billing event', () => {
     const f = await fixture('revoid');
     const o = await anOrder(f);
     await asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: o.orderId, reason: 'Mistake.' }));
+    // DEF-561: one sentence for the loser of a double void, no id.
     await expect(
       asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: o.orderId, reason: 'Again.' })),
-    ).rejects.toThrow(/already void/);
+    ).rejects.toMatchObject({ userMessage: 'This order has already been voided.' });
   });
 });
 

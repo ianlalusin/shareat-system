@@ -23,7 +23,7 @@
  * ⛔ **No posting functions here.** Journal SQL lives in `repo/journal.ts` and is reached only
  * through `postEntry` (bible §4.3). This file reads the ledger; it never writes it.
  */
-import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { recordGone } from './record-gone';
 import type { SafeInsert, SafeUpdate } from './numeric-input';
@@ -158,7 +158,7 @@ export async function listPrepaidItems(
  * A single COUNT rather than a list length, because the banner is rendered on every load of the
  * module and the list it filters may be long.
  */
-export async function countNeedingReview(tx: Tx, orgId: string): Promise<number> {
+export async function countNeedingReview(tx: Tx, orgId: string, storeIds?: readonly string[]): Promise<number> {
   const [row] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(prepaidItems)
@@ -167,6 +167,8 @@ export async function countNeedingReview(tx: Tx, orgId: string): Promise<number>
         eq(prepaidItems.orgId, orgId),
         eq(prepaidItems.needsReview, true),
         eq(prepaidItems.status, 'active'),
+        // T-603: only these stores' items (an empty list matches nothing); omitted = every store.
+        storeIds ? (storeIds.length ? inArray(prepaidItems.storeId, [...storeIds]) : sql`false`) : undefined,
       ),
     );
   return row?.n ?? 0;
@@ -359,7 +361,8 @@ export async function entriesForPeriod(
     .where(
       and(
         eq(journalEntries.orgId, orgId),
-        sql`${journalEntries.idempotencyKey} = ${base} or ${journalEntries.idempotencyKey} like ${base + '#%'}`,
+        // DEF-894: bracketed — `and()` brackets the list once, so a bare `a or b` would let the LIKE arm skip org_id.
+        sql`(${journalEntries.idempotencyKey} = ${base} or ${journalEntries.idempotencyKey} like ${base + '#%'})`,
       ),
     )
     .orderBy(asc(journalEntries.createdAt));
@@ -379,6 +382,32 @@ export function nextRevisionKey(
   existing: { status: string }[],
 ): string {
   const base = `prepaid:${itemId}:amortisation:${period}`;
+  return existing.length === 0 ? base : `${base}#${existing.length + 1}`;
+}
+
+/** DEF-882: every write-off entry ever posted for an item, reversed ones included, oldest first. */
+export async function writeOffEntries(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+): Promise<{ id: string; status: string; key: string }[]> {
+  const base = `prepaid:${itemId}:write-off`;
+  const rows = await tx
+    .select({ id: journalEntries.id, status: journalEntries.status, key: journalEntries.idempotencyKey })
+    .from(journalEntries)
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        sql`(${journalEntries.idempotencyKey} = ${base} or ${journalEntries.idempotencyKey} like ${base + '#%'})`,
+      ),
+    )
+    .orderBy(asc(journalEntries.createdAt));
+  return rows.map((r) => ({ id: r.id, status: r.status, key: r.key ?? '' }));
+}
+
+/** DEF-882: the first write-off keeps the plain key; a re-write-off after an undo gets `#2`, `#3`, ... */
+export function nextWriteOffKey(itemId: string, existing: { status: string }[]): string {
+  const base = `prepaid:${itemId}:write-off`;
   return existing.length === 0 ? base : `${base}#${existing.length + 1}`;
 }
 

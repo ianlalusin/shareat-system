@@ -74,6 +74,13 @@ describe('DEF-778 - each page mints a fresh id when it renders', () => {
     expect(page).toMatch(/<AutoAllocatePaymentForm[\s\S]*?requestId=\{crypto\.randomUUID\(\)\}/);
   });
 
+  it('T-597 DEF-885: the cash-request page mints a settleId per render and the action passes it to settleCashRequest', () => {
+    const page = source('../src/app/cash-requests/[id]/page.tsx');
+    expect(page).toMatch(/<input type="hidden" name="settleId" value=\{crypto\.randomUUID\(\)\} \/>/);
+    const actions = source('../src/app/cash-requests/actions.ts');
+    expect(actions).toMatch(/settleCashRequest\(tx, actor, \{\s*requestId: id,\s*settleId: str\(formData, 'settleId'\)/);
+  });
+
   it('both server actions read the id from the form, never mint one', () => {
     const transferActions = source('../src/app/money-transfers/actions.ts');
     const apActions = source('../src/app/ap/actions.ts');

@@ -15,6 +15,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { compare, fromCentavos, isZero, money, negate, toCentavos, ZERO, type Money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
+import { loanSchedule, splitSettlementLeg } from '../loans/interest';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
@@ -723,10 +724,39 @@ export async function recordChannelSettlement(
     // T-511 S7a (audit): the channel lock approve takes, taken here too (re-entrant inside approve), BEFORE the balance is read, so a hand-recorded settlement and an approve
     // of the same channel cannot both clear the same balance.
     await advisoryLocksRepo.lockSettlementChannel(trx, input.channelId);
+    // DEF-881 (T-595): the named day must be this org's, store's and channel's, on the date being settled, and verified (the page queue lists exactly
+    // these). After the channel lock, before any balance read; an unreadable id is "not found", never a database cast error. A VOIDED day is named as
+    // voided by lockLiveSalesDay (T-594), so a settlement that waited on a day void is refused with that sentence, not "nothing outstanding".
+    const day = UUID_TEXT.test(rawInput.salesDayId)
+      ? await R.salesDayForSettlement(trx, actor.orgId, rawInput.salesDayId, input.channelId)
+      : undefined;
+    if (!day || day.storeId !== input.storeId || !day.hasChannel) {
+      throw refuse(
+        'recordChannelSettlement: the sales day is not this store and channel',
+        'That sales day could not be found for this store and channel. Choose the day from the list of days waiting to be settled.',
+      );
+    }
+    if (day.businessDate !== input.businessDate) {
+      throw refuse(
+        'recordChannelSettlement: the sales day date differs from the business date',
+        `That sales day is ${day.businessDate}, not ${input.businessDate}. A settlement clears the one day it names.`,
+      );
+    }
+    if (day.status === 'voided') {
+      await lockLiveSalesDay(trx, actor.orgId, { salesDayId: input.salesDayId, storeId: input.storeId, doing: 'a payout settlement' });
+    }
+    if (day.status !== 'verified') {
+      throw refuse(
+        'recordChannelSettlement: the sales day is not verified',
+        'That sales day is not verified yet, so it has raised no receivable to settle. Verify the day first.',
+      );
+    }
     const ctx = await gatherSettlementContext(trx, actor, input, true);
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const legBlockers = await loanLegBlockers(trx, actor.orgId, figures.loanLegs);
     if (legBlockers.length > 0) throw refuse('recordChannelSettlement: a loan leg is not valid', legBlockers[0]!);
+    // DEF-921 (T-618): a cross-store loan leg posts 1250/2150, so it takes the store-pair lock a transfer, its void and a settle-between-stores take, before the loan rows.
+    await lockLoanLegPairs(trx, input.storeId, figures.loanLegs.map((l) => l.ownerStoreId));
     // T-573: a dock lowers a loan's principal, so it takes the same row lock a payment does (in id order: two settlements cannot deadlock).
     for (const id of [...new Set(figures.loanLegs.map((l) => l.loanId))].sort()) await loansRepo.lockForPayment(trx, actor.orgId, id);
     const config = ctx.config;
@@ -739,7 +769,7 @@ export async function recordChannelSettlement(
 
     // T-594 DEF-904: lock the sales day and re-check it is not voided BEFORE the first write, so a day void in flight is waited out and
     // this is refused instead of committing against a voided day. After every config/figure refusal, so those keep their sentences (a
-    // channel of another store is refused as such, not as a day of another store). Lock order: channel advisory, loan rows, day (a void takes the day alone).
+    // channel of another store is refused as such, not as a day of another store). Lock order: channel advisory, day (already taken `for share` by `salesDayForSettlement` above, BEFORE any loan row: DEF-922, pinned by t618-def922), loan rows, this re-check (a void takes the day alone).
     await lockLiveSalesDay(trx, actor.orgId, { salesDayId: input.salesDayId, storeId: input.storeId, doing: 'a payout settlement' });
 
     const {
@@ -846,6 +876,22 @@ export async function recordChannelSettlement(
     const codes = crossStoreIds.length > 0 ? await moneyTransfersRepo.storeCodes(trx, actor.orgId, [input.storeId, ...crossStoreIds]) : new Map<string, string>();
     for (const leg of figures.loanLegs) {
       const legAmount = leg.amount;
+      // ⭐ T-608 (DEF-931): on a SCHEDULED loan the dock is part principal (2400) and part interest (7200), by the loan's fixed ratio, worked out cumulatively
+      // from the ledger (loans/interest.ts). Any other loan stays all principal. The loan row is locked above, so this position cannot move under us.
+      // The 7200 line carries the loan as its party (migration 0267) so the loan's position counts it. A part of zero gets no line.
+      const loan = await loansRepo.getById(trx, actor.orgId, leg.loanId);
+      if (!loan) throw refuse('recordChannelSettlement: a docked loan no longer exists.', 'One of the loans docked from this payout could not be found. Pick the loan again from the list.');
+      const before = await loansRepo.positionOf(trx, actor.orgId, leg.loanId);
+      const split = splitSettlementLeg(
+        loanSchedule(loan), toCentavos(legAmount),
+        toCentavos(money(before.principalPaid)) + toCentavos(money(before.interestPaid)), toCentavos(money(before.interestPaid)),
+      );
+      const principalPart = fromCentavos(split.principal);
+      const interestPart = fromCentavos(split.interest);
+      const loanLines = (storeId: string) => [
+        ...(split.principal > 0n ? [{ accountCode: R.LOANS_PAYABLE_CODE, storeId, debit: principalPart, partyType: 'loan' as const, partyId: leg.loanId, lineMemo: `Loan repayment — ${memo}` }] : []),
+        ...(split.interest > 0n ? [{ accountCode: loansRepo.INTEREST_EXPENSE_CODE, storeId, debit: interestPart, partyType: 'loan' as const, partyId: leg.loanId, lineMemo: `Loan interest — ${memo}` }] : []),
+      ];
       if (leg.ownerStoreId !== input.storeId) {
         // ⭐ Cross-store: the paying store is owed by the store that owns the loan, and invariant
         // 6's reciprocal check already proves that pair nets to zero.
@@ -867,11 +913,7 @@ export async function recordChannelSettlement(
             partyType: 'store' as const, partyId: owningCode,
             lineMemo: `Due from ${owningCode} — their loan repaid out of this payout`,
           },
-          {
-            accountCode: R.LOANS_PAYABLE_CODE, storeId: leg.ownerStoreId, debit: legAmount,
-            partyType: 'loan' as const, partyId: leg.loanId,
-            lineMemo: `Loan repayment — ${memo}`,
-          },
+          ...loanLines(leg.ownerStoreId),
           {
             accountCode: R.DUE_TO_STORE_CODE, storeId: leg.ownerStoreId, credit: legAmount,
             partyType: 'store' as const, partyId: payingCode,
@@ -879,14 +921,7 @@ export async function recordChannelSettlement(
           },
         );
       } else {
-        lines.push({
-          accountCode: R.LOANS_PAYABLE_CODE,
-          storeId: input.storeId,
-          debit: legAmount,
-          partyType: 'loan' as const,
-          partyId: leg.loanId,
-          lineMemo: `Loan repayment — ${memo}`,
-        });
+        lines.push(...loanLines(input.storeId));
       }
     }
 
@@ -1057,6 +1092,16 @@ export async function setChannelPayoutDestination(
 }
 
 /**
+ * DEF-921 (T-618): the store-pair lock for each OTHER store a settlement's loan legs name (a leg owned by the paying store posts no 1250/2150). Locked in key order, so two
+ * settlements naming the same pairs never wait on each other crosswise. Lock order everywhere: pair lock first, then draws and loan rows.
+ */
+async function lockLoanLegPairs(trx: Tx, storeId: string, ownerStoreIds: readonly (string | null | undefined)[]): Promise<void> {
+  const others = [...new Set(ownerStoreIds.filter((id): id is string => !!id && id !== storeId))];
+  const keyed = others.map((o) => ({ o, key: [storeId, o].sort().join(':') })).sort((a, b) => a.key.localeCompare(b.key));
+  for (const { o } of keyed) await advisoryLocksRepo.lockInterStorePair(trx, storeId, o);
+}
+
+/**
  * Void a posted settlement. ⚠️ Reverses every leg through `reverseEntry` — a correction is void
  * and re-post, never an edit, because a posted settlement is immutable.
  */
@@ -1071,6 +1116,8 @@ export async function voidChannelSettlement(
     await authorize(trx, actor, 'record_ar_collection', { storeId: seen.storeId });
     // The channel lock approve takes first (channel, then the staged line, then the books), so a void and an approve of the same channel queue instead of crossing.
     await advisoryLocksRepo.lockSettlementChannel(trx, seen.channelId);
+    // DEF-921 (T-618): reversing a cross-store leg moves 1250/2150 back, so the void takes the same store-pair locks the settlement did, before the loan rows.
+    await lockLoanLegPairs(trx, seen.storeId, seen.loanLegs.map((l) => l.ownerStoreId));
     // T-573: reversing a dock raises each docked loan's principal - the same row lock a payment takes, in id order, after the channel lock.
     for (const id of [...new Set(seen.loanLegs.map((l) => l.loanId))].sort()) await loansRepo.lockForPayment(trx, actor.orgId, id);
     // Read again under the lock: a second voider that queued behind the first must see it voided.

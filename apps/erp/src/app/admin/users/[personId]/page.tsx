@@ -68,7 +68,7 @@ export default async function UserAccessPage({
   const detail = await userDetail(actor.orgId, personId);
   if (!detail) notFound();
 
-  const { person, stores, grants, credentials, openJobs } = detail;
+  const { person, stores, grants, credentials, openJobs, pinResetPending } = detail;
   // T-416: is this person's administrator-PIN approval bucket capped right now (auto-lift applied)?
   // Informational banner only: if the status read fails the page still renders, just without the banner.
   const approvalCap = await withOrgPrincipal(actor.orgId, (tx) => pinAttemptsRepo.statusForActor(tx, actor.orgId, personId)).catch((err: unknown): { capped: boolean; cappedAt: Date | null } => {
@@ -260,6 +260,12 @@ export default async function UserAccessPage({
               the account can be linked again later.
             </p>
           </div>
+
+          {pinResetPending && (
+            <p className="text-sm text-warning-ink">
+              PIN reset: set a new PIN. Their role was raised, so the old PIN no longer works.
+            </p>
+          )}
 
           {credentials.length === 0 ? (
             <p className="text-sm text-neutral-500 dark:text-neutral-400">

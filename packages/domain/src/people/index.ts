@@ -9,7 +9,7 @@
  * `resolveActor` (T-138), which is why `created_by` on an employment is worth anything at all —
  * v1's equivalent is a client-supplied parameter on ~24 server actions (landmine #17).
  */
-import { authorize, can, holdsSuperAdminAuthority, isAdministrative, isStoreManagerOrAbove, type Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, can, holdsSuperAdminAuthority, isAdministrative, isStoreManagerOrAbove, type Actor } from '@shareat/auth';
 import {
   accessRepo,
   auditLogRepo,
@@ -48,6 +48,32 @@ export { formatDisplayName, nameKey, normaliseNamePart, normaliseName, type Name
 
 // T-434: staff photo and signature (upload / replace / remove / guarded view).
 export * from './staff-media';
+// T-612: activate / suspend / reinstate a person's account.
+export * from './account-status';
+
+/** DEF-504: the ONE sentence for an employment id that does not exist, is another organisation's, or sits at a store the caller cannot manage. */
+const EMPLOYMENT_OUT_OF_REACH = 'That employment does not exist, or it is not at a store where you manage staff.';
+
+/**
+ * DEF-504: read the employment and authorise `enrol_staff` at its store, with ONE refusal for "no such id" and "not yours", so
+ * the reply cannot be used to probe ids (the DEF-497 shape, as `recordAdjustment` does it). The real reason goes on `cause`.
+ */
+async function employmentForEnrolment(tx: Tx, actor: Actor, employmentId: string, context: string): Promise<EmploymentRow> {
+  const out = (why: string, cause?: unknown) => {
+    const err = new AuthorizationError(`${context}: ${why}`, 'enrol_staff', EMPLOYMENT_OUT_OF_REACH);
+    if (cause !== undefined) err.cause = cause;
+    return err;
+  };
+  const existing = await employmentRepo.getEmployment(tx, employmentId);
+  if (!existing || existing.orgId !== actor.orgId) throw out(`no employment ${employmentId} in org ${actor.orgId}`);
+  try {
+    await authorize(tx, actor, 'enrol_staff', { storeId: existing.storeId, orgId: existing.orgId });
+  } catch (err) {
+    if (err instanceof AuthorizationError) throw out(err.message, err);
+    throw err;
+  }
+  return existing;
+}
 
 export class EmploymentError extends Error {
   /** A sentence a person at the screen (or Ian at the terminal) can act on. Set where the refusal is about their input. */
@@ -96,6 +122,9 @@ export async function createEmployment(
         'an ended employment needs an end date. Hire them, then end it.',
     );
   }
+
+  // T-612: the person row first (lock order persons -> employments -> org lock, shared with sign-in and endEmployment).
+  const statusBefore = await personsRepo.lockAccountStatus(tx, actor.orgId, input.personId);
 
   // ⛔ Checked here for a comprehensible message, and enforced by a partial unique index regardless
   // (bible §16.4's principle: the database enforces the rule, the service explains it).
@@ -169,6 +198,11 @@ export async function createEmployment(
     source: 'employment',
   });
 
+  // T-612 (BOSS ruling 20 Nov): ONLY a person whose account ENDED (T-609, or the 0268 backfill of pre-T-609 leavers) is re-hired as `pending` - a manager activates
+  // them again. Anyone else keeps their status: `active` stays active (a franchise owner / manager with no job ever, an administrator, a person with another job) and a
+  // `suspended` person stays suspended. A brand-new person is already `pending` (createPerson).
+  if (statusBefore === 'ended') await personsRepo.setAccountStatus(tx, actor.orgId, input.personId, ['ended'], 'pending');
+
   // T-289 moment 3 — a hire applies whatever position defaults the assigned positions carry.
   await reconcilePositionGrants(tx, actor, { personId: input.personId, storeId: input.storeId });
 
@@ -214,7 +248,7 @@ export async function createPerson(tx: Tx, actor: Actor, input: CreatePersonInpu
   if (input.name === undefined) {
     const displayName = (input.displayName ?? '').trim();
     if (!displayName) throw new EmploymentError('A person needs a name.');
-    return personsRepo.insertPerson(tx, { orgId: actor.orgId, displayName });
+    return personsRepo.insertPerson(tx, { orgId: actor.orgId, displayName, accountStatus: 'pending' }); // T-612: a hire starts pending
   }
 
   const name = normaliseName(input.name);
@@ -243,7 +277,7 @@ export async function createPerson(tx: Tx, actor: Actor, input: CreatePersonInpu
     const reason = `${who} is already in the system. Search for them and pick them, or tick 'This is a different person with the same name'.`;
     throw new EmploymentError(reason, reason);
   }
-  const person = await personsRepo.insertPerson(tx, { orgId: actor.orgId, name });
+  const person = await personsRepo.insertPerson(tx, { orgId: actor.orgId, name, accountStatus: 'pending' }); // T-612: a hire starts pending
   if (match) {
     await auditLogRepo.append(tx, actor.orgId, {
       actorPersonId: actor.personId,
@@ -358,9 +392,7 @@ export async function endEmployment(
   actor: Actor,
   input: { employmentId: string; endedOn: string; employmentStatus: EmploymentStatus },
 ): Promise<EmploymentRow> {
-  const existing = await employmentRepo.getEmployment(tx, input.employmentId);
-  if (!existing) throw new EmploymentError(`No employment ${input.employmentId}`);
-  await authorize(tx, actor, 'enrol_staff', { storeId: existing.storeId, orgId: existing.orgId });
+  const existing = await employmentForEnrolment(tx, actor, input.employmentId, 'endEmployment');
 
   if (!ENDED_STATUSES.includes(input.employmentStatus)) {
     throw new EmploymentError(
@@ -375,6 +407,8 @@ export async function endEmployment(
     );
   }
 
+  // T-612: the person row first (a racing sign-in holds it `for share`; lock order persons -> employments -> org lock).
+  await personsRepo.lockAccountStatus(tx, existing.orgId, existing.personId);
   // T-407 Inv 21: serialise concurrent ends for the same person BEFORE writing (no lock-order deadlock).
   await employmentRepo.lockPersonEmployments(tx, existing.personId, existing.orgId);
 
@@ -389,6 +423,8 @@ export async function endEmployment(
   if (lastJob) await refuseIfEndWouldStripAuthority(tx, actor, existing.personId, existing.orgId);
 
   const closed = await employmentRepo.closeEmployment(tx, input);
+  // T-612: ending the person's LAST open job ends the account in the same transaction (employment and status can never disagree).
+  if (lastJob) await personsRepo.setAccountStatus(tx, existing.orgId, existing.personId, ['pending', 'active', 'suspended'], 'ended');
 
   // T-289 moment 5 — ending the employment leaves no open employment at this store, so
   // `wanted` computes empty and every position-sourced row for THIS store is revoked; other
@@ -515,9 +551,7 @@ export async function setEmploymentPositions(
   actor: Actor,
   input: { employmentId: string; positionIds: string[]; primaryPositionId: string },
 ): Promise<void> {
-  const existing = await employmentRepo.getEmployment(tx, input.employmentId);
-  if (!existing) throw new EmploymentError(`No employment ${input.employmentId}`);
-  await authorize(tx, actor, 'enrol_staff', { storeId: existing.storeId, orgId: existing.orgId });
+  const existing = await employmentForEnrolment(tx, actor, input.employmentId, 'setEmploymentPositions');
 
   const resolved = await resolvePositions(tx, actor, {
     personId: existing.personId,

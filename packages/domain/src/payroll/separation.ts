@@ -22,6 +22,7 @@ import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover } from './compute';
 import { assertPayrollMoneyAccount, outstandingAdvance, PAYROLL_ADVANCE_ACCOUNT, payrollMoneyParty } from './index';
+import { assertActiveAccount, checkDraw } from '../money-accounts/overdraft';
 import { agreedRecoverable, applyDeductionRecovery, reopenAfterVoid } from './deduction-agreements';
 import { THIRTEENTH_MONTH_ACCOUNT } from './thirteenth-month';
 // T-436: unused Service Incentive Leave is paid in final pay when this is the person's last job (spec D12).
@@ -107,7 +108,7 @@ export async function postSeparation(
     entryDate?: string;
     notes?: string | null;
   },
-): Promise<{ id: string; netPay: string }> {
+): Promise<{ id: string; netPay: string; warning?: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_payroll', { storeId: input.storeId });
 
@@ -160,6 +161,9 @@ export async function postSeparation(
       throw new Error('postSeparation: that money account belongs to another store.');
     }
     assertPayrollMoneyAccount(account, 'postSeparation');
+    // DEF-889 (T-597, option A): see postPayRun. The separation's SIL cash-out (settleSilAtSeparation) is a second draw: it checks itself, below, after this pay is posted (T-613 E).
+    assertActiveAccount(account, 'postSeparation');
+    const warning = compare(netPay, ZERO) > 0 ? await checkDraw(trx, actor.orgId, account, netPay, 'postSeparation') : null;
 
     const entryDate = input.entryDate ?? input.separationDate;
     const separationId = (
@@ -223,7 +227,7 @@ export async function postSeparation(
 
     // ⭐ T-436 (D12): a person whose LAST job this is leaves with their unused SIL days paid in cash, in the same transaction, instead
     // of waiting for a year end they will not be here for. Its own journal entry; voiding the separation releases and reverses it.
-    await settleSilAtSeparation(trx, actor, {
+    const sil = await settleSilAtSeparation(trx, actor, {
       storeId: input.storeId,
       employmentId: input.employmentId,
       personId: employment.personId,
@@ -234,7 +238,8 @@ export async function postSeparation(
       moneyAccountId: account.id,
     });
 
-    return { id: separationId, netPay: netPay };
+    const shown = warning ?? sil?.warning;
+    return { id: separationId, netPay: netPay, ...(shown ? { warning: shown } : {}) };
   };
   return run(tx);
 }

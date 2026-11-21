@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { can } from '@shareat/auth';
 import { ITEM_IMPORT_MAX_ROWS, type ItemImportPreview } from '@shareat/domain';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { withOrgPrincipal } from '../lib';
 import { FlashBanner, Banner, Table, Th, Td } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -68,7 +68,8 @@ function PreviewPanel({ csv, preview }: { csv: string; preview: ItemImportPrevie
 
 export default async function ImportItemsPage({ searchParams }: { searchParams: Promise<{ error?: string; ok?: string; warning?: string }> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/items/import');
+  const { actor, refusal } = await requirePageAccess('/items/import');
+  if (refusal) return refusal;
   // Presentation only: the domain refuses a non-admin on its own. This keeps the upload box away from people who cannot use it.
   const mayImport = await withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'approve_item_request', {}));
 

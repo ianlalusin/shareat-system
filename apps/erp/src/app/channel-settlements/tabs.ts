@@ -8,7 +8,8 @@ export const OVERVIEW_HREF = '/channel-settlements';
 export const RECORD_HREF = '/channel-settlements/record';
 
 export const SETTLEMENT_TABS: readonly (SectionTabItem & { readonly capability?: string })[] = [
-  { href: OVERVIEW_HREF, label: 'Overview' },
+  // T-617: the overview needs the word that records a settlement (the route's own key), so it is not offered to someone the route would refuse.
+  { href: OVERVIEW_HREF, label: 'Overview', capability: 'record_ar_collection' },
   { href: '/channel-settlements/upload', label: 'Upload files', capability: 'upload_settlement_files' },
   { href: '/channel-settlements/review', label: 'Review days', capability: 'record_ar_collection' },
 ];
