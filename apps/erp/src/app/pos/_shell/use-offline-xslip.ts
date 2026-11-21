@@ -44,7 +44,7 @@ export function useOfflineXSlip(i: { paired: boolean; online: boolean; offlineSi
         setMeta: (v) => setMeta(OFFLINE_XSLIP_META_KEY, v),
         print: async (sinceMs) => {
           const now = latest.current;
-          if (!now.payment) return;
+          if (!now.payment) return false; // nothing to head the slip with: not done, tried again at the next check
           const { store, tenders } = now.payment;
           const view = offlineXSlipView(offlineXSlipFigures(now.pendingEvents, tenders), {
             header: receiptHeaderOf({ name: store.name, vatRegistered: store.vatRegistered, identity: store.identity, mode: store.mode }),
@@ -54,8 +54,9 @@ export function useOfflineXSlip(i: { paired: boolean; online: boolean; offlineSi
             waitingCount: now.pendingEvents.length,
           });
           const lines = formatOfflineXSlip(view, printSettingsOf(store).layout);
-          if (now.printer === 'plugin' && (await printLines(lines, { copies: 1 })) === 'printed') return;
+          if (now.printer === 'plugin' && (await printLines(lines, { copies: 1 })) === 'printed') return true;
           setOnScreen(lines); // no printer, or it failed: show it, with Print
+          return true;
         },
       });
     } catch {

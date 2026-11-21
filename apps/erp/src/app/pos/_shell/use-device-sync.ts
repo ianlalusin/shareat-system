@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { countPending, drain, isSnapshotUsable, listPending, listVerifiers, readSnapshot, type CachedSnapshot, type PosEvent, type PosEventResult } from '@/lib/pos-device';
 import { POS_DRAIN_INTERVAL_MS, POS_OFFLINE_ACTOR_KEY, POS_OFFLINE_SNAPSHOT_MAX_AGE_MS, POS_POLL_INTERVAL_MS, POS_SNAPSHOT_REFRESH_MS } from './constants';
 import { makePosSend } from './drain-send';
-import { heldSalesCount, nextHeldOrigins } from './held-sales';
+import { heldSalesCount, nextHeldOrigins, sendableEvents } from './held-sales';
 import { POS_STATE_REFRESH_EVENT } from './use-pos-state';
 import { browserPromoteJar, promoteAfterTabletSignIn } from './pending-verifier';
 import { showNeedsInternetOnce } from './offline-band';
@@ -43,6 +43,8 @@ export interface DeviceSync {
   ordersSnapshot: SnapshotOrdersPart | null;
   /** The outbox as it stands (the events not yet sent), oldest first: the Orders tab applies them on top of the server's list (T-527). */
   pendingEvents: PosEvent[];
+  /** T-621: `pendingEvents` minus the sales held for another pairing (the ones this till can actually send). */
+  sendableEvents: PosEvent[];
   /** True once the outbox has been read at least once (T-529: the outage print must not judge a list that is still empty because it was not loaded). */
   pendingLoaded: boolean;
   /** Asks for a send now; a request made while one is running is sent right after it (T-527). */
@@ -253,10 +255,12 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
     return () => clearInterval(timer);
   }, [actor, snapshot, setOfflineActor]);
 
+  const pairingNow = (snapshot?.body as Partial<SnapshotBody> | undefined)?.device?.pairingId ?? null;
   return {
     staff: staffOf(snapshot),
     ordersSnapshot: ordersPartOf(snapshot),
     pendingEvents,
+    sendableEvents: sendableEvents(pendingEvents, heldOrigins, pairingNow),
     pendingLoaded,
     requestDrain,
     setResultsHandler,
@@ -265,7 +269,7 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
     pending,
     sending,
     conflicts,
-    heldSales: heldSalesCount(pendingEvents, heldOrigins, (snapshot?.body as Partial<SnapshotBody> | undefined)?.device?.pairingId ?? null),
+    heldSales: heldSalesCount(pendingEvents, heldOrigins, pairingNow),
     clearConflicts: () => setConflicts(0),
     refreshPending,
     drainNow,

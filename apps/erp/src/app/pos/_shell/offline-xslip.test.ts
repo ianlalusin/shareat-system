@@ -148,6 +148,20 @@ describe('T-621 S4 checkOfflineXSlip: survives a reload through the meta store',
     expect(counts).not.toEqual([1, 1, 1, 2]);
   });
 
+  it('a print that could not happen (returns false) does not save the period: the next check prints it [kills: saving the period before printing]', async () => {
+    let stored: unknown = null;
+    const printed: number[] = [];
+    let ok = false;
+    const check = (nowMs: number) =>
+      checkOfflineXSlip({ online: false, offlineSinceMs: since, nowMs, hours: 4, getMeta: async () => stored, setMeta: async (v) => void (stored = v), print: async (s) => (ok ? void printed.push(s) : false) });
+    expect(await check(since + 4 * H)).toBe(false);
+    expect(stored).toEqual({ sinceMs: since, printedPeriod: 0 }); // the stretch is remembered, the period is not
+    ok = true;
+    expect(await check(since + 4 * H + 60_000)).toBe(true);
+    expect(printed).toEqual([since]);
+    expect(stored).toEqual({ sinceMs: since, printedPeriod: 1 });
+  });
+
   it('going online forgets the stretch; the next offline stretch starts fresh', async () => {
     const h = harness();
     await h.check({ offlineSinceMs: since, nowMs: since + 4 * H });

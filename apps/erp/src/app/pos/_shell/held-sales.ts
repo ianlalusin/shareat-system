@@ -8,5 +8,10 @@ export function nextHeldOrigins(prev: string[], report: Pick<DrainReport, 'stopp
 
 /** The waiting sales the server refused to take under this tablet's current store. Events of the current pairing are never "another store". */
 export function heldSalesCount(events: PosEvent[], heldOrigins: string[], currentPairingId: string | null): number {
-  return events.filter((e) => e.pairingId !== undefined && e.pairingId !== currentPairingId && heldOrigins.includes(e.pairingId)).length;
+  return events.length - sendableEvents(events, heldOrigins, currentPairingId).length;
+}
+
+/** T-621: the waiting events THIS till can send. Held ones (another store's pairing, refused by the server) never drain here, so the update gate and the unsent-total warning must not count them. */
+export function sendableEvents(events: PosEvent[], heldOrigins: string[], currentPairingId: string | null): PosEvent[] {
+  return events.filter((e) => !(e.pairingId !== undefined && e.pairingId !== currentPairingId && heldOrigins.includes(e.pairingId)));
 }

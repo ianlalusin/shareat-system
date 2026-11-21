@@ -103,8 +103,8 @@ const isMeta = (v: unknown): v is OfflineXSlipMeta =>
   typeof v === 'object' && v !== null && Number.isFinite((v as OfflineXSlipMeta).sinceMs) && Number.isInteger((v as OfflineXSlipMeta).printedPeriod);
 
 /**
- * Run one check against the meta store. Online: forget the stretch. Offline: read, decide, remember the period BEFORE printing (a crash mid-print never
- * prints twice), then hand the slip's start time to `print`. Returns whether it printed.
+ * Run one check against the meta store. Online: forget the stretch. Offline: read, decide, hand the slip's start time to `print`, and remember the period only AFTER it printed or
+ * was shown (`print` returns false when it could not do either: the next check tries again, no slip is skipped silently). Returns whether it printed.
  */
 export async function checkOfflineXSlip(deps: {
   online: boolean;
@@ -113,7 +113,7 @@ export async function checkOfflineXSlip(deps: {
   hours: number | null;
   getMeta: () => Promise<unknown>;
   setMeta: (v: OfflineXSlipMeta | null) => Promise<void>;
-  print: (sinceMs: number) => Promise<void>;
+  print: (sinceMs: number) => Promise<boolean | void>;
 }): Promise<boolean> {
   if (deps.online) {
     await deps.setMeta(null);
@@ -122,7 +122,10 @@ export async function checkOfflineXSlip(deps: {
   if (deps.hours === null || deps.offlineSinceMs === null) return false;
   const stored = await deps.getMeta();
   const step = offlineXSlipStep({ meta: isMeta(stored) ? stored : null, offlineSinceMs: deps.offlineSinceMs, nowMs: deps.nowMs, hours: deps.hours });
-  if (!isMeta(stored) || step.print) await deps.setMeta(step.meta);
-  if (step.print) await deps.print(step.meta.sinceMs);
-  return step.print;
+  // A new stretch's start is saved at once (a retry must not shift it); the printed period only once the slip is out.
+  if (!isMeta(stored)) await deps.setMeta({ sinceMs: step.meta.sinceMs, printedPeriod: 0 });
+  if (!step.print) return false;
+  if ((await deps.print(step.meta.sinceMs)) === false) return false;
+  await deps.setMeta(step.meta);
+  return true;
 }
