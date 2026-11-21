@@ -144,6 +144,24 @@ export async function sendVoidNow(deps: { reserveSeq: () => Promise<{ seq: numbe
   }
 }
 
+export const VOID_STILL_SENDING = 'This table is still sending. Try again in a moment.';
+/**
+ * T-620: what the Void dialog's confirm does. No PIN: the event is saved to the outbox like any action (`submit`). A typed PIN: sent now (`sendNow`), never saved, and only when nothing for
+ * this table is still waiting in the outbox (`stillSending`), because a direct send would jump that queue. `onSent` gets the sent copy WITHOUT the PIN.
+ */
+export async function confirmVoidTable(
+  d: { stillSending: boolean; submit: (e: NewPosEvent) => Promise<string | null>; sendNow: (e: NewPosEvent) => Promise<{ ok: true; event: PosEvent } | { ok: false; message: string }>; onSent: (e: PosEvent) => void },
+  event: NewPosEvent,
+): Promise<string | null> {
+  if (!('approval' in event.payload)) return d.submit(event);
+  if (d.stillSending) return VOID_STILL_SENDING;
+  const sent = await d.sendNow(event);
+  if (!sent.ok) return sent.message;
+  const { approval: _pin, ...payload } = sent.event.payload;
+  d.onSent({ ...sent.event, payload });
+  return null;
+}
+
 /** The one write path: save to the tablet's outbox first, and only then ask for a send. A failed save changes nothing and says so. */
 export async function submitPosEvent(
   deps: { enqueue: (e: NewPosEvent) => Promise<PosEvent>; requestDrain: () => void },

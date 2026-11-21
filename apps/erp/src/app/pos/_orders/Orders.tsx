@@ -25,7 +25,7 @@ import { newDeviceId } from './ids';
 import { OrderDialog, CancelLineDialog, VoidStandDialog, type OrderDialogMode, type OrderSend } from './OrderDialogs';
 import type { MenuLike } from './menu-filter';
 import { OrdersView } from './OrdersView';
-import { actingPersonId, addLinesEvent, cancelLineEvent, ordersAccess, seatEvent, sendVoidNow, setHeadsEvent, submitPosEvent, takeOutEvent, voidAccess, voidSessionEvent, HEADS_MAX, HEADS_MIN, VOID_OFFLINE_NOTE } from './payloads';
+import { actingPersonId, addLinesEvent, cancelLineEvent, confirmVoidTable, ordersAccess, seatEvent, sendVoidNow, setHeadsEvent, submitPosEvent, takeOutEvent, voidAccess, voidSessionEvent, HEADS_MAX, HEADS_MIN, VOID_OFFLINE_NOTE } from './payloads';
 import { projectOrders, type GhostLine, type ServerStand, type SessionBody } from './project';
 import { droppedEvents, SETTLE_MAX_MS, stillSettling, type Settling } from './settle';
 
@@ -177,6 +177,12 @@ export function Orders() {
     };
   }, [missingExtra]);
 
+  // T-620: went offline with the Void dialog open (a cashier): close it for good, so it does not pop back up when the till is online again.
+  const voidBlocked = voidAccess({ canApprove: pos?.held?.has('approve_pos_correction') === true, online: pos?.online ?? false }) === 'blocked';
+  useEffect(() => {
+    if (voidBlocked) setVoiding(null);
+  }, [voidBlocked]);
+
   if (!pos) return null;
   const access = ordersAccess({ paired: pos.paired });
   const personId = actingPersonId(pos.offlineActorPersonId ? { personId: pos.offlineActorPersonId } : null, pos.personId);
@@ -213,17 +219,20 @@ export function Orders() {
 
   // T-620: who may void a table, as the server decides it: a person who may approve corrections (no PIN, works offline), else a manager's PIN online, else not at all.
   const voidMode = voidAccess({ canApprove: pos.held?.has('approve_pos_correction') === true, online: pos.online });
-  const confirmVoid = async (v: { sessionId: string }, reason: string, pin: string): Promise<string | null> => {
-    const event = voidSessionEvent({ personId, sessionId: v.sessionId, reason, now: new Date(), offline: !pos.online, ...(pin ? { pin } : {}) });
-    if (!pin) return build(() => event);
-    // A typed PIN goes to the server at once and never into the outbox. The sent copy has no PIN; it keeps the table off the list until the poll catches up.
-    const sent = await sendVoidNow({ reserveSeq, fetch: (...x) => fetch(...x) }, event);
-    if (!sent.ok) return sent.message;
-    const { approval: _pin, ...payload } = sent.event.payload;
-    setSettling((cur) => [...cur, { event: { ...sent.event, payload }, sessionId: v.sessionId, versionAtDrop: version, droppedAtMs: Date.now() }]);
-    setProblem(null);
-    return null;
-  };
+  const confirmVoid = (v: { sessionId: string }, reason: string, pin: string): Promise<string | null> =>
+    confirmVoidTable(
+      {
+        stillSending: outbox.some((e) => sessionOf(e) === v.sessionId),
+        submit: (event) => build(() => event),
+        // A typed PIN goes to the server at once and never into the outbox. The sent copy (no PIN) keeps the table off the list until the poll catches up.
+        sendNow: (event) => sendVoidNow({ reserveSeq, fetch: (...x) => fetch(...x) }, event),
+        onSent: (event) => {
+          setSettling((cur) => [...cur, { event, sessionId: v.sessionId, versionAtDrop: version, droppedAtMs: Date.now() }]);
+          setProblem(null);
+        },
+      },
+      voidSessionEvent({ personId, sessionId: v.sessionId, reason, now: new Date(), offline: !pos.online, ...(pin ? { pin } : {}) }),
+    );
 
   const payment = snapshot?.payment ?? null;
   const payingTile = paying ? tileOf(paying) : undefined;

@@ -13,7 +13,7 @@ import { bindPairing, enqueue, reserveSeq } from '@/lib/pos-device';
 import { OUTBOX_STORE } from '@/lib/pos-device/db';
 import { VoidStandDialog } from '@/app/pos/_orders/OrderDialogs';
 import { OrdersView } from '@/app/pos/_orders/OrdersView';
-import { sendVoidNow, VOID_NOT_SENT, VOID_OFFLINE_NOTE, voidAccess, voidSessionEvent } from '@/app/pos/_orders/payloads';
+import { confirmVoidTable, sendVoidNow, VOID_NOT_SENT, VOID_OFFLINE_NOTE, VOID_STILL_SENDING, voidAccess, voidSessionEvent } from '@/app/pos/_orders/payloads';
 import { projectOrders, seatStandChoices } from '@/app/pos/_orders/project';
 import { createFakeIdb, type FakeIdbFactory } from './helpers/fake-idb';
 import { IDS, SNAPSHOT, id, PERSON } from './helpers/t527-menu';
@@ -134,5 +134,54 @@ describe('T-620 a typed PIN is sent now and never stored', () => {
     expect(await sendVoidNow({ reserveSeq, fetch: offline }, ev())).toEqual({ ok: false, message: VOID_NOT_SENT });
     expect(await sendVoidNow({ reserveSeq, fetch: answer([], 409) }, ev())).toEqual({ ok: false, message: VOID_NOT_SENT });
     expect(await sendVoidNow({ reserveSeq, fetch: answer([]) }, ev())).toEqual({ ok: false, message: VOID_NOT_SENT });
+  });
+});
+
+describe('T-620 the dialog confirm (confirmVoidTable, what Orders runs)', () => {
+  const PIN = '987654';
+  const mk = (pin?: string) => voidSessionEvent({ personId: PERSON, sessionId: S, reason: 'Walked out', now: NOW, offline: false, ...(pin ? { pin } : {}) });
+  const rig = (o: { stillSending?: boolean; send?: { ok: true } | { ok: false; message: string } } = {}) => {
+    const queued: unknown[] = [];
+    const sentNow: unknown[] = [];
+    const settled: unknown[] = [];
+    const deps = {
+      stillSending: o.stillSending ?? false,
+      submit: async (e: unknown) => {
+        queued.push(e);
+        return null;
+      },
+      sendNow: async (e: ReturnType<typeof mk>) => {
+        sentNow.push(e);
+        return o.send?.ok === false ? o.send : { ok: true as const, event: { seq: 9, pairingId: 'p', ...e } };
+      },
+      onSent: (e: unknown) => settled.push(e),
+    };
+    return { deps, queued, sentNow, settled };
+  };
+
+  it('a typed PIN is sent now and NEVER handed to the outbox; the settled copy has no PIN [kills: build(() => event) when a PIN is set]', async () => {
+    const r = rig();
+    expect(await confirmVoidTable(r.deps, mk(PIN))).toBeNull();
+    expect(r.queued).toEqual([]);
+    expect(r.sentNow).toHaveLength(1);
+    expect(JSON.stringify(r.settled)).not.toContain(PIN);
+    expect(r.settled).toHaveLength(1);
+  });
+  it('no PIN (a person who may approve) goes to the outbox and is not sent now', async () => {
+    const r = rig();
+    expect(await confirmVoidTable(r.deps, mk())).toBeNull();
+    expect(r.queued).toHaveLength(1);
+    expect(r.sentNow).toEqual([]);
+  });
+  it('a PIN void while that table still has events in the outbox is refused with a sentence and sends nothing [kills: jumping the queue]', async () => {
+    const r = rig({ stillSending: true });
+    expect(await confirmVoidTable(r.deps, mk(PIN))).toBe(VOID_STILL_SENDING);
+    expect(r.queued).toEqual([]);
+    expect(r.sentNow).toEqual([]);
+  });
+  it('a refused send returns its sentence and settles nothing', async () => {
+    const r = rig({ send: { ok: false, message: 'That PIN cannot approve this. Ask a store manager.' } });
+    expect(await confirmVoidTable(r.deps, mk(PIN))).toBe('That PIN cannot approve this. Ask a store manager.');
+    expect(r.settled).toEqual([]);
   });
 });
