@@ -321,19 +321,23 @@ export async function recordDrawing(
     assertFieldRules(OWNERS_DRAWING_RULES, { amount: input.amount, fromMoneyAccountId: input.fromMoneyAccountId, on: input.on });
     const requestId = requireRequestId('recordDrawing', input.requestId);
 
+    // DEF-544: a bad amount or a closed month is refused BEFORE the lock, so it never holds the owner row until rollback.
+    const parsed = parseMoneyInput(input.amount, 'recordDrawing: the amount', 'The drawing amount');
+    if (compare(parsed, ZERO) <= 0) throw refuse('recordDrawing: a drawing has to be greater than zero.', 'A drawing has to be greater than zero.');
+    await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'recordDrawing');
+
     // ⛔ T-370 / DEF-516 (R3a) — held to COMMIT/ROLLBACK, AFTER authorize so a refused caller never
     // queues on the row: two concurrent drawings must not both read the cap before either posts.
     await ownersRepo.lockOwnerForUpdate(trx, actor.orgId, owner.id);
-
-    const parsed = parseMoneyInput(input.amount, 'recordDrawing: the amount', 'The drawing amount');
-    if (compare(parsed, ZERO) <= 0) throw refuse('recordDrawing: a drawing has to be greater than zero.', 'A drawing has to be greater than zero.');
-
+    // DEF-544: judged on the row as it stands NOW, not as it stood before the wait (a limit changed meanwhile applies), and the month is
+    // checked again because a close may have committed while this waited.
+    const fresh = (await ownersRepo.getById(trx, actor.orgId, owner.id)) ?? owner;
     await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'recordDrawing');
 
     // ⛔ BLOCKS, unlike the overdraft guard (row 154). There is no "unverified count" ambiguity in a
     // drawing limit: it is a decision the owners made about themselves, measured against an exact
     // figure.
-    const verdict = await judgeDrawingLimit(trx, actor.orgId, owner, parsed, input.on);
+    const verdict = await judgeDrawingLimit(trx, actor.orgId, fresh, parsed, input.on);
     if (!verdict.allowed) throw new Error(`recordDrawing: ${verdict.message}`);
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);

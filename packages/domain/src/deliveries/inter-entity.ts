@@ -365,7 +365,7 @@ export async function receiveInterEntityShipment(tx: Tx, actor: Actor, input: Re
       locationId: null,
     })),
   );
-  const doc = await deliveriesRepo.getDeliveryDocument(tx, delivery.id);
+  const doc = await deliveriesRepo.getDeliveryDocument(tx, actor.orgId, delivery.id);
   if (!doc) throw internalFault(`receiveInterEntityShipment: delivery ${delivery.id} vanished after it was written.`);
   const docLineByNo = new Map(doc.lines.map((l) => [l.lineNo, l]));
   const receipt = await receiveDeliveryDocument(tx, actor, {

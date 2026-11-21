@@ -28,7 +28,7 @@ import {
   recordLeaveDocumentViewed,
   recordLeaveDocumentViewRefused,
 } from '../leave/document-access';
-import { signatureUrl } from './signature';
+import { signatureLinkGrant } from './signature';
 import { fileBytesMatchType } from './magic';
 
 export * from './driver';
@@ -255,18 +255,33 @@ export async function canReadFiles(tx: Tx, actor: Actor, fileIds: readonly strin
   return allowed;
 }
 
+/** What a viewer has been allowed to open: everything but the signature, which the caller makes AFTER its transaction ends (DEF-554). */
+export interface FileReadGrant {
+  readonly storagePath: string;
+  readonly contentType: string;
+  readonly expiresInSeconds: number;
+}
+
+/** Signs a grant. A slow signing call (V4 signBlob over IAM) must not hold a pooled connection, so the route calls this after commit. */
+export async function signFileRead(grant: FileReadGrant): Promise<{ url: string; contentType: string }> {
+  const url = await resolveStorageDriver().signedUrl(grant.storagePath, grant.expiresInSeconds);
+  return { url, contentType: grant.contentType };
+}
+
 /**
  * A URL good for a few minutes, minted per request.
  *
  * ⛔ **Never stored and never logged.** A stored URL is a permanent unauthenticated grant, which is
  * exactly what `getDownloadURL()` hands out and exactly what this replaces.
+ *
+ * DEF-554: this is the read-and-authorize half (inside the caller's transaction, audits included) with no signing; `signFileRead` is the other half.
  */
-export async function readFileUrl(
+export async function authorizeFileRead(
   tx: Tx,
   actor: Actor,
   input: { fileId: string; expiresInSeconds?: number },
-): Promise<{ url: string; contentType: string }> {
-  const run = async (trx: Tx) => {
+): Promise<FileReadGrant> {
+  const run = async (trx: Tx): Promise<FileReadGrant> => {
     // ⭐ The org check is the WHOLE POINT (DEF-070). The bucket has no isolation of its own, so
     // this row — reachable only under the actor's own org through RLS — is where it comes from.
     const file = await filesRepo.getById(trx, actor.orgId, input.fileId);
@@ -285,24 +300,20 @@ export async function readFileUrl(
         throw new FileNotFoundError(`readFileUrl: file ${input.fileId} does not exist in this org.`);
       }
       await recordLeaveDocumentViewed(trx, actor, verdict);
-      const leaveUrl = await resolveStorageDriver().signedUrl(
-        file.storagePath,
-        Math.min(input.expiresInSeconds ?? LEAVE_DOCUMENT_LINK_SECONDS, LEAVE_DOCUMENT_LINK_SECONDS),
-      );
-      return { url: leaveUrl, contentType: file.contentType };
+      return {
+        storagePath: file.storagePath,
+        contentType: file.contentType,
+        expiresInSeconds: Math.min(input.expiresInSeconds ?? LEAVE_DOCUMENT_LINK_SECONDS, LEAVE_DOCUMENT_LINK_SECONDS),
+      };
     }
     // ⛔ T-434: a signature goes through its own rule, its own 60 s link and its own audit - never `assertCanRead`.
-    if (file.purpose === 'staff_signature') return signatureUrl(trx, actor, file);
+    if (file.purpose === 'staff_signature') return signatureLinkGrant(trx, actor, file);
     await assertCanRead(trx, actor, file);
-
-    const url = await resolveStorageDriver().signedUrl(
-      file.storagePath,
-      input.expiresInSeconds ?? 300,
-    );
-    return { url, contentType: file.contentType };
+    return { storagePath: file.storagePath, contentType: file.contentType, expiresInSeconds: input.expiresInSeconds ?? 300 };
   };
   return run(tx);
 }
+
 
 /**
  * T-441 (audit A1/A2) - THE claim of an upload-on-pick file by the record that now owns it. ONE conditional

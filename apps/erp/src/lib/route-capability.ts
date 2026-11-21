@@ -22,9 +22,11 @@
  *
  * It is not the authorization system. `authorize()` in `packages/auth` remains the control, is
  * unchanged, and still runs inside every domain service on every write. This adds a **second
- * layer for reads** (bible §15.11 — no layer may be the only one for a given risk). A route absent
- * from this map is readable by any signed-in person, which is correct for the staff-facing
- * surfaces and is why the map is deliberately not exhaustive.
+ * layer for reads** (bible §15.11 — no layer may be the only one for a given risk).
+ *
+ * ⛔ **Deny-by-default (bible §7 rule 11, T-603 S5).** A route absent from this map is refused at runtime by `requirePageAccess` (T-616) unless it is on the approved-open or awaiting list in `route-open-lists.ts`,
+ * and `tests/unit/route-capability-coverage.test.ts` fails for every page, and every server-action folder, that has no entry here and is not on
+ * its approved-open or awaiting-a-decision list. A new screen therefore cannot ship unmapped: map it (a capability, a list, or an explicit `null`).
  */
 import type { Capability } from '@shareat/auth';
 
@@ -32,11 +34,8 @@ import type { Capability } from '@shareat/auth';
  * Route → the capability required to READ it. Longest prefix wins, so `/admin/users/[id]` inherits
  * `/admin/users` without needing its own row.
  *
- * ⭐ **Only genuinely sensitive surfaces are listed, and that is a decision not an omission.**
- * `/clock`, `/till`, `/sales-days`, `/expenses`, `/inventory/*` and the rest are where a cashier
- * legitimately works; gating them would break the app for the role that uses it most. The test
- * that matters is *"would it be wrong for the person at the counter to read this"*, not
- * *"is there a capability that sounds related"*.
+ * ⭐ **Each key is the screen's own write words, not a capability that merely sounds related.** The test that matters is
+ * *"would it be wrong for the person at the counter to read this"*; a screen a cashier legitimately works gets the words that cashier holds.
  */
 /** T-435: a single capability, a LIST meaning ANY-OF, or `null` meaning OPEN (a longer `null` key re-opens a sub-route). */
 export type RouteRequirement = Capability | readonly Capability[] | null;
@@ -96,6 +95,7 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/reports/expense-items': 'view_financial_reports',
   '/reports/sales-rollup': 'view_financial_reports',
   '/reports/pos-data': 'view_financial_reports',
+  '/reports/pos-reconciliation': 'view_financial_reports',
   // T-589 B3a: these routes had no key, so a refused person hit the error boundary (`reportScope`'s data gate throws). Each key is the word the page's own
   // `reportScope(...)` gate uses, so the route gate and the data gate cannot disagree. Children inherit (dual-run/pack, dual-run/[store]/[week]).
   '/reports/journal-lines': 'view_trial_balance',

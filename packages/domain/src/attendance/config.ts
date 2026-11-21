@@ -39,8 +39,9 @@ export async function getLiveConfig(tx: Tx, input: { storeId: string }): Promise
   if (!row) {
     throw new AttendanceConfigError(
       `Store ${input.storeId} has no attendance config. Every store gets one at creation — a store ` +
-        'without one is not "using defaults", it is unconfigured, and an unconfigured attendance ' +
-        'policy fails quietly in the direction that looks fine.',
+        'without one is not "using defaults", it is unconfigured. (DEF-255: this read only runs on a store that is ' +
+        'about to be superseded, so a missing row stops the change loudly; the paths that read a config and ' +
+        'fall back quietly are the review screen\'s `defaultRange` and the scheduler sweep, which now name the gap.)',
     );
   }
   return row;

@@ -37,7 +37,7 @@
  * ⭐ T-361 / DEF-492 — the cash-on-delivery rule (no credit line against a supplier with no terms)
  * is enforced HERE, for every caller, not only the web action's own copy.
  */
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, type Actor, type Capability } from '@shareat/auth';
 import { apRepo, auditLogRepo, expensesRepo, type Tx } from '@shareat/db';
 import { add } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
@@ -122,10 +122,13 @@ export async function createExpense(
   return runCreateExpense(tx, actor, input);
 }
 
+/** DEF-533: what `createExpense` requires, said once. The expenses screens pre-gate on this very list, so the two cannot drift. */
+export const CREATE_EXPENSE_CAPABILITIES: readonly Capability[] = ['create_expense'];
+
 async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput): Promise<CreateExpenseResult> {
   // Bible §7 rule 1 — the first statement. store-scoped, so this alone proves the actor
   // may record spend for THIS store before anything else runs.
-  await authorize(tx, actor, 'create_expense', { storeId: input.storeId });
+  for (const c of CREATE_EXPENSE_CAPABILITIES) await authorize(tx, actor, c, { storeId: input.storeId });
 
   const particulars = input.particulars.trim();
   if (!particulars) {

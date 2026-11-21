@@ -1,6 +1,6 @@
 import { reportsRepo } from '@shareat/db';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
-import { add, money } from '@shareat/core/money';
+import { money } from '@shareat/core/money';
 import { reportScope, runReport } from '../lib';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { JournalLinesTable, type JournalLineRow } from '@/components/reports/JournalLinesTable';
@@ -55,15 +55,9 @@ export default async function JournalLinesPage({
   const currentStore = storeId ? scope.stores.find((s) => s.id === storeId) : undefined;
   const includeYearClose = sp.yearClose === 'exclude' ? false : true;
 
-  const rows = await runReport(orgId, (tx) =>
-    reportsRepo.getAccountEntries(tx, {
-      orgId,
-      storeId,
-      accountId: sp.account!,
-      fromDate: sp.from!,
-      toDate: sp.to!,
-      includeYearClose,
-    }),
+  // T-615: the totals come from SQL over the whole filter; only the rows drawn are capped.
+  const { rows, ...totals } = await runReport(orgId, (tx) =>
+    reportsRepo.getAccountDrill(tx, { orgId, storeId, accountId: sp.account!, fromDate: sp.from!, toDate: sp.to!, includeYearClose }),
   );
 
   const lines: JournalLineRow[] = rows.map((r) => ({
@@ -78,8 +72,8 @@ export default async function JournalLinesPage({
     credit: money(r.credit),
   }));
 
-  const totalDebit = add(...lines.map((l) => l.debit));
-  const totalCredit = add(...lines.map((l) => l.credit));
+  const totalDebit = money(totals.debit);
+  const totalCredit = money(totals.credit);
 
   return (
     <Page density="wide">
@@ -103,7 +97,14 @@ export default async function JournalLinesPage({
       </p>
 
       {lines.length > 0 ? (
-        <JournalLinesTable rows={lines} totalDebit={totalDebit} totalCredit={totalCredit} />
+        <>
+          {totals.count > lines.length ? (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              Showing {lines.length} of {totals.count} lines. The totals below cover all {totals.count}.
+            </p>
+          ) : null}
+          <JournalLinesTable rows={lines} totalDebit={totalDebit} totalCredit={totalCredit} />
+        </>
       ) : (
         <EmptyState message={`No entries on this account for ${formatBusinessDayLong(sp.from)} to ${formatBusinessDayLong(sp.to)}.`} />
       )}

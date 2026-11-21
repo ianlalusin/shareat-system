@@ -824,7 +824,7 @@ export async function voidTradeOrder(
     } else {
       await authorize(trx, actor, 'approve_buyer', { storeId: order.storeId });
     }
-    if (order.status === 'void') throw new Error('voidTradeOrder: this order is already void.');
+    if (order.status === 'void') throw refuse('voidTradeOrder: this order is already void.', tradeRepo.ORDER_ALREADY_VOIDED);
 
     const reason = input.reason.trim();
     if (!reason) throw new Error('voidTradeOrder: say why this order is being voided.');
