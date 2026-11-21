@@ -349,7 +349,7 @@ describe('W4 - the Retire section', () => {
       expect(html).toMatch(/Still holds stock at: Store \(5(\.0+)? kg\)/);
       expect(html).toContain('It stays on count sheets until counted out.');
       // The sellability section lists every store, so scope to the Retire section only.
-      const retireStart = html.indexOf('Retire or restore');
+      const retireStart = html.indexOf('id="retire"');
       expect(retireStart).toBeGreaterThan(-1);
       const retireSection = html.slice(retireStart, html.indexOf('</section>', retireStart));
       expect(retireSection).not.toContain('Zulu');
