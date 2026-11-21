@@ -2,9 +2,8 @@ import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
 import { discrepancyDispositionLabel, lowStockRepo, schema } from '@shareat/db';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
-import { listStores } from '../../inventory/lib';
 import { deferDiscrepancyAction, resolveDiscrepancyAction } from './actions';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
@@ -32,9 +31,10 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function DiscrepanciesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/commissary/discrepancies');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  // T-617: the route gate, then only the stores where one of its words is held (a store outside that list is one sentence, never a fallback).
+  const scope = await storePageScope('/commissary/discrepancies', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
   const includeResolved = sp.all === '1';
 
   if (!storeId) {

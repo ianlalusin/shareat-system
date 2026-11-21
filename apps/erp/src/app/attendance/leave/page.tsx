@@ -6,7 +6,7 @@ import {
 } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import {
   groupByRequest,
   holdsManageAttendance,
@@ -63,7 +63,9 @@ interface SearchParams {
 */
 export default async function LeavePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/attendance/leave');
+  // T-617: the route is open by decision (every signed-in person sees their OWN leave); the manager half below is drawn only for `manage_attendance`.
+  const { actor, refusal } = await requirePageAccess('/attendance/leave');
+  if (refusal) return refusal;
 
   const mine = await loadMine(actor);
   const isManager = await holdsManageAttendance(actor);

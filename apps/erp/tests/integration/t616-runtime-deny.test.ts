@@ -9,7 +9,7 @@ import { ROUTES_AWAITING_A_DECISION } from '../../src/lib/route-open-lists';
  * T-616 - the route map is enforced at RUNTIME, not only by `tests/unit/route-capability-coverage.test.ts`.
  * Spec: docs/tasks/616-deny-by-default-at-runtime.md.
  *
- * `requirePageAccess` refuses a route that has no map entry, is not approved-open and is not on the awaiting list. Admins get one extra line.
+ * `requirePageAccess` refuses a route that has no map entry, is not approved-open and is not on the awaiting list (T-617: that list is now empty). Admins get one extra line.
  * Mutant: make `routeHasNoRule` return false (or drop the early return in `requirePageAccess`) -> the first case goes red.
  */
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
@@ -50,12 +50,12 @@ describe('T-616 - requirePageAccess is deny-by-default', () => {
     for (const route of ['/setup', '/clock', '/']) expect(await gate(route, w.C), route).toBeNull();
   });
 
-  it('awaiting routes keep today\'s behaviour: any signed-in person renders them (and their child routes)', async () => {
+  it('T-617: the awaiting list is empty, so the 13 former awaiting routes are now decided: /items refuses a person with no grant, and /attendance/leave stays open', async () => {
     const w = await world();
-    expect(ROUTES_AWAITING_A_DECISION).toContain('/items');
-    expect(await gate('/items', w.C)).toBeNull();
-    expect(await gate('/items/some-id', w.C)).toBeNull();
-    for (const route of ROUTES_AWAITING_A_DECISION) expect(await gate(route, w.C), route).toBeNull();
+    expect(ROUTES_AWAITING_A_DECISION).toEqual([]);
+    expect(await gate('/items', w.C)).toContain(M.refusedCard);
+    expect(await gate('/items/some-id', w.C)).toContain(M.refusedCard);
+    expect(await gate('/attendance/leave', w.C)).toBeNull();
   });
 
   it('a mapped route is unchanged: allowed with the right word, refused without it', async () => {

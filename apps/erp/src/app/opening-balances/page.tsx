@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { isZero, money } from '@shareat/core/money';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import { attestStepAction } from './actions';
 import { PHASE_TITLE, kindLabel, listStores, loadGaps, loadProgress, peso } from './lib';
 import { Page } from '@/components/shell/Page';
@@ -22,7 +22,8 @@ export default async function CutoverPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/opening-balances');
+  const { actor, refusal } = await requirePageAccess('/opening-balances');
+  if (refusal) return refusal;
 
   const stores = await listStores(actor.orgId);
   const [progress, gaps] = await Promise.all([

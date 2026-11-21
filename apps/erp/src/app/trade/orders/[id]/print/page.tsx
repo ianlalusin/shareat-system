@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { add, compare, money, ZERO } from '@shareat/core/money';
-import { requireSession } from '../../../../../lib/session';
+import { requirePageAccess } from '../../../../../lib/page-access';
 import { deliveryReceiptData, orderDetail, peso } from '../../lib';
 import { receiptRefusal } from './refusal';
 import { NAV_LINK } from '@/components/action-link';
@@ -25,7 +25,8 @@ export const dynamic = 'force-dynamic';
  */
 export default async function DeliveryReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { actor } = await requireSession(`/trade/orders/${id}/print`);
+  const { actor, refusal } = await requirePageAccess(`/trade/orders/${id}/print`);
+  if (refusal) return refusal;
   const data = await deliveryReceiptData(actor, id);
   if (!data) {
     // T-589 B4b: someone who can open the order is told why it has no receipt; a forged id, another org's order, or a person
