@@ -7,7 +7,6 @@
       20
     ],
     "app/admin/users/[personId]/page.tsx": [
-      16,
       20
     ],
     "app/ap/invoices/[id]/page.tsx": [
@@ -125,9 +124,6 @@
     ],
     "app/admin/stores/[id]/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
-    "app/admin/users/[personId]/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "app/ap/invoices/[id]/page.tsx": [
