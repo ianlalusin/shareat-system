@@ -32,6 +32,9 @@ export interface SnapshotOrdersPart {
   requirePinLineActions?: boolean;
   /** T-528: what the Payment screen prices and pays with. Null when the cached snapshot is older than the fields it needs (the tablet must go online once). */
   payment?: SnapshotPaymentPart | null;
+  /** T-621: the offline safety rails. Each null when the cached snapshot is older than the rule (that rail stays off until the next refresh). */
+  offlineUnsentWarnCentavos?: number | null;
+  offlineXSlipHours?: number | null;
 }
 export interface DeviceSync {
   /** The cached snapshot's staff list (empty until one exists). */
@@ -70,7 +73,19 @@ function ordersPartOf(s: CachedSnapshot | null): SnapshotOrdersPart | null {
   if (!b || !Array.isArray(b.stands) || !b.menu) return null;
   const warn = (b.rules as { tableWarnMinutes?: unknown } | undefined)?.tableWarnMinutes;
   const requirePin = (b.rules as { requirePinLineActions?: unknown } | undefined)?.requirePinLineActions === true;
-  return { stands: b.stands, menu: b.menu, nextChangeAt: snapshotNextChangeAt(s), tableWarnMinutes: typeof warn === 'number' ? warn : null, requirePinLineActions: requirePin, payment: paymentPartOf(b) };
+  const rules = b.rules as { offlineUnsentWarnCentavos?: unknown; offlineXSlipHours?: unknown } | undefined;
+  const unsentWarn = rules?.offlineUnsentWarnCentavos;
+  const xslipHours = rules?.offlineXSlipHours;
+  return {
+    stands: b.stands,
+    menu: b.menu,
+    nextChangeAt: snapshotNextChangeAt(s),
+    tableWarnMinutes: typeof warn === 'number' ? warn : null,
+    requirePinLineActions: requirePin,
+    payment: paymentPartOf(b),
+    offlineUnsentWarnCentavos: typeof unsentWarn === 'number' && Number.isSafeInteger(unsentWarn) && unsentWarn > 0 ? unsentWarn : null,
+    offlineXSlipHours: typeof xslipHours === 'number' && Number.isInteger(xslipHours) && xslipHours >= 1 ? xslipHours : null,
+  };
 }
 
 const sameEvents = (a: PosEvent[], b: PosEvent[]): boolean => a.length === b.length && a.every((e, i) => e.seq === b[i]!.seq);

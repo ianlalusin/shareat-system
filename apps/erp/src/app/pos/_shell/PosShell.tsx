@@ -18,6 +18,7 @@ import { purgePosShell, registerPosServiceWorker } from './offline-sw';
 import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, POS_UPDATE_HELD, posHeldSalesMessage, posHttpErrorMessage, testBandText } from './messages';
 import { SwitchCashierDialog } from './SwitchCashierDialog';
 import { posOfflineBandText } from './offline-band';
+import { showUnsentWarning, unsentSalesCentavos, unsentWarningText } from './unsent-total';
 import { asStoreMenu, type MenuLike } from '../_orders/menu-filter';
 import { projectOrders, refusalNotices, type SessionBody, type ServerStand } from '../_orders/project';
 import { PosContext } from './pos-context';
@@ -132,6 +133,9 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   }, [actor, person.personId, state.online, sync]);
 
   const sinceMs = state.failingSinceMs ?? offlineSince;
+  // T-621 S3: the sales waiting to send, in exact centavos; offline at or above the rule, everyone at the till sees the warning (the manager is the one called).
+  const unsentCentavos = useMemo(() => unsentSalesCentavos(sync.pendingEvents), [sync.pendingEvents]);
+  const unsentWarn = showUnsentWarning({ online: state.online, unsentCentavos, warnCentavos: sync.ordersSnapshot?.offlineUnsentWarnCentavos ?? null });
   const pillInput = { online: state.online, sending: sync.sending, pending: sync.pending, offlineForMs: sinceMs === null ? 0 : Math.max(0, now - sinceMs), signedOut: state.signedOut === true };
   const pill = statusPillLabel(pillInput);
   const pillShort = statusPillShort(pillInput);
@@ -269,6 +273,12 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
         {offline ? (
           <div role="status" className="w-full bg-warning-soft px-4 py-3 text-sm font-semibold text-warning-ink">
             {posOfflineBandText(sinceMs ?? now)}
+          </div>
+        ) : null}
+        {/* T-621 S3: unsent offline sales at or above the rule. A warning only; selling never stops. */}
+        {unsentWarn ? (
+          <div role="alert" className="w-full bg-danger-surface px-4 py-3 text-sm font-bold text-danger">
+            {unsentWarningText(unsentCentavos)}
           </div>
         ) : null}
 
