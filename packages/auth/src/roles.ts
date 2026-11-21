@@ -24,7 +24,7 @@
  * SQL is written. This file only decides WHAT to write (the elevated set, the revoke-then-
  * insert sequence for a role change) and calls the repo to write it.
  */
-import { accessRepo, auditLogRepo, goneSentence, authzDenialCountsRepo, personsRepo, refuse, type Tx } from '@shareat/db';
+import { accessRepo, auditLogRepo, goneSentence, authzDenialCountsRepo, personsRepo, refuse, sessionsRepo, type Tx } from '@shareat/db';
 import {
   CAPABILITIES,
   CAPABILITY_SCOPE,
@@ -100,7 +100,10 @@ export interface AssignRoleResult {
  * is exactly the moment the fallback should fire for them, not a state it should ignore.
  */
 export async function assignRole(tx: Tx, input: AssignRoleInput): Promise<AssignRoleResult> {
+  // T-619 / DEF-920 — read the role being replaced BEFORE the revoke, to know whether this is a promotion.
+  const previousRole = await accessRepo.activeRoleForPerson(tx, input.personId, input.orgId);
   await accessRepo.revokeActiveRole(tx, input.personId, input.orgId);
+  await resetPinOnPromotion(tx, input, previousRole?.role);
 
   let elevatedGrants: readonly Capability[] = [];
   if (input.role === 'manager') {
@@ -171,6 +174,44 @@ export async function assignRole(tx: Tx, input: AssignRoleInput): Promise<Assign
   }
 
   return { roleId: id, elevatedGrants, materialisedStoreIds, revokedElevatedGrants };
+}
+
+/**
+ * ⭐ T-619 / DEF-920 (Ian, 22 Nov 2026) — a RAISED role retires the person's PIN, because the PIN was chosen and
+ * shared at the lower role. Same transaction as the role write, in the primitive, so every path is covered.
+ * Lateral or lower changes leave the PIN alone. No role before counts as below staff (rank -1).
+ * One audit row, only when a PIN was actually retired; the person then sets a new one through Set PIN.
+ */
+async function resetPinOnPromotion(tx: Tx, input: AssignRoleInput, oldRole: Role | undefined): Promise<void> {
+  if (ROLE_RANK[input.role] <= (oldRole === undefined ? -1 : ROLE_RANK[oldRole])) return;
+  const pins = (await sessionsRepo.listLiveForPerson(tx, input.personId)).filter((c) => c.kind === 'pin');
+  if (pins.length === 0) return;
+  for (const pin of pins) {
+    await sessionsRepo.revokeCredential(tx, { id: pin.id, by: input.grantedBy, reason: `role raised to ${input.role}` });
+  }
+  const sessionsEnded = await sessionsRepo.endAllForPerson(tx, input.personId, 'revoked');
+  const before = { role: oldRole ?? null };
+  const after = { role: input.role, pinsRevoked: pins.length, sessionsEnded };
+  if (input.grantedBy) {
+    await auditLogRepo.append(tx, input.orgId, {
+      actorPersonId: input.grantedBy,
+      action: 'credential.pin_reset_on_promotion',
+      storeId: null,
+      entityId: input.personId,
+      before,
+      after,
+      source: 'web',
+    });
+  } else {
+    await auditLogRepo.appendSystem(tx, input.orgId, {
+      action: 'credential.pin_reset_on_promotion',
+      storeId: null,
+      entityId: input.personId,
+      before,
+      after,
+      source: 'web',
+    });
+  }
 }
 
 export interface AssignRoleAsActorInput {
