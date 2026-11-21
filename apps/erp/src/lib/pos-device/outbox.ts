@@ -147,6 +147,32 @@ export async function enqueue(event: NewPosEvent): Promise<PosEvent> {
 }
 
 /**
+ * T-620: takes the next `seq` and the bound pairing WITHOUT storing an event, for the one action that must go to the server at once and never sit in the outbox
+ * (a void with a typed manager PIN). The number is used once by the caller; a failed send burns it, which the server never minds (it only needs `seq` unique per pairing).
+ */
+export async function reserveSeq(): Promise<{ seq: number; pairingId: string }> {
+  const db = await openDeviceDb();
+  try {
+    const tx = db.transaction(META_STORE, 'readwrite');
+    const done = transactionDone(tx);
+    const meta = tx.objectStore(META_STORE);
+    const pairingId = await asPromise<string | undefined>(meta.get(META_PAIRING_ID));
+    if (typeof pairingId !== 'string' || pairingId === '') {
+      tx.abort();
+      await done.catch(() => undefined);
+      throw new Error(NO_PAIRING_BOUND_MESSAGE);
+    }
+    const current = await asPromise<number | undefined>(meta.get(COUNTER_NEXT_SEQ));
+    const seq = typeof current === 'number' ? current : 1;
+    meta.put(seq + 1, COUNTER_NEXT_SEQ);
+    await done;
+    return { seq, pairingId };
+  } finally {
+    db.close();
+  }
+}
+
+/**
  * Takes the next receipt number. Never returns the same number twice, even across a reopen, because
  * the counter commits with the read in one transaction.
  */

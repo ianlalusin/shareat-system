@@ -16,8 +16,6 @@
       16
     ],
     "app/budgets/page.tsx": [
-      16,
-      20,
       20
     ],
     "app/commissary/discrepancies/page.tsx": [
@@ -253,8 +251,8 @@
     ]
   },
   "_totals": {
-    "fail": 50,
+    "fail": 48,
     "unresolved": 50,
-    "total": 1725
+    "total": 1731
   }
 }

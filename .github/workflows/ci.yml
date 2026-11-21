@@ -152,10 +152,11 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       # DEF-631: tsc outgrew node's ~2 GB default heap on 10 Oct (PR #10: exit 134, heap out of memory).
+      # 21 Nov: it outgrew 4 GB too (a0c4110, #348 head, exit 134 every run). The public-repo runner has 16 GB.
       - name: Typecheck
         run: npm run typecheck
         env:
-          NODE_OPTIONS: --max-old-space-size=4096
+          NODE_OPTIONS: --max-old-space-size=8192
 
   unit:
     name: unit

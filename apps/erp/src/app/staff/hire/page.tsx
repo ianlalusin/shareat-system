@@ -5,7 +5,7 @@ import { hireAction } from '../actions';
 import { positionsForStore, searchPersonsFor, staffStoresFor } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { Button, FlashBanner, FormGrid, Field, Input } from '@/components/ui';
+import { Button, FlashBanner, FormGrid, FormSection, Field, Input, SaveBar } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { STAFF_HIRE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -30,6 +30,9 @@ const HIRE_DEFAULT_STATUS = 'probationary';
 
 /** Every status except the two that mean "has left" — hiring INTO an ended status is refused by
  *  the domain, so it is not offered here either. */
+/** The status as a sentence-case label; the option value stays the stored word. */
+const statusWords = (s: string): string => { const t = s.replace(/-/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
+
 const HIRE_STATUSES = EMPLOYMENT_STATUSES.filter((s) => !(ENDED_STATUSES as readonly string[]).includes(s));
 
 export default async function HireStaffPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -63,11 +66,8 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         <a href="/staff" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Staff
         </a>
-        <h1 className="mt-1 text-2xl font-semibold">Hire</h1>
-        <PageDescription>
-          Search for the person first, so a typo does not create a duplicate. Someone who already works at
-          another store shows up here too. Hiring them again adds a second job for the same person.
-        </PageDescription>
+        <h1 className="mt-1 text-2xl font-semibold">Hire someone</h1>
+        <PageDescription>Search first, so a typo does not make a duplicate.</PageDescription>
       </div>
 
       <FlashBanner flash={sp} />
@@ -97,21 +97,17 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         </p>
       )}
 
-      <h2 className="text-lg font-medium">Hire someone</h2>
-      <CheckedForm rules={STAFF_HIRE_RULES} action={hireAction} className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <CheckedForm rules={STAFF_HIRE_RULES} action={hireAction} className="space-y-4">
         <input type="hidden" name="storeId" value={storeId} />
 
-        <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-          <legend className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-            Who is this?
-          </legend>
+        <FormSection title="Who is this?" className="space-y-2 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
           {results.map((p) => (
-            <label key={p.id} className="flex items-center gap-2 text-sm">
+            <label key={p.id} className="flex min-h-11 items-center gap-3 text-sm">
               <input type="radio" name="personChoice" value={`existing:${p.id}`} className="h-4 w-4" />
-              Use this person: <strong>{p.displayName}</strong>{'branches' in p && ` (works at ${p.branches.join(', ')})`}
+              <span>Use: <strong>{p.displayName}</strong>{'branches' in p && ` (works at ${p.branches.join(', ')})`}</span>
             </label>
           ))}
-          <p className="pt-1 text-sm font-medium">Or type a new person&rsquo;s name</p>
+          <p className="pt-1 text-sm font-medium">Or a new person</p>
           <FormGrid>
             <Field label="Last name">
               <Input name="lastName" placeholder="Santos" className="mt-1 w-full" />
@@ -123,7 +119,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
               <Input name="middleName" placeholder="Clara" className="mt-1 w-full" />
             </Field>
           </FormGrid>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex min-h-11 items-center gap-3 text-sm">
             <input type="checkbox" name="sameNameConfirmed" className="h-4 w-4" />
             This is a different person with the same name
           </label>
@@ -131,55 +127,57 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
             Nothing is created until you save. Pick a person above or type a name, not both. A typed
             name shows as &ldquo;Last, First M.&rdquo;.
           </p>
-        </fieldset>
+        </FormSection>
 
-        <FormGrid>
-          <Field label="Starting status">
-            <select name="employmentStatus" defaultValue={HIRE_DEFAULT_STATUS} className={`${INPUT} mt-1 w-full`}>
-              {HIRE_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s.replace(/-/g, ' ')}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Start date" rule={STAFF_HIRE_RULES.startedOn}>
-            <Input type="date" {...nativeAttrs(STAFF_HIRE_RULES.startedOn)} defaultValue={toBusinessDate()} className="mt-1 w-full" />
-          </Field>
-        </FormGrid>
+        <FormSection title="The job" className="space-y-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+          <FormGrid>
+            <Field label="Starting status">
+              <select name="employmentStatus" defaultValue={HIRE_DEFAULT_STATUS} className={`${INPUT} mt-1 w-full`}>
+                {HIRE_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {statusWords(s)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Start date" rule={STAFF_HIRE_RULES.startedOn}>
+              <Input type="date" {...nativeAttrs(STAFF_HIRE_RULES.startedOn)} defaultValue={toBusinessDate()} className="mt-1 w-full" />
+            </Field>
+          </FormGrid>
 
-        <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-          <legend className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-            Positions: tick what they do, and mark exactly one as primary
-          </legend>
-          {positions.length === 0 ? (
+          <fieldset className="space-y-1">
+            <legend className="text-sm font-medium">Positions</legend>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              No positions defined for this store yet.
+              Tick what they do. Mark one as their main job. Leave all blank to hire them as <strong>Server</strong>, the role with the fewest permissions.
             </p>
-          ) : (
-            <div className="space-y-1">
-              {positions.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 text-sm">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" name="positionIds" value={p.id} className="h-4 w-4" />
-                    {p.name}
-                  </label>
-                  <label className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                    <input type="radio" name="primaryPositionId" value={p.id} />
-                    primary
-                  </label>
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Leave all of this blank to hire them as <strong>Server</strong>, the role with the fewest permissions.
-          </p>
-        </fieldset>
+            {positions.length === 0 ? (
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                No positions defined for this store yet.
+              </p>
+            ) : (
+              <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
+                {positions.map((p) => (
+                  <div key={p.id} className="flex min-h-11 items-center justify-between gap-3 text-sm">
+                    <label className="flex min-h-11 min-w-0 flex-1 items-center gap-3">
+                      <input type="checkbox" name="positionIds" value={p.id} className="h-4 w-4" />
+                      {p.name}
+                    </label>
+                    <label className="flex min-h-11 items-center gap-2 text-xs text-neutral-600 dark:text-neutral-400">
+                      <input type="radio" name="primaryPositionId" value={p.id} className="h-4 w-4" />
+                      Main job
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
+          </fieldset>
+        </FormSection>
 
-        <Button type="submit" variant="primary">
-          Save
-        </Button>
+        <SaveBar>
+          <Button type="submit" variant="primary">
+            Save
+          </Button>
+        </SaveBar>
       </CheckedForm>
     </Page>
   );

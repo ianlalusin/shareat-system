@@ -171,11 +171,11 @@ describe('T-587 S4 - store page', () => {
   );
 
   it(
-    'C1: Close this store sits after the Details section and after both columns, and the summary is a 44px tap target',
+    'C1: Close this store sits after the About this store section and after both columns, and the summary is a 44px tap target',
     async () => {
       const f = await storeFixture('c1');
       const html = await renderStorePage(f);
-      const details = html.indexOf('>Details<');
+      const details = html.indexOf('>About this store<');
       const close = html.indexOf('>Close this store<');
       const hours = html.indexOf('>Menu hours<');
       expect(details).toBeGreaterThan(-1);
