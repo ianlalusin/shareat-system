@@ -1131,7 +1131,7 @@ export interface ReceiptFigures {
   discountByKind: Record<'senior' | 'pwd' | 'preset' | 'custom', string>;
   /** Distinct statutory rows (senior / PWD diners). */
   statutoryDiners: number;
-  /** Per tender: Σ amount, Σ change given, and how many payments are offline wallet payments still to check. */
+  /** Per tender: Σ amount, Σ change given, and how many payments are offline wallet payments still to check (T-623: not yet checked by a manager). */
   byTender: { tenderId: string; amount: string; change: string; toCheck: number }[];
   /** Package sessions (a receipt with a package line): their count and the Σ of their billed heads (the larger of the cashier's and the server's count). */
   packageSessions: number;
@@ -1171,7 +1171,7 @@ export async function receiptFigures(tx: Tx, orgId: string, receiptIds: string[]
       join pos_sales_receipt_lines l on l.id = d.receipt_line_id
      where d.org_id = ${orgId} and l.receipt_id in (${ids})`)) as unknown as { n: number }[];
   const pays = (await tx.execute(sql`
-    select p.tender_id as tender_id, sum(p.amount)::text as amount, sum(p.change_given)::text as change, (count(*) filter (where p.to_check))::int as to_check
+    select p.tender_id as tender_id, sum(p.amount)::text as amount, sum(p.change_given)::text as change, (count(*) filter (where p.to_check and p.checked_at is null))::int as to_check
       from pos_sales_receipt_payments p
      where p.org_id = ${orgId} and p.receipt_id in (${ids})
      group by p.tender_id`)) as unknown as { tender_id: string; amount: string; change: string; to_check: number }[];
@@ -1546,6 +1546,82 @@ export async function listPaymentRowsOfReceipts(
     .from(posSalesReceiptPayments)
     .where(and(eq(posSalesReceiptPayments.orgId, orgId), inArray(posSalesReceiptPayments.receiptId, [...receiptIds])))
     .orderBy(asc(posSalesReceiptPayments.id));
+}
+
+/** T-623: one wallet payment of a store with what the manager's check needs (its receipt's number parts, tender, reference and who checked it). Undefined when the payment is not at this org/store. */
+export interface PaymentCheckRow {
+  paymentId: string;
+  terminalNo: number;
+  terminalSeq: number;
+  issuedAtDevice: Date;
+  tenderName: string;
+  amount: string;
+  referenceNo: string | null;
+  toCheck: boolean;
+  checkedAt: Date | null;
+  /** The first name (display name when the parts are empty) of the person who checked it. */
+  checkedByName: string | null;
+}
+const paymentCheckFields = {
+  paymentId: posSalesReceiptPayments.id,
+  terminalNo: posTerminals.terminalNo,
+  terminalSeq: posSalesReceipts.terminalSeq,
+  issuedAtDevice: posSalesReceipts.issuedAtDevice,
+  tenderName: tenders.name,
+  amount: posSalesReceiptPayments.amount,
+  referenceNo: posSalesReceiptPayments.referenceNo,
+  toCheck: posSalesReceiptPayments.toCheck,
+  checkedAt: posSalesReceiptPayments.checkedAt,
+  checkedByName: sql<string | null>`coalesce(${persons.firstName}, ${persons.displayName})`,
+};
+const paymentCheckFrom = (tx: Tx) =>
+  tx
+    .select(paymentCheckFields)
+    .from(posSalesReceiptPayments)
+    .innerJoin(posSalesReceipts, eq(posSalesReceipts.id, posSalesReceiptPayments.receiptId))
+    .innerJoin(posTerminals, eq(posTerminals.id, posSalesReceipts.terminalId))
+    .innerJoin(tenders, eq(tenders.id, posSalesReceiptPayments.tenderId))
+    .leftJoin(persons, eq(persons.id, posSalesReceiptPayments.checkedBy));
+
+export async function getPaymentForCheck(tx: Tx, orgId: string, storeId: string, paymentId: string): Promise<PaymentCheckRow | undefined> {
+  const [row] = await paymentCheckFrom(tx).where(and(eq(posSalesReceiptPayments.orgId, orgId), eq(posSalesReceipts.storeId, storeId), eq(posSalesReceiptPayments.id, paymentId)));
+  return row;
+}
+
+/** T-623: the payments still "to check" (to_check, not yet checked) of receipts issued since `since`, newest first. */
+export async function listPaymentsToCheck(tx: Tx, orgId: string, storeId: string, since?: Date): Promise<PaymentCheckRow[]> {
+  return paymentCheckFrom(tx)
+    .where(
+      and(
+        eq(posSalesReceiptPayments.orgId, orgId),
+        eq(posSalesReceipts.storeId, storeId),
+        eq(posSalesReceiptPayments.toCheck, true),
+        isNull(posSalesReceiptPayments.checkedAt),
+        since ? gte(posSalesReceipts.issuedAtDevice, since) : undefined,
+      ),
+    )
+    .orderBy(desc(posSalesReceipts.issuedAtDevice), desc(posSalesReceiptPayments.id));
+}
+
+/**
+ * T-623: the manager saw the money arrive. Sets checked_by / checked_at on one payment of THIS org and store that is "to check" and not yet checked (the trigger lets them go NULL -> a value once).
+ * Returns whether it wrote: false = no such payment here, not "to check", or already checked (a racing second check waits on the row, re-reads the condition and writes nothing).
+ */
+export async function markPaymentChecked(tx: Tx, input: { orgId: string; storeId: string; paymentId: string; checkedBy: string; at: Date }): Promise<boolean> {
+  const rows = await tx
+    .update(posSalesReceiptPayments)
+    .set({ checkedBy: input.checkedBy, checkedAt: input.at })
+    .where(
+      and(
+        eq(posSalesReceiptPayments.orgId, input.orgId),
+        eq(posSalesReceiptPayments.id, input.paymentId),
+        eq(posSalesReceiptPayments.toCheck, true),
+        isNull(posSalesReceiptPayments.checkedAt),
+        inArray(posSalesReceiptPayments.receiptId, tx.select({ id: posSalesReceipts.id }).from(posSalesReceipts).where(and(eq(posSalesReceipts.orgId, input.orgId), eq(posSalesReceipts.storeId, input.storeId)))),
+      ),
+    )
+    .returning({ id: posSalesReceiptPayments.id });
+  return rows.length > 0;
 }
 
 /** Every correction of some receipts (open or in a Z), oldest first. */
