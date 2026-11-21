@@ -27,6 +27,7 @@ export {
   drain,
   enqueue,
   listPending,
+  reserveSeq,
   reserveTerminalSeq,
   resumeAbove,
 } from './outbox';
