@@ -1110,6 +1110,24 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     expect((await snapshot(f)).body.device, 'a quarantined seq counts, so a reinstalled tablet never reuses it').toEqual({ pairingId: f.pairingId, lastSeq: 4, lastTerminalSeq: day.terminalSeq });
   });
 
+  it('T-602: with two terminals in one store (one live pairing per store, so the first is revoked after its sale), each snapshot lastTerminalSeq is its OWN terminal highest receipt number', async () => {
+    const f = await fixture();
+    await signedIn(f, f.counterId);
+    const one = plainDay(f);
+    await send(f, one.events);
+    await sql`update pos_tablet_pairings set revoked_at = now(), revoked_by = paired_by where id = ${f.pairingId}`;
+    const [p2] = await sql<{ id: string }[]>`insert into pos_tablet_pairings (org_id, store_id, label, cookie_digest, paired_by) select org_id, store_id, 't602-second', 't602-' || gen_random_uuid()::text, paired_by from pos_tablet_pairings where id = ${f.pairingId} returning id`;
+    await sql`insert into pos_terminals (org_id, store_id, terminal_no, pairing_id, created_by) select org_id, store_id, 2, ${p2!.id}, created_by from pos_terminals where pairing_id = ${f.pairingId}`;
+    await pinSession(f, f.counterId, { pairingId: p2!.id });
+    const two = plainDay(f);
+    const sale2 = two.events[2]!;
+    sale2.payload = { ...sale2.payload, terminalNo: 2, terminalSeq: one.terminalSeq + 100 };
+    expect(statuses(await send(f, two.events, RATES, p2!.id)), 'the till-2 sale is accepted').toEqual(['applied', 'applied', 'applied']);
+    const lastOf = async (pairingId: string) => ((await (asOrg(f.orgId, (tx) => SNAPSHOT.buildPosSnapshot(tx, { pairing: { pairingId, orgId: f.orgId, storeId: f.storeId } }, RATES)) as Promise<Snap>)).body.device as { lastTerminalSeq: number }).lastTerminalSeq;
+    expect(await lastOf(f.pairingId), 'till 1').toBe(one.terminalSeq);
+    expect(await lastOf(p2!.id), 'till 2').toBe(one.terminalSeq + 100);
+  });
+
   it('businessDate is T-524\'s currentBusinessDate for the store', async () => {
     const f = await fixture();
     const s = await snapshot(f);

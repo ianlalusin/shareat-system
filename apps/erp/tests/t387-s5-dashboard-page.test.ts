@@ -159,7 +159,7 @@ vi.mock('@shareat/db', async (importOriginal) => {
     },
     lowStockRepo: {
       ...(actual as { lowStockRepo?: object }).lowStockRepo,
-      lowStock: async () => Array.from({ length: 17 }, (_, i) => ({ itemId: `i${i}` })),
+      lowStockForStores: async () => Array.from({ length: 17 }, (_, i) => ({ itemId: `i${i}` })),
     },
     attendanceDaysRepo: {
       ...(actual as { attendanceDaysRepo?: object }).attendanceDaysRepo,

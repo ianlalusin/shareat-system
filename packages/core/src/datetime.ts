@@ -138,6 +138,11 @@ export function formatBusinessDateTime(
   }).format(instant);
 }
 
+/** A business date as "Jan 10, 2027", Manila. The one copy of the medium-date wording refusals and findings use (DEF-449). */
+export function mediumBusinessDate(d: BusinessDate): string {
+  return formatBusinessDateTime(businessDayRange(d).start, { dateStyle: 'medium' });
+}
+
 /** A business date ("2022-02-14") in long words, Manila time. The one date formatter above, applied to that day's own midnight. */
 export function formatBusinessDayLong(date: string): string {
   const at = new Date(`${date}T00:00:00+08:00`);

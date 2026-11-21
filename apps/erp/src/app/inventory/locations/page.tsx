@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { LOCATION_ROLES } from '@shareat/db/schema';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import {
   createLocationAction,
   deactivateLocationAction,
@@ -9,7 +9,7 @@ import {
   setupRoomsAction,
   updateLocationAction,
 } from './actions';
-import { listStores, locationsPageData } from './lib';
+import { locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_LOCATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -39,9 +39,9 @@ const STOCK_MODEL_EXPLANATION: Record<'single_room' | 'multi_room', string> = {
 
 export default async function StockLocationsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/inventory/locations');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  const scope = await storePageScope('/inventory/locations', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
 
   if (!storeId) {
     return (

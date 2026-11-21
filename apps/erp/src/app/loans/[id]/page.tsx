@@ -4,6 +4,7 @@ import { compare, fromCentavos, money, subtract, ZERO } from '@shareat/core/mone
 import { leftToPay, loanSchedule } from '@shareat/domain';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
+import { recordInScope } from '@/lib/store-scope';
 import { disburseLoanAction, recordPaymentAction, reverseEntryAction, updateLoanRepaymentAmountAction } from '../actions';
 import { METHOD_LABEL, getDetail, moneyAccounts, peso, repaymentAmountFor, today } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
@@ -37,7 +38,7 @@ export default async function LoanPage({
   if (refusal) return refusal;
 
   const loan = await getDetail(actor.orgId, id);
-  if (!loan) notFound();
+  if (!loan || !(await recordInScope(actor, '/loans', loan.storeId))) notFound();
   // T-488: minted per render and submitted back, so a double click is a replay of ONE posting and a second genuine
   // transaction on the same day carries its own id (the entry is keyed on it, never on the figures).
   const requestId = crypto.randomUUID();

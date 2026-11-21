@@ -4,5 +4,5 @@
  */
 import { defineTypedForm } from '@/lib/keep-typing';
 
-export const COMMISSARY_LINE_UPDATE = defineTypedForm({ form: 'commissary.lineUpdate', fields: ['quantity', 'rate'] });
+export const COMMISSARY_LINE_UPDATE = defineTypedForm({ form: 'commissary.lineUpdate', fields: ['quantity'] });
 export const COMMISSARY_LINE_FULFIL = defineTypedForm({ form: 'commissary.lineFulfil', fields: ['quantity', 'rate', 'sourceLocationId'] });

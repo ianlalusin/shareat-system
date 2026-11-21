@@ -36,7 +36,7 @@ import type {
   SupplierVatStatus,
 } from '@shareat/db/schema';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
-import { authorize, can, type Actor } from '@shareat/auth';
+import { authorize, can, type Actor, type Capability } from '@shareat/auth';
 import { add, compare, formatMoney, isZero, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { addDays, parseBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
@@ -68,7 +68,7 @@ import {
   vatCheck,
   verifySupplierActiveCheck,
 } from '../business-rules';
-import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
+import { CREATE_EXPENSE_CAPABILITIES, createExpense, type CreateExpensePaymentInput } from '../expenses/create';
 import { approveExpense, type ApproveExpenseResult } from '../expenses/approve';
 import { voidExpense } from '../expenses/void';
 import { deleteExpenseDraft } from '../expenses/delete';
@@ -244,7 +244,7 @@ export async function editSupplier(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_supplier', {});
 
-    const existing = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
+    const existing = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId, { forUpdate: true });
     if (!existing) {
       throw gone(`editSupplier: supplier ${input.supplierId} does not exist.`, 'supplier');
     }
@@ -299,6 +299,19 @@ export async function editSupplier(
         // The ERP screen is this function's only caller today; a second front-end must thread its
         // own source through, not inherit this one (same comment as the precedent).
         source: 'web',
+      });
+    }
+
+    // DEF-507: a name decides who a payment is addressed to, so a real rename is audited like the other supplier controls.
+    if (values.name !== undefined && values.name !== existing.name) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'supplier.renamed',
+        storeId: null,
+        entityId: input.supplierId,
+        before: { name: existing.name },
+        after: { name: values.name },
+        source: input.source ?? 'web',
       });
     }
 
@@ -985,12 +998,18 @@ export interface RecordExpenseForInvoiceResult extends ApproveExpenseResult {
  * T-361 / DEF-492 — the cash-on-delivery rule reaches this function through `createExpense`,
  * which it calls below; there is no separate copy of it here.
  */
+/** DEF-533: what `recordExpenseForInvoice` requires (the stronger gate first, then what `createExpense` needs). The screens pre-gate on this list. */
+const RECORD_EXPENSE_FIRST_GATE: Capability = 'approve_expense';
+export const RECORD_EXPENSE_FOR_INVOICE_CAPABILITIES: readonly Capability[] = [RECORD_EXPENSE_FIRST_GATE, ...CREATE_EXPENSE_CAPABILITIES];
+
 export async function recordExpenseForInvoice(
   tx: Tx,
   actor: Actor,
   input: RecordExpenseForInvoiceInput,
 ): Promise<RecordExpenseForInvoiceResult> {
   const run = async (trx: Tx) => {
+    // DEF-505: the stronger gate first, so a person who cannot approve is told so before any of the form is judged.
+    await authorize(trx, actor, RECORD_EXPENSE_FIRST_GATE, { storeId: input.storeId });
     const { id: expenseId } = await createExpense(trx, actor, {
       storeId: input.storeId,
       businessDate: '', // ignored — createExpense forces this from the invoice's own date

@@ -1,5 +1,6 @@
 import { commissaryCatalogueRepo } from '@shareat/db';
 import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { removeMapAction, upsertLinkAction, upsertMapAction, upsertOfferingAction } from './actions';
 import {
   EXPENSE_GROUPS,
@@ -31,6 +32,9 @@ interface SearchParams {
 
 export default async function CommissaryCataloguePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
+  // T-617: the route gate first; the session is read again only for the terminal's store (which commissary to open by default).
+  const { refusal } = await requirePageAccess('/commissary/catalogue');
+  if (refusal) return refusal;
   const session = await requireSession('/commissary/catalogue');
   const { actor } = session;
   const stores = await listStores(actor.orgId);

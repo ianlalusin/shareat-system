@@ -22,9 +22,11 @@
  *
  * It is not the authorization system. `authorize()` in `packages/auth` remains the control, is
  * unchanged, and still runs inside every domain service on every write. This adds a **second
- * layer for reads** (bible §15.11 — no layer may be the only one for a given risk). A route absent
- * from this map is readable by any signed-in person, which is correct for the staff-facing
- * surfaces and is why the map is deliberately not exhaustive.
+ * layer for reads** (bible §15.11 — no layer may be the only one for a given risk).
+ *
+ * ⛔ **Deny-by-default (bible §7 rule 11, T-603 S5).** A route absent from this map is refused at runtime by `requirePageAccess` (T-616) unless it is on the approved-open or awaiting list in `route-open-lists.ts`,
+ * and `tests/unit/route-capability-coverage.test.ts` fails for every page, and every server-action folder, that has no entry here and is not on
+ * its approved-open or awaiting-a-decision list. A new screen therefore cannot ship unmapped: map it (a capability, a list, or an explicit `null`).
  */
 import type { Capability } from '@shareat/auth';
 
@@ -32,11 +34,8 @@ import type { Capability } from '@shareat/auth';
  * Route → the capability required to READ it. Longest prefix wins, so `/admin/users/[id]` inherits
  * `/admin/users` without needing its own row.
  *
- * ⭐ **Only genuinely sensitive surfaces are listed, and that is a decision not an omission.**
- * `/clock`, `/till`, `/sales-days`, `/expenses`, `/inventory/*` and the rest are where a cashier
- * legitimately works; gating them would break the app for the role that uses it most. The test
- * that matters is *"would it be wrong for the person at the counter to read this"*, not
- * *"is there a capability that sounds related"*.
+ * ⭐ **Each key is the screen's own write words, not a capability that merely sounds related.** The test that matters is
+ * *"would it be wrong for the person at the counter to read this"*; a screen a cashier legitimately works gets the words that cashier holds.
  */
 /** T-435: a single capability, a LIST meaning ANY-OF, or `null` meaning OPEN (a longer `null` key re-opens a sub-route). */
 export type RouteRequirement = Capability | readonly Capability[] | null;
@@ -96,6 +95,7 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/reports/expense-items': 'view_financial_reports',
   '/reports/sales-rollup': 'view_financial_reports',
   '/reports/pos-data': 'view_financial_reports',
+  '/reports/pos-reconciliation': 'view_financial_reports',
   // T-589 B3a: these routes had no key, so a refused person hit the error boundary (`reportScope`'s data gate throws). Each key is the word the page's own
   // `reportScope(...)` gate uses, so the route gate and the data gate cannot disagree. Children inherit (dual-run/pack, dual-run/[store]/[week]).
   '/reports/journal-lines': 'view_trial_balance',
@@ -130,9 +130,9 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // /budgets only sets and removes caps (`manage_expense_budgets`). A spender still sees what is left on /expenses/new, which stays open.
   '/budgets': 'manage_expense_budgets',
   '/cash-requests': ['create_expense', 'approve_expense'],
-  // T-511 S4: uploading a Grab / Foodpanda statement. `ingestSettlementFile` checks the same word at the store the file belongs to. The longer prefix wins over the open /channel-settlements.
+  // T-511 S4: uploading a Grab / Foodpanda statement. `ingestSettlementFile` checks the same word at the store the file belongs to. The longer prefix wins over /channel-settlements (record_ar_collection, T-617).
   '/channel-settlements/upload': 'upload_settlement_files',
-  // T-511 S5b: reading, rejecting and reopening the staged days. The list and detail are scoped per store inside the domain by the same word `rejectDay` checks (recording a channel settlement); the longer prefix wins over the open /channel-settlements.
+  // T-511 S5b: reading, rejecting and reopening the staged days. The list and detail are scoped per store inside the domain by the same word `rejectDay` checks (recording a channel settlement); the longer prefix wins over /channel-settlements (T-617).
   '/channel-settlements/review': 'record_ar_collection',
   // T-390 S5: the opening count (costs), the opening figures (party names, balances) and the count sheet. The domain's writes check
   // the same word; this is the read layer. The prefix covers /opening-balances/stock-count/sheet.
@@ -153,6 +153,23 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // Ian Q2: holding only manage_attendance at a store is enough to see that store's roster.
   '/staff': ['enrol_staff', 'manage_attendance'],
   '/staff/hire': 'enrol_staff',
+  // T-603 S2 (DEF-906, 907, 910, 916): the store-picker screens. Each key is the screen's own write words (any ONE opens it); the page then lists only the stores where
+  // one is held (`storePageScope`) and a record page asks the same list at the record's store (`recordInScope`). Longer keys below still win.
+  // Every word a screen under /inventory exists for: stock moves and receiving, rooms, thresholds, counts, usage and wastage (record and post), transfers, supplier returns, production, and their voids.
+  '/inventory': [
+    'record_stock_movement', 'record_wastage', 'receive_delivery', 'transfer_stock', 'void_transfer', 'record_supplier_return', 'void_supplier_return',
+    'set_item_threshold', 'manage_locations', 'open_count_session', 'commit_count', 'post_usage', 'void_usage_record', 'finalize_pos_usage_pull',
+    'post_production', 'edit_posted_production', 'void_production',
+  ],
+  '/till': ['record_till_count', 'resolve_till_variance'],
+  '/remittance': 'accept_remittance',
+  '/trade/returns': ['record_customer_return', 'void_customer_return', 'apply_customer_credit'],
+  '/wastage': ['record_order_wastage', 'resolve_order_wastage'],
+  // T-603 S3 (DEF-911): the expense list and form are for people who record or approve expenses, at their stores (the same words `expenses/[id]` already reads by). `/expenses/reimbursements` and `/expenses/recurring` keep their longer keys.
+  '/expenses': ['create_expense', 'edit_own_expense', 'approve_expense'],
+  '/expenses/recurring': 'manage_recurring_expenses',
+  // T-603 S3 (DEF-912): the findings feed and the store scorecard. A store-limited viewer sees their stores' findings; org-level ones (trial balance, fiscal runway) and close-readiness are for an org-wide viewer. Children inherit.
+  '/findings': 'view_financial_reports',
   // T-398 S5d: goods another company sent us are received by whoever may receive a delivery. The longer key wins over the open /inventory.
   '/inventory/deliveries/inbound': 'receive_delivery',
   // T-583 S2 (Ian, 2026-11-15, revised 16 Nov: "cooks can read recipes"): the cookbook is READ by whoever may record a cook run
@@ -164,6 +181,31 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/franchise/sales': 'view_franchise_sales',
   '/franchise/stock': 'view_franchise_sales',
   '/franchise/access-log': 'view_franchise_access_log',
+
+  // --- T-617 (Ian, 22 Nov 2026, "approve the defaults"): the 13 routes that awaited a decision. Existing words only; each is the screen's own acts, any ONE opens it.
+  // Longer keys elsewhere in this map still win (/attendance/terminals, /channel-settlements/upload, /opening-balances/stock-count ...).
+  '/attendance': 'manage_attendance',
+  // A signed-in person's OWN leave (balance, request, their requests) stays open to everyone; the store-wide half is drawn only for `manage_attendance` and every read is store-checked in the domain.
+  '/attendance/leave': null,
+  // Recording, voiding and reviewing a settlement all need record_ar_collection at the store (domain). Admin-only payout account (set_channel_payout) sits on top inside the page.
+  '/channel-settlements': 'record_ar_collection',
+  // Commissary floor staff hold fulfil_branch_order at the commissary (a read of what is offered and what is short); the writes keep their own manage/resolve words in the domain.
+  '/commissary/catalogue': ['manage_commissary_offerings', 'manage_commissary_map', 'fulfil_branch_order'],
+  '/commissary/discrepancies': ['resolve_trade_discrepancy', 'fulfil_branch_order'],
+  // Both sides of an internal order: the branch (place), the commissary (fulfil, dispatch), signing for goods (confirm_receipt) and the thread (post_order_message).
+  '/commissary/orders': ['place_branch_order', 'fulfil_branch_order', 'dispatch_branch_order', 'confirm_receipt', 'post_order_message'],
+  // The item master: manage (manager+), approve (super admin) or decide a request (admin).
+  '/items': ['manage_items', 'approve_item', 'approve_item_request'],
+  // The CSV import is the admin's; `importItems` checks approve_item_request.
+  '/items/import': 'approve_item_request',
+  // Attesting a store's opening step is a manager's (run_cutover, store-checked); posting the opening entry stays admin-only in the domain behind an administrator PIN.
+  '/opening-balances': 'run_cutover',
+  // The SC/PWD register: `listStatutoryDiscounts` reads by record_statutory_discount at the store, so a cashier (who transcribes the paper logbook) keeps the screen; managers and admins hold it by role.
+  '/statutory-discounts': 'record_statutory_discount',
+  // The same three words `orderDetail` already opens an order by.
+  '/trade/orders': ['create_wholesale_order', 'approve_buyer', 'record_ar_collection'],
+  // The franchisor's actions; the domain asks view_franchise_sales on every press. /franchise/access-log keeps its own longer key.
+  '/franchise': 'view_franchise_sales',
 };
 
 /**

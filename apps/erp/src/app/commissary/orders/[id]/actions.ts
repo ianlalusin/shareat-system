@@ -155,7 +155,6 @@ export async function addLineAction(fd: FormData): Promise<void> {
       orderId,
       itemId: str(fd, 'itemId'),
       quantity: str(fd, 'quantity'),
-      rate: str(fd, 'rate') || null,
     });
     return 'Line added.';
   }));
@@ -168,7 +167,6 @@ export async function updateLineAction(fd: FormData): Promise<void> {
       orderId,
       lineId: str(fd, 'lineId'),
       quantity: str(fd, 'quantity'),
-      rate: str(fd, 'rate') || null,
     });
     return 'Line updated.';
   }, (actorId) => keepTyping(fd, COMMISSARY_LINE_UPDATE, str(fd, 'lineId'), { actorId })));

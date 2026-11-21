@@ -247,16 +247,7 @@ export interface AccountEntryLine {
   credit: string;
 }
 
-/**
- * The drill-down — T-209c. Line-level, NOT aggregated: every journal line posted to one
- * account, for the given org/optional store/date range. `status in ('posted','reversed')`
- * matches every reporting view's own filter exactly (views.ts's top comment) so the sum of
- * what this returns never disagrees with the report line that linked here.
- */
-export async function getAccountEntries(
-  ex: Executor,
-  filter: DateRangeFilter & { accountId: string },
-): Promise<AccountEntryLine[]> {
+function accountEntryConditions(filter: DateRangeFilter & { accountId: string }) {
   const includeYearClose = filter.includeYearClose ?? true;
 
   const conditions = [
@@ -272,8 +263,42 @@ export async function getAccountEntries(
   if (!includeYearClose) {
     conditions.push(ne(journalEntries.sourceType, 'year_close'));
   }
+  return and(...conditions);
+}
 
-  const rows = await ex
+/**
+ * T-615: the drill-down's totals and row count in SQL, over the SAME filter as `getAccountEntries`
+ * (one shared `accountEntryConditions`), so a page that caps the rows it loads still shows true totals.
+ */
+async function getAccountEntryTotals(
+  ex: Executor,
+  filter: DateRangeFilter & { accountId: string },
+): Promise<{ debit: string; credit: string; count: number }> {
+  const [r] = await ex
+    .select({
+      debit: sql<string>`coalesce(sum(${journalLines.debit}), 0)::text`,
+      credit: sql<string>`coalesce(sum(${journalLines.credit}), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(journalLines)
+    .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
+    .where(accountEntryConditions(filter));
+  return r!;
+}
+
+/**
+ * The drill-down — T-209c. Line-level, NOT aggregated: every journal line posted to one
+ * account, for the given org/optional store/date range. `status in ('posted','reversed')`
+ * matches every reporting view's own filter exactly (views.ts's top comment) so the sum of
+ * what this returns never disagrees with the report line that linked here.
+ */
+export async function getAccountEntries(
+  ex: Executor,
+  filter: DateRangeFilter & { accountId: string },
+  /** T-615: at most this many rows (the first by date and line). Omit for every row. */
+  limit?: number,
+): Promise<AccountEntryLine[]> {
+  const q = ex
     .select({
       entryId: journalEntries.id,
       entryDate: journalEntries.entryDate,
@@ -290,10 +315,24 @@ export async function getAccountEntries(
     })
     .from(journalLines)
     .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
-    .where(and(...conditions))
-    .orderBy(journalEntries.entryDate, journalLines.lineNo);
+    .where(accountEntryConditions(filter))
+    .orderBy(journalEntries.entryDate, journalLines.lineNo, journalLines.id)
+    .$dynamic();
 
-  return rows as AccountEntryLine[];
+  return (limit === undefined ? await q : await q.limit(limit)) as AccountEntryLine[];
+}
+
+/** T-615: the most rows the drill-down loads; its totals still cover every line. */
+export const ACCOUNT_DRILL_ROW_CAP = 500;
+
+/** T-615: what the drill-down page shows: at most `cap` rows, plus the totals and line count over the whole filter. */
+export async function getAccountDrill(
+  ex: Executor,
+  filter: DateRangeFilter & { accountId: string },
+  cap: number = ACCOUNT_DRILL_ROW_CAP,
+): Promise<{ rows: AccountEntryLine[]; debit: string; credit: string; count: number }> {
+  const rows = await getAccountEntries(ex, filter, cap);
+  return { rows, ...(await getAccountEntryTotals(ex, filter)) };
 }
 
 // -------------------------------------------------------------------------------------

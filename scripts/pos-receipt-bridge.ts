@@ -13,13 +13,9 @@ import { config } from 'dotenv';
 import { closeDb } from '@shareat/db';
 import { posReceiptBridgeSweep } from '@shareat/domain';
 import { PosReceiptBridgeAdapter } from '@shareat/etl-firestore/pos-receipt-bridge-adapter';
+import { scriptArg } from './lib/args';
 
 config({ path: '.env.local' });
-
-function arg(name: string): string | undefined {
-  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-  return hit?.split('=')[1];
-}
 
 /** Dead-man's switch. Never throws, never changes the exit code, and never prints the URL (it carries a secret token). */
 async function heartbeat(failed: boolean, lines: string[]): Promise<void> {
@@ -43,13 +39,13 @@ async function heartbeat(failed: boolean, lines: string[]): Promise<void> {
 }
 
 async function main(): Promise<number> {
-  const orgId = arg('org');
+  const orgId = scriptArg('org');
   const trigger = process.argv.includes('--manual') ? 'manual' : 'cron';
   const dryRun = process.argv.includes('--dry-run');
   console.log(`pos-receipt-bridge: running (${trigger}${dryRun ? ', dry run' : ''})${orgId ? ` for org ${orgId}` : ''}`);
 
   const port = PosReceiptBridgeAdapter.fromEnv(process.env);
-  const result = await posReceiptBridgeSweep({ orgId, trigger, dryRun, date: arg('date'), now: new Date(), port });
+  const result = await posReceiptBridgeSweep({ orgId, trigger, dryRun, date: scriptArg('date'), now: new Date(), port });
 
   const failLines: string[] = [];
   for (const o of result.outcomes) {

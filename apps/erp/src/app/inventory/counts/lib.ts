@@ -126,7 +126,7 @@ export async function countLineId(orgId: string, sessionId: string, itemId: stri
  *  resolves to "not found" under this org's RLS principal rather than ever being read. */
 export async function getCountSessionDetail(orgId: string, id: string): Promise<CountSessionDetail | undefined> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const session = await countSessionsRepo.getCountSession(tx, id);
+    const session = await countSessionsRepo.getCountSession(tx, orgId, id);
     if (!session || session.orgId !== orgId) return undefined;
 
     const locationIds = session.locations.map((l) => l.id);

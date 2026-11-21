@@ -131,23 +131,36 @@ jobs:
           echo "$RESULT" >> "$GITHUB_OUTPUT"
           echo "::notice::T-417: $(echo $RESULT)"
 
-  verify:
-    name: typecheck, test, build
+  # T-604 S2: the one `verify` job became four parallel jobs plus a gate. Measured before: 33 min 21 s in one job
+  # (typecheck 72 s, unit 307 s, integration 1499 s on 2 workers, build 63 s). The jobs share nothing, so wall time is
+  # now the slowest of them. The env block is repeated in `unit`, `integration` and `build` on purpose:
+  # tests/unit/ci-env-contract.test.ts reads it by text and pins that the three copies agree.
+  typecheck:
+    name: typecheck
     needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}  # see the note on `changes`
+    steps:
+      - uses: actions/checkout@v4
 
-    services:
-      postgres:
-        image: postgres:18
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # DEF-631: tsc outgrew node's ~2 GB default heap on 10 Oct (PR #10: exit 134, heap out of memory).
+      - name: Typecheck
+        run: npm run typecheck
         env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: shareat_test
-        ports: ['5435:5432']
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          NODE_OPTIONS: --max-old-space-size=4096
+
+  unit:
+    name: unit
+    needs: changes  # runs on docs-only changes too: the documentation guards (toc-freshness, pages ledger, ...) live in this project
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}  # see the note on `changes`
 
     env:
       # CI-only throwaway values. Real secrets live in GitHub Secrets, never here.
@@ -179,14 +192,60 @@ jobs:
       - name: Install
         run: npm ci --no-audit --no-fund
 
-      # DEF-631: tsc outgrew node's ~2 GB default heap on 10 Oct (PR #10: exit 134, heap out of memory).
-      - name: Typecheck
-        run: npm run typecheck
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-
       - name: Unit tests
         run: npm run test
+
+  integration:
+    name: integration ${{ matrix.shard }}
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}  # see the note on `changes`
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shareat_test
+        ports: ['5435:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # CI-only throwaway values. Real secrets live in GitHub Secrets, never here.
+      NODE_ENV: test
+      APP_TIMEZONE: Asia/Manila
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5435/shareat_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5435/shareat_test
+      SESSION_SECRET: ci-only-not-a-real-secret-000000000000
+      FIREBASE_PROJECT_ID: ci
+      FIREBASE_SERVICE_ACCOUNT_KEY: '{}'
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci
+
+    steps:
+      # fetch-depth: 0, same reason as the unit job (DEF-432): some integration tests also read pinned commits.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
 
       # T-251 / DEF-218 Contract 1: the restricted test role, cluster-wide, idempotent.
       # Must run before migrations apply the per-database grants that give it teeth.
@@ -197,29 +256,21 @@ jobs:
       # is explicitly '0', and nothing sets it here. ⛔ Delete or reorder this step and every
       # integration test fails to connect — loudly, which is the correct direction.
       # Evidence for the flip: 116 files / 2747 tests / 0 failed, one clean single-invocation run.
-      # T-306: these four steps are the ~8 (of ~11) minutes a docs-only push has no way to need —
-      # nothing here can be affected by a Markdown edit. Skipped only when `changes` positively
-      # determined docs-only; any uncertain answer from that job already came back `false` above,
-      # so `!= 'true'` here runs everything on any value other than the literal string "true".
       - name: Provision restricted test role
-        if: needs.changes.outputs.docs_only != 'true'
         run: node scripts/provision-test-role.mjs
 
       - name: Apply migrations
-        if: needs.changes.outputs.docs_only != 'true'
         run: npm run db:migrate
 
       # T-400: one cloned DB per vitest worker. Remove INTEGRATION_WORKERS to roll back to serial.
-      # 2 workers, not 4: the self-hosted runner's WSL VM is capped at 8 CPUs / 6 GB (11 Oct), and
-      # 2 x ~22 connections stays far under max_connections=100, so DATABASE_POOL_MAX stays default.
+      # T-604: a hosted runner on a public repo has 4 vCPU / 16 GB, and each shard has its own Postgres, so
+      # 4 workers x pool 4 stays far under max_connections=100.
       - name: Create integration worker DBs (T-400)
-        if: needs.changes.outputs.docs_only != 'true'
-        run: node scripts/make-integration-worker-dbs.mjs 2
+        run: node scripts/make-integration-worker-dbs.mjs 4
 
       # T-393: the backup tests run the REAL pg_dump / pg_restore / pg_dumpall, and pg_dump refuses a server newer
       # than itself (the service container is postgres:18). The runner's stock client is older, so install PGDG's.
       - name: PostgreSQL 18 client (T-393)
-        if: needs.changes.outputs.docs_only != 'true'
         # The self-hosted runner (ians-pc) has no passwordless sudo: it carries the client pre-installed, so skip.
         run: |
           if [ -x /usr/lib/postgresql/18/bin/pg_dump ]; then
@@ -233,25 +284,81 @@ jobs:
           sudo apt-get install -y postgresql-client-18
           echo "PG_BIN_DIR=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"
 
+      # vitest splits the files by name, not by time: compare the two shard durations after a few runs.
       - name: Integration tests (real Postgres)
-        if: needs.changes.outputs.docs_only != 'true'
         env:
-          INTEGRATION_WORKERS: '2'
-        run: npm run test:integration
+          INTEGRATION_WORKERS: '4'
+          DATABASE_POOL_MAX: '4'
+        run: npm run test:integration -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       # >>> Customer lobby
       # T-455: the customer lobby server tests need real Postgres, so they run here (the app-customer job has no database).
       # The tests set LOBBY_* and DATABASE_URL themselves; the job env supplies TEST_DATABASE_URL.
       - name: Customer server integration tests (real Postgres)
-        if: needs.changes.outputs.docs_only != 'true'
+        if: matrix.shard == 1
         run: npm run test:integration -w @shareat/customer
 
       # <<< Customer lobby
+
+  build:
+    name: build
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}  # see the note on `changes`
+
+    env:
+      # CI-only throwaway values. Real secrets live in GitHub Secrets, never here.
+      NODE_ENV: test
+      APP_TIMEZONE: Asia/Manila
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5435/shareat_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5435/shareat_test
+      SESSION_SECRET: ci-only-not-a-real-secret-000000000000
+      FIREBASE_PROJECT_ID: ci
+      FIREBASE_SERVICE_ACCOUNT_KEY: '{}'
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - uses: actions/cache@v4
+        with:
+          path: apps/erp/.next/cache
+          key: next-erp-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: next-erp-${{ hashFiles('package-lock.json') }}-
+
       # PROJECT_BIBLE.md §2 rule 10 / §8 Rule 1:
       # the production droplet NEVER builds. Builds happen here, and only here.
       - name: Build
-        if: needs.changes.outputs.docs_only != 'true'
         run: npm run build
+
+  # T-604: the ONE required check. Branch protection requires the name "typecheck, test, build", so this gate keeps it
+  # while the work runs in parallel. `if: always()` is load-bearing: a gate skipped after a failed job reports SUCCESS.
+  verify:
+    name: typecheck, test, build
+    needs: [changes, typecheck, unit, integration, build]
+    if: always()
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}  # see the note on `changes`
+    steps:
+      - name: Every job passed (a skip counts only on a docs-only change)
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          echo "$NEEDS" | jq -e --arg docs "$DOCS_ONLY" '
+            .changes.result == "success" and .unit.result == "success" and
+            ([.typecheck, .integration, .build] | all(.result == "success" or (.result == "skipped" and $docs == "true")))'
 
   app-pos:
     # T-417: the app jobs. Each runs only when its own output is true, on GitHub-hosted runners

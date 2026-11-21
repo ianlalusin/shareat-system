@@ -5,7 +5,7 @@ import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/dat
 import { previewExpenseApproval } from '@shareat/domain';
 import { buildCategoryFacts } from '@shareat/domain/business-rules';
 import { listStores, listActingPersons, listCategoriesGrouped } from '../lib';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { canReadAtStore } from '@/lib/can-read-at-store';
 import { approveExpenseAction, voidExpenseAction, updateDraftAction, deleteDraftAction } from '../actions';
 import { withOrgPrincipal } from '../lib';
@@ -59,17 +59,18 @@ export default async function ExpenseDetailPage({
   const { id } = await params;
   const sp = await withFlash(searchParams);
 
-  const { actor } = await requireSession(`/expenses/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/expenses/${id}`);
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
   const expense = await withOrgPrincipal(orgId, (tx) => expensesRepo.getExpenseById(tx, orgId, id));
   // T-577 (DEF-834): an expense outside the viewer's stores is the same not-found as a forged id. The page's own actions are edit (own draft), approve and void.
   if (!expense || !(await withOrgPrincipal(orgId, (tx) => canReadAtStore(tx, actor, expense.storeId, ['create_expense', 'edit_own_expense', 'approve_expense'])))) notFound();
 
-  const [payments, stores, persons, categories] = await Promise.all([
-    withOrgPrincipal(orgId, (tx) => expensesRepo.getPaymentsForExpense(tx, expense.id)),
+  const payments = await withOrgPrincipal(orgId, (tx) => expensesRepo.getPaymentsForExpense(tx, expense.id));
+  const [stores, persons, categories] = await Promise.all([
     listStores(orgId),
-    listActingPersons(orgId),
+    listActingPersons(orgId, expense.storeId, [expense.createdBy, expense.approvedBy, expense.voidedBy, ...payments.map((p) => p.staffId)]),
     listCategoriesGrouped(orgId),
   ]);
 

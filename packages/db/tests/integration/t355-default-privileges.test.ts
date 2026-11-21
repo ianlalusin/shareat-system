@@ -292,6 +292,8 @@ const T356_REVOKES: Record<string, readonly string[]> = {
   missed_month_adjustments: ['UPDATE', 'DELETE'],
   // T-498 S1 (0221, DEF-799): pay_rates is append-only.
   pay_rates: ['UPDATE', 'DELETE'],
+  // T-598 S10 (0271, DEF-548): no app path deletes a trade order.
+  trade_orders: ['DELETE'],
 };
 
 describe('E1 sanity — every T356_REVOKES key exists in the fixture, and every removed privilege was present in it', () => {

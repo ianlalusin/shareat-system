@@ -180,7 +180,9 @@ than discovered — which is exactly what the discovery note asked for.
 ## 9. Tests
 
 1. 100 kg slab at ₱300 in, 97 kg of three sliced products out, ₱1,000 labour: one entry,
-   `Dr 1330 30,903 / Dr 5300 97 / Cr 1310 30,000 / Cr 6xxx 1,000`, outputs layered at ₱318.59/kg,
+   `Dr 1330 30,100 / Dr 5300 900 / Cr 1310 30,000 / Cr 6xxx 1,000`, outputs layered at ₱310.31/kg
+   (corrected by T-598, DEF-154: the yield gap is worth 3 kg x the input's own ₱300/kg = ₱900, labour is not part of it, so the
+   outputs carry 30,000 + 1,000 - 900 = ₱30,100; the first draft's 30,903 / 97 / ₱318.59 did not reconcile with §3),
    and the value identity holds to the centavo.
 2. Output exceeding input is a HARD block.
 3. A pooled-trimmings case raises a SOFT warning, **posts**, and the warning is on the record.

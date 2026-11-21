@@ -18,7 +18,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { FLOOR_PX, runCensus, stylesheetsUnderApp } from './touch-target-geometry';
-import baseline from './touch-target-baseline.json';
+import { lowerMultisets, writeTotals } from '../../../tests/helpers/census-write';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = resolve(here, '..', 'src');
@@ -54,8 +54,17 @@ const TARGET_FILES = [
 ];
 
 const { files, results } = runCensus(srcRoot, globalsCssPath);
+const baselinePath = resolve(here, 'touch-target-baseline.json');
+// Read at assert time, not imported, so `npm run census:write` (which rewrites the file in this same run) is judged against what it wrote.
+const loadBaseline = () =>
+  JSON.parse(readFileSync(baselinePath, 'utf8')) as {
+    fail: Record<string, number[]>;
+    unresolved: Record<string, string[]>;
+    _totals?: { fail: number; unresolved: number; total: number };
+  };
 const failResults = results.filter((r) => r.status === 'fail');
 const unresolvedResults = results.filter((r) => r.status === 'unresolved');
+const measuredTotals = () => ({ fail: failResults.length, unresolved: unresolvedResults.length, total: results.length });
 
 describe('ACTION_LINK sweep — DEF-239 / T-249 (unchanged invariants)', () => {
   it('non-zero control: the walk actually scans a real number of files', () => {
@@ -169,411 +178,18 @@ function multisetDiff(baselineItems: readonly (string | number)[], actualItems: 
 }
 
 describe('T-262 / DEF-269 — every interactive control matches the accepted baseline', () => {
-  // ⭐ 53 → 56, T-283 + T-284 (2026-09-12). THREE controls entered the population, all of them
-  //   intentionally-accepted additions (the second of the three red cases named above), none a
-  //   regression. T-284 added the two `stockModel` radios on `admin/stores/[id]/page.tsx` — the
-  //   first writer that column has ever had (DEF-316). And T-283's capability-grant
-  //   multi-select replaced a single `<select>` with a checkbox. All three are `unresolved` for
-  //   the same reason the other 37 files are: an intrinsic checkbox/radio box is not resolvable
-  //   from source (Ian's ruling, §6.1). ⭐ FAIL is unchanged at 151 — nothing became undersized,
-  //   because all three reuse the existing full-width touch-target row idiom rather than a new
-  //   control shape.
-  // ⭐ 56 → 58, T-334 slice 2 (2026-09-21). TWO controls entered the population — the new
-  //   `components/ui/Button.tsx` and `components/ui/Input.tsx` — both intentionally-accepted
-  //   additions (the second of the three red cases named above), neither a regression.
-  //   ⛔ THEY ARE UNRESOLVABLE BY CONSTRUCTION, NOT BY SLOPPINESS, and the builder proved it
-  //   empirically rather than by argument: stripping the className-append made each resolve
-  //   cleanly, restoring it put each straight back to `unresolved` with a byte-identical reason.
-  //   The cause is structural — `className` is a destructured function PARAMETER, and
-  //   `findLocalConst` only ever inspects `ts.VariableStatement`s with an `ts.isIdentifier` name
-  //   and a literal initializer, so a parameter binding can never resolve no matter how the
-  //   reference is shaped. ⭐ A source scanner that DID resolve a runtime prop to a literal would
-  //   be the actual defect. Any component accepting a passthrough `className` for a native
-  //   control is therefore permanently in this set: `Tile.tsx`, `PhotoInput.tsx` and
-  //   `two-way-picker.tsx` (×2) were already here for the identical reason; these are members
-  //   four and five of that category.
-  //   ⭐ FAIL is unchanged at 151 — nothing became undersized. Because the sweep cannot measure
-  //   these two, the orchestrator measured them BY HAND before accepting, which is the whole
-  //   point of adjudicating rather than rubber-stamping: Button is `text-sm` (20px line-height)
-  //   + `py-2.5` (10px × 2) + `border` (1px × 2) = 42px; Input is `text-sm` + `py-2` (8px × 2)
-  //   + `border` = 38px. Both clear `FLOOR_PX` (24) comfortably, and 38px is exactly the repo's
-  //   existing form-control convention. ⚠️ What is lost here is STATIC VERIFIABILITY, not tap
-  //   size — and it is lost for every future edit to these two files, which is the real cost.
-  //   ⛔ Two bugs found on the way were NOT waved through: `BASE_CLASSES` was a `+`-joined
-  //   BinaryExpression (unresolvable — `findLocalConst` does not recurse through `resolveExpr`
-  //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
-  //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
-  //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 51 FAIL / 51 UNRESOLVED', () => {
-    // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
-    // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
-    // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
-    // take a caller className through a template like Input.tsx's (same reason string), and Checkbox.tsx's native
-    // `<input type="checkbox">` is the intrinsic checkbox box (Ian's ruling, section 6.1). touch-target-baseline.json gains the
-    // three entries. FAIL unmoved at 151: the new boxes are 44px (min-h-11).
-    // 151 -> 148 FAIL, 66 -> 49 UNRESOLVED, T-387 S8 2026-10-10: the sweep moved buttons/fields onto the 44px kit.
-    // FAIL -3: undersized 20/22px controls in customers, fixed-assets and sales-days became 44px kit controls.
-    // UNRESOLVED -17: native checkboxes/selects became kit controls in budgets, inventory/locations, pos-map, items,
-    // items/[id], ItemCodeField, store-comparison, trade/returns, setup/SubmitButton and two-way-picker.
-    // ⚠️ Not a fall: 7 inline prose links (budgets, expenses/new, inventory/production, inventory/usage, liabilities,
-    // money-transfers, owners) now sit inside a kit <Banner>, whose text-sm the census cannot see through a component.
-    // They were briefly UNRESOLVED; each got an explicit `text-sm` (visually a no-op, the Banner is text-sm) and is
-    // again the same accepted 20px inline-link FAIL it was before, entry restored unchanged.
-    // 49 -> 48 UNRESOLVED, T-387 S5 2026-10-11: components/dashboard/Tile.tsx retired (its baseline entry removed). FAIL unmoved at 148.
-    // 148 -> 147 FAIL, T-387 S7 2026-10-11: app/staff/page.tsx's 20px name link in the old table is gone (the page is now the
-    // ID-card wall plus the live roster, every control min-h-11); its touch-target-baseline.json entry is removed.
-    // 116 FAIL / 1259 total, T-411 2026-10-15: 30 tables' row links are full-height rows (h-11).
-    // components/ui/Table.tsx UNRESOLVED (T-411): RowLink's tap target is its stretched ::after (absolute inset-0) over the
-    // enclosing LinkRow, which is h-11 (44px); RowLink's own class carries no height by design.
-    // 47 -> 49 UNRESOLVED, FAIL unmoved at 116, T-448 2026-10-22. +2, none undersized:
-    //   components/ui/Button.tsx +1 (the round icon-button branch takes a caller className like the text branch; h-11 w-11 = 44px touch, 32px desktop by CSS);
-    //   components/ui/Dialog.tsx +1 (its Close button, h-8 w-8 = 32px; the font size sits behind the component boundary).
-    // T-448 x main merge: main's own +1 (T-440 expenses/recurring checkbox) stacks on the +2 above, so 48 + 2 = 50 UNRESOLVED; FAIL still 116, none new.
-    // 48 -> 47 UNRESOLVED, T-441 S7 (22 Oct): components/PhotoInput.tsx deleted; its baseline entry removed from touch-target-baseline.json.
-    // 47 -> 48 UNRESOLVED, T-440 (17 Oct): expenses/recurring gained a second intrinsic checkbox box (touch-target-baseline.json entry added).
-    // T-448 x main (05ada44) merge: re-measured
-    // 50 -> 51 UNRESOLVED, T-502 section 12: components/expenses/InvoiceBatchRecord.tsx gained intrinsic include checkboxes (baseline entry added); FAIL unmoved at 116.
-    // 49 -> 50 UNRESOLVED, merge of main + T-193: re-measured; src/app/page.tsx gov-tile 'Set it under Employer numbers' inline Link (font size unresolvable), baseline entry added.
-    // 116 -> 115 FAIL, T-520 (5 Nov, BOSS approved): /ap's invoice table replaced the amber banner's 20px inline link; baseline entry app/ap/page.tsx removed. UNRESOLVED unmoved at 51.
-    // 51 -> 50 UNRESOLVED, T-511 S6a: app/channel-settlements/SettlementForm.tsx lost its intrinsic checkbox (baseline entry removed); FAIL unmoved at 115; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
-    // 115 -> 113 FAIL, 50 -> 49 UNRESOLVED, T-550 (row 452): the retired /inventory/pos-map and /inventory/pos-usage pages left the baseline (two 20px FAIL entries, one intrinsic-checkbox UNRESOLVED entry).
-    // 113 -> 104 FAIL, 50 -> 53 UNRESOLVED, T-568 S1 (groups pass): the Inventory landing's eight inline 20px shortcut links became nav pills (baseline entry app/inventory/page.tsx removed, -8, one more left the census); the shared Table surface moved three controls (the Users Manage link, the findings summary, the staff roster) out of static reach into UNRESOLVED (baselined). No control became smaller; re-measured by runCensus(), 12 Nov 2026.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 51, unresolved: 51 }); // 53 -> 51 UNRESOLVED, T-589 B9: two description sentence links (settings/organization, settings/attendance) now resolve as inline-exempt; re-measured by running.
-    // 58 -> 53 FAIL, 51 -> 53 UNRESOLVED, T-586: seven settings pages moved onto <Page crumb title description>; their "Settings" crumb links became NAV_LINK (44px), so 5 sub-44px links left the baseline (attendance 20, expense-categories 16, organization 16+20, wastage-monitor 16), and the organization and attendance description links now sit in a prop, so their ancestry no longer resolves (+2 UNRESOLVED); re-measured by runCensus().
-    // 53 -> 51 FAIL, UNRESOLVED unmoved at 51, T-592 (17 Nov 2026): the sales-channels crumb became a NAV_LINK (44px) and its description link now resolves as inline-exempt, so two 16px links left the baseline (touch-target-baseline.json page entry [16,16,16,20] -> [16,20]); measured by runCensus().
-    // 103 -> 101 FAIL, UNRESOLVED unmoved at 51, T-590: the staff page's two 20px 'Manage ... ->' links became 44px access rows (baseline entries removed); re-measured by runCensus().
-    // 52 -> 51 UNRESOLVED, T-587 S1 (NEEDS BOSS APPROVAL): the hub's old SettingsCard anchor had no resolvable font size; the new row resolves. app/settings/page.tsx left the baseline.
-    // 101 -> 58 FAIL, UNRESOLVED unmoved at 51, T-589 B4b: 43 sub-44px navigation links (back links, sub-page links, filters, production kind chips) became NAV_LINK / FILTER_CHIP (44px) and left the baseline; re-measured by runCensus() after merging main.
-    // 104 -> 103 FAIL, T-571 (12 Nov 2026): the /ap/suppliers/[id] collapsed card holding one pencil button went; its 20px <summary> left the census (baseline entry trimmed). UNRESOLVED unmoved at 53.
-    // 53 -> 52 UNRESOLVED, FAIL unmoved at 103, T-560 (Codex F1, BOSS ruling 11 Nov): the text-size scale made page.tsx's gov-tile 'Set it under Employer numbers' link resolvable (20px, below the 24px floor); fixed with inline-flex min-h-6 so it now PASSes, and its app/page.tsx baseline entry was removed.
-    // FAIL unmoved at 113, 49 -> 50 UNRESOLVED, T-546 Tills (+7 controls, +1 radio box in app/admin/pos-tablets/TillsSection.tsx baselined in touch-target-baseline.json); re-measured after rebase on main, 8 Nov 2026, BOSS approved.
+  // The FAIL / UNRESOLVED totals live in touch-target-baseline.json (`_totals`); `npm run census:write` re-measures them (T-604 S4).
+  it('accepted-baseline totals match the baseline file', () => {
+    writeTotals(baselinePath, '_totals', measuredTotals());
+    const t = loadBaseline()._totals;
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: t?.fail, unresolved: t?.unresolved });
   });
 
-  // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
-  // buckets asserted above — PASS never was. A candidate that stops being counted AT ALL (not
-  // failed, not unresolved, just gone) moves neither number and is invisible to every check in this
-  // file. Measured: T-334 slice 3 adopting `<Input>` made native `<input>` in its 5 files go
-  // 34 -> 23 while {fail: 151, unresolved: 58} sat unmoved, because the 11 converted call sites
-  // landed nowhere — `touch-target-geometry.ts` did not recognise the capitalised tag as a
-  // candidate at all (fixed separately, same commit). This is the cheap, whole-population
-  // backstop the file's own header describes wanting ("a cheap early signal before the itemised
-  // diff below even runs") but never actually had for PASS.
+  // Audit finding F2 (T-334 slice 3): FAIL and UNRESOLVED are not the whole population; a candidate that stops being counted at all
+  // moves neither number, so the TOTAL of every candidate is pinned too.
   it('the census TOTAL — every candidate, every bucket — matches what was actually measured', () => {
-    // 1037 -> 1041, T-337 (2026-09-24). +4 PASS, FAIL/UNRESOLVED unmoved (both asserted above).
-    // Itemised: exactly 4 NEW `<summary>` source occurrences in the new
-    // `admin/access-defaults/grid.tsx` — DesktopGrid's scope-level summary and its area-level
-    // summary, and MobileSections' new scope-level summary and its new area-level summary, all
-    // landing PASS at 28/28/32/32px. MobileSections' per-POSITION summary (44px) is NOT new — it
-    // is the same "unchanged" accordion T-337 §3 names, moved here from `page.tsx` by commit 1's
-    // extraction; it was already counted before, just under a different file path, so it
-    // contributes 0 to the delta. Verified by filtering `runCensus()`'s own results to
-    // `file.includes('access-defaults')` and reading every summary candidate's line/px, not by
-    // arithmetic alone — named by component here rather than by line number, which moves under
-    // the next edit to this file.
-    // 1041 -> 1043, T-344/DEF-422 (2026-09-25). +2 PASS, FAIL/UNRESOLVED unmoved (both asserted
-    // above). Itemised: `app/findings/page.tsx`'s new "Create the missing month" form (the admin
-    // action for a hole missing inside closed books) — the `reason` text input at :312 (38px PASS)
-    // and its submit button at :318 (34px PASS). The form's three `type="hidden"` inputs (:309-311)
-    // are not interactive controls and the census does not count them. Verified by filtering
-    // `runCensus()`'s own results to `file === 'app/findings/page.tsx'` and reading each new
-    // candidate's line/px, not by arithmetic alone.
-    // 1043 -> 1045, T-345 (2026-09-26). +2 PASS, FAIL/UNRESOLVED unmoved (both asserted above).
-    // Itemised: `app/findings/page.tsx`'s new "Scheduled charges missed in closed months" section
-    // (`ScheduledChargesMissedSection`) — the `reason` text input at :397 (38px PASS) and its
-    // "Book it" submit button at :403 (34px PASS). Same shape and same two pixel values as T-344's
-    // own pair immediately above it in the same file (createMissingClosedPeriodAction's form, now
-    // at :333/:339 — unchanged, just shifted down by the new imports/section). The form's four
-    // `type="hidden"` inputs (:393-396) are not interactive controls and the census does not count
-    // them. Verified by filtering `runCensus()`'s own results to `file === 'app/findings/page.tsx'`
-    // and reading `git diff HEAD -- apps/erp/src/app/findings/page.tsx` directly, not by arithmetic
-    // alone — the file's third pre-existing input/button pair (:258/:263) is `acknowledgeFindingAction`,
-    // unrelated to either task, and was already counted before this change.
-    // 1045 -> 1048, T-346 S1 (2026-09-26). +3, FAIL/UNRESOLVED unmoved (both asserted above).
-    // Itemised, verified against `git diff HEAD -- apps/erp/src/app/admin/stores/` directly (not
-    // by arithmetic alone), exactly three new interactive controls and nothing else changed in
-    // that diff: `app/admin/stores/page.tsx`'s create-store form gains one `<input type="date"
-    // name="openingDate">` (no new button — it shares the form's existing submit); and
-    // `app/admin/stores/[id]/page.tsx` gains its own "Opening date" form — a second
-    // `<input type="date" name="openingDate">` plus its "Save opening date" submit button. The
-    // detail-page form's `type="hidden"` `storeId` input is not an interactive control and the
-    // census does not count it. ⛔ Pixel classification (PASS/FAIL/UNRESOLVED per control) held
-    // pending the code-review hold on this cycle — re-verify against `runCensus()`'s own filtered
-    // results the same way T-344/T-345's entries were, before trusting this number as final.
-    // 1048 -> 1054, T-346 S2 (DEF-427) (2026-09-26). +6, FAIL/UNRESOLVED unmoved (both asserted
-    // above). Itemised, verified against `git diff HEAD -- apps/erp/src/app/fixed-assets/ apps/erp/src/app/admin/stores/`
-    // directly (not by arithmetic alone), exactly six new interactive controls and nothing else:
-    // `app/fixed-assets/[id]/page.tsx`'s new "In service" form — the `mode` `<select>`, the
-    // "Specific date" `<input type="date" name="inServiceOn">`, the `reason` text input, and its
-    // submit button (four); `app/fixed-assets/new/page.tsx`'s new "When it goes into service"
-    // section — the `inServiceMode` `<select>` and its own `<input type="date" name="inServiceOn">`
-    // (two). Per Ian's ruling §6.1 (T-262), the mode pickers are `<select>` elements, not radios —
-    // a native radio/checkbox box is unresolvable-by-construction for the touch-target sweep, which
-    // is exactly the 8-UNRESOLVED regression an earlier radio-based draft of this same UI produced
-    // before the builder redesigned it; a `<select>` sizes from its own classes like this file's
-    // other pickers. The confirm-reversal steps on both the asset page and
-    // `app/admin/stores/[id]/page.tsx` add only `type="hidden"` inputs (`confirmedPlan`) and
-    // reuse each form's EXISTING submit button (relabelled, not a new element) — the census does
-    // not count hidden inputs, and an unchanged button contributes nothing to the delta.
-    // 1054 -> 1058, T-350 (DEF-477). +4 PASS, FAIL/UNRESOLVED unmoved (both asserted above).
-    // Itemised, verified directly against runCensus()'s own filtered results for
-    // `app/channel-settlements/page.tsx` (not by arithmetic alone): the new wired-channel-card
-    // Change control — the `<details>`'s `<summary>Change</summary>` at :195 (28px), the
-    // `moneyAccountId` `<select>` at :203 (26px), its "Save" submit `<button>` at :217 (26px), and
-    // the "Cancel" `<Link>` at :223 (28px). All four PASS; nothing else in that file's census
-    // entries moved.
-    // 1058 = 151 FAIL + 58 UNRESOLVED + 849 PASS, all measured together via runCensus() (not
-    // computed from the other two numbers, so this cannot become circular with them). Corrects
-    // this comment's own stale "1054 = ...845" breakdown, left behind when T-350 bumped the
-    // assertion below without updating the arithmetic note beside it (T-348 S1 audit).
-    // 1058 -> 1059, T-348 S1 (DEF-474). +1 PASS, FAIL/UNRESOLVED unmoved (both asserted above).
-    // The ONLY new candidate is `PageDescription.tsx`'s own `<button type="button" ...
-    // min-h-11 min-w-11>` (44x44, well above the 24px floor) — its JSX literally exists once, in
-    // that one file, which `runCensus()`'s walk of `apps/erp/src` reaches directly. The component's
-    // ~102 call sites across `app/**` contribute NOTHING: `<PageDescription>` is a plain custom tag
-    // (not native, not `Link`, not an onClick-div, not in `KNOWN_COMPONENT_HEIGHT_PX`, and — per
-    // spec item 8 — deliberately never added to `OPAQUE_COMPONENTS`), so every branch in
-    // `runCensus()`'s visitor skips it silently, same as `<Page>`/`<PageHeader>` themselves today.
-    // 1059 -> 1056, T-358 (DEF-485), 2026-09-29. -3 PASS, FAIL/UNRESOLVED unmoved (both asserted
-    // above — confirmed unchanged at 151/58 before this re-pin). `apps/ap/invoices/[id]/page.tsx`'s
-    // hand-rolled trio (the `method_1` `<select>`, `amount_1` `<input>` and `moneyAccountId_1`
-    // `<select>`) is REPLACED by `<MoneyLines>`, a plain custom tag the census walk does not resolve
-    // (same reasoning as `PageDescription` above) — three candidates leave the population outright,
-    // they do not move buckets.
-    // 1056 -> 1060, T-362 (DEF-495), 2026-09-29. +4 PASS, FAIL/UNRESOLVED unmoved (both asserted
-    // above — confirmed unchanged at 151/58 before this re-pin). The new "Payment terms" fieldset's
-    // four native controls, all styled through the pages' own `INPUT` constant (`text-sm` + `py-2`
-    // + `border` = 38px, the repo's existing form-control convention): `app/ap/page.tsx:119`
-    // (`termsMode` `<select>`) and `:125` (`creditTermsDays` `<input>`); `app/ap/suppliers/[id]/
-    // page.tsx:152` (`termsMode` `<select>`) and `:163` (`creditTermsDays` `<input>`). Verified by
-    // filtering `runCensus()`'s own results to these two files and reading each new candidate's
-    // line/px directly, not by arithmetic alone.
-    // 1060 -> 1063, T-366 S3 (DEF-380/386), 2026-10-01. +3 PASS, FAIL/UNRESOLVED unmoved (both
-    // asserted above — confirmed unchanged at 151/58 before this re-pin). The overage branch of
-    // `/remittance`'s variance form, previously a plain sentence with no controls at all, gains
-    // three: `app/remittance/page.tsx:259` (`fromMoneyAccountId` `<select>`, "Came into" — R5,
-    // shown only when the handover came from more than one account, but a static AST census counts
-    // the source element regardless of the runtime condition), `:273` (the `reason` `<input>`,
-    // "Note (optional)") and `:275` (the `recognise_income` `<button>`, "Recognise as other
-    // income (7350)"). All three are styled through the same `INPUT` constant and amber-button
-    // classes the shortage branch's sibling controls already use (38px / 38px / 32px), so all
-    // three PASS. Verified by filtering `runCensus()`'s own results to `app/remittance/page.tsx`
-    // and reading each new candidate's line/px directly.
-    // 1086 -> 1096, T-369 S9 (DEF-557), 2026-10-02. +10 PASS, FAIL/UNRESOLVED unmoved (both asserted
-    // above — the baseline test ran green at 151/58 with the new total measured). `/money-transfers`
-    // gains the "Settle between stores" panel: `app/money-transfers/page.tsx:207` (the `<summary>`
-    // disclosure) plus the nine visible controls of `SettleBetweenStoresForm.tsx` — three `<select>`s
-    // (the pair picker, `fromMoneyAccountId`, `toMoneyAccountId`), five `<input>`s (`amountOut`,
-    // `amountIn`, `transferDate`, `reference`, `notes`) and one `<button>` (the submit). The hidden
-    // `settlementId` input is not a control and is not counted. FAIL and UNRESOLVED did not move, so
-    // all ten are PASS (by partition, not per-control pixel reading). Verified by running the census
-    // (1096) and by counting the form's elements in source (3 selects + 6 inputs − 1 hidden + 1 button).
-    // 1096 -> 1097, T-372 S6 (DEF-513), 2026-10-03. +1 PASS, FAIL/UNRESOLVED unmoved (both asserted above —
-    // the baseline test ran green at 151/58 with the new total measured). `/commissary/discrepancies` now
-    // offers an OVER row its own disposition `<select>` (`app/commissary/discrepancies/page.tsx:171`: extra
-    // dispatch / return / audit) beside the short row's existing one; a static census counts the source
-    // element regardless of which branch renders. FAIL and UNRESOLVED did not move, so it is PASS by
-    // partition, not per-control pixel reading. Verified by running the census (1097).
-    // 1097 -> 1103, T-374 S6 + S7 (DEF-574, DEF-578), 2026-10-04. +6 PASS, FAIL/UNRESOLVED unmoved (both asserted
-    // above). `/commissary/discrepancies` gains the branch recount section: the order `ACTION_LINK`, the required
-    // note `<input>` and the Return `<button>` (its hidden id/storeId/resolvedOn/disposition inputs are not
-    // controls). `/inventory/pos-usage` gains the void-pull form: the reason `<input>` and its `<button>`.
-    // `/inventory/usage/[id]` gains the `ACTION_LINK` to POS usage that replaces the Void form for a pull-made
-    // record (a static census counts the source element regardless of branch). Verified by running the census
-    // (1103) and by reading the six added elements in the diff.
-    // 1103 -> 1110, T-375 S1, 2026-10-04. +7 PASS, FAIL/UNRESOLVED unmoved (the 'no control is undersized or unresolved
-    // outside the accepted baseline' test stays green). New page `/settings/pos-link` (link form controls); a static
-    // census counts the source elements regardless of branch. Verified by running the census (1110).
-    // 1110 -> 1120, T-375 S2, 2026-10-05. +10 PASS, FAIL/UNRESOLVED unmoved (the 151/58 totals test and the 'no control is
-    // undersized or unresolved outside the accepted baseline' test both stay green). The Tenders section of
-    // `/settings/pos-link` (`app/settings/pos-link/page.tsx`); a static census counts the source elements regardless of
-    // branch. Verified by running the census (1120).
-    // 1120 -> 1122, T-375 S3, 2026-10-05. +2 net, UNRESOLVED 58 -> 57 (FAIL unmoved at 151). The "From POS" checkbox in
-    // `SalesDayForm.tsx` is gone (-1, one UNRESOLVED baseline entry removed from touch-target-baseline.json); the new
-    // Import from POS button and date input (`sales-days/new/page.tsx`) and the Re-import button
-    // (`sales-days/[id]/page.tsx`) are +3 PASS. Verified by running the census (1122).
-    // 1122 -> 1125, T-375 S4, 2026-10-05. +3 PASS/UNRESOLVED, FAIL unmoved at 151; UNRESOLVED 57 -> 58. The Platform sales
-    // form (`sales-days/[id]/page.tsx`) renders one row per non-remitted channel from a single `.map` template: an amount
-    // input, a "no sales" checkbox (+1 UNRESOLVED baseline entry, touch-target-baseline.json) and the Save platform sales
-    // button. Verified by running the census (1125).
-    // 1125 -> 1130, T-375 S6, 2026-10-05. +5, read from the page source: the "Check POS again" button on the T-210 page
-    // (`reports/pos-reconciliation/page.tsx`) and on the day page, and the Post correction form on the day page (the
-    // date `<input>`, the reason `<input>` and its submit `<button>`); the hidden inputs are not controls. Nothing else.
-    // Verified by running the census (1130).
-    // 1130 -> 1137, T-377 S2 + T-378 S1/S3, 2026-10-07. +7, found by running the census and diffing against HEAD~5: the
-    // items approve form (`items/page.tsx`) gains the Measured-in `<select>` and three sold-as checkboxes (purchasable,
-    // retail, wholesale; +3 UNRESOLVED baseline entries, touch-target-baseline.json); the item detail page
-    // (`items/[id]/page.tsx`) gains the Change-unit `<select>` and its submit `<button>`; the POS usage pull page
-    // (`inventory/pos-usage/page.tsx`) gains the "Finish this pull" submit `<button>` (T-377 S2). Verified by running the census (1137).
-    // 1137 -> 1139, T-379 S3b, 2026-10-07. +2: the `deliveryFee` and `otherFees` inputs on the log-a-bill form (`ap/page.tsx`).
-    // 1139 -> 1142, T-382 S3, 2026-10-08. +3, found by running the census: the "Unlink from POS" form on `settings/pos-link/page.tsx`
-    // gains the reason `<textarea>`, the confirm `<input type="checkbox">` (+1 UNRESOLVED baseline entry, touch-target-baseline.json)
-    // and the "Unlink <store>" submit `<button>`. FAIL unmoved at 151. Verified by running the census (1142).
-    // 1142 -> 1145, T-383 S1, 2026-10-08. +3: the rename form on `items/[id]/page.tsx` gains the name and code inputs and its
-    // "Rename" submit `<button>` (super-admin only). Verified by running the census (1145).
-    // 1145 -> 1148, T-384 S3a (merged 2026-10-08). +3: `components/ui/EditableRecord.tsx` gains its Edit, Save and Cancel
-    // `<button>`s (static class literals, so the census resolves them; FAIL 151 / UNRESOLVED 62 unmoved). The S1b-min hidden
-    // `version` inputs on `settings/pos-link/page.tsx` are not counted. Verified by running the census (1148).
-    // 1148 -> 1147, int-fix 2026-10-08. -1: the item page's "Rename" submit `<button>` is gone; the rename section now uses
-    // EditableRecord (its Edit/Save/Cancel are counted once, in `components/forms/EditableRecord.tsx`). FAIL 151 / UNRESOLVED 62 unmoved.
-    // Verified by running the census (1147).
-    // 1147 -> 1145, T-384 sweep integration 2026-10-09. -2, found by running the census: the sweep (full-width FormGrid/Field,
-    // EditableRecord wrapping, "Save"/"Save draft" submit renames) removed two controls net of those EditableRecord adds.
-    // FAIL / UNRESOLVED assertions unmoved (they pass). Verified by running the census (1145).
-    // 1145 -> 1146, T-384 audit-fix 2026-10-09. +1: a sales day with no saved platform rows renders the open add form's
-    // "Save" `<button>` (A6). FAIL 151 / UNRESOLVED 62 unmoved. Verified by running the census (1146).
-    // 1146 -> 1148, T-386 S4 2026-10-09. +2: `app/items/ItemCodeField.tsx` adds the super-admin code-override input and the
-    // rename "use the suggested code" checkbox (+1 UNRESOLVED baseline entry, touch-target-baseline.json). FAIL unmoved at 151.
-    // Verified by running the census (1148).
-    // 1148 -> 1149, T-386 audit round 2026-10-09. +1: the super-admin "Use a different code" override input moved out of
-    // ItemCodeField onto app/items/page.tsx beside "Add directly" (audit #4). FAIL 151 / UNRESOLVED 63 unmoved. Verified (1149).
-    // 1149 -> 1151, T-383 S2a 2026-10-09. +2: the Retire section on `items/[id]/page.tsx` (super-admin only) has two submit
-    // `<button>`s, one in the Retire form and one in the Restore form (a static census counts both branches); the hidden
-    // `itemId`/`status` inputs are not controls. FAIL / UNRESOLVED assertions unmoved. Verified by running the census (1151).
-    // 1151 -> 1152, T-395 S2 2026-10-10. +1 PASS: the "Reopen PIN sign-in" submit `<button>` in the new
-    // `app/staff/PinSignInPanel.tsx` (the hidden `storeId` input is not a control). FAIL 151 / UNRESOLVED unmoved, so
-    // touch-target-baseline.json needs no entry. Verified by running the census (1152).
-    // 1151 -> 1152, T-387 S2 2026-10-10. +1: the new `components/feedback/SubmitButton.tsx` renders one kit `<Button type="submit">`.
-    // FAIL / UNRESOLVED assertions unmoved. Verified by running the census (1152).
-    // 1152 + 1152 -> 1153 at the merge of T-395 S2 and T-387 S2 (both +1). Verified by running the census.
-    // 1152 -> 1156, T-387 S3 2026-10-10. +4: Select.tsx `<select>`, Textarea.tsx `<textarea>`, Checkbox.tsx `<input type="checkbox">`
-    // (the 3 UNRESOLVED above) and Banner.tsx's "Go to <field>" `<a>` (assumed a PASS: the builder gives it a 24px+ box).
-    // FAIL unchanged at 151. If the Banner anchor lands FAIL or UNRESOLVED instead, correct this number and the totals
-    // with a measured census, not by guess.
-    // 1156 -> 1148, T-387 S8 2026-10-10. -8 net: the sweep removed controls it replaced with kit components; FAIL 151 -> 141, UNRESOLVED 66 -> 56.
-    // 1156 + T-395 S2's reopen button -> 1157 at the merge of PR #10 with T-387 S3. Verified by running the census.
-    // T-387 S8 merged onto main (1157): measured 1149 (S8's kit swaps net -8 against main's 1157); FAIL 148 / UNRESOLVED 49 unmoved. Verified by running the census.
-    // 1149 -> 1153, T-387 S5 2026-10-11. Measured +4: Tile.tsx retired (-1); new interactive sites are the RangeForm preset link,
-    // page.tsx's stat link, OutlineCount, and the two RightNowBand links. All 44px; FAIL 148 unmoved, UNRESOLVED 49 -> 48.
-    // 1149 -> 1154, T-387 S7 2026-10-11. +5 net: /staff gains two segmented-control links, the card links and roster-row
-    // links (kit-sized, resolved) and loses the old table's name link; FAIL 148 -> 147 (that link), UNRESOLVED 49 unmoved.
-    // Verified by running the census (1154).
-    // 1158 with S5 and S7 together (1149 + 4 + 5), T-387 S5-S7 combined 2026-10-11.
-    // 1158 (T-387 S5-S7 on main) + 12 (T-390 S5 cutover UI) = 1170, measured after merging origin/main 12 Oct.
-    // 1170 + 2 (T-404, 2026-10-14: /admin/stores "Open a branch" summary + /ap/suppliers/[id] invoice row link) = 1172.
-    // release 2026-10-14: 1170 + 2 (T-404) + 18 (T-392 S5) + 86 (T-401 S4) + 16 (T-401 S5) = 1292.
-    // 116 FAIL / 1259 total, T-411 2026-10-15: 30 tables' row links are full-height rows (h-11).
-    // + T-408 (/ap VAT/OR controls, /ap/vat page). Total re-measured on release 2026-10-16.
-    // 1259 -> 1245, release 2026-10-16 combined branch, re-measured (1249 before the three T-411 sweeps of vat, usage drafts and recipes, which each fold a link and its row into one RowLink): T-412 swapped confirm checkboxes and danger buttons for
-    // ConfirmDestructive across screens (not itemised; net -10 measured). FAIL 116 unmoved. UNRESOLVED 48 -> 47: settings/pos-link's
-    // "I understand" checkbox is gone (T-412 retype-the-name), so its touch-target-baseline.json entry is removed.
-    // 1245 -> 1244, DEF-654 2026-10-16: the plain 'void' collection button became a ConfirmDestructive (not a census candidate).
-    // +4 (16 Oct): T-416 clear-approval-PIN-cap button on admin/users/[personId]; T-418 one-click Delete draft / Delete usage draft / Delete template buttons (expenses/[id], inventory/usage/[id], expenses/recurring).
-    // +1 (16 Oct): T-432 the bill page's "Pay this bill" link (ap/invoices/[id]); the form's new `source` select replaces the old account select, net 0.
-    // +1 (16 Oct): T-430 "Starts from" date field on the expenses/recurring create form.
-    // +4 (16 Oct): T-431 Everything unpaid page controls (all pass: 32/32/32/44px)
-    // +6 (16 Oct): T-433 order page — Print delivery receipt link, BIR invoice no. input + save button, pay-now amount, money account select, receipt photo
-    // -1 (16 Oct): T-433 BIR invoice no. form moved into EditableRecord, so its Save button leaves the census
-    // +7 (16 Oct): T-434 staff detail page photo and signature controls (net +7 measured, 1259 -> 1266; the "View signature" link is a per-click link).
-    // +4 (17 Oct): T-386 /staff Positions tab - the third view-switch link, the per-position <details> summary, and the holder link (plus the add form's controls, measured net +4, 1266 -> 1270).
-    // +45 (17 Oct): T-436 leave tracking - attendance/leave page (request, record, approve, reject, cancel, void, certificate attach/view) and settings/attendance leave kinds and caps controls (1266 -> 1311 measured).
-    // = 1315 after both merged (17 Oct)
-    // +35 (17 Oct): T-190 payroll screens (rates page, government IDs on the staff page, payslip lines; net +35 measured on its older base).
-    // = 1352 after T-190 merged onto main (17 Oct; expected 1350, measured 1352: the two extra controls come from where the T-190 screens meet T-436/T-386 on the same pages)
-    // +5 (17 Oct): T-438 hire name boxes and rename form
-    // +6 (17 Oct): T-441 S1 shared photo control on /ap (Lightbox dialog/Close/Open PDF, PhotoUpload shape button/file input/action button; 1357 -> 1363 measured).
-    // -1 (17 Oct): T-440 S1 supplier add form - Days-to-pay loses type=number, a Button becomes SubmitButton (1357 -> 1356 measured).
-    // = 1362 with both merged (17 Oct)
-    // +16 (17 Oct): T-440 S3-S7 sweep - ruled fields moved onto Field/CheckedForm (helper lines, SubmitButton, the owners SettleForm split; 1362 -> 1378 measured).
-    // +12 (18 Oct): T-443 items page - kind filter chips (6), the look-alike panel's note box + "Different items" button (per pair), the
-    //   dismissed-pairs list (summary, links, Undo), the Variation-of selects on the request form and approve row, and the item page's
-    //   Variations section (links, select, Save). Measured 1362 -> 1374; all 12 new controls are >= 24px (the 5 that were 20px got py-0.5).
-    // T-444: one new Review and approvals disclosure summary; all existing controls remain.
-    // +9 (22 Oct): T-448 modal forms - the shared Dialog's Close button, every form's Save/Cancel/Edit now icon buttons, add forms moved into dialogs (1375 -> 1384 measured; the 9 new controls are 32px desktop / 44px touch icon buttons, or the 2 UNRESOLVED above).
-    // T-448 x main merge: main's 1392 (T-450/T-451 controls) + this branch's +9 = 1401 measured.
-    // Combined T-440 controls plus T-448: Books moves into the financial StatCard map.
-    // SSR checks retain Assets and Books links; this removes one static scanner site.
-    // T-450: one new native DisclosureCard summary, authored min-h-11 (44px); no fail/unresolved exemption.
-    // T-451: one explicit Remove staff positions submit control; existing size/baseline checks still apply.
-    // T-464: +8 controls (measured), all >= 24px, none baselined: the paired-tablet sign-in form and /settings/pos-tablet.
-    // T-448 x main (b2a0ebe) merge: re-measured
-    // T-448 x main (05ada44) merge: re-measured
-    // 49 -> 50 UNRESOLVED, merge of main + T-193: re-measured; src/app/page.tsx gov-tile 'Set it under Employer numbers' inline Link (font size unresolvable), baseline entry added.
-    // T-441 S7 (22 Oct): PhotoInput.tsx deleted (its 2 controls leave the census with it): 1400 -> 1398.
-    // T-448 follow-up (24 Oct): trial balance's inline filter form replaced by the shared ReportFilters
-    // (its 6 controls leave the census; the shared component's were already counted), measured: 1407 -> 1401.
-    // T-448 Amendment A3 (25 Oct): inline add-forms moved into FormModal; re-measured 1401 -> 1398.
-    // 1398 -> 1399 after merging main 9e4778d (one new control).
-    // 1401 -> 1403, T-475 S3 (25 Oct). +2 PASS, FAIL/UNRESOLVED unmoved (asserted above): the /ap "Self-verified" filter link and its sibling control; re-measured by runCensus().
-    // Merge of T-448 A3 (1399) with main 4444bb6 (1403): re-measured by runCensus() = 1401.
-    // 1403 -> 1405, T-398 S5c: customer credit terms (+2), re-measured.
-    // 1405 -> 1414, T-398 S5d: inbound list + receipt form, re-measured.
-    // 1414 -> 1415, T-398 S5e: one new control (the credit-note action on the order page), re-measured by runCensus().
-    // Merge of T-398 S5 with main 26605d1 (T-448 A3): re-measured by runCensus() = 1413 (1401 + S5 +12).
-    // 1413 -> 1422, T-398 S6d: the franchise screens' controls (+9), re-measured by runCensus().
-    // 1434 -> 1440, T-193 S6: month detail, its CSV link, and the employer-number forms. Merge of main + T-193: re-measured.
-    // 1450 -> 1448, T-500: the contribution-row form moved into StatutoryRateForm and shares its controls (-2); re-measured by runCensus().
-    // 1448 -> 1455, T-505: the POS tablets screen (store picker, revoke form, register form, clear-lock form); re-measured by runCensus().
-    // 1448 -> 1453, T-502: expense-category selects on the request and approve forms (+2) and the item page's Expense category and Other names sections (+3); re-measured by runCensus().
-    // 1453 -> 1458, T-502 section 11: sub-category selects on the request, approve and item forms (+3), and the sub-category add/rename/retire controls on the expense categories screen (+2); re-measured by runCensus().
-    // 1458 -> 1460, T-502 section 12: the part picker and the invoice page's batch table replaced the old category/payment controls (+2 net); re-measured by runCensus().
-    // 1460 -> 1457, T-502 section 14: the batch Save, the invoice modal's Record expense and /expenses/new's Save draft became SubmitButton (-3, not census candidates); re-measured by runCensus().
-    // merged with main: +1, T-504: sales-days/DraftMemory.tsx, the "Discard" button of the restored-draft line (ACTION_LINK, 32px), re-measured.
-    // 1468 -> 1469, T-507: the Due-from-delivery-platforms section's unverified-days link (+1, 44px; the channel row link is a RowLink, not a census candidate); merged with main, re-measured by runCensus().
-    // 1469 -> 1473, merged with main after t502-s5 (re-measured by runCensus()).
-    // 1473 -> 1478, T-511 S2b, 3 Nov, BOSS approved: +5 compliant controls (all pass the 44 px rule; FAIL/UNRESOLVED baselines unchanged): sales-channels select, code input and submit Button; loans repayment amount input and submit Button.
-    // 1478 -> 1490, T-508 S2b, 4 Nov 2026, BOSS approved: +12 compliant controls (kitchen stations and routing).
-    // 1490 -> 1494, T-508 S2b design fixes, 4 Nov 2026, BOSS approved.
-    // 1494 -> 1495, T-511 S4, 5 Nov 2026, BOSS approved: +1 control on /channel-settlements/upload (the upload form), re-measured by runCensus() after the rebase on main (FAIL/UNRESOLVED baselines unchanged).
-    // 1495 -> 1506, T-510 S3, 5 Nov 2026 (NEEDS BOSS APPROVAL): +11 controls, all passing the size rule (FAIL/UNRESOLVED baselines unchanged), re-measured by runCensus() (not itemised):
-    // the store page's lunch-and-dinner hours section and /menu/prices' per-slot controls and When select.
-    // 1506 -> 1510, T-510 S3 follow-up, 5 Nov 2026 (BOSS approved /menu/hours): +4 compliant controls, re-measured by runCensus(): the /menu/hours page and its links.
-    // 1510 -> 1509, T-510 S3 audit fixes (NEEDS BOSS APPROVAL): the hours Retire button became a ConfirmDestructive (not a census candidate), net -1, re-measured by runCensus().
-    // 1509 -> 1518, T-519 S2, 6 Nov 2026, BOSS approved: +9 controls on the staff page deduction-agreements section (record form, scan upload, cancel with reason, history), re-measured after the rebase on e3d048c.
-    // 1518 -> 1520, T-519 S2 review fixes, 6 Nov 2026, NEEDS BOSS APPROVAL: +2 controls in the agreements section (the View signed scan link, the Cancel agreement reveal), both size-compliant, re-measured by runCensus().
-    // 1520 -> 1532, T-511 S5b rebased on 79966e8, 6 Nov 2026, BOSS approved: +12 controls on /channel-settlements/review (filters, buttons, forms, Previous/Next page), measured 1495 -> 1507 on its own base.
-    // 1532 -> 1537, T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: +5 compliant controls on the new /settings/business-rules screen (breadcrumb link, folded-history summary, change form value, date and reason fields).
-    // 1537 -> 1540, T-544, 7 Nov 2026, re-measured by runCensus(): +3 compliant controls (the record page's back link, the overview's + Record settlement link-button, the tab strip's links); the FormModal trigger left the overview. FAIL/UNRESOLVED baselines unchanged.
-    // 1540 -> 1553, T-526 POS kiosk shell (+13 controls), re-measured on main, 7 Nov 2026, BOSS approved.
-    // 1553 -> 1557, T-526b (+4 controls), re-measured on main, 7 Nov 2026, BOSS approved.
-    // 1557 -> 1586, T-527 (+29 controls), re-measured on main, 7 Nov 2026, BOSS approved.
-    // 1586 -> 1587, T-527b (+1 controls), re-measured on main, 7 Nov 2026, BOSS approved.
-    // 1587 -> 1615, T-528 (+28 controls), re-measured on main, 7 Nov 2026, BOSS approved.
-    // 1615 -> 1618, +3 T-528c controls (Pay-blocked reason, Reprint, Done); BOSS approved
-    // 1618 -> 1619, +1 VAT details disclosure (T-528d); BOSS approved
-    // 1540 -> 1541, T-511 S6d, 8 Nov 2026, re-measured by runCensus(): +1 compliant control (the loan section's <summary> on /channel-settlements/record, 44px). FAIL/UNRESOLVED baselines unchanged.
-    // 1619 + S6d = 1620 after merging main into #196, 8 Nov 2026, BOSS approved.
-    // 1540 -> 1514, T-550 (row 452): -26 controls, the two retired pages (/inventory/pos-map, /inventory/pos-usage) and the one ACTION_LINK on /inventory/usage/[id] that pointed at the retired pull page (now plain text); FAIL/UNRESOLVED moved as noted above; measured by runCensus().
-    // 1514 -> 1515, T-550 (Ian, 8 Nov): the Void POS pull submit <button> (ConfirmDestructive) moved onto /inventory/usage/[id]; net vs 1540 is -25; FAIL/UNRESOLVED unmoved at 113/49; measured by runCensus(); pending BOSS approval.
-    // 1620 - 25 (T-550) = 1595 after merging main into #207, 8 Nov 2026, BOSS approved.
-    // 1595 -> 1602, T-546 Tills (+7 controls); re-measured after rebase on main, 8 Nov 2026, BOSS approved.
-    // 1602 -> 1614, +12 T-529 Kitchen/Refills controls; re-measured after rebase on main, 8 Nov 2026, BOSS approved.
-    // 1614 -> 1626, +12 T-531 till and day-close controls, all PASS (FAIL/UNRESOLVED buckets unmoved); re-measured on main ff553f6, 11 Nov 2026, BOSS approved.
-    // 1626 -> 1631, +5 T-569 POS data page controls, all PASS
-    // 1631 -> 1632, T-566 (P-007, Ian 11 Nov): +1 compliant control, the refill flavour pill <button aria-pressed> on /pos Refills (48 px); FAIL/UNRESOLVED unmoved at 113/50 (asserted above); measured by CI runCensus().
-    // 1626 -> 1628, T-568 S1 (groups pass): +2 net controls across the table/card pass; FAIL/UNRESOLVED moved as noted above; re-measured by runCensus(), 12 Nov 2026.
-    // 1628 -> 1629, T-568 S2: the admin PIN confirmation dialog adds two buttons (Cancel, Yes) and the PIN row's Button became a SubmitButton (not a census candidate), net +1, all PASS at 44px; FAIL/UNRESOLVED unmoved; re-measured by runCensus().
-    // 1635 -> 1636, T-575 (13 Nov 2026): +1 compliant control, the On/Off <select> the business-rules screen shows for a `flag` rule (T-576 will be its first key); FAIL/UNRESOLVED unmoved; re-measured by runCensus().
-    // 1636 -> 1638, T-576 (13 Nov 2026): +2 compliant controls, the manager-PIN box (data-erp-size="free", min-h-12) in LineApprovalField and the confirm button of ManagerPinDialog (min-h-16); FAIL/UNRESOLVED unmoved (asserted above); re-measured by runCensus().
-    // 1638 -> 1637, T-571 (12 Nov 2026): the /ap/suppliers/[id] collapsed-card <summary> left the census; measured by runCensus().
-    // 1637 -> 1638, T-511 S7b, 11 Nov 2026 (BOSS approved): +1 control on /channel-settlements/review, re-measured by runCensus(); FAIL/UNRESOLVED baselines unchanged.
-    // 1637 -> 1647, T-564 (14 Nov 2026): +10 controls, the Settlement wiring panel and per-channel bank-names form on /settings/sales-channels plus three links on /admin/stores/[id]; FAIL/UNRESOLVED unmoved (asserted above); re-measured by this test's own runCensus() on lane/t564 over main 93e638a.
-    // 1647 -> 1645, T-564 guard fix (15 Nov 2026): the two T-564 forms moved into <EditableRecord>, so their raw Save buttons left the census; re-measured by runCensus().
-    // 1638 + T-564 net +8 = 1646 after merging main (incl. #267) into #266, 15 Nov 2026; re-measured by runCensus().
-    // 1646 -> 1648, T-533 S3 (15 Nov 2026): +2 compliant controls, the two 44px links on /admin/stores/[id]/pos-preflight; FAIL/UNRESOLVED unmoved (asserted above); re-measured by runCensus().
-    // 1648 -> 1653, T-533 S1 (15 Nov 2026): +5 controls on /admin/stores/[id], the See-the-pre-flight link, the Set POS mode record form (mode, date, reason) and the confirm step's Cancel link; FAIL/UNRESOLVED unmoved (asserted above); re-measured by this test's own runCensus() on lane/t533.
-    // 1653 -> 1654, T-587 S4 (NEEDS BOSS APPROVAL): +1 compliant control, the store page's Readiness <summary> (44 px), re-measured by runCensus().
-    // 1654 -> 1656, T-583 (15 Nov 2026): +2 compliant controls (min-h-11), the stock-count link and the Record a delivery link on each /inventory/locations card; the Recipes text link left /inventory/production and the Cookbook settings button replaced it (net 0); FAIL/UNRESOLVED unmoved; re-measured by runCensus().
-    // 1656 -> 1657, T-587 S1 (BOSS approved +1, as measured): settings hub rebuilt as rows; re-measured by runCensus() after merging main.
-    // 1657 -> 1688, T-584 (15 Nov 2026): +31 controls, the Documents screens; re-measured by runCensus().
-    // 1688 -> 1689, T-587 S3 (NEEDS BOSS APPROVAL): +1 hub row link (POS tablet approvals, so /admin/pos-tablets is not orphaned once it leaves the sidebar), re-measured by runCensus() on main 145f7cc.
-    // 1689 -> 1690, T-589 B3a: +1 compliant control, the 44px link row in the dashboard's plain welcome (WelcomeFallback); FAIL/UNRESOLVED unmoved (asserted above); re-measured by runCensus().
-    // 1690 -> 1686, T-589 B3d: the sales-channels Retire link, the sales-days Withdraw day button, the fixed-assets Run button and the owners Close month button became tier="confirm" ConfirmDestructive (a kit component, not a candidate); re-measured by runCensus() after merging main.
-    // 1686 -> 1686, T-589 B4a: Button/EditableRecord carry their word beside the icon and moved no candidate; re-measured by runCensus() after merging main.
-    // 1686 -> 1687, T-590 A1: the Edit name, Edit positions and Change photo buttons were added and the Name card's Edit and Photo and signature controls left; re-measured by runCensus().
-    // 1687 -> 1690, T-589 B4b: 44px links on the new print / branch-order message pages and the swapped filter and back links; re-measured by runCensus() after merging main.
-    // 1690 -> 1689, T-586: settings crumbs and descriptions moved into <Page>; re-measured by runCensus().
-    // 1689 -> 1692, T-589 B8: the commissary/catalogue empty state carries its own "+ Link store" modal (trigger + 2 selects); re-measured by runCensus() after merging main.
-    // 1692 -> 1692, T-592 (17 Nov 2026): the sales-channels page keeps 19 census controls (crumb and description links, store select, band Edit/Retire, store-code box and Save, statement-matching forms); measured by runCensus() before and after.
-    // 1692 -> 1686, T-592 R4 (17 Nov 2026): the Statement matching section left /settings/sales-channels (Settlement wiring EditableRecord, one bank-names EditableRecord per settle-later channel, their fields and the email checkbox): -6 census controls on the fixture-free source count; measured by runCensus() before (1692) and after (1686).
-    // 1686 -> 1687, T-601 S2 (18 Nov 2026): the /pos/receipts placeholder became the Receipts list (+1 census control on the fixture-free source count); measured by runCensus() (the test reported 1687 against 1686).
-    // 1687 -> 1688, T-606 S4 (18 Nov 2026): the admin-only "Move to Channel receivable" button on a platform channel's card (+1 census control); measured by runCensus() (the test reported 1688 against 1687).
-    // 1688 -> 1694, T-532 S1 (19 Nov 2026): the /pos/printer screen and the shell Printer link: +6 census controls; the test reported 1694 against 1688, FAIL/UNRESOLVED unmoved.
-    // 1694 -> 1705, T-534 (19 Nov 2026): +5 for S2's Convert section on the Till tab (its branch did not bump this) and +6 for S3's Wrong payment method dialog on /pos/receipts (four buttons and the reference and reason boxes: all pass, min-h-12 or taller); FAIL/UNRESOLVED unmoved; re-measured by runCensus() (re-based on main after T-532 S1: 1694 + 11 = 1705; the original measure was 1699 against 1688).
-    // 1705 -> 1714, T-534 S4 (19 Nov 2026): +9 for the Refund dialog on /pos/receipts (the Refund button, the item minus and plus, the money-back box, the wallet reference box, the reason box, Print slip again, Done, and the Refund save button; all min-h-12 or taller, so FAIL/UNRESOLVED are unmoved); re-measured by runCensus() (merged with T-532 S1 +6; the final merged measure, by runCensus(), is 1714 against 1694 on main b6ee979).
-    // 1714 -> 1719, T-611 S1: Copy-from-store dialog +5 (all min-h-11 or taller, so FAIL/UNRESOLVED are unmoved).
-    // 1719 -> 1722, T-612 (20 Nov 2026): the staff record's Account row adds Activate, Reinstate and the Suspend dialog trigger (+3 census controls); re-measured by the test after merging main (1719 + 3).
-    // 1722 -> 1724, T-613 D4: Find a receipt on /pos/receipts +2 (the number box and the Find button, both min-h-12; FAIL/UNRESOLVED unmoved).
-    expect(results.length).toBe(1724);
+    writeTotals(baselinePath, '_totals', measuredTotals());
+    expect(results.length).toBe(loadBaseline()._totals?.total);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
@@ -583,12 +199,15 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
-    const baselineFail: Record<string, number[]> = baseline.fail;
-    const baselineUnresolved: Record<string, string[]> = baseline.unresolved;
     const failByFile: Record<string, number[]> = {};
     const unresolvedByFile: Record<string, string[]> = {};
     for (const r of failResults) (failByFile[r.file] ??= []).push(r.px);
     for (const r of unresolvedResults) (unresolvedByFile[r.file] ??= []).push(r.reason);
+    lowerMultisets(baselinePath, 'fail', failByFile);
+    lowerMultisets(baselinePath, 'unresolved', unresolvedByFile);
+    const baseline = loadBaseline();
+    const baselineFail: Record<string, number[]> = baseline.fail;
+    const baselineUnresolved: Record<string, string[]> = baseline.unresolved;
 
     const report: string[] = [];
     const allFailFiles = new Set([...Object.keys(baselineFail), ...Object.keys(failByFile)]);

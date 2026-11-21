@@ -18,8 +18,8 @@ import { Suspense } from 'react';
 // ⛔ From the CHOKEPOINT, not from `@shareat/db` — T-261 §B6. That module is where the
 //    constraint-refusal counter lives; a direct import silently bypasses it.
 import { withOrgPrincipal } from '../../app/expenses/lib';
-import { heldCapabilities } from '@shareat/auth';
-import { commissaryCatalogueRepo } from '@shareat/db';
+import { heldFor } from '../../lib/page-access';
+import { commissaryCatalogueRepo, personsRepo } from '@shareat/db';
 import { currentSession } from '../../lib/session';
 import { GROUPS } from '../nav';
 import { commissaryNavAllowed, navHrefAllowed } from '../../lib/route-capability';
@@ -55,10 +55,14 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
    */
   // ⛔ Principalled — see `page-access.tsx`'s note. T-231.
   // DEF-803: the commissary usage rides the same transaction - one more cheap query, not one per link.
-  const { held, usage } = await withOrgPrincipal(session.actor.orgId, async (tx) => ({
-    held: await heldCapabilities(tx, session.actor),
-    usage: await commissaryCatalogueRepo.commissaryUsage(tx, session.actor.orgId),
-  }));
+  const [held, { usage, signedInAs }] = await Promise.all([
+    heldFor(session.actor.orgId, session.actor.personId), // T-602 S3: shared with the page's own gate for this request
+    withOrgPrincipal(session.actor.orgId, async (tx) => ({
+      usage: await commissaryCatalogueRepo.commissaryUsage(tx, session.actor.orgId),
+      // DEF-271: the sign-out controls name the person, so a shared back-office PC shows who it is about to end.
+      signedInAs: (await personsRepo.getPersonById(tx, session.actor.orgId, session.actor.personId))?.displayName ?? null,
+    })),
+  ]);
   const allowedHrefs = GROUPS.flatMap((g) => g.links.map((l) => l.href)).filter(
     (href) => navHrefAllowed(href, held as ReadonlySet<string>) && commissaryNavAllowed(href, usage),
   );
@@ -66,9 +70,9 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider initialState={initialState}>
       <div className="flex min-h-dvh">
-        <Sidebar allowedHrefs={allowedHrefs} />
+        <Sidebar allowedHrefs={allowedHrefs} signedInAs={signedInAs} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar />
+          <TopBar signedInAs={signedInAs} />
           <main className="erp-workspace min-w-0 flex-1"><PhoneTableCards><Suspense fallback={null}><ScreenState scope={`${session.actor.orgId}:${session.actor.personId}`} /></Suspense>{children}</PhoneTableCards></main>
         </div>
       </div>

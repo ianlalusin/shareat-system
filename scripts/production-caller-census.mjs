@@ -119,7 +119,8 @@ const FLOOR_EXPORTS = 1200;
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
-const ROOT = (args.find((a) => !a.startsWith('--')) || process.cwd()).replace(/\\/g, '/');
+// DEF-402: the value after `--probe` is a symbol list, never the scan root.
+const ROOT = (args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--probe') || process.cwd()).replace(/\\/g, '/');
 // DEF-669: '.claude' holds nested git worktrees (a full second copy of the repo) - never scan it.
 const SKIP_DIR = new Set(['node_modules', '.next', 'dist', 'build', '.turbo', 'coverage', '.git', '.claude']);
 
@@ -155,7 +156,7 @@ const isSpike = (f) => f.startsWith('spike/');
  * numbers stay true. `${...}` inside a template literal is KEPT — it is real code.
  * Failure mode 1 lives here. Do not remove.
  */
-function stripNonCode(src) {
+function stripNonCode(src, isJsx = false) {
   const out = src.split('');
   const n = src.length;
   let i = 0;
@@ -192,6 +193,11 @@ function stripNonCode(src) {
     }
     i++;
   }
+  // DEF-403: JSX text is prose, not code ("press Allocate to fill the boxes" is not a call to allocate). Only text with no call,
+  // assignment or statement punctuation is blanked, so a comparison like `a > b && c < d` inside an expression keeps its calls.
+  if (isJsx) {
+    return out.join('').replace(/>([^<>{}()=;&|]*[A-Za-z][^<>{}()=;&|]*)</g, (m, text) => '>' + text.replace(/[^\r\n]/g, ' ') + '<');
+  }
   return out.join('');
 }
 
@@ -201,7 +207,7 @@ for (const f of files) {
   try {
     const text = readFileSync(join(ROOT, f), 'utf8');
     raw.set(f, text.split(/\r?\n/));
-    code.set(f, stripNonCode(text).split(/\r?\n/));
+    code.set(f, stripNonCode(text, /\.tsx$/.test(f)).split(/\r?\n/));
   } catch { /* unreadable — skip */ }
 }
 
@@ -318,6 +324,11 @@ function runControls() {
     failures.push(`EXPORT FLOOR: found ${results.length} exported functions, expected at least ` +
       `${FLOOR_EXPORTS}. The declaration patterns matched almost nothing.`);
   }
+
+  // DEF-403 control: prose between JSX tags must not count, a real <Card /> usage must.
+  const jsxProbe = stripNonCode('const a = <p>press Card to fill</p>;\nconst b = <Card x={1} />;', true);
+  if (/press Card/.test(jsxProbe)) failures.push('JSX CONTROL FAILED: a word in JSX text came back as code - prose is being counted as a call site.');
+  if (!/<Card x/.test(jsxProbe)) failures.push('JSX CONTROL FAILED: a real <Card /> usage was blanked - the JSX stripper is eating code.');
 
   for (const name of CONTROL_POSITIVE) {
     const r = byName.get(name);

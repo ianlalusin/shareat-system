@@ -77,3 +77,8 @@ knowledge/
 *.docx
 *.doc
 *.pdf
+
+# DEF-864: leftover login script, saved signed-in session, and the browser-tool scratch folder
+.tmp-login.mjs
+.tmp/
+.playwright-mcp/

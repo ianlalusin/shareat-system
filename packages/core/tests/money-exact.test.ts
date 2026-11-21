@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decimal, divideMoney, multiplyToMoney, money } from '../src/money';
+import { decimal, divideMoney, multiplyByFraction, multiplyToMoney, money } from '../src/money';
 
 /**
  * T-371 S4 — the exact qty x cost -> Money and Money / integer helpers. Half-up, away from zero, once, to the centavo.
@@ -60,5 +60,13 @@ describe('float control — the same cases are wrong under Number + toFixed(2)',
     expect((1.5 * 0.01).toFixed(2)).toBe('0.01');
     expect(multiplyToMoney(q('1'), c('1.005'))).not.toBe(money((1 * 1.005).toFixed(2)));
     expect(divideMoney(money('0.03'), 2)).not.toBe(money((0.03 / 2).toFixed(2)));
+  });
+});
+
+describe('multiplyByFraction (DEF-859)', () => {
+  it('rounds one exact half centavo up, away from zero, once', () => {
+    expect(multiplyByFraction(money('100.02'), 150n, 1800n)).toBe(money('8.34')); // 833.5 centavos
+    expect(multiplyByFraction(money('-100.02'), 150n, 1800n)).toBe(money('-8.34'));
+    expect(() => multiplyByFraction(money('1'), 1n, 0n)).toThrow(RangeError);
   });
 });

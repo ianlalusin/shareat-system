@@ -9,7 +9,7 @@
  * `resolveActor` (T-138), which is why `created_by` on an employment is worth anything at all —
  * v1's equivalent is a client-supplied parameter on ~24 server actions (landmine #17).
  */
-import { authorize, can, holdsSuperAdminAuthority, isAdministrative, isStoreManagerOrAbove, type Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, can, holdsSuperAdminAuthority, isAdministrative, isStoreManagerOrAbove, type Actor } from '@shareat/auth';
 import {
   accessRepo,
   auditLogRepo,
@@ -50,6 +50,30 @@ export { formatDisplayName, nameKey, normaliseNamePart, normaliseName, type Name
 export * from './staff-media';
 // T-612: activate / suspend / reinstate a person's account.
 export * from './account-status';
+
+/** DEF-504: the ONE sentence for an employment id that does not exist, is another organisation's, or sits at a store the caller cannot manage. */
+const EMPLOYMENT_OUT_OF_REACH = 'That employment does not exist, or it is not at a store where you manage staff.';
+
+/**
+ * DEF-504: read the employment and authorise `enrol_staff` at its store, with ONE refusal for "no such id" and "not yours", so
+ * the reply cannot be used to probe ids (the DEF-497 shape, as `recordAdjustment` does it). The real reason goes on `cause`.
+ */
+async function employmentForEnrolment(tx: Tx, actor: Actor, employmentId: string, context: string): Promise<EmploymentRow> {
+  const out = (why: string, cause?: unknown) => {
+    const err = new AuthorizationError(`${context}: ${why}`, 'enrol_staff', EMPLOYMENT_OUT_OF_REACH);
+    if (cause !== undefined) err.cause = cause;
+    return err;
+  };
+  const existing = await employmentRepo.getEmployment(tx, employmentId);
+  if (!existing || existing.orgId !== actor.orgId) throw out(`no employment ${employmentId} in org ${actor.orgId}`);
+  try {
+    await authorize(tx, actor, 'enrol_staff', { storeId: existing.storeId, orgId: existing.orgId });
+  } catch (err) {
+    if (err instanceof AuthorizationError) throw out(err.message, err);
+    throw err;
+  }
+  return existing;
+}
 
 export class EmploymentError extends Error {
   /** A sentence a person at the screen (or Ian at the terminal) can act on. Set where the refusal is about their input. */
@@ -368,9 +392,7 @@ export async function endEmployment(
   actor: Actor,
   input: { employmentId: string; endedOn: string; employmentStatus: EmploymentStatus },
 ): Promise<EmploymentRow> {
-  const existing = await employmentRepo.getEmployment(tx, input.employmentId);
-  if (!existing) throw new EmploymentError(`No employment ${input.employmentId}`);
-  await authorize(tx, actor, 'enrol_staff', { storeId: existing.storeId, orgId: existing.orgId });
+  const existing = await employmentForEnrolment(tx, actor, input.employmentId, 'endEmployment');
 
   if (!ENDED_STATUSES.includes(input.employmentStatus)) {
     throw new EmploymentError(
@@ -529,9 +551,7 @@ export async function setEmploymentPositions(
   actor: Actor,
   input: { employmentId: string; positionIds: string[]; primaryPositionId: string },
 ): Promise<void> {
-  const existing = await employmentRepo.getEmployment(tx, input.employmentId);
-  if (!existing) throw new EmploymentError(`No employment ${input.employmentId}`);
-  await authorize(tx, actor, 'enrol_staff', { storeId: existing.storeId, orgId: existing.orgId });
+  const existing = await employmentForEnrolment(tx, actor, input.employmentId, 'setEmploymentPositions');
 
   const resolved = await resolvePositions(tx, actor, {
     personId: existing.personId,

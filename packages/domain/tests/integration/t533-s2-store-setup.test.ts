@@ -20,7 +20,7 @@ afterAll(closeAll);
 
 const stand = (f: Fx, actor: Fx['admin'], number: unknown, storeId = f.storeId) => asOrg(f.orgId, (tx) => upsertPosStand(tx, actor, { storeId, number }));
 const preset = (f: Fx, actor: Fx['admin'], name: unknown, valueType: unknown, value: unknown, storeId = f.storeId) =>
-  asOrg(f.orgId, (tx) => upsertPosDiscountPreset(tx, actor, { storeId, name, valueType, value }));
+  asOrg(f.orgId, (tx) => upsertPosDiscountPreset(tx, actor, { storeId, name, valueType, value }, 'etl'));
 const standCount = async (f: Fx) => (await sql<{ n: number }[]>`select count(*)::int n from pos_stands where store_id = ${f.storeId}`)[0]!.n;
 const presetRow = async (f: Fx, name: string) =>
   (

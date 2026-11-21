@@ -115,7 +115,7 @@ export async function recordCount(
   actor: Actor,
   input: RecordCountInput,
 ): Promise<RecordCountOutcome> {
-  const session = await countSessionsRepo.getCountSession(tx, input.sessionId);
+  const session = await countSessionsRepo.getCountSession(tx, actor.orgId, input.sessionId);
   if (!session) return { ok: false, reason: `count session ${input.sessionId} does not exist` };
 
   await authorize(tx, actor, 'record_stock_movement', { storeId: session.storeId });
@@ -159,7 +159,7 @@ export async function advanceCountSession(
   actor: Actor,
   input: { readonly sessionId: string; readonly to: 'reviewing' },
 ): Promise<AdvanceCountSessionOutcome> {
-  const session = await countSessionsRepo.getCountSession(tx, input.sessionId);
+  const session = await countSessionsRepo.getCountSession(tx, actor.orgId, input.sessionId);
   if (!session) return { ok: false, reason: `count session ${input.sessionId} does not exist` };
 
   await authorize(tx, actor, 'open_count_session', { storeId: session.storeId });
@@ -193,7 +193,7 @@ export async function commitCount(
   actor: Actor,
   input: { readonly sessionId: string },
 ): Promise<CommitCountWorkflowOutcome> {
-  const session = await countSessionsRepo.getCountSession(tx, input.sessionId);
+  const session = await countSessionsRepo.getCountSession(tx, actor.orgId, input.sessionId);
   if (!session) return { ok: false, reason: `count session ${input.sessionId} does not exist` };
 
   await authorize(tx, actor, 'commit_count', { storeId: session.storeId });
@@ -294,7 +294,7 @@ export async function cancelCountSession(
   actor: Actor,
   input: { readonly sessionId: string },
 ): Promise<CancelCountSessionOutcome> {
-  const session = await countSessionsRepo.getCountSession(tx, input.sessionId);
+  const session = await countSessionsRepo.getCountSession(tx, actor.orgId, input.sessionId);
   if (!session) return { ok: false, reason: `count session ${input.sessionId} does not exist` };
 
   await authorize(tx, actor, 'commit_count', { storeId: session.storeId });

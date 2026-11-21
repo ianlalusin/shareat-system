@@ -28,6 +28,7 @@
  * `'use client'`. docs/tasks/257-def-259-sign-out.md, "Placement decision".
  */
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { signOutLabel } from './sign-out-label';
 import Link from 'next/link';
 import { signOutAction } from '../../app/sign-in/actions';
 import { purgePosShell } from '../../app/pos/_shell/offline-sw';
@@ -125,7 +126,7 @@ function Wordmark() {
 
 /** The persistent ≥768 sidebar — rail or expanded, decided entirely by CSS off `data-sidebar-state`
  *  on the `SidebarProvider` wrapper (see globals.css). */
-function PersistentSidebar({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
+function PersistentSidebar({ allowedHrefs, signedInAs }: { allowedHrefs: readonly string[]; signedInAs: string | null }) {
   const { toggleCollapse, isRailNow, expandFromRail, state } = useSidebarContext();
   return (
     <div className="shell-sidebar hidden shrink-0 flex-col border-r border-neutral-200 bg-surface dark:border-neutral-800 md:sticky md:top-0 md:flex md:h-dvh">
@@ -159,13 +160,14 @@ function PersistentSidebar({ allowedHrefs }: { allowedHrefs: readonly string[] }
             type="submit"
             className={`shell-sidebar-expanded-only shell-nav-row rounded-md px-2 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100 ${FOCUS_RING}`}
           >
-            Sign out
+            {signOutLabel(signedInAs)}
           </button>
         </form>
         <form action={signOutAction} onSubmit={purgeSavedPosPage}>
           <button
             type="submit"
-            aria-label="Sign out"
+            aria-label={signOutLabel(signedInAs)}
+            title={signOutLabel(signedInAs)}
             // ⚠️ `w-9` (36px) is explicit and deliberate, not left to shrink-to-fit: this button is
             // `inline-flex` (via `.shell-sidebar-collapsed-only`'s own CSS, not Tailwind's `flex`,
             // so it does not stretch to the rail's width the way the Collapse button's block-level
@@ -308,10 +310,10 @@ function Drawer({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
  * `ROUTE_CAPABILITY`. ⛔ Presentation only: a link this actor cannot see is ALSO refused by
  * `requirePageAccess` on the route itself, so hiding is never the thing doing the work.
  */
-export function Sidebar({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
+export function Sidebar({ allowedHrefs, signedInAs }: { allowedHrefs: readonly string[]; signedInAs: string | null }) {
   return (
     <>
-      <PersistentSidebar allowedHrefs={allowedHrefs} />
+      <PersistentSidebar allowedHrefs={allowedHrefs} signedInAs={signedInAs} />
       <Drawer allowedHrefs={allowedHrefs} />
     </>
   );

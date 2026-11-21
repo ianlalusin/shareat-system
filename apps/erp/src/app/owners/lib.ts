@@ -34,7 +34,8 @@ export interface OwnerListRow extends OwnerRow {
   aged: AgedReceivable | null;
 }
 
-export async function listRegister(orgId: string): Promise<OwnerListRow[]> {
+/** `storeIds`: only these stores' owners; `undefined` = the viewer is not store-limited (T-603). */
+export async function listRegister(orgId: string, storeIds?: readonly string[]): Promise<OwnerListRow[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     // One grouped query each — the N+1 is what makes a derived figure feel expensive and tempts the
     // next person to store it.
@@ -44,7 +45,7 @@ export async function listRegister(orgId: string): Promise<OwnerListRow[]> {
       ownersRepo.agedReceivables(tx, orgId),
     ]);
     const agedBy = new Map(aged.map((a) => [a.ownerId, a]));
-    return rows.map((o) => ({
+    return rows.filter((o) => !storeIds || storeIds.includes(o.storeId)).map((o) => ({
       ...o,
       position: positions.get(o.id) ?? ZERO,
       aged: agedBy.get(o.id) ?? null,

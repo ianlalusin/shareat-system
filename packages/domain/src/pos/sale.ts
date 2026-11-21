@@ -444,7 +444,7 @@ export async function listTodaysSalesReceipts(tx: Tx, actor: Actor, input: { sto
 
 /**
  * T-613 D4 (DEF-937): "Find a receipt" - one receipt by its printed number (<store code>-<till, 2 digits>-<6 digits>; the store code may be left off), among the store's last
- * `RECEIPT_LOOKUP_DAYS` days, in the SAME shape as the list so the Refund dialog opens on it unchanged. A number that is not found (or is older) answers an empty list, not an error.
+ * `pos.receipt_lookup_days` days, in the SAME shape as the list so the Refund dialog opens on it unchanged. A number that is not found (or is older) answers an empty list, not an error.
  * T-614 S2: the window is the business rule `pos.receipt_lookup_days` (default 30, set on Settings > Business rules); the Receipts screen reads the same rule to say it.
  */
 export async function findSalesReceiptByNo(tx: Tx, actor: Actor, input: { storeId: string; receiptNo: string; now?: Date }) {

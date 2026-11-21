@@ -65,8 +65,9 @@ vi.mock('@shareat/domain', async (importOriginal) => {
     ...actual,
     canReadFile: (...args: Parameters<typeof actual.canReadFile>) =>
       CAN_READ_FILE_STUB.fn ? CAN_READ_FILE_STUB.fn(...args) : actual.canReadFile(...args),
-    readFileUrl: (...args: Parameters<typeof actual.readFileUrl>) =>
-      READ_FILE_URL_STUB.fn ? READ_FILE_URL_STUB.fn(...args) : actual.readFileUrl(...args),
+    // DEF-554: the route authorizes in its transaction and signs after it, so the swap sits on the authorize half.
+    authorizeFileRead: (...args: Parameters<typeof actual.authorizeFileRead>) =>
+      READ_FILE_URL_STUB.fn ? READ_FILE_URL_STUB.fn(...args) : actual.authorizeFileRead(...args),
   };
 });
 
@@ -439,8 +440,11 @@ describe('AUDIT A — the photo thumbnail is shown ONLY to people who hold the f
       return renderToStaticMarkup((await DeliveryPage({ params: Promise.resolve({ id: deliveryId }), searchParams: Promise.resolve({}) })) as never);
     };
     expect(links(await render(f.manager)), 'positive control: the holder sees the link').toBe(1);
+    // T-603: reading a delivery needs an inventory word at its store; give staff `transfer_stock` (NOT the receiver's), so the thumbnail rule is still what is tested.
+    await grantPositionCapability(sql, { orgId: f.orgId, storeId: f.storeId, personId: f.staffId, setBy: f.managerId, capability: 'transfer_stock' });
     expect(links(await render(f.staff)), 'staff without the capability was handed a /files/ link').toBe(0);
-    expect(links(await render(f.otherManager)), "another store's manager was handed a /files/ link").toBe(0);
+    // ...and another store's manager no longer reads the delivery at all (the same not-found as a forged id).
+    await expect(render(f.otherManager), "another store's manager").rejects.toThrow(/notFound\(\)/);
   });
 
   it("customer page: a collection receipt's thumbnail shows for the holder of record_ar_collection and NOT for staff without it", async () => {
@@ -505,6 +509,24 @@ describe('AUDIT C — only a "missing file / not yours" outcome becomes the unif
 
     READ_FILE_URL_STUB.fn = null;
     expect((await get(f.manager, f.fileId)).status, 'control: the real function serves the manager again').toBe(302);
+  });
+});
+
+describe('T-598 S7 / DEF-554 — the photo is signed after the transaction has ended', () => {
+  it('while signedUrl runs no session is idle inside a transaction (a slow signer holds no pooled connection) - control: the photo is still served', async () => {
+    const f = await fixture('def554');
+    const real = driver;
+    let idleInTx = -1;
+    setStorageDriver({
+      ...real,
+      signedUrl: async (...args: Parameters<StorageDriver['signedUrl']>) => {
+        const [r] = await sql<{ n: number }[]>`select count(*)::int as n from pg_stat_activity where datname = current_database() and state like 'idle in transaction%'`;
+        idleInTx = r!.n;
+        return real.signedUrl(...args);
+      },
+    });
+    expect((await get(f.manager, f.fileId)).status).toBe(302);
+    expect(idleInTx, 'signing ran while the read transaction was still open').toBe(0);
   });
 });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { ROUTE_CAPABILITY, capabilityForRoute, navHrefAllowed } from '../../apps/erp/src/lib/route-capability';
+import { APPROVED_OPEN_ROUTES, ROUTES_AWAITING_A_DECISION, hasMapEntry } from '../../apps/erp/src/lib/route-open-lists';
 
 /**
  * T-288 — the guard that stops the nav filter and the read gate drifting apart.
@@ -101,7 +102,7 @@ function staticPrefix(route: string): string {
   return cut === -1 ? route : route.slice(0, cut);
 }
 
-const GATE_MARKERS = ['requirePageAccess(', 'reportScope('];
+const GATE_MARKERS = ['requirePageAccess(', 'reportScope(', 'storePageScope('];
 
 describe('T-288 — ROUTE_CAPABILITY covers what it claims, and only what it can', () => {
   const pages = trackedPages();
@@ -147,79 +148,127 @@ describe('T-288 — ROUTE_CAPABILITY covers what it claims, and only what it can
 });
 
 // =====================================================================================================================
-// T-497 S1 / DEF-794 - a page under /admin or /settings with NO permission-map entry used to pass this file silently
-// (`capabilityForRoute(...) === null` was skipped above). docs/tasks/288-staff-pin-sees-every-admin-screen.md requires
-// enumeration and a red when a route lacks an entry; bible section 7 rule 11 is default-deny. Nothing here changes a page's access.
+// T-603 S5 / bible section 7 rule 11 - the route map is deny-by-default. Generalises T-497 S1 (which covered /admin and /settings only):
+// EVERY page, and the folder of EVERY 'use server' file, needs a map entry or a place on one of the two lists below. A new unmapped page
+// or action file fails here until someone records a decision. T-616 enforces the same rule at runtime: `requirePageAccess` refuses an unmapped route (lists in `route-open-lists.ts`).
 // =====================================================================================================================
 
+const USE_SERVER = /^\s*(?:\/\*[\s\S]*?\*\/\s*|\/\/[^\n]*\n\s*)*['"]use server['"]/;
+
+/** Source files that declare server actions. Same filesystem walk as `trackedPages` (staging state is not the question). */
+function actionFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(entry.name) && USE_SERVER.test(readFileSync(full, 'utf8'))) {
+        out.push(path.relative(repoRoot, full).split(path.sep).join('/'));
+      }
+    }
+  };
+  walk(APP);
+  return out;
+}
+
+/** `apps/erp/src/app/franchise/actions.ts` -> `/franchise`. Route groups `(x)` and private folders `_x` contribute nothing to the URL. */
+function routeOfActionFile(file: string): string {
+  const rel = path.relative(APP, path.join(repoRoot, file)).split(path.sep).join('/');
+  const segments = rel.split('/').slice(0, -1).filter((seg) => seg && !(seg.startsWith('(') && seg.endsWith(')')) && !seg.startsWith('_'));
+  return `/${segments.join('/')}`;
+}
+
 /**
- * Routes under /admin or /settings that are open to any signed-in person BY RECORDED DECISION. Each entry cites the decision.
- * ⛔ Add a route here only when a bible row / task says it is open - never to make this guard green. An unmapped page with no
- * decision is a defect to report, not an entry to add.
- *
- * Empty today: every mapped page is covered by ROUTE_CAPABILITY. The one page once unmapped (/admin/prerequisite-refusals, T-245) was
- * mapped to manage_stores by Ian's ruling of 2026-10-28 (bible row 403).
+ * Folders that hold server actions but are not a URL (no page of their own): shared widgets shown on mapped pages. Each entry cites where it is gated.
+ * The guard still fails for a new action folder that is neither mapped nor listed here.
  */
-const APPROVED_OPEN_ADMIN_ROUTES: Readonly<Record<string, string>> = {};
+const SHARED_ACTION_FOLDERS: Readonly<Record<string, string>> = {
+  '/copy-from-store': 'T-611: no page; the dialog sits on /kitchen, /menu/hours and /admin/pos-tablets (all mapped); the domain checks admin role, the store edit right and an administrator PIN',
+};
 
-/**
- * ⚠️ KNOWN GAP, reported not hidden (DEF-794 follow-up): pages that are unmapped and have no decision that they are open.
- * Listing one here keeps the guard honest about it without inventing a capability; the guard still FAILS for any route not here,
- * and a separate assertion below fails when an entry here is no longer a real unmapped page (so this list can only shrink).
- * Resolution is Ian's: map it to a capability (and gate the page with requirePageAccess) or record a decision that it is open.
- */
-const ADMIN_ROUTES_AWAITING_A_DECISION: readonly string[] = [];
+const isApprovedOpen = (r: string): boolean => r in APPROVED_OPEN_ROUTES || r in SHARED_ACTION_FOLDERS;
 
-/** Has the permission map an entry (any value, `null` included - an explicit open entry is still an entry) for this route? */
-function hasMapEntry(route: string): boolean {
-  return Object.keys(ROUTE_CAPABILITY).some((k) => route === k || route.startsWith(`${k}/`));
+/** The routes (from `routes`) with no map entry and no approved-open decision. */
+function unmappedRoutes(routes: readonly string[]): string[] {
+  return [...new Set(routes.map(staticPrefix).filter((r) => !hasMapEntry(r) && !isApprovedOpen(r)))].sort();
 }
 
-function isAdminOrSettings(route: string): boolean {
-  return /^\/(admin|settings)(\/|$)/.test(route);
-}
+describe('T-603 S5 - every page and every server-action folder has a permission-map entry, an approved-open decision, or a place on the awaiting list', () => {
+  const pageRoutes = trackedPages().map(routeOf);
+  const actionRoutes = actionFiles().map(routeOfActionFile);
+  const realRoutes = [...pageRoutes, ...actionRoutes];
 
-/** The admin/settings routes (from `routes`) with no map entry and no approved-open decision. */
-function unmappedAdminRoutes(routes: readonly string[]): string[] {
-  return routes
-    .map(staticPrefix)
-    .filter((r) => isAdminOrSettings(r) && !hasMapEntry(r) && !(r in APPROVED_OPEN_ADMIN_ROUTES))
-    .sort();
-}
-
-describe('T-497 S1 - every /admin and /settings page has a permission-map entry or an approved-open decision', () => {
-  const realRoutes = trackedPages().map(routeOf);
-
-  it('the real tree: no unmapped admin/settings page beyond the known, reported ones', () => {
-    const unexpected = unmappedAdminRoutes(realRoutes).filter((r) => !ADMIN_ROUTES_AWAITING_A_DECISION.includes(r));
-    expect(unexpected).toEqual([]);
+  it('the enumeration is not vacuous: it sees the pages and the action files', () => {
+    expect(pageRoutes.length).toBeGreaterThan(100);
+    expect(actionRoutes.length).toBeGreaterThan(50);
   });
 
-  it('the awaiting-a-decision list only shrinks: each entry is a real, still-unmapped page', () => {
-    const stillUnmapped = unmappedAdminRoutes(realRoutes);
-    for (const r of ADMIN_ROUTES_AWAITING_A_DECISION) expect(stillUnmapped, r).toContain(r);
+  it('the real tree: no unmapped page or action folder beyond the known, reported ones', () => {
+    const unexpected = unmappedRoutes(realRoutes).filter((r) => !ROUTES_AWAITING_A_DECISION.includes(r));
+    expect(unexpected, 'map it in route-capability.ts (and gate the page), or record a decision above').toEqual([]);
+  });
+
+  it('the awaiting-a-decision list only shrinks: each entry is a real, still-unmapped route', () => {
+    const stillUnmapped = unmappedRoutes(realRoutes);
+    for (const r of ROUTES_AWAITING_A_DECISION) expect(stillUnmapped, `${r}: mapped or gone - delete it from the list`).toContain(r);
   });
 
   it('every approved-open entry names a real page, cites a decision, and is genuinely unmapped', () => {
-    for (const [route, why] of Object.entries(APPROVED_OPEN_ADMIN_ROUTES)) {
-      expect(realRoutes.map(staticPrefix), route).toContain(route);
+    for (const [route, why] of Object.entries(APPROVED_OPEN_ROUTES)) {
+      expect(pageRoutes.map(staticPrefix), route).toContain(route);
       expect(why.length, route).toBeGreaterThan(0);
       expect(hasMapEntry(route), route).toBe(false);
     }
   });
 
-  it('⛔ PLANT - a NEW unmapped page under /admin makes the guard fail (it passed before T-497)', () => {
-    expect(unmappedAdminRoutes([...realRoutes, '/admin/audit-unlisted-private'])).toContain('/admin/audit-unlisted-private');
+  it('every shared action folder cites its gate, has no page of its own, and is genuinely unmapped', () => {
+    for (const [route, why] of Object.entries(SHARED_ACTION_FOLDERS)) {
+      expect(actionRoutes, route).toContain(route);
+      expect(pageRoutes.map(staticPrefix), route).not.toContain(route);
+      expect(why.length, route).toBeGreaterThan(0);
+      expect(hasMapEntry(route), route).toBe(false);
+    }
   });
 
-  it('PLANT - the same under /settings, and a dynamic child of an unmapped admin route', () => {
-    // /settings itself is mapped, so a new settings page is covered by the prefix; an unmapped sibling area is not.
-    expect(unmappedAdminRoutes(['/admin/brand-new/[id]'])).toEqual(['/admin/brand-new']);
-    expect(unmappedAdminRoutes(['/settings/anything-new'])).toEqual([]);
+  it('⛔ PLANT - a NEW unmapped page makes the guard fail (anywhere, not only /admin)', () => {
+    expect(unmappedRoutes([...realRoutes, '/brand-new-screen'])).toContain('/brand-new-screen');
+    expect(unmappedRoutes(['/brand-new/[id]'])).toEqual(['/brand-new']);
+    expect(unmappedRoutes([...realRoutes, '/admin/audit-unlisted-private'])).toContain('/admin/audit-unlisted-private');
   });
 
-  it('positive control - a new page under a MAPPED admin route is covered by the prefix (and the gate test above checks it calls a gate)', () => {
-    expect(unmappedAdminRoutes(['/admin/users/audit-unlisted-private'])).toEqual([]);
+  it('⛔ PLANT - a NEW server-action file under an unmapped folder makes the guard fail', () => {
+    const planted = routeOfActionFile('apps/erp/src/app/brand-new-area/actions.ts');
+    expect(planted).toBe('/brand-new-area');
+    expect(unmappedRoutes([...realRoutes, planted])).toContain('/brand-new-area');
+    // a nested file and a private folder fold into the folder's route
+    expect(routeOfActionFile('apps/erp/src/app/brand-new-area/_actions/save.ts')).toBe('/brand-new-area');
+    // the directive detector sees a real action file and ignores a plain one
+    expect(USE_SERVER.test("'use server';\nexport async function a() {}")).toBe(true);
+    expect(USE_SERVER.test("/** doc */\n'use server';\n")).toBe(true);
+    expect(USE_SERVER.test("import x from 'y';\nexport const a = 1;")).toBe(false);
+  });
+
+  it('T-617: the awaiting list ended EMPTY - every route is mapped, approved-open, or refused', () => {
+    expect(ROUTES_AWAITING_A_DECISION).toEqual([]);
+    expect(unmappedRoutes(realRoutes)).toEqual([]);
+  });
+
+  it('⛔ PLANT - dropping any one of the 13 map entries makes its route unmapped again (the guard would go red)', () => {
+    const stillMapped = (route: string) => Object.keys(ROUTE_CAPABILITY).filter((k) => k !== route).some((k) => route === k || route.startsWith(`${k}/`));
+    // A child key (/attendance/leave, /items/import) sits under a mapped parent, so dropping it narrows nothing; only the roots go unmapped.
+    const roots = Object.keys(T617).filter((r) => !Object.keys(T617).some((o) => o !== r && r.startsWith(`${o}/`)));
+    expect(roots.length).toBe(10);
+    for (const route of roots) expect(stillMapped(route), `${route}: no other key may cover it`).toBe(false);
+  });
+
+  it('⛔ PLANT - an awaiting entry that has become mapped is stale and is caught (the list can only shrink)', () => {
+    const staleOf = (list: readonly string[]) => list.filter((r) => !unmappedRoutes(realRoutes).includes(r));
+    expect(staleOf(ROUTES_AWAITING_A_DECISION)).toEqual([]);
+    expect(staleOf([...ROUTES_AWAITING_A_DECISION, '/payroll'])).toEqual(['/payroll']);
+  });
+
+  it('positive control - a new page under a MAPPED route is covered by the prefix (the gate test above checks it calls a gate)', () => {
+    expect(unmappedRoutes(['/admin/users/audit-unlisted-private', '/payroll/anything-new'])).toEqual([]);
   });
 
   it('PLANT - removing an existing map entry makes its page unmapped', () => {
@@ -227,17 +276,8 @@ describe('T-497 S1 - every /admin and /settings page has a permission-map entry 
     expect(realStores.length).toBeGreaterThan(0);
     const withoutEntry = (route: string) =>
       Object.keys(ROUTE_CAPABILITY).filter((k) => k !== '/admin/stores').some((k) => route === k || route.startsWith(`${k}/`));
-    // With the real map /admin/stores is covered; with its entry removed no other key covers it.
     expect(hasMapEntry('/admin/stores')).toBe(true);
     expect(realStores.map(staticPrefix).some((r) => !withoutEntry(r))).toBe(true);
-  });
-
-  it('an approved-open route passes; an absent one does not (the list is the only way out)', () => {
-    // Exercised through the same predicate with a local approved list so the real list can stay empty.
-    const approved: Record<string, string> = { '/admin/some-open-page': 'bible row N / T-NNN (example)' };
-    const check = (routes: string[]) => routes.filter((r) => isAdminOrSettings(r) && !hasMapEntry(r) && !(r in approved));
-    expect(check(['/admin/some-open-page'])).toEqual([]);
-    expect(check(['/admin/some-other-page'])).toEqual(['/admin/some-other-page']);
   });
 });
 
@@ -264,8 +304,8 @@ describe('capabilityForRoute — prefix matching', () => {
     expect(accepts('/reports/ap-aging')).toEqual(['view_financial_reports']);
   });
 
-  it('an unmapped route is open to any signed-in person', () => {
-    expect(capabilityForRoute('/till')).toBeNull();
+  it('an unmapped route is open to any signed-in person (the pure lookup; requirePageAccess refuses it at runtime, T-616)', () => {
+    expect(capabilityForRoute('/zz-unmapped-screen')).toBeNull();
     // T-589 B3a: /sales-days is keyed now (the day list shows every day's totals); `/` stays the one open landing page.
     expect(capabilityForRoute('/')).toBeNull();
   });
@@ -273,7 +313,7 @@ describe('capabilityForRoute — prefix matching', () => {
 
 describe('navHrefAllowed — presentation only', () => {
   it('shows an unmapped link to everyone', () => {
-    expect(navHrefAllowed('/till', new Set())).toBe(true);
+    expect(navHrefAllowed('/attendance/leave', new Set())).toBe(true);
   });
 
   it('hides a mapped link from someone without the capability', () => {
@@ -415,6 +455,75 @@ describe('T-577 - /ap, /budgets and /cash-requests are mapped, and every page un
       const src = codeOnly(readFileSync(path.join(repoRoot, file), 'utf8'));
       expect(re.test(src), `${file}: the store check on the record's own store`).toBe(true);
       expect(src.includes('notFound()'), `${file}: refusal is the standard not-found`).toBe(true);
+    }
+  });
+});
+
+
+// =====================================================================================================================
+// T-617 (Ian, 22 Nov 2026, "approve the defaults") - the 13 routes that awaited a decision are mapped to EXISTING words. Who is let in, who is refused and
+// that an admin sees each one is proved against real Postgres in apps/erp/tests/integration/t617-gate-awaiting-routes.test.ts.
+// Mutants: M1 drop one route's map entry; M2 swap one page back to bare requireSession; M3 map /opening-balances to nothing.
+// =====================================================================================================================
+
+/** route -> the words that open it (any ONE); [] = open by decision. */
+const T617: Readonly<Record<string, readonly string[]>> = {
+  '/attendance': ['manage_attendance'],
+  '/attendance/leave': [],
+  '/channel-settlements': ['record_ar_collection'],
+  '/commissary/catalogue': ['manage_commissary_offerings', 'manage_commissary_map', 'fulfil_branch_order'],
+  '/commissary/discrepancies': ['resolve_trade_discrepancy', 'fulfil_branch_order'],
+  '/commissary/orders': ['place_branch_order', 'fulfil_branch_order', 'dispatch_branch_order', 'confirm_receipt', 'post_order_message'],
+  '/items': ['manage_items', 'approve_item', 'approve_item_request'],
+  '/items/import': ['approve_item_request'],
+  '/opening-balances': ['run_cutover'],
+  '/statutory-discounts': ['record_statutory_discount'],
+  '/trade/orders': ['create_wholesale_order', 'approve_buyer', 'record_ar_collection'],
+  '/franchise': ['view_franchise_sales'],
+};
+
+describe('T-617 - the 13 routes are mapped, and every page under them calls the gate', () => {
+  it('each route accepts exactly the words the default names (a child inherits it); /attendance/leave is open', () => {
+    for (const [route, words] of Object.entries(T617)) {
+      expect(accepts(route).sort(), route).toEqual([...words].sort());
+      if (route !== '/items') expect(accepts(`${route}/019a0000-0000-7000-8000-000000000001`).sort(), `${route}/<id>`).toEqual([...words].sort());
+    }
+    // Longer keys keep their own words: the settlements record page inherits, upload and review do not.
+    expect(accepts('/channel-settlements/record')).toEqual(['record_ar_collection']);
+    expect(accepts('/channel-settlements/upload')).toEqual(['upload_settlement_files']);
+    expect(accepts('/attendance/terminals')).toEqual(['manage_attendance']);
+    expect(accepts('/franchise/access-log')).toEqual(['view_franchise_access_log']);
+    expect(accepts('/items/import')).toEqual(['approve_item_request']);
+  });
+
+  it('every page under the 13 routes calls the gate (requirePageAccess or storePageScope), never bare requireSession - leave included, though it is open', () => {
+    const roots = Object.keys(T617);
+    const offenders: string[] = [];
+    let seen = 0;
+    for (const file of trackedPages()) {
+      const route = routeOf(file);
+      if (!roots.some((r) => route === r || route.startsWith(`${r}/`))) continue;
+      seen++;
+      const src = codeOnly(readFileSync(path.join(repoRoot, file), 'utf8'));
+      if (!(src.includes('requirePageAccess(') || src.includes('storePageScope('))) offenders.push(route);
+    }
+    expect(seen, 'the pages exist').toBeGreaterThanOrEqual(20);
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  it('⛔ PLANT - a page that goes back to bare requireSession is caught by the same predicate', () => {
+    const src = codeOnly(readFileSync(path.join(repoRoot, 'apps/erp/src/app/items/import/page.tsx'), 'utf8'));
+    expect(src.includes('requirePageAccess(')).toBe(true);
+    expect(src.replaceAll('requirePageAccess(', 'requireSession(').includes('requirePageAccess(')).toBe(false);
+  });
+
+  it('nav: a cashier keeps SC/PWD, the commissary screens and own leave; loses attendance review, settlements, items, opening balances, trade orders, franchise', () => {
+    const cashier = new Set(['record_statutory_discount', 'fulfil_branch_order', 'place_branch_order', 'confirm_receipt', 'post_order_message']);
+    for (const keep of ['/statutory-discounts', '/commissary/orders', '/commissary/catalogue', '/commissary/discrepancies', '/attendance/leave']) {
+      expect(navHrefAllowed(keep, cashier), keep).toBe(true);
+    }
+    for (const lose of ['/attendance', '/channel-settlements', '/items', '/opening-balances', '/trade/orders', '/franchise']) {
+      expect(navHrefAllowed(lose, cashier), lose).toBe(false);
     }
   });
 });

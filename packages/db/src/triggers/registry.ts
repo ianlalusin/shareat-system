@@ -338,6 +338,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: 'An entry may post only into an OPEN period (0003) — reads the period\'s CURRENT status.',
   },
+  journal_entries_entry_date_in_period: {
+    table: 'journal_entries',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "An entry's date must fall inside its fiscal period (0270, T-600, DEF-902) — reads the period's CURRENT dates.",
+  },
   journal_lines_period_open: {
     table: 'journal_lines',
     mode: 'origin',

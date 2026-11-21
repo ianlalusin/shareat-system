@@ -1655,6 +1655,27 @@
       "breakpoints": true
     },
     {
+      "idx": 270,
+      "version": "7",
+      "when": 1809401507084,
+      "tag": "0270_t600_journal_entry_date_in_period",
+      "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "7",
+      "when": 1809487907084,
+      "tag": "0271_t598_s10_revoke_reason_and_trade_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 272,
+      "version": "7",
+      "when": 1809574307084,
+      "tag": "0272_t602_performance_indexes",
+      "breakpoints": true
+    },
+    {
       "idx": 273,
       "version": "7",
       "when": 1809660707084,

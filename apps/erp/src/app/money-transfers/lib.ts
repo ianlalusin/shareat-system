@@ -29,8 +29,8 @@ export interface AccountOption {
  * behind the page's own read gate (`view_financial_reports`). ⚠️ Never feed a PICKER from this: it is not
  * scoped to anything the viewer may move (use `listTransferableAccounts`).
  */
-export async function listAccountBalances(orgId: string): Promise<AccountOption[]> {
-  return withOrgPrincipal(orgId, (tx) => balancesOf(tx, orgId, null));
+export async function listAccountBalances(orgId: string, storeIds?: readonly string[]): Promise<AccountOption[]> {
+  return withOrgPrincipal(orgId, (tx) => balancesOf(tx, orgId, storeIds ? new Set(storeIds) : null));
 }
 
 /**
@@ -110,9 +110,9 @@ export async function listSettlementPairs(actor: Actor, usable: readonly Account
     .filter((p) => p.fromAccounts.length > 0 && p.toAccounts.length > 0);
 }
 
-export async function listRecentTransfers(orgId: string): Promise<MoneyTransferListRow[]> {
+export async function listRecentTransfers(orgId: string, storeIds?: readonly string[]): Promise<MoneyTransferListRow[]> {
   return withOrgPrincipal(orgId, (tx) =>
-    moneyTransfersRepo.listMoneyTransfers(tx, orgId, { limit: 50 }),
+    moneyTransfersRepo.listMoneyTransfers(tx, orgId, { limit: 50, storeIds }),
   );
 }
 

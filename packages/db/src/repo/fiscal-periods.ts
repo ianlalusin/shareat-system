@@ -8,6 +8,7 @@
  * "severity correction" for the full trace.
  */
 import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm';
+import { addDays, parseBusinessDate } from '@shareat/core/datetime';
 import type { Tx } from '../client';
 import {
   deliveries,
@@ -137,17 +138,9 @@ export function periodBounds(period: string): { startsOn: string; endsOn: string
   return monthBounds(Number(yStr), Number(mStr));
 }
 
-/** `date` plus/minus one day, as `YYYY-MM-DD`. Local, like `monthBounds` above — this file's own
- *  convention is small date arithmetic written here rather than imported, so a caller in
- *  `packages/db` never needs `@shareat/core`'s branded `BusinessDate` for a one-line shift. */
-function addOneDay(date: string): string {
-  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-}
-function subtractOneDay(date: string): string {
-  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
-}
+/** `date` plus/minus one day, as `YYYY-MM-DD` -- core's own date arithmetic (DEF-542), so an out-of-range year is refused the same way everywhere. */
+const addOneDay = (date: string): string => addDays(parseBusinessDate(date), 1);
+const subtractOneDay = (date: string): string => addDays(parseBusinessDate(date), -1);
 
 /**
  * Flips `status` `open` -> `closed` and stamps `closed_at`/`closed_by`, all in ONE statement.
@@ -192,6 +185,17 @@ export async function closePeriod(
 export async function hasEarlierOpenPeriod(tx: Tx, orgId: string, period: string): Promise<boolean> {
   const { startsOn } = periodBounds(period);
   return hasEarlierOpenPeriodBefore(tx, orgId, startsOn);
+}
+
+/** DEF-439: is any OPEN fiscal period inside the `'YYYY-MM'` month? A month with none cannot be closed (there is nothing to close). */
+export async function hasOpenPeriodInMonth(tx: Tx, orgId: string, period: string): Promise<boolean> {
+  const { startsOn, endsOn } = periodBounds(period);
+  const [row] = await tx
+    .select({ id: fiscalPeriods.id })
+    .from(fiscalPeriods)
+    .where(and(eq(fiscalPeriods.orgId, orgId), eq(fiscalPeriods.status, 'open'), lte(fiscalPeriods.startsOn, endsOn), gte(fiscalPeriods.endsOn, startsOn)))
+    .limit(1);
+  return row !== undefined;
 }
 
 /**

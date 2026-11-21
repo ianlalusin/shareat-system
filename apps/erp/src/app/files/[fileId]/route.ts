@@ -1,8 +1,8 @@
 /**
  * `GET /files/[fileId]` - view an attached photo. T-369 S2 (DEF-198).
  *
- * Mints a short-lived signed URL PER CLICK through `readFileUrl` (which checks the file's own org and the
- * capability that governs its purpose) and redirects to it. Nothing is stored and nothing is logged:
+ * Mints a short-lived signed URL PER CLICK (`authorizeFileRead` checks the file's own org and the capability that
+ * governs its purpose inside the transaction; `signFileRead` signs after it ends, DEF-554) and redirects to it. Nothing is stored and nothing is logged:
  * a stored URL is a permanent unauthenticated grant, which is what v1's `getDownloadURL()` handed out.
  *
  * ⭐ ONE uniform 404 for every refusal - no grant, another store, another org, no such file, a malformed
@@ -14,7 +14,7 @@
  */
 import { AuthorizationError } from '@shareat/auth';
 import { RefusalError } from '@shareat/db';
-import { FileNotFoundError, readFileUrl } from '@shareat/domain';
+import { authorizeFileRead, FileNotFoundError, signFileRead } from '@shareat/domain';
 import { logger } from '@shareat/core/logger';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { requireActor } from '../../../lib/session';
@@ -35,7 +35,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ fil
   if (!UUID_SHAPE.test(fileId)) return unavailable();
 
   try {
-    const { url } = await withOrgPrincipal(actor.orgId, (tx) => readFileUrl(tx, actor, { fileId }));
+    const grant = await withOrgPrincipal(actor.orgId, (tx) => authorizeFileRead(tx, actor, { fileId }));
+    const { url } = await signFileRead(grant);
     return new Response('', { status: 302, headers: { Location: url, 'Cache-Control': NO_STORE } });
   } catch (err) {
     // ONLY "no such file for you" and "not allowed" are the uniform 404; any other refusal or fault is not

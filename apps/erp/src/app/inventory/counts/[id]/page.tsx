@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation';
 import { compareQuantity, quantity, ZERO_QUANTITY } from '@shareat/domain';
 import { getCountSessionDetail, type SheetLine } from '../lib';
 import { advanceCountAction, cancelCountAction, commitCountAction, recordCountAction } from '../actions';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '../../../../lib/page-access';
+import { recordInScope } from '../../../../lib/store-scope';
 import { Page } from '@/components/shell/Page';
 import { Button, DialogActions, FlashBanner, FormGrid, FormModal, Field, Input, Select } from '@/components/ui';
 import { CheckedForm, EditableRecord } from '@/components/forms';
@@ -115,9 +116,10 @@ export default async function CountSessionPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/inventory/counts/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/inventory/counts/${id}`);
+  if (refusal) return refusal;
   const detail = await getCountSessionDetail(actor.orgId, id);
-  if (!detail) notFound();
+  if (!detail || !(await recordInScope(actor, `/inventory/counts/${id}`, detail.storeId))) notFound();
 
   const editable = detail.status === 'open' || detail.status === 'counting' || detail.status === 'reviewing';
   const canAdvance = detail.status === 'counting';
