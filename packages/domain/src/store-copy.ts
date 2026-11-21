@@ -320,7 +320,7 @@ export async function copySettingsToStore(actor: Actor, input: CopyInput & { app
       const stationId = stationIds.get(key(o.stationName));
       if (!stationId) throw refuse(`copyFromStore: station ${o.stationName} missing after create`, `The kitchen station ${o.stationName} could not be found at ${p.targetName}.`);
       await setKitchenRoute(tx, actor, { storeId: to, menuItemId: o.menuItemId, stationId });
-    } else if (o.op === 'preset') await upsertPosDiscountPreset(tx, actor, { storeId: to, name: o.name, valueType: o.valueType, value: o.value });
+    } else if (o.op === 'preset') await upsertPosDiscountPreset(tx, actor, { storeId: to, name: o.name, valueType: o.valueType, value: o.value }, 'web');
     else if (o.op === 'daypart_create') await createDaypart(actor, { storeId: to, name: o.name, days: o.days, start: o.start, end: o.end }, tx);
     else if (o.op === 'daypart_update') await updateDaypart(actor, { id: o.id, days: o.days, start: o.start, end: o.end }, tx);
     else if (o.op === 'option') await setOptionOffer(actor, { storeId: to, optionValueId: o.optionValueId, channel: o.channel, priceDelta: o.priceDelta }, tx);

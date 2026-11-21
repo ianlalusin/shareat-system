@@ -306,11 +306,11 @@ export async function outstandingForCharge(tx: Tx, orgId: string, chargeId: stri
       select a.ar_charge_id, sum(a.amount_applied) as amt
       from ar_collection_allocations a
       join ar_collections c on c.id = a.ar_collection_id
-      where c.status = 'posted'
+      where c.status = 'posted' and a.ar_charge_id = ${chargeId}
       group by a.ar_charge_id
     ),
     written as (
-      select ar_charge_id, sum(amount) as amt from ar_write_offs group by ar_charge_id
+      select ar_charge_id, sum(amount) as amt from ar_write_offs where ar_charge_id = ${chargeId} group by ar_charge_id
     ),
     ${creditedCtes(orgId, sql`and o.ar_charge_id = ${chargeId}`)}
     select (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - coalesce(cr.amt, 0))::text as outstanding
@@ -725,10 +725,13 @@ export async function listChargesForCustomer(
       from ar_collection_allocations a
       join ar_collections c on c.id = a.ar_collection_id
       where c.status = 'posted'
+        and a.ar_charge_id in (select ch.id from ar_charges ch where ch.org_id = ${orgId} and ch.customer_id = ${customerId} ${storeFilter})
       group by a.ar_charge_id
     ),
     written as (
-      select ar_charge_id, sum(amount) as amt from ar_write_offs group by ar_charge_id
+      select ar_charge_id, sum(amount) as amt from ar_write_offs
+      where ar_charge_id in (select ch.id from ar_charges ch where ch.org_id = ${orgId} and ch.customer_id = ${customerId} ${storeFilter})
+      group by ar_charge_id
     ),
     ${creditedCtes(orgId, sql`and o.customer_id = ${customerId}`)}
     select ch.id as charge_id, ch.store_id, ch.charge_date::text as charge_date,
