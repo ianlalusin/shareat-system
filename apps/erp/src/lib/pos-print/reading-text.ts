@@ -1,6 +1,6 @@
 import { center, columnsFor, justify, printAmount, rule, wrap } from './layout';
 import { TEST_LINE } from './receipt-text';
-import type { PrintLayout, ReadingSlipView, ZSlipView } from './types';
+import type { OfflineXSlipView, PrintLayout, ReadingSlipView, ZSlipView } from './types';
 
 /**
  * T-531 R6 - the X-reading and the Z-reading as plain text, one string per paper line. Cash control, not a BIR document (bible row 390).
@@ -23,7 +23,7 @@ const isZeroAmount = (value: string): boolean => /^-?0(\.0+)?$/.test(value.trim(
 const FOOTER = 'Cash control, not a BIR document';
 
 /** The store header and the blank line under it. */
-function pushHeader(out: string[], view: ReadingSlipView, cols: number): void {
+function pushHeader(out: string[], view: Pick<ReadingSlipView, 'header'>, cols: number): void {
   pushCentered(out, view.header.businessName.toUpperCase(), cols);
   for (const address of view.header.addressLines) pushCentered(out, address, cols);
   if (view.header.tin !== null) pushCentered(out, `TIN: ${view.header.tin} ${view.header.vatRegistered ? 'VAT' : 'Non-VAT'}`, cols);
@@ -94,5 +94,32 @@ export function formatZSlip(view: ZSlipView, layout: PrintLayout): string[] {
   out.push(...justify('BUSINESS DATE:', view.businessDateLocal, cols));
   pushWindow(out, view, cols, view.approvedBy);
   pushFigures(out, view, cols);
+  return out;
+}
+
+/**
+ * T-621 S4: the offline X-slip, printed every N hours while the till has no internet. Same widths and layout as `formatXSlip`. Built from the tablet's own
+ * outbox, so the paper says plainly it is not a BIR reading. Nothing is computed: the tenders and the short-paid line add up to the total because the
+ * caller made them so (`offlineXSlipFigures`).
+ */
+export function formatOfflineXSlip(view: OfflineXSlipView, layout: PrintLayout): string[] {
+  const cols = columnsFor(layout);
+  const out: string[] = [];
+  pushHeader(out, view, cols);
+  pushCentered(out, 'OFFLINE X-SLIP - not a BIR reading', cols);
+  pushCentered(out, "From this tablet's own unsent sales", cols);
+  out.push(...justify('TERMINAL:', String(view.terminalNo), cols));
+  out.push(...justify('OFFLINE SINCE:', view.offlineSinceLocal, cols));
+  out.push(...justify('PRINTED AT:', view.printedAtLocal, cols));
+  out.push(rule(cols));
+  out.push(...justify('SALES', String(view.saleCount), cols));
+  out.push(...justify('TOTAL', printAmount(view.total), cols));
+  out.push(rule(cols));
+  for (const tender of view.tenders) out.push(...justify(tender.name, printAmount(tender.amount), cols));
+  if (!isZeroAmount(view.shortPaid)) out.push(...justify('SHORT PAID', printAmount(view.shortPaid), cols));
+  out.push(rule(cols));
+  out.push(...justify('WAITING TO SEND', String(view.waitingCount), cols));
+  out.push(rule(cols));
+  pushCentered(out, FOOTER, cols);
   return out;
 }

@@ -28,6 +28,7 @@ import { useDeviceSync } from './use-device-sync';
 import { useMenuClock } from './use-menu-clock';
 import { usePosState } from './use-pos-state';
 import { useUpdateGate } from './use-update-gate';
+import { useOfflineXSlip } from './use-offline-xslip';
 import { useOutageReplay } from '../_kitchen/use-outage-replay';
 
 export interface PosShellProps {
@@ -136,6 +137,8 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   // T-621 S3: the sales waiting to send, in exact centavos; offline at or above the rule, everyone at the till sees the warning (the manager is the one called).
   const unsentCentavos = useMemo(() => unsentSalesCentavos(sync.pendingEvents), [sync.pendingEvents]);
   const unsentWarn = showUnsentWarning({ online: state.online, unsentCentavos, warnCentavos: sync.ordersSnapshot?.offlineUnsentWarnCentavos ?? null });
+  // T-621 S4: an offline X-slip every N hours offline, once per period (remembered in the device meta store, so a reload never reprints).
+  const xslip = useOfflineXSlip({ paired: pairedStoreId !== null, online: state.online, offlineSinceMs: offline ? sinceMs : null, hours: sync.ordersSnapshot?.offlineXSlipHours ?? null, pendingEvents: sync.pendingEvents, payment: sync.ordersSnapshot?.payment, printer });
   const pillInput = { online: state.online, sending: sync.sending, pending: sync.pending, offlineForMs: sinceMs === null ? 0 : Math.max(0, now - sinceMs), signedOut: state.signedOut === true };
   const pill = statusPillLabel(pillInput);
   const pillShort = statusPillShort(pillInput);
@@ -318,6 +321,21 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
             </Banner>
           ))}
           {sync.heldSales > 0 ? <Banner tone="warning">{posHeldSalesMessage(sync.heldSales)}</Banner> : null}
+          {/* T-621 S4: no printer (or it failed): the offline X-slip on screen, with Print. Selling goes on around it. */}
+          {xslip.onScreen ? (
+            <section aria-label="Offline X-slip" className="rounded-2xl border border-surface-border bg-surface p-4">
+              <pre className="overflow-x-auto font-mono text-xs leading-snug text-ink">{xslip.onScreen.join('
+')}</pre>
+              <div className="mt-3 flex gap-2">
+                <Button icon={null} className="min-h-12" onClick={xslip.printOnScreen}>
+                  Print
+                </Button>
+                <Button icon={null} className="min-h-12" onClick={xslip.dismiss}>
+                  Close
+                </Button>
+              </div>
+            </section>
+          ) : null}
           {sync.conflicts > 0 ? (
             <Banner tone="warning">
               {POS_CONFLICT_MESSAGE}{' '}
