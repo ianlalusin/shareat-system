@@ -122,3 +122,28 @@ describe('T-606 /settings/sales-channels - the move button follows what is left 
     expect(manager).toContain('An admin can move it to Channel receivable.');
   });
 });
+
+describe('T-618 DEF-928 /settings/sales-channels - platform wording and the platform picker only for platform channels', () => {
+  // A wholesale buyer on its own receivable (1210): settle-later, no platform, not on the channel receivable.
+  const wholesale = channel({ id: 'c-wh', name: 'Wholesale Xlice', isRemittedDaily: false, receivableAccountCode: '1210' });
+
+  it('a settle-later channel on 1210 says it is owed to us, not "by the platform" - Mutant: always print the platform wording -> red', async () => {
+    const html = await render([wholesale]);
+    expect(html).toContain('Owed to us until it is settled.');
+    expect(html).not.toContain('Owed by the platform');
+  });
+
+  it('and it shows no platform picker, no radio rows, no store-code form or "not set" nag, even to an admin - Mutant: drop the platformish gate -> red', async () => {
+    const html = await render([wholesale], true);
+    expect(codeForms(html)).toHaveLength(0);
+    expect(withName(html, 'platform')).toBe(false);
+    expect(html).not.toContain('Which platform is this channel?');
+    expect(html).not.toContain('payout files cannot be matched');
+  });
+
+  it('positive: a Foodpanda channel keeps the platform wording and its store-code form', async () => {
+    const html = await render([foodpanda]);
+    expect(html).toContain('Owed by the platform until it pays out.');
+    expect(codeForms(html)).toHaveLength(1);
+  });
+});
