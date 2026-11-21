@@ -9,7 +9,7 @@ Lipa stays OFF or TEST until Ian says "go" (bible row 435). Nothing below switch
 ## The two gates (both must pass)
 | Gate | Pass mark | Result | Date | Evidence |
 |---|---|---|---|---|
-| **1. Soak** (`pos-soak-plan.md`; 24 h on two tablets per row 431, `docs/ops/pos2-soak.md`) | 0 sales lost, 0 sales doubled, no open blocker | _(Pass / Fail)_ | | _(defect ids, receipt counts)_ |
+| **1. Soak** (`pos-soak-plan.md`; 24 h on two tablets per row 431, `docs/ops/pos-v2-soak.md`) | 0 sales lost, 0 sales doubled, no open blocker | _(Pass / Fail)_ | | _(defect ids, receipt counts)_ |
 | **2. Printing check** (APK shell, T-532; `pos-lipa-switch.md` section B) | Every slip prints, readable, right totals, nothing doubled | _(Pass / Fail)_ | | _(photos, notes)_ |
 
 If either gate is a Fail, the answer is **No-go** for that date. Fix, then retest (soak #2 by Wed 2 Dec at the latest, then re-check the date).

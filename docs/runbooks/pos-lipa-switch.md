@@ -2,7 +2,9 @@
 
 **Purpose:** the exact steps, owners and times to switch Lipa to the new POS, and to roll back. **Owner:** Ian (decides); an admin runs the steps; BOSS tracks. Written for T-533 (R4), 15 Nov 2026.
 
-Read with: `docs/plans/pos-v2-design.md` section 8 (switch-over) and 8a (December bridge), `docs/runbooks/pos-soak-plan.md`, `docs/runbooks/pos-go-no-go.md`, `docs/ops/pos2-soak.md` (the two-tablet offline soak, not repeated here), `docs/ops/pos2-runbook.md`.
+Read with: `docs/plans/pos-v2-design.md` section 8 (switch-over) and 8a (December bridge), `docs/runbooks/pos-soak-plan.md`, `docs/runbooks/pos-go-no-go.md`, `docs/ops/pos-soak-2026-11-21-checklist.md` (the Saturday trial sheet), `docs/ops/pos-v2-soak.md` (the two-tablet offline soak, not repeated here), `docs/ops/pos2-runbook.md`.
+
+**Update 21 Nov 2026:** the printing work (T-532 S1 to S4) is built and live: the printer screen `/pos/printer`, the Android app `net.shareat.erppos` ("SharEat POS", built by CI as a signed APK) and the offline start. The only printing step still open is **S5, the real-tablet printing check at Lipa** (section B).
 
 ## The rules, in plain words
 - Lipa stays **OFF or TEST** until Ian says "go" (bible row 435). Nothing here switches Lipa to live by itself.
@@ -10,7 +12,7 @@ Read with: `docs/plans/pos-v2-design.md` section 8 (switch-over) and 8a (Decembe
 - A store switches at a **business-day boundary**, never in the middle of a day. A business day never mixes two sources.
 - **Go-live needs two things, both:**
   1. the soak passes (24 hours on two tablets, 0 sales lost, 0 sales doubled; row 431), **and**
-  2. the printing check passes. This is a separate check with the APK shell (T-532, not built yet). The soak in Chrome cannot test the Bluetooth printer.
+  2. the printing check passes (T-532 S5). This is a separate check on the real tablet with the Android app (the APK shell). The app is built; the check has not been done yet. The soak in Chrome cannot test the Bluetooth printer.
 - The new POS does not write to the old v1 Firebase, except the **December bridge** (day totals only, until 31 Dec 2026, row 436).
 - The load script only **reads** v1. Nothing here changes Lipa's v1 data.
 - **Lipa's business rules must be seeded on production** (VAT, senior/PWD discounts, business-day start hour, table warning minutes). The pre-flight page shows if they are missing. Without them the switch is refused.
@@ -43,11 +45,12 @@ Going live needs the store to be in TEST mode first; the switch refuses a store 
 
 Notes:
 - The v1 day import (the 06:00 job) **skips a live store's dates automatically** (T-533 S1). A database trigger (migration 0247) is the backstop. In TEST mode nothing changes for the import: v1 stays Lipa's sales source during the soak.
-- Do **not** try to test printing in Chrome. Chrome cannot use the Bluetooth printer; the tablet only offers "Browser print".
+- Do **not** try to test printing in Chrome. Chrome cannot use the Bluetooth printer; the tablet only offers "Browser print". Real printing is tested in the Android app (section B).
+- Two things staff can now do that the trial sheet can include: **void a table that was never paid** (T-620; a manager does it, or a cashier with the manager's PIN, and only online), and the **manager marks a GCash/Maya payment as checked** (T-623, still in review, not live yet; skip until it is merged).
 
 ## B. After the soak: the printing check (separate)
-1. Install the APK shell (T-532, **not built yet**) on the tablet **beside** the old app.
-2. Pair the Bluetooth printer. Print: a receipt, a reprint, an X slip, a Z slip, an outage kitchen ticket. Paper width (58 or 80 mm) and copies are set per till in **Settings > POS tablet > Tills**.
+1. Install the APK shell `net.shareat.erppos` ("SharEat POS") on the tablet **beside** the old app. The signed APK is the artifact of the **POS shell build** run on GitHub (workflow `pos-shell-build.yml`). BOSS gets it and gives it to the manager. It opens `erp2.shareat.net/pos` and never replaces the old app.
+2. Pair the Bluetooth printer first in the **Android Bluetooth settings**. Then in the app open **`/pos/printer`** (the Printer item in the POS header), choose the printer and tap **Print test slip**. The Printer screen only offers a printer inside the Android app; in Chrome it just uses the print dialog. Then print: a receipt, a reprint, an X slip, a Z slip, an outage kitchen ticket. Paper width (58 or 80 mm) and copies are set per till in **Settings > POS tablet > Tills**.
 3. Pass mark: every slip prints, is readable, shows the right totals, and nothing prints twice.
 4. Record the result in `pos-go-no-go.md`. Until it passes, Lipa does not go live.
 
@@ -63,7 +66,7 @@ Notes:
 | Step | Who |
 |---|---|
 | Pair the tablet again if it is new or was re-installed (a re-install is a new device). Settings > POS tablet. | Manager |
-| Install the release APK (T-532) beside the old app. | Manager |
+| Install the release APK `net.shareat.erppos` (T-532) beside the old app, and check `/pos/printer` still prints the test slip. | Manager |
 | Make a test sale in TEST mode and refund it. | Manager |
 | Pre-flight is green again. | Admin |
 
