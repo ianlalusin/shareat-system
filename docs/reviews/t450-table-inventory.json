@@ -18,6 +18,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/admin/users/[personId]/page.tsx",
+    "tables": 0,
+    "sharedTables": 5,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/admin/users/page.tsx",
     "tables": 0,
     "sharedTables": 1,
