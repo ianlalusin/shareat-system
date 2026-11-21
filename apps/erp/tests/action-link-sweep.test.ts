@@ -573,7 +573,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1714 -> 1719, T-611 S1: Copy-from-store dialog +5 (all min-h-11 or taller, so FAIL/UNRESOLVED are unmoved).
     // 1719 -> 1722, T-612 (20 Nov 2026): the staff record's Account row adds Activate, Reinstate and the Suspend dialog trigger (+3 census controls); re-measured by the test after merging main (1719 + 3).
     // 1722 -> 1723, T-599 S3 (21 Nov 2026): +1 the "Go to this step" anchor in the opening-balances Next banner (min-h-11, so FAIL/UNRESOLVED are unmoved); S1 and S2 moved nothing; re-measured by runCensus() (the test reported 1723 against 1722).
-    expect(results.length).toBe(1723);
+    // 1723 -> 1724, T-599 S7-S9 (21 Nov 2026): net +1 across the three pages (FAIL/UNRESOLVED unmoved); re-measured by runCensus() (the test reported 1724 against 1723).
+    expect(results.length).toBe(1724);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
