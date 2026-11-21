@@ -184,7 +184,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 132 -> 131, T-589 B6: /expenses now uses PageHeader, whose own <PageDescription> lives in Page.tsx; re-measured.
     // 131 -> 122, T-586: seven settings pages (organization, expense-categories, pos-link, pos-tablet, usage-tolerance, wastage-monitor x2 branches, attendance x2 branches) moved onto <Page crumb title description>, which renders the prose through PageHeader, so nine call sites left app/; measured by walking app/.
     // 122 -> 120, T-592: /settings/sales-channels moved onto <Page crumb title description> (and its no-stores branch onto EmptyState), so its two call sites left app/; measured by walking app/.
-    expect(count).toBe(120);
+    // 120 -> 119, T-599: a redrawn long page moved its prose onto the page header; measured by walking app/.
+    expect(count).toBe(119);
   });
 });
 

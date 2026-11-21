@@ -25,7 +25,7 @@ import { typedFor } from '@/lib/keep-typing';
 import { ITEM_ALIAS, ITEM_CATEGORY, ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord, RecordSummary } from '@/components/forms';
-import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select, SplitWorkspace, statusLabel } from '@/components/ui';
+import { Badge, Banner, Button, Checkbox, ConfirmDestructive, DisclosureCard, Field, FlashBanner, FormGrid, HelpTip, Input, Select, SplitWorkspace, statusLabel } from '@/components/ui';
 import { formatBusinessDateTime, formatBusinessDayLong } from '@shareat/core/datetime';
 import { NAV_LINK } from '@/components/action-link';
 
@@ -117,7 +117,10 @@ export default async function ItemDetailPage({
         <a data-screen-return href="/items" className={`${NAV_LINK} text-neutral-500 dark:text-neutral-400`}>
           ← Items
         </a>
-        <h1 className="mt-1 text-2xl font-semibold">{item.name}</h1>
+        <h1 className="mt-1 flex flex-wrap items-center gap-2 text-2xl font-semibold">
+          {item.name}
+          {item.status !== 'active' && <Badge status={item.status} />}
+        </h1>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           <span className="font-mono text-xs">{item.code}</span> · {itemKindLabel(item.kind)} ·
           priced per {item.baseUnit} · {soldAsLabel(item)}
@@ -137,8 +140,11 @@ export default async function ItemDetailPage({
         detailsTitle="Item details and prices"
         form={<div className="min-w-0 space-y-4">
       {/* T-383 R6. Rename: name and code, super-admin only; the domain (`renameItem`) is the enforcement. */}
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Name and code</h2>
+      {/* T-599 S4: one "About this item" card; the five blocks keep their own EditableRecord and are divided by a rule, not boxed. */}
+      <section aria-label="About this item" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">About this item</h2>
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium">Name and code</h3>
         {mayApproveItem ? (
           <EditableRecord action={renameItemAction} rules={ITEMS_RENAME_RULES} label={item.name} summary={nameCodeSummary} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_RENAME, item.id, actor.personId)}>
             <FormGrid>
@@ -172,11 +178,11 @@ export default async function ItemDetailPage({
             </p>
           </>
         )}
-      </section>
+      </div>
 
       {/* T-502 S1/S2. The expense category this item is bought under, so cost drivers read Group -> Category -> Item. Admin sets it. */}
-      <section id="category" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Expense category</h2>
+      <div id="category" className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+        <h3 className="text-sm font-medium">Expense category</h3>
         {mayKeepCatalogue ? (
           <EditableRecord action={setItemExpenseCategoryAction} label={`${item.name} expense category`} summary={categorySummary} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_CATEGORY, item.id, actor.personId)}>
             <FormGrid>
@@ -200,11 +206,11 @@ export default async function ItemDetailPage({
               : 'No expense category yet. Only an admin can set it.'}
           </p>
         )}
-      </section>
+      </div>
 
       {/* T-502 S1. Other names people type for this item (chili / sili / siling pula). The picker finds the item by any of them. */}
-      <section id="aliases" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Other names</h2>
+      <div id="aliases" className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+        <h3 className="text-sm font-medium">Other names</h3>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Names people use for {item.name}. Each other name belongs to one item only, and cannot be the official name of another item.
         </p>
@@ -237,14 +243,14 @@ export default async function ItemDetailPage({
         ) : (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">Only an admin can add or remove other names.</p>
         )}
-      </section>
+      </div>
 
       {/*
         T-443 R1. Variations: each size is its own item (own code, stock, price history) grouped under a top-level parent. One level only;
         the database trigger `items_variant_guard` is the rule and the domain (`setItemVariantOf`) speaks it in words. Super-admin sets it.
       */}
-      <section id="variation" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Variations</h2>
+      <div id="variation" className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+        <h3 className="text-sm font-medium">Variation of</h3>
         {variations.length > 0 && (
           <div className="space-y-1 text-sm">
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -285,15 +291,18 @@ export default async function ItemDetailPage({
             {parentItem ? 'Only a super-admin can change which item this is a variation of.' : 'No variations. Only a super-admin can group items as variations.'}
           </p>
         ) : null}
-      </section>
+      </div>
 
       {/* T-378 R2/R4. The form shows only while the database says the item has no history; the trigger is the rule. */}
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Measured in</h2>
+      <div className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+        <h3 className="text-sm font-medium">Measured in</h3>
         {unitLocked ? (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            {"This item's unit can no longer change: it already has stock, counts, invoices, recipes, prices or orders recorded in its current unit, and changing it would re-read every one of them in the new unit."}{' '}
-            It is measured in {item.baseUnit}.
+          <p className="flex items-center gap-1 text-sm text-neutral-600 dark:text-neutral-400">
+            {item.baseUnit} — fixed, it already has records
+            <HelpTip label="Measured in">
+              {"This item's unit can no longer change: it already has stock, counts, invoices, recipes, prices or orders recorded in its current unit, and changing it would re-read every one of them in the new unit."}{' '}
+              It is measured in {item.baseUnit}.
+            </HelpTip>
           </p>
         ) : !mayApproveItem ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -316,6 +325,7 @@ export default async function ItemDetailPage({
             </p>
           </EditableRecord>
         )}
+      </div>
       </section>
 
       {/*
@@ -326,7 +336,7 @@ export default async function ItemDetailPage({
       */}
       <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <div>
-          <h2 className="font-medium">What it may be bought and sold as</h2>
+          <h2 className="font-medium">Bought and sold as</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Tick what applies to this item everywhere. A store can answer differently below. An item with
             nothing ticked can be neither bought nor sold.
@@ -343,7 +353,7 @@ export default async function ItemDetailPage({
 
         {byStore.length > 0 && (
           <div className="space-y-2">
-            <h3 className="text-sm font-medium">Where a store differs</h3>
+            <h3 className="text-sm font-medium">Store exceptions</h3>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               &ldquo;Use the default&rdquo; is not the same as &ldquo;No&rdquo;. It keeps following the default
               above if that changes. A store that says &ldquo;No&rdquo; keeps its own answer.
@@ -352,7 +362,7 @@ export default async function ItemDetailPage({
               {byStore.map((s) => (
                 <li
                   key={s.storeId}
-                  className="space-y-2 rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800"
+                  className={s.override ? 'space-y-2 rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800' : 'text-sm'}
                 >
                   {/*
                     Save and Clear are TWO forms, side by side, not one form with a
@@ -410,18 +420,17 @@ export default async function ItemDetailPage({
                       </div>
                     </EditableRecord>
                   ) : (
+                  <DisclosureCard
+                    id={`sell-${s.storeId}`}
+                    title={s.storeName}
+                    action="Change"
+                    open={typedFor(sp, ITEM_STORE_SELLABILITY, s.storeId, actor.personId) !== null}
+                    meta={`uses the default · here: ${soldAsLabel(s.resolved)}`}
+                  >
                   <form action={setStoreSellabilityAction}>
                     <input type="hidden" name="itemId" value={item.id} />
                     <input type="hidden" name="storeId" value={s.storeId} />
                     <div className="flex flex-wrap items-end gap-3">
-                      <div className="min-w-[8rem]">
-                        <div className="font-medium">{s.storeName}</div>
-                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                          {'uses the default'}
-                          {' · here: '}
-                          {soldAsLabel(s.resolved)}
-                        </div>
-                      </div>
                       {FLAGS.map((f) => (
                         <label key={f.key} className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                           {f.label}
@@ -446,6 +455,7 @@ export default async function ItemDetailPage({
                       Save
                     </Button>
                   </form>
+                  </DisclosureCard>
                   )}
                 </li>
               ))}
@@ -454,74 +464,10 @@ export default async function ItemDetailPage({
         )}
       </section>
 
-      {/* T-383 R6/B2.4. Retire or restore: super-admin only, never for a merged item. The domain (`setItemStatus`) is the enforcement. */}
-      {mayApproveItem && readout && (
-        <section id="retire" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="font-medium">Retire or restore</h2>
-          {retireFlash && (
-            <Banner tone="error">{retireFlash}</Banner>
-          )}
-          {item.status === 'inactive' && <p className="text-sm font-medium">Retired.</p>}
-          {readout.onHand.length > 0 && (
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              {`Still holds stock at: ${readout.onHand.map((r) => `${r.storeName} (${r.quantity} ${item.baseUnit})`).join(', ')}. ${
-                item.status === 'inactive'
-                  ? 'It can still be used, wasted, moved and counted until it runs out.'
-                  : 'It stays on count sheets until counted out.'
-              }`}
-            </p>
-          )}
-          {readout.activePosMaps > 0 && (
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              {`${readout.activePosMaps} live POS ${readout.activePosMaps === 1 ? 'map' : 'maps'} still use it. Point them at the replacement; sales keep using up this item until its stock runs out.`}
-            </p>
-          )}
-          {readout.activeMenuRules > 0 && (
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              {`${readout.activeMenuRules} menu stock ${readout.activeMenuRules === 1 ? 'rule' : 'rules'} at a store that reads its usage from the menu still use it. Switch that store back to the POS item maps before retiring.`}
-            </p>
-          )}
-          {readout.activeRecipes > 0 && (
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              {`${readout.activeRecipes} live ${readout.activeRecipes === 1 ? 'recipe' : 'recipes'} still use it.`}
-            </p>
-          )}
-          {item.status === 'active' ? (
-            <form action={setItemStatusAction} className="space-y-2">
-              <input type="hidden" name="itemId" value={item.id} />
-              <input type="hidden" name="status" value="inactive" />
-              <ConfirmDestructive
-                tier="retype"
-                label="Retire item"
-                consequence="Retires this item. Every record stays, and it can be restored."
-                expectedName={item.name}
-              />
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Retiring keeps every record. It can no longer be ordered, received, priced, mapped to a POS item or put on a new recipe. Stock already on hand can still be used, wasted, moved and counted until it runs out. You can restore it.
-              </p>
-            </form>
-          ) : (
-            <form action={setItemStatusAction}>
-              <input type="hidden" name="itemId" value={item.id} />
-              <input type="hidden" name="status" value="active" />
-              <Button type="submit" variant="secondary">Restore</Button>
-            </form>
-          )}
-        </section>
-      )}
 
 
         </div>}
         details={<div className="min-w-0 space-y-4">
-          <section className="rounded-lg border border-surface-border bg-surface p-4">
-            <h2 className="mb-3 font-semibold">Item details</h2>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <dt className="text-muted">Code</dt><dd className="font-mono">{item.code}</dd>
-              <dt className="text-muted">Kind</dt><dd>{itemKindLabel(item.kind)}</dd>
-              <dt className="text-muted">Measured in</dt><dd>{item.baseUnit}</dd>
-              <dt className="text-muted">Status</dt><dd>{statusLabel(item.status)}</dd>
-            </dl>
-          </section>
       {sellers.length > 0 && (
         <section className="space-y-2">
           <h2 className="font-medium">Who sells this</h2>
@@ -645,6 +591,62 @@ export default async function ItemDetailPage({
 
         </div>}
       />
+
+      {/* T-383 R6/B2.4. Retire or restore: super-admin only, never for a merged item. The domain (`setItemStatus`) is the enforcement. */}
+      {mayApproveItem && readout && (
+        <section id="retire" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">{item.status === 'active' ? 'Retire item' : 'Restore item'}</h2>
+          {retireFlash && (
+            <Banner tone="error">{retireFlash}</Banner>
+          )}
+          {item.status === 'inactive' && <p className="text-sm font-medium">Retired.</p>}
+          {readout.onHand.length > 0 && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {`Still holds stock at: ${readout.onHand.map((r) => `${r.storeName} (${r.quantity} ${item.baseUnit})`).join(', ')}. ${
+                item.status === 'inactive'
+                  ? 'It can still be used, wasted, moved and counted until it runs out.'
+                  : 'It stays on count sheets until counted out.'
+              }`}
+            </p>
+          )}
+          {readout.activePosMaps > 0 && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {`${readout.activePosMaps} live POS ${readout.activePosMaps === 1 ? 'map' : 'maps'} still use it. Point them at the replacement; sales keep using up this item until its stock runs out.`}
+            </p>
+          )}
+          {readout.activeMenuRules > 0 && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {`${readout.activeMenuRules} menu stock ${readout.activeMenuRules === 1 ? 'rule' : 'rules'} at a store that reads its usage from the menu still use it. Switch that store back to the POS item maps before retiring.`}
+            </p>
+          )}
+          {readout.activeRecipes > 0 && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {`${readout.activeRecipes} live ${readout.activeRecipes === 1 ? 'recipe' : 'recipes'} still use it.`}
+            </p>
+          )}
+          {item.status === 'active' ? (
+            <form action={setItemStatusAction} className="space-y-2">
+              <input type="hidden" name="itemId" value={item.id} />
+              <input type="hidden" name="status" value="inactive" />
+              <ConfirmDestructive
+                tier="retype"
+                label="Retire item"
+                consequence="Retires this item. Every record stays, and it can be restored."
+                expectedName={item.name}
+              />
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                Retiring keeps every record. It can no longer be ordered, received, priced, mapped to a POS item or put on a new recipe. Stock already on hand can still be used, wasted, moved and counted until it runs out. You can restore it.
+              </p>
+            </form>
+          ) : (
+            <form action={setItemStatusAction}>
+              <input type="hidden" name="itemId" value={item.id} />
+              <input type="hidden" name="status" value="active" />
+              <Button type="submit" variant="secondary">Restore</Button>
+            </form>
+          )}
+        </section>
+      )}
     </Page>
   );
 }

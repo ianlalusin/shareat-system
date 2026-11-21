@@ -374,6 +374,8 @@ describe('(d) non-converted <select> sites are byte-for-byte unchanged', () => {
             .replace(/className=\{`\$\{INPUT\} mt-1 w-full`\}/g, 'className={INPUT}')
             // T-590: the end-employment status shows "Resigned" / "Terminated" (capital letter); the option values are untouched.
             .replace(/\{capital\(s\)\}/g, '{s}')
+            // T-599 S2: the hire status options read "Probationary" / "Regular" (capital letter); the option values are untouched.
+            .replace(/\{statusWords\(s\)\}/g, "{s.replace(/-/g, ' ')}")
             .split('\n')
             .map((l) => l.trim())
             .join('\n');

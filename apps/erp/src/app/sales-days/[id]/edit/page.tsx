@@ -147,10 +147,7 @@ export default async function EditSalesDayPage({
       <div>
         {back}
         <h1 className="mt-1 text-2xl font-semibold">Edit sales day: {formatBusinessDayLong(day.businessDate)}</h1>
-        <PageDescription>
-          Fix the figures, channels or wallets. <strong>The date, the store and the status stay as they are.</strong>{' '}
-          A submitted day stays submitted, and the verifier sees what you saved here.
-        </PageDescription>
+        <PageDescription>Fix the figures, channels or wallets. The date, store and status stay as they are.</PageDescription>
       </div>
 
       <FlashBanner flash={sp} />
