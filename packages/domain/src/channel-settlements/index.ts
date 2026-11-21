@@ -755,6 +755,8 @@ export async function recordChannelSettlement(
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const legBlockers = await loanLegBlockers(trx, actor.orgId, figures.loanLegs);
     if (legBlockers.length > 0) throw refuse('recordChannelSettlement: a loan leg is not valid', legBlockers[0]!);
+    // DEF-921 (T-618): a cross-store loan leg posts 1250/2150, so it takes the store-pair lock a transfer, its void and a settle-between-stores take, before the loan rows.
+    await lockLoanLegPairs(trx, input.storeId, figures.loanLegs.map((l) => l.ownerStoreId));
     // T-573: a dock lowers a loan's principal, so it takes the same row lock a payment does (in id order: two settlements cannot deadlock).
     for (const id of [...new Set(figures.loanLegs.map((l) => l.loanId))].sort()) await loansRepo.lockForPayment(trx, actor.orgId, id);
     const config = ctx.config;
@@ -1090,6 +1092,16 @@ export async function setChannelPayoutDestination(
 }
 
 /**
+ * DEF-921 (T-618): the store-pair lock for each OTHER store a settlement's loan legs name (a leg owned by the paying store posts no 1250/2150). Locked in key order, so two
+ * settlements naming the same pairs never wait on each other crosswise. Lock order everywhere: pair lock first, then draws and loan rows.
+ */
+async function lockLoanLegPairs(trx: Tx, storeId: string, ownerStoreIds: readonly (string | null | undefined)[]): Promise<void> {
+  const others = [...new Set(ownerStoreIds.filter((id): id is string => !!id && id !== storeId))];
+  const keyed = others.map((o) => ({ o, key: [storeId, o].sort().join(':') })).sort((a, b) => a.key.localeCompare(b.key));
+  for (const { o } of keyed) await advisoryLocksRepo.lockInterStorePair(trx, storeId, o);
+}
+
+/**
  * Void a posted settlement. ⚠️ Reverses every leg through `reverseEntry` — a correction is void
  * and re-post, never an edit, because a posted settlement is immutable.
  */
@@ -1104,6 +1116,8 @@ export async function voidChannelSettlement(
     await authorize(trx, actor, 'record_ar_collection', { storeId: seen.storeId });
     // The channel lock approve takes first (channel, then the staged line, then the books), so a void and an approve of the same channel queue instead of crossing.
     await advisoryLocksRepo.lockSettlementChannel(trx, seen.channelId);
+    // DEF-921 (T-618): reversing a cross-store leg moves 1250/2150 back, so the void takes the same store-pair locks the settlement did, before the loan rows.
+    await lockLoanLegPairs(trx, seen.storeId, seen.loanLegs.map((l) => l.ownerStoreId));
     // T-573: reversing a dock raises each docked loan's principal - the same row lock a payment takes, in id order, after the channel lock.
     for (const id of [...new Set(seen.loanLegs.map((l) => l.loanId))].sort()) await loansRepo.lockForPayment(trx, actor.orgId, id);
     // Read again under the lock: a second voider that queued behind the first must see it voided.

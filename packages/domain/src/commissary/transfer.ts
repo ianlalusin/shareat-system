@@ -93,7 +93,7 @@
  * this task's scope entirely.
  */
 import { add, compare, decimal, fromCentavos, isZero, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
-import { deliveriesRepo, stockLayersRepo, stockLedgerRepo, tradeDiscrepanciesRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, deliveriesRepo, stockLayersRepo, stockLedgerRepo, tradeDiscrepanciesRepo, type Tx } from '@shareat/db';
 import type { ShortageReason } from '@shareat/db/schema';
 import { consume } from '../stock/consume';
 import { repeatedItemSentence } from '../stock/usage';
@@ -383,6 +383,8 @@ export async function confirmReceipt(
   input: ConfirmReceiptInput,
 ): Promise<Outcome<ConfirmReceiptResult>> {
   if (input.lines.length === 0) return { ok: false, reason: 'a receipt with no lines posts nothing' };
+  // DEF-921 (T-618): a receipt posts 1250/2150 between the commissary and the branch, so it takes the store-pair lock a transfer void reads the position under.
+  await advisoryLocksRepo.lockInterStorePair(tx, input.branchStoreId, input.commissaryStoreId);
 
   const branchMovements: { lineId: string; movementId: string }[] = [];
   const discrepancies: { lineId: string; shortfall: Quantity; id: string | null; direction: 'short' | 'over' }[] = [];
@@ -651,6 +653,8 @@ export async function postInternalFreight(
     );
   }
   if (isZero(input.freight)) return null;
+  // DEF-921 (T-618): the freight is a 1250/2150 pair too (see confirmReceipt).
+  await advisoryLocksRepo.lockInterStorePair(tx, input.branchStoreId, input.commissaryStoreId);
 
   const posted = await postEntry(tx, {
     orgId: input.orgId,

@@ -40,6 +40,7 @@
  */
 import { compare, decimal, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import {
+  advisoryLocksRepo,
   commissaryRepo,
   customersRepo,
   itemsRepo,
@@ -285,6 +286,8 @@ async function resolveAsExtraDispatch(
   const customer = await customersRepo.getById(tx, input.orgId, order.customerId);
   const branchStoreId = customer?.counterpartyStoreId;
   if (!branchStoreId) throw internalFault(`resolveDiscrepancy: order ${order.id} has no branch store to receive the extra`);
+  // DEF-921 (T-618): the extra dispatch posts 1250/2150 between the commissary and the branch (see confirmReceipt).
+  await advisoryLocksRepo.lockInterStorePair(tx, row.storeId, branchStoreId);
 
   const item = await itemsRepo.getItemById(tx, input.orgId, line.itemId);
   const map = await commissaryRepo.mapItem(tx, row.storeId, branchStoreId, line.itemId);
