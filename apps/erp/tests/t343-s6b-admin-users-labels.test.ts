@@ -177,6 +177,7 @@ function staffDetail() {
       },
     ],
     credentials: [] as never[],
+    openJobs: [] as never[],
   };
 }
 
@@ -198,6 +199,7 @@ function superAdminDetail() {
     stores: [] as never[],
     grants: [] as never[],
     credentials: [] as never[],
+    openJobs: [] as never[],
   };
 }
 
@@ -241,7 +243,7 @@ function mutedSecondaryTexts(html: string): string[] {
 /** Every top-level `<li>…</li>` block (grants list, revoked list, store list, credentials list all
  *  use flat, non-nested `<li>`s on this page). */
 function liBlocks(html: string): string[] {
-  return html.match(/<li\b[^>]*>[\s\S]*?<\/li>/g) ?? [];
+  return html.match(/<(?:li|tr)\b[^>]*>[\s\S]*?<\/(?:li|tr)>/g) ?? [];
 }
 
 interface HiddenField {

@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { afterAll, describe, expect, it } from 'vitest';
+import { pinPlan } from './_fixtures/plan-pins';
 
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
@@ -36,7 +37,7 @@ async function planTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
   let value: T | undefined;
   try {
     await sql.begin(async (tx) => {
-      await tx`set local enable_seqscan = off`;
+      await pinPlan((s) => tx.unsafe(s));
       value = await fn(tx);
       throw new Rollback('rollback');
     });
@@ -49,6 +50,24 @@ const explain = async (tx: Tx, query: string): Promise<string> => {
   const rows = await tx.unsafe(`explain ${query}`);
   return rows.map((r) => String(r['QUERY PLAN'])).join('\n');
 };
+
+/**
+ * T-624: EXPLAIN with the sibling indexes that could also serve the shape dropped (in a savepoint, undone at once). Which of two valid
+ * indexes the planner prefers moves with row estimates, and CI shards share a database; what M3 proves is that `keep` CAN serve the shape.
+ */
+async function explainAlone(tx: Tx, query: string, siblings: readonly string[]): Promise<string> {
+  let plan = '';
+  try {
+    await tx.savepoint(async (sp) => {
+      for (const name of siblings) await sp.unsafe(`drop index ${name}`);
+      plan = await explain(sp, query);
+      throw new Rollback('undo the drops');
+    });
+  } catch (e) {
+    if (!(e instanceof Rollback)) throw e;
+  }
+  return plan;
+}
 
 const ORG = '00000000-0000-4000-8000-000000000001';
 const STORE = '00000000-0000-4000-8000-000000000002';
@@ -95,11 +114,14 @@ describe('T-602 S1 - migration 0272', () => {
 
   it('M3: the query shapes are served by their index; dropping X1 un-serves the till list (mutant)', async () => {
     await planTx(async (tx) => {
-      expect(await explain(tx, SINCE)).toContain('pos_sales_receipts_store_issued_idx');
-      expect(await explain(tx, OF_CLOSE)).toContain('pos_sales_receipts_day_close_idx');
-      expect(await explain(tx, OPEN)).toContain('pos_sales_receipts_open_idx');
-      expect(await explain(tx, ON_HAND)).toContain('stock_movements_store_item_qty_idx');
-      const max = await explain(tx, MAX_SEQ);
+      const X1 = 'pos_sales_receipts_store_issued_idx';
+      const X2 = 'pos_sales_receipts_day_close_idx';
+      const X3 = 'pos_sales_receipts_open_idx';
+      expect(await explainAlone(tx, SINCE, [X2, X3])).toContain(X1);
+      expect(await explainAlone(tx, OF_CLOSE, [X1, X3])).toContain(X2);
+      expect(await explainAlone(tx, OPEN, [X1, X2])).toContain(X3);
+      expect(await explainAlone(tx, ON_HAND, ['stock_movements_store_moved_idx', 'stock_movements_item_location_idx'])).toContain('stock_movements_store_item_qty_idx');
+      const max = await explainAlone(tx, MAX_SEQ, [X1, X2, X3]);
       expect(max).toContain('pos_sales_receipts_terminal_seq_unique');
       expect(max).not.toMatch(/Join/);
       // MUTANT: without X1 the plan cannot name it.

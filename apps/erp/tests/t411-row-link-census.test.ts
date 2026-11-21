@@ -105,6 +105,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/trade/returns/page.tsx',
   // Read-only detail lines with nowhere to go (16)
   'app/admin/prerequisite-refusals/page.tsx',
+  'app/admin/users/[personId]/page.tsx', // store access, sign-in and grant tables: each row's own buttons, no row destination
   'app/customers/price-lists/[id]/page.tsx',
   'app/opening-balances/stock-count/page.tsx', // T-591 B: a count table; the row's one action is its own Edit, no row destination
   'app/opening-balances/stock-count/sheet/page.tsx',
@@ -123,6 +124,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/settings/pos-link/page.tsx',
   'app/till/page.tsx',
   'app/pos/receipts/page.tsx', // T-601 S2: a read-only list of the day's receipts; there is no receipt detail page to open yet (reprint comes after the soak)
+  'app/pos/receipts/WalletChecks.tsx', // T-623: each row's only action is its Checked button; there is no payment page to open
 ];
 
 /**

@@ -1,5 +1,7 @@
 # Runbook: the POS v2 server (`pos2.shareat.net`) - T-424
 
+> **Superseded 21 Nov 2026 for go-live.** This runbook describes the retired Firebase server and app `apps/pos` (`pos2.shareat.net`). POS v2 now lives in the ERP at `erp2.shareat.net/pos`. For go-live use `docs/runbooks/pos-lipa-switch.md`.
+
 The POS v2 server is a small Next.js server (`apps/pos`, `next start`) that checks money actions the tablet is not trusted to check:
 refunds, wrong-tender corrections, voiding an unpaid table, and (test project only) the analytics port. A manager approves each one with
 their ERP v2 PIN. It runs as `shareat-pos.service` on **159.223.46.224** (our production host, never `.78.207`) behind

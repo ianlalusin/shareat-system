@@ -1,5 +1,7 @@
 # POS v2 offline soak - real two-tablet run (T-425, Ruling 10)
 
+> **For the Lipa go-live soak, use [`pos-v2-soak.md`](./pos-v2-soak.md)** (POS v2 in the ERP at `/pos`, Android app `net.shareat.erppos`). This file is the soak for the old Firebase app `apps/pos`, kept until that app is retired (T-588).
+
 The unit-test soak (`apps/pos/src/lib/outbox/__soak__/two-tablets.test.ts`, part of `npm test -w @shareat/pos`) proves the logic with fakes: 150 sales over
 two tablets, flapping connectivity, 4 X-slips each, a lost SDK queue, a killed reconcile pass, a re-seated table, a table voided online. This document is the
 **real-device run**: two tablets, 24 hours, (planned 23 to 29 November; a failure retries 30 November to 4 December; docs/plans/pos-customer-v2-phase-plan.md section 0), by Ian or ops. Nothing here touches production data.

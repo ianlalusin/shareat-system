@@ -203,7 +203,7 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
           {reading.convert && reading.convert.count > 0 ? <Row label="Convert: cash in" value={amount(reading.convert.cashIn)} /> : null}
           {reading.convert && reading.convert.count > 0 ? <Row label="Convert: cash out" value={amount(reading.convert.cashOut)} /> : null}
           {reading.refunds && reading.refunds.count > 0 ? <Row label="Refunds" value={`-${amount(reading.refunds.total)}`} /> : null}
-          {reading.toCheckCount > 0 ? <Row label="Wallet payments to check" value={String(reading.toCheckCount)} /> : null}
+          {reading.toCheckCount > 0 ? <Row label="Wallet payments still to check" value={String(reading.toCheckCount)} /> : null}
           {reading.lateCount > 0 ? <Row label="Late receipts" value={String(reading.lateCount)} /> : null}
         </dl>
         {notice ? (
