@@ -59,7 +59,7 @@ describe('T-623 - checkWalletPayment', () => {
     expect((audits[0]!.after as { receiptNo: string }).receiptNo).toMatch(/^.+-01-\d{6}$/);
   });
 
-  it('a second check is a plain refusal naming who and when; nothing more is written [kills: no already-checked guard]', async () => {
+  it('a second check is a plain refusal naming who and when; nothing more is written [kills: dropping the already-checked guards]', async () => {
     const w = await world();
     const r = await toCheck(w);
     await check(w, r.paymentId);
@@ -69,7 +69,7 @@ describe('T-623 - checkWalletPayment', () => {
     expect(await auditsOf(w, 'pos.payment_checked')).toHaveLength(1);
   });
 
-  it('two managers racing: exactly one writes, the other gets the plain refusal [kills: the update ignoring checked_at is null]', async () => {
+  it('two managers racing: exactly one writes, the other gets the plain refusal [kills: dropping the already-checked guards]', async () => {
     const w = await world();
     const r = await toCheck(w);
     const outcomes = await Promise.allSettled([check(w, r.paymentId, w.manager), check(w, r.paymentId, w.admin)]);
