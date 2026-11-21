@@ -28,6 +28,7 @@ if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 
 import { apRepo, arRepo, type Tx } from '@shareat/db';
+import { pinPlan } from './_fixtures/plan-pins';
 
 // The test URL's role (a superuser) so session_replication_role can be set; the app pool's role may not.
 const pg = postgres(url, { max: 1 });
@@ -381,8 +382,10 @@ describe('T-602 S5 - the narrowed CTEs return what the old SQL returned', () => 
     await rolledBack(async (tx) => {
       const a = newOrg();
       await seedOrg(tx, a);
-      await tx.execute(dsql`analyze expense_payments`);
-      await tx.execute(dsql`set local enable_seqscan = off`);
+      // T-624: 1,000 credit payments of OTHER expenses (foreign keys are off in this tx), so walking expense_payments end to end is decisively dearer than
+      // probing it per expense of the store. Without them the table holds a handful of rows and the planner's choice is a coin toss that moves with CI's shared data.
+      await tx.execute(dsql`insert into expense_payments (expense_id, method, amount) select gen_random_uuid(), 'credit', 1.00 from generate_series(1, 1000)`);
+      await pinPlan((s) => tx.execute(dsql.raw(s)), ['expense_payments', 'expenses']);
       // The exact text apRepo.aging runs, with a store, EXPLAINed. Captured by wrapping the executor so the test cannot drift from the repo.
       const seen: string[] = [];
       const spy = new Proxy(tx, {
