@@ -316,7 +316,7 @@ export async function moveChannelToChannelReceivable(
   input: { channelId: string; requestId: string },
   /** Tests only: the Manila business date to date the entry by (the screen never passes one). */
   today?: string,
-): Promise<{ moved: boolean; entryId: string | null; total: string }> {
+): Promise<{ moved: boolean; entryId: string | null; total: string; replayed?: true }> {
   await authorize(tx, actor, 'manage_chart_of_accounts', {});
   const seen = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
   if (!seen) throw refuse(`moveChannelToChannelReceivable: channel ${input.channelId} does not exist in this organisation.`, 'That channel no longer exists.');
@@ -373,8 +373,9 @@ export async function moveChannelToChannelReceivable(
       postedBy: actor.personId,
       lines,
     });
-    // A replay of a press whose entry was written (and later reversed): nothing new was posted, so nothing else happens either.
-    if (!posted.created) return { moved: false, entryId: posted.entryId, total: '0.00' };
+    // A replay of a press whose entry was written (and later reversed): nothing new was posted, so nothing else happens either. DEF-929: `total` is what sits on another account NOW
+    // (the reversal put it back), so the screen can say so instead of "nothing to do".
+    if (!posted.created) return { moved: false, entryId: posted.entryId, total: String(total), replayed: true };
     entryId = posted.entryId;
   }
   if (old !== PLATFORM_RECEIVABLE_CODE) {
