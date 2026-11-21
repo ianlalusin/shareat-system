@@ -341,6 +341,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('credential.linked', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
   def('credential.unlinked', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
   def('credential.pin_set', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),
+  // T-619 / DEF-920: a raised role retires the person's PIN; the system writes it when the role was assigned with no actor.
+  def('credential.pin_reset_on_promotion', 'security', 'high', 'org', 'persons', 'T-619', { ...ADMIN, actor: 'either' }),
   // T-603 S1: a refused PIN set carries the employment's store, so it is store-scoped (an org-scoped row may not carry one).
   def('credential.pin_set_refused', 'security', 'high', 'store', 'persons', 'T-603', ADMIN),
   def('role.assigned', 'security', 'high', 'org', 'persons', 'T-402', ADMIN),

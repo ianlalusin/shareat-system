@@ -156,6 +156,15 @@ export async function livePinFor(actor: Actor, personId: string): Promise<{ issu
   });
 }
 
+/** T-619 / DEF-920: true while a promotion has retired this person's PIN and no new one is set. Same read gate as `livePinFor`. */
+export async function pinResetPendingFor(actor: Actor, personId: string): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const held = (await heldStoresFor(tx, actor, STAFF_READ)).map((st) => st.id);
+    if (!(await employmentRepo.personHasEmploymentAtStores(tx, personId, held))) return false;
+    return sessionsRepo.pinResetPendingForPerson(tx, personId);
+  });
+}
+
 /** T-609: true when this person can no longer sign in at this store - the "Access: off" pill on an ended record. The page's own read gate has already passed. */
 export async function accessOffAtStoreFor(actor: Actor, personId: string, storeId: string): Promise<boolean> {
   return withOrgPrincipal(actor.orgId, async (tx) => !(await accessRepo.personMaySignInAtStore(tx, personId, storeId)));
