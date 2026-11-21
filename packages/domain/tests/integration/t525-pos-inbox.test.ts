@@ -39,7 +39,6 @@ import {
   type Ev, type Fx,
 } from './_fixtures/t525-pos';
 import { putRule } from './_fixtures/t512-rules';
-import { voidSessionEvent } from '../../../../apps/erp/src/app/pos/_orders/payloads';
 import { insOffer } from '../../../db/tests/integration/_fixtures/t401-menu';
 
 afterAll(closeAll);
@@ -1176,10 +1175,13 @@ describe('T-620 - the till builds the void event the inbox understands', () => {
     expect(statuses(r)).toEqual(['applied', 'applied']);
     return sessionId;
   }
-  const built = (seq: number, personId: string, i: { sessionId: string; offline: boolean; pin?: string }) => {
-    const e = voidSessionEvent({ personId, sessionId: i.sessionId, reason: 'Walked out', now: new Date(), offline: i.offline, ...(i.pin ? { pin: i.pin } : {}) });
-    return ev(seq, e.kind, e.personId, e.payload);
-  };
+  // The payload the till's voidSessionEvent builds (apps/erp/.../_orders/payloads.ts; a package test may not import an app,
+  // so its shape is pinned against the inbox spec by apps/erp/tests/t620-void-stand.test.ts).
+  const built = (seq: number, personId: string, i: { sessionId: string; offline: boolean; pin?: string }) =>
+    ev(seq, 'session.voided', personId, {
+      sessionId: i.sessionId, reason: 'Walked out', voidedAtDevice: new Date().toISOString(), offline: i.offline,
+      ...(i.pin ? { approval: { pin: i.pin } } : {}),
+    });
 
   it('voidSessionEvent with a manager PIN, sent through the inbox, voids the table and writes pos.session_voided', async () => {
     const f = await fixture();
