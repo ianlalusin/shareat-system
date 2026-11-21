@@ -239,6 +239,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-533 S2: the one-time store setup load (and later T-535's screen) added a stand (entity = the pos_stands row) or set a discount preset (entity = the pos_discount_presets row; created or its value changed).
   def('pos.stand_added', 'settings', 'normal', 'store', 'pos_stands', 'T-533'),
   def('pos.discount_preset_set', 'settings', 'normal', 'store', 'pos_discount_presets', 'T-533'),
+  // T-622: a named discount retired from the ERP screen (entity = the pos_discount_presets row; before = name, type, value). The row is kept: past sales name it.
+  def('pos.discount_preset_retired', 'settings', 'normal', 'store', 'pos_discount_presets', 'T-622'),
   // T-533 S1: a store's POS mode set or moved (off, test, live from a date, or the roll-back); entity = the pos_stores row. `high`: it decides whether real sales days come from the new POS.
   def('pos.store_mode_set', 'settings', 'high', 'store', 'pos_stores', 'T-533'),
   // T-531: the day close (the Z; entity = the pos_day_closes row, or the run id for the backlog), the ERP sales day it derives, and the December bridge to v1 (entity = the store).
