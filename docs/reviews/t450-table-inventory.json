@@ -444,12 +444,6 @@
     "headerless": 0
   },
   {
-    "file": "apps/erp/src/app/sales-days/SalesDayForm.tsx",
-    "tables": 2,
-    "sharedTables": 0,
-    "headerless": 0
-  },
-  {
     "file": "apps/erp/src/app/settings/expense-categories/page.tsx",
     "tables": 0,
     "sharedTables": 1,

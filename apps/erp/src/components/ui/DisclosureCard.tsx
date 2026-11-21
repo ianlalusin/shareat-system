@@ -28,7 +28,7 @@ export function DisclosureCard({ id, title, action = 'Add', open, meta, classNam
           </span>
         : <span>{title}</span>}
       {fold
-        ? <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-neutral-500 transition-transform group-open:rotate-90"><path d="M7 5l5 5-5 5" /></svg>
+        ? <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-90"><path d="M7 5l5 5-5 5" /></svg>
         : <span className="erp-disclosure-action inline-flex min-h-11 min-w-14 items-center justify-center gap-2 rounded-lg border border-field-border px-3">
             <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
             <span>{action}</span>
