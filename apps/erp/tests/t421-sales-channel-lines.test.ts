@@ -116,7 +116,7 @@ vi.mock('@shareat/db', async (importOriginal) => {
       receivedInRange: async () => ({ orderCount: 0, goodsDispatchedValue: '0.00', goodsReceivedValue: '0.00', shortReceivedValue: '0.00', unrecordedValue: '0.00' }),
     },
     employmentRepo: { ...(actual as { employmentRepo?: object }).employmentRepo, listActiveRoster: async () => [] },
-    lowStockRepo: { ...(actual as { lowStockRepo?: object }).lowStockRepo, lowStock: async () => [] },
+    lowStockRepo: { ...(actual as { lowStockRepo?: object }).lowStockRepo, lowStockForStores: async () => [] },
     attendanceDaysRepo: { ...(actual as { attendanceDaysRepo?: object }).attendanceDaysRepo, countOpenToday: async () => 0 },
   };
 });
