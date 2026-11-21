@@ -11,7 +11,7 @@
 | **Mode** | Lipa set to **TEST** on `/admin/stores/[id]`. **No sales day is booked. Nothing goes to v1.** |
 | **Printer** | **None in this soak.** Chrome cannot use the Bluetooth printer. Steps that print are marked "printing check, T-532" and are **skipped here**. The printing is built (the Android app is ready); it is tested separately on the real tablet (T-532 S5) |
 
-This is the first of the two go-live gates. The other is the **printing check** with the Android app `net.shareat.erppos` (T-532 S5: built, but not yet tried on the real Lipa tablet), described in `pos-lipa-switch.md` section B. Lipa goes live only when **both** pass. The 24-hour two-tablet offline soak (0 sales lost, 0 doubled, row 431) is in `docs/ops/pos2-soak.md`; this script is the shorter, scripted Lipa run and does not replace it.
+This is the first of the two go-live gates. The other is the **printing check** with the Android app `net.shareat.erppos` (T-532 S5: built, but not yet tried on the real Lipa tablet), described in `pos-lipa-switch.md` section B. Lipa goes live only when **both** pass. The 24-hour two-tablet offline soak (0 sales lost, 0 doubled, row 431) is in `docs/ops/pos-v2-soak.md`; this script is the shorter, scripted Lipa run and does not replace it.
 
 ## Before you start (check each)
 1. Open `erp2.shareat.net/pos` in Chrome on the tablet and confirm it loads.

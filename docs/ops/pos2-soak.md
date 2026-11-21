@@ -1,35 +1,47 @@
-# POS v2 offline soak: the 24-hour, two-tablet run (go-live gate, bible row 431)
+# POS v2 offline soak - real two-tablet run (T-425, Ruling 10)
 
-**Updated 21 Nov 2026.** This used to describe the old Firebase app `apps/pos` (`net.shareat.pos2`, terminal numbers, `pos2-soak-verify.mjs`). That app is retired. POS v2 now lives inside the ERP at `erp2.shareat.net/pos`, and the Android app is `net.shareat.erppos` (T-532). The old steps are gone from this file. Do not run the old scripts.
+> **For the Lipa go-live soak, use [`pos-v2-soak.md`](./pos-v2-soak.md)** (POS v2 in the ERP at `/pos`, Android app `net.shareat.erppos`). This file is the soak for the old Firebase app `apps/pos`, kept until that app is retired (T-588).
 
-Not the same thing as the Saturday trial. The short scripted run (about 30 actions, Chrome, one tablet) is `docs/ops/pos-soak-2026-11-21-checklist.md` and `docs/runbooks/pos-soak-plan.md`. This file is the longer proof: **two tablets, about 24 hours, with real offline stretches.**
-
-**Pass mark:** 0 sales lost and 0 sales doubled (row 431). Latest start date: Wed 2 Dec 2026 (`docs/plans/pos-v2-design.md`, section 9). Run by Ian or the Lipa manager. Nothing here touches real money: Lipa stays in **TEST** mode.
-
-Words: **outbox** = sales saved on the tablet that have not reached the server yet. **Receipts tab** = the list of the day's sales on `/pos`.
+The unit-test soak (`apps/pos/src/lib/outbox/__soak__/two-tablets.test.ts`, part of `npm test -w @shareat/pos`) proves the logic with fakes: 150 sales over
+two tablets, flapping connectivity, 4 X-slips each, a lost SDK queue, a killed reconcile pass, a re-seated table, a table voided online. This document is the
+**real-device run**: two tablets, 24 hours, (planned 23 to 29 November; a failure retries 30 November to 4 December; docs/plans/pos-customer-v2-phase-plan.md section 0), by Ian or ops. Nothing here touches production data.
 
 ## Before you start
-1. Lipa is in **TEST** mode and the pre-flight page has no blocking items (`pos-lipa-switch.md` section A).
-2. Two tablets, both paired to Lipa (Settings > POS tablet) and linked to **two different tills**. Both run the **Android app `net.shareat.erppos`**, installed from the same signed APK (the artifact of the POS shell build, `pos-shell-build.yml`). Never a debug build.
-3. Each tablet signs in with an Employee ID and PIN. Write down each tablet's name and till number.
-4. The status label at the top right says **Online** on both. Open the **Receipts** tab on both and write down today's receipt count before you start.
-5. Do not clear the app's data or storage on a tablet that has unsent sales. That would delete them.
+1. **Health route first.** From a laptop: `curl -s https://pos2.shareat.net/api/pos2/health` must print `{"ok":true,"version":"..."}`. If it does not, stop:
+   every tablet would read "offline" (card disabled, every sale offline). The route is `/api/pos2/health`; see `docs/ops/pos2-runbook.md` section 12.
+2. Both tablets run the SAME release APK, signed with the release key (never a debug build). Each has its own terminal number (Settings > Terminal).
+3. No cloud test project: each tablet signed in to a Lipa test setup (a test store entry, a test cashier and a test manager). Note each tablet's device id and terminal number.
+4. Settings > Unsent sales shows `Unsent sales: 0` on both. A printer is paired on at least one tablet (the other tests the on-screen slip).
 
 ## The run (about 24 hours)
-1. **A normal offline stretch.** Switch both tablets to airplane mode for several hours. Sell at least 60 sales per tablet: cash, GCash with a reference number, and two payment methods on one bill. Try a card payment and a refund: both must say they need the internet. Void a table nobody paid (T-620) as a manager: it needs the internet and must say so offline.
-2. **Wi-Fi on and off.** For one hour, every 5 to 10 minutes turn the Wi-Fi on for 1 to 2 minutes, then off again, while still selling. The label must go from "Offline 12m, N waiting to send" to "Sending..." to "Online" and back. Sales must stay counted as waiting until the server has them.
-3. **Close the app right after paying.** Pay a sale and, within 1 second, swipe the app away. Then once force-stop it from Android settings. Reopen it, also with no internet (the offline start from T-532 S4). The sale must still be there, and the next receipt number must not repeat. Do this at least 10 times per tablet.
-4. **Update during an outage.** Once T-621 is live (it adds the update gate), do a deploy while a tablet is offline with sales waiting. The tablet must keep running the old screens and not lose a sale. Until T-621 is merged, skip this step and write "skipped". Also do an **in-place APK update during an outage**: install the newer signed APK over the old one (never uninstall first) while the tablet is offline with sales waiting. Every waiting sale must still be there and send once the internet is back.
-5. **Unsent money warning and the 4-hour slip.** Also from T-621 (not live until merged): with more than 50,000 pesos unsent, a warning shows and selling continues; an X slip prints every 4 offline hours. Skip and write "skipped" until it is live.
-6. **A change made in the office while the tablet is offline.** In the ERP, void an unpaid table that a tablet has open. Reconnect. The tablet must not lose its other sales. Write down what the screen says. BOSS then checks in the database whether any sale was set aside (there is no manager screen for set-aside sales yet).
-7. **Reconnect and wait 10 minutes.** Both tablets must say **Online** with nothing waiting.
+1. **Normal offline day.** Put both tablets in airplane mode. Sell for several hours: at least 60 sales per tablet, a mix of cash, GCash with a reference, and
+   two tenders on one bill. Try card and QR Ph (must say "Needs the internet"), a refund (must say "Refunds need the internet."), a void as a cashier (refused)
+   and as a manager (allowed), and a table opened on tablet A paid on tablet B (refused).
+2. **Airplane-mode flapping.** Every 5 to 10 minutes switch airplane mode off for 1 to 2 minutes and on again, for an hour, while selling. The banner and the
+   X-slip clock must not reset on a short reconnect; unsent sales must stay listed until the server has them.
+3. **Kill the app within 1 s of a payment.** Complete a payment and, within 1 s, swipe the app away (and once force-stop it from Android settings). Reopen:
+   the sale must be in the ledger as unsent (or already sent) and never lost, and the next receipt number must not repeat. Do this at least 10 times per tablet.
+4. **Android "Clear cache".** With unsent sales on the tablet, Settings > Apps > Shareat POS v2 > Storage > **Clear cache** (NOT "Clear data"). Reopen: every
+   unsent sale must still be there. (Clear data deletes them; that is the warning on the Settings screen.)
+5. **In-place APK update during an outage.** With at least 5 unsent sales and the tablet still offline, install the next release APK over the current one (an
+   in-place update, same key). Reopen: the 5 sales are still listed and reach the server when the internet returns. Never test this with a debug build.
+6. **50,000 peso banner.** Let unsent sales pass 50,000.00 pesos on one tablet: the banner must show on every screen and selling must continue.
+7. **4-hour X-slip.** The first slip prints at 4:00 of offline-period time (and 8:00, 12:00, ...). Press Settings > Unsent sales > Print X-slip at any time:
+   the totals must equal the ledger's sales for the period. The header says "not a BIR document".
+8. **A server-side change during the outage.** On a laptop (ERP or Firebase console), void one of the tablet's open tables and re-seat
+   another. Reconnect: the paid sale on the voided table is **quarantined** (shown to the manager, server copy untouched); the re-seated table is not freed.
+9. **Reconnect and wait 10 minutes.** Both tablets: `Unsent sales: 0`, the offline period ends 10 minutes after the last unsent sale is proven.
 
-## Check (read-only)
-For each tablet:
-1. **Receipts tab:** the count must equal the count before you started plus the sales you rang. The top line says whether any numbers are missing (a missing number is a finding to write down, not proof a sale was lost).
-2. **Till tab:** the X reading (Reading so far) matches the Receipts tab: same count, same total, day not closed.
-3. **Doubles:** no receipt appears twice. Compare the last six digits of each receipt number.
-4. Give BOSS the notes. BOSS checks the database for receipts that never arrived or arrived twice. Every problem goes in `docs/DEFECTS-REGISTER.md` with the step number and receipt number.
-5. Leave Lipa in **TEST**. Do not close the day for real unless the test plan says so.
+## Verify (read-only)
+For each tablet, with the POS Firebase service-account key (the project the APK signs into) (`POS_FIREBASE_SA_KEY_FILE`, never typed into a chat or a flag):
+`node apps/pos/scripts/pos2-soak-verify.mjs --store=<test store id> --terminal=<n> --skipped=<comma list>`
+`--skipped` is the list of terminal sequence numbers the tablet's ledger explains WITHOUT a receipt: online sales that failed (status `skipped`) and offline voids
+(each void used a number). Void rows are shown in Settings > Unsent sales > "Review after outage"; ask the developer for a ledger dump for `skipped` rows.
+Output: the receipt count, every gap labelled `skipped` or `MISSING`, and any duplicate receipt number. Exit 0 = every number explained, none duplicated.
+Also run `node apps/pos/scripts/pos2-audit.mjs --from=<day> --to=<day>` to list the offline voids for a manager to review.
 
-Also read: `docs/ops/pos2-runbook.md` is about the retired Firebase server and is not part of this run.
+## Pass criteria
+- No `MISSING` number and no duplicate receipt number on either terminal.
+- Every sale made offline is on the server exactly once, except the planted conflict, which is quarantined and untouched.
+- Unsent sales survived: the kill within 1 s, Clear cache and the in-place update.
+- X-slip totals equal the ledger; the banner showed at 50,000.00; selling never stopped.

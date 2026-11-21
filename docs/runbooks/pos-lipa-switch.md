@@ -2,7 +2,7 @@
 
 **Purpose:** the exact steps, owners and times to switch Lipa to the new POS, and to roll back. **Owner:** Ian (decides); an admin runs the steps; BOSS tracks. Written for T-533 (R4), 15 Nov 2026.
 
-Read with: `docs/plans/pos-v2-design.md` section 8 (switch-over) and 8a (December bridge), `docs/runbooks/pos-soak-plan.md`, `docs/runbooks/pos-go-no-go.md`, `docs/ops/pos-soak-2026-11-21-checklist.md` (the Saturday trial sheet), `docs/ops/pos2-soak.md` (the two-tablet offline soak, not repeated here), `docs/ops/pos2-runbook.md`.
+Read with: `docs/plans/pos-v2-design.md` section 8 (switch-over) and 8a (December bridge), `docs/runbooks/pos-soak-plan.md`, `docs/runbooks/pos-go-no-go.md`, `docs/ops/pos-soak-2026-11-21-checklist.md` (the Saturday trial sheet), `docs/ops/pos-v2-soak.md` (the two-tablet offline soak, not repeated here), `docs/ops/pos2-runbook.md`.
 
 **Update 21 Nov 2026:** the printing work (T-532 S1 to S4) is built and live: the printer screen `/pos/printer`, the Android app `net.shareat.erppos` ("SharEat POS", built by CI as a signed APK) and the offline start. The only printing step still open is **S5, the real-tablet printing check at Lipa** (section B).
 
