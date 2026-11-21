@@ -21,6 +21,7 @@ import { lookupSeniorRepeat, repeatWarning } from './senior-repeat';
 import { receiptLinesOf, statutoryDiners, toPriceLines, type BillLineRow, type PresetLike, type ProjectedBill } from './bill';
 import { DiscountSheet, type SheetTarget } from './DiscountSheet';
 import { ManagerPinDialog } from '../_shell/LineApprovalField';
+import { usePaymentScreenOpen } from '../_shell/use-update-gate';
 import { REVIEW_NOTE, resolveApproval, type ApprovalFields, type LineActionKind, type LineApprovalMode } from '../_shell/line-approval';
 import {
   addSplitRow, amountCents, appendAmountKey, applyToAllEvent, canAddPayment, chooseTender, discountAddedEvent, discountRemovedEvent, finishLabel, paySale, payBlockerDetail, paymentSummary, priceBill, rateLabel, scPwdDiscountOf,
@@ -145,6 +146,7 @@ function BillLineView({ line, priced, scLabel, holders, onOpen, onRemove }: { li
 }
 
 export function PaymentPanel(p: PaymentPanelProps) {
+  usePaymentScreenOpen(); // T-621 S1: a deploy's new code never takes over while a payment is on screen
   const [rows, setRows] = useState<PayRow[]>([]);
   const [active, setActive] = useState<number | null>(null);
   const [fresh, setFresh] = useState(false); // the next digit replaces the pre-filled amount

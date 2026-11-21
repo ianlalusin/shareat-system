@@ -15,7 +15,7 @@ import { signOutAction } from '@/app/sign-in/actions';
 import { printerMode } from '@/lib/pos-print/adapter';
 import { installPrinterBridge } from '@/lib/pos-print/native';
 import { purgePosShell, registerPosServiceWorker } from './offline-sw';
-import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHeldSalesMessage, posHttpErrorMessage, testBandText } from './messages';
+import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, POS_UPDATE_HELD, posHeldSalesMessage, posHttpErrorMessage, testBandText } from './messages';
 import { SwitchCashierDialog } from './SwitchCashierDialog';
 import { posOfflineBandText } from './offline-band';
 import { asStoreMenu, type MenuLike } from '../_orders/menu-filter';
@@ -26,6 +26,7 @@ import { tabCount, visibleTabs } from './tabs';
 import { useDeviceSync } from './use-device-sync';
 import { useMenuClock } from './use-menu-clock';
 import { usePosState } from './use-pos-state';
+import { useUpdateGate } from './use-update-gate';
 import { useOutageReplay } from '../_kitchen/use-outage-replay';
 
 export interface PosShellProps {
@@ -66,6 +67,8 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   const clockAt = useMenuClock(menuHours, sync.ordersSnapshot?.nextChangeAt ?? null);
   // T-529 R3: orders saved in the ~6 s before the poll says Offline still print, once.
   useOutageReplay({ paired: pairedStoreId !== null, online: state.online, snapshot: sync.ordersSnapshot, pending: sync.pendingEvents, loaded: sync.pendingLoaded, openStands: state.body?.openStands ?? null });
+  // T-621 S1: a deploy's new code waits until nothing is waiting to send, no payment screen is open and the till is online.
+  const updateHeld = useUpdateGate({ waiting: sync.pending, online: state.online });
   const [switching, setSwitching] = useState(false);
   const [offlineSince, setOfflineSince] = useState<number | null>(null);
   const [now, setNow] = useState(0);
@@ -267,6 +270,13 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
           <div role="status" className="w-full bg-warning-soft px-4 py-3 text-sm font-semibold text-warning-ink">
             {posOfflineBandText(sinceMs ?? now)}
           </div>
+        ) : null}
+
+        {/* T-621 S1: a quiet note while a new version is held back. Never a modal; selling goes on. */}
+        {updateHeld ? (
+          <p role="status" className="w-full px-4 py-1 text-center text-xs text-muted">
+            {POS_UPDATE_HELD}
+          </p>
         ) : null}
 
         {tabs.length > 0 ? (
