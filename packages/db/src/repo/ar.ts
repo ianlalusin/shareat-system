@@ -10,7 +10,7 @@
  * it is why every number below is a query.
  */
 import { and, eq, sql, type SQL } from 'drizzle-orm';
-import type { Money } from '@shareat/core/money';
+import { money, type Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
 import { recordGone } from './record-gone';
@@ -191,6 +191,26 @@ export async function creditBalanceOf(
   return Number(row?.balance ?? 0).toFixed(2);
 }
 
+/**
+ * T-602 S6-4: every customer's `2140` store credit (what `creditBalanceOf` returns for one, org-wide) in ONE grouped query. Customers with no `2140` line are absent (their balance is 0).
+ */
+export async function creditBalancesByCustomer(tx: Tx, orgId: string): Promise<Map<string, string>> {
+  const rows = (await tx.execute(sql`
+    select jl.party_id as customer_id, coalesce(sum(jl.credit - jl.debit), 0)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and a.code = ${STORE_CREDIT_CODE}
+      and je.status <> 'draft'
+    group by jl.party_id
+  `)) as unknown as Record<string, string>[];
+  const map = new Map<string, string>();
+  for (const r of rows) map.set(String(r.customer_id), Number(r.balance ?? 0).toFixed(2));
+  return map;
+}
+
 export interface ArOpenItem {
   chargeId: string;
   customerId: string;
@@ -259,10 +279,13 @@ export async function openItems(
       from ar_collection_allocations a
       join ar_collections c on c.id = a.ar_collection_id
       where c.status = 'posted'
+        and a.ar_charge_id in (select ch.id from ar_charges ch where ch.org_id = ${orgId} and ch.customer_id = ${customerId} and ch.store_id = ${storeId})
       group by a.ar_charge_id
     ),
     written as (
-      select ar_charge_id, sum(amount) as amt from ar_write_offs group by ar_charge_id
+      select ar_charge_id, sum(amount) as amt from ar_write_offs
+      where ar_charge_id in (select ch.id from ar_charges ch where ch.org_id = ${orgId} and ch.customer_id = ${customerId} and ch.store_id = ${storeId})
+      group by ar_charge_id
     ),
     ${creditedCtes(orgId, sql`and o.customer_id = ${customerId}`)}
     select ch.id as charge_id, ch.customer_id, ch.store_id, ch.charge_date::text as charge_date,
@@ -382,16 +405,21 @@ export async function aging(
   asOfDate: string,
   storeId?: string,
 ): Promise<ArAgingBucket[]> {
+  // T-602 S5: the same optional store filter the outer query and the allocated/written sums are narrowed by (alias ch, the outer query's own).
+  const storeTail = storeId ? sql`and ch.store_id = ${storeId}` : sql``;
   const rows = (await tx.execute(sql`
     with allocated as (
       select a.ar_charge_id, sum(a.amount_applied) as amt
       from ar_collection_allocations a
       join ar_collections c on c.id = a.ar_collection_id
       where c.status = 'posted'
+        and a.ar_charge_id in (select ch.id from ar_charges ch where ch.org_id = ${orgId} ${storeTail})
       group by a.ar_charge_id
     ),
     written as (
-      select ar_charge_id, sum(amount) as amt from ar_write_offs group by ar_charge_id
+      select ar_charge_id, sum(amount) as amt from ar_write_offs
+      where ar_charge_id in (select ch.id from ar_charges ch where ch.org_id = ${orgId} ${storeTail})
+      group by ar_charge_id
     ),
     ${creditedCtes(orgId, storeId ? sql`and o.store_id = ${storeId}` : sql``)},
     open as (
@@ -404,7 +432,7 @@ export async function aging(
       left join credited cr on cr.ar_charge_id = ch.id
       where ch.org_id = ${orgId} and ch.status = 'posted'
         and (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - coalesce(cr.amt, 0)) > ${EPSILON}
-        ${storeId ? sql`and ch.store_id = ${storeId}` : sql``}
+        ${storeTail}
     )
     select customer_id, store_id,
       coalesce(sum(outstanding) filter (where aging_date >= ${asOfDate}), 0)::text as current,
@@ -417,11 +445,11 @@ export async function aging(
   return rows.map((r) => ({
     customerId: String(r.customer_id ?? r.customerId),
     storeId: String(r.store_id ?? r.storeId),
-    current: Number(r.current).toFixed(2),
-    d1to30: Number(r.d1to30).toFixed(2),
-    d31to60: Number(r.d31to60).toFixed(2),
-    d61to90: Number(r.d61to90).toFixed(2),
-    d90plus: Number(r.d90plus).toFixed(2),
+    current: money(r.current!),
+    d1to30: money(r.d1to30!),
+    d31to60: money(r.d31to60!),
+    d61to90: money(r.d61to90!),
+    d90plus: money(r.d90plus!),
   }));
 }
 

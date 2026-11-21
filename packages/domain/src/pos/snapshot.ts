@@ -77,7 +77,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
     device: {
       pairingId,
       lastSeq: await posV2Repo.maxSeqForPairing(tx, orgId, storeId, pairingId),
-      lastTerminalSeq: await posV2Repo.maxTerminalSeq(tx, orgId, storeId, terminal.terminalNo),
+      lastTerminalSeq: await posV2Repo.maxTerminalSeq(tx, orgId, terminal.id),
     },
     businessDate,
   };

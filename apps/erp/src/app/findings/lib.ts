@@ -6,14 +6,14 @@
  * be "resolved" while it is still true.
  */
 import {
-  closeReadiness,
   lastCompletedPeriod,
   listFindings,
   logFindingView,
   managerScorecard,
+  readinessOf,
 } from '@shareat/domain';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
-import { storesRepo } from '@shareat/db';
+import { fiscalPeriodsRepo, storesRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -60,8 +60,8 @@ function previousPeriod(period: string): string {
 /**
  * The feed and the close verdict, from ONE call each, in one transaction.
  *
- * ⛔ **`closeReadiness` is not recomputed here.** The task spec's own rule: the close checker and
- * the findings feed are one machine, or they disagree on the 15th.
+ * ⛔ **The close verdict is filtered from the SAME feed, not recomputed.** The task spec's own rule: the close checker and
+ * the findings feed are one machine, or they disagree on the 15th. T-602 S2: `readinessOf(feed)` is the one rule `closeReadiness` also uses, so the detectors run once per load.
  */
 export async function findingsFor(orgId: string, period: string, storeIds?: readonly string[]) {
   return withOrgPrincipal(orgId, async (tx) => {
@@ -80,8 +80,7 @@ export async function findingsFor(orgId: string, period: string, storeIds?: read
         readiness: null,
       };
     }
-    const readiness = await closeReadiness(tx, orgId, period);
-    return { feed, readiness };
+    return { feed, readiness: readinessOf(feed, await fiscalPeriodsRepo.hasOpenPeriodInMonth(tx, orgId, period)) };
   });
 }
 

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { and, desc, eq, sql as dsql } from 'drizzle-orm';
 import { schema } from '@shareat/db';
 import { compare, ZERO } from '@shareat/core/money';
-import { customerCreditBalance, isPositiveQuantity, quantity, subtractQuantity } from '@shareat/domain';
+import { customerCreditBalances, isPositiveQuantity, quantity, subtractQuantity } from '@shareat/domain';
 import { recordReturnAction, voidReturnAction } from './actions';
 import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
@@ -101,9 +101,11 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
         .where(eq(schema.customers.orgId, actor.orgId))
     ).filter((c) => seen.has(c.id));
 
+    // T-602 S6-4: one grouped query for every customer's balance, not one per customer.
     const creditByCustomer = new Map<string, string>();
+    const balances = await customerCreditBalances(tx, actor.orgId);
     for (const c of customerRows) {
-      const bal = await customerCreditBalance(tx, actor.orgId, c.id);
+      const bal = balances.get(c.id) ?? ZERO;
       if (compare(bal, ZERO) > 0) creditByCustomer.set(c.id, bal);
     }
 

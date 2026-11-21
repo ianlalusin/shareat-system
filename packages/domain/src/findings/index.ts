@@ -385,12 +385,17 @@ export async function closeReadiness(
   orgId: string,
   period: string,
 ): Promise<{ ready: boolean; blocking: Finding[]; noOpenPeriod: boolean }> {
-  const feed = await listFindings(tx, orgId, { period });
-  // ⚠️ An acknowledged HARD finding still blocks. Accepting a risk is not the same as the books
-  // adding up, and a close is exactly the moment that distinction matters.
+  return readinessOf(await listFindings(tx, orgId, { period }), await fiscalPeriodsRepo.hasOpenPeriodInMonth(tx, orgId, period));
+}
+
+/**
+ * T-602 S2: the close verdict from a feed the caller already holds, so a screen that needs both the feed and the verdict computes the ~45 detectors ONCE.
+ * ⚠️ An acknowledged HARD finding still blocks. Accepting a risk is not the same as the books
+ * adding up, and a close is exactly the moment that distinction matters.
+ * DEF-439: `hasOpenPeriod` is read by the caller (`fiscalPeriodsRepo.hasOpenPeriodInMonth`); a month with no open period is not "ready to close".
+ */
+export function readinessOf(feed: FindingsFeed, hasOpenPeriod: boolean): { ready: boolean; blocking: Finding[]; noOpenPeriod: boolean } {
   const blocking = feed.findings.filter((f) => f.severity === 'hard');
-  // DEF-439: a month with no open period is not "ready to close" -- there is nothing to close. `blocking` stays the findings only.
-  const hasOpenPeriod = await fiscalPeriodsRepo.hasOpenPeriodInMonth(tx, orgId, period);
   return { ready: blocking.length === 0 && hasOpenPeriod, blocking, noOpenPeriod: !hasOpenPeriod };
 }
 

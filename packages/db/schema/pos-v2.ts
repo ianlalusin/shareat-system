@@ -494,6 +494,16 @@ export const posSalesReceipts = pgTable(
     // NOTE: pos_sales_receipts_store_id_id_unique UNIQUE (store_id, id) - hand-added in migration 0265 (T-534); the target of the (store_id, receipt_id) composites on the correction and refund tables, so they cannot name another store's receipt.
     unique('pos_sales_receipts_store_id_id_unique').on(t.storeId, t.id),
     unique('pos_sales_receipts_terminal_seq_unique').on(t.terminalId, t.terminalSeq),
+    // NOTE: hand-added in migration 0272 (T-602): the receipt list indexes. Column order follows the ORDER BY of the query each one serves (see the migration header).
+    index('pos_sales_receipts_store_issued_idx').on(t.storeId, t.issuedAtDevice.desc(), t.id.desc()),
+    // NOTE: hand-added in migration 0272 (T-602): one close is one store, so no store_id; partial on closed receipts.
+    index('pos_sales_receipts_day_close_idx')
+      .on(t.dayCloseId, t.issuedAtDevice, t.id)
+      .where(sql`${t.dayCloseId} is not null`),
+    // NOTE: hand-added in migration 0272 (T-602): partial on the unclosed day only, so it stays tiny forever.
+    index('pos_sales_receipts_open_idx')
+      .on(t.terminalId, t.issuedAtDevice, t.id)
+      .where(sql`${t.dayCloseId} is null`),
     unique('pos_sales_receipts_table_session_unique').on(t.tableSessionId),
     // NOTE: the trigger pos_sales_receipts_session_guard (INSERT for a voided session refused, 23001) is hand-added in migration 0238, ENABLE ALWAYS.
     // NOTE: the trigger pos_sales_receipts_frozen (every column frozen, day_close_id set once; DELETE refused; 23001) is hand-added in migration 0238, ENABLE ALWAYS.

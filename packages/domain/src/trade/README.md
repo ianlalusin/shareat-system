@@ -4,7 +4,7 @@ Trade orders (T-132, T-133): one ordering and fulfilment flow with two accountin
 
 ## Interface
 - `index.ts`: `WHOLESALE_REVENUE_CODE` (4300), `assertTradeTotalReconciles`, `createTradeOrder`, `confirmTradeOrder`, `dispatchTradeOrder`, `voidTradeOrder`, `receiveTradeOrder`, `setBirInvoiceNo`, types `TradeLineDraft`, `CreateTradeOrderInput`, `DispatchResult`, `ReceiveTradeOrderLineInput`, `ReceiveTradeOrderInput`, `ReceiveTradeOrderResult`.
-- `returns.ts`: `RETURN_REVENUE_CODE` (4950), `CUSTOMER_RETURN_UNSELLABLE_REASON`, `customerReturnableQuantity`, `customerCreditBalance`, `recordCustomerReturn`, `voidCustomerReturn`, `applyCredit`, types `RecordCustomerReturnLineInput`, `RecordCustomerReturnInput`, `RecordCustomerReturnResult`, `RecordCustomerReturnOutcome`, `VoidCustomerReturnOutcome`, `ApplyCreditOutcome`.
+- `returns.ts`: `RETURN_REVENUE_CODE` (4950), `CUSTOMER_RETURN_UNSELLABLE_REASON`, `customerReturnableQuantity`, `customerCreditBalance`, `customerCreditBalances`, `recordCustomerReturn`, `voidCustomerReturn`, `applyCredit`, types `RecordCustomerReturnLineInput`, `RecordCustomerReturnInput`, `RecordCustomerReturnResult`, `RecordCustomerReturnOutcome`, `VoidCustomerReturnOutcome`, `ApplyCreditOutcome`.
 
 ## Invariants
 - A branch is not a customer of its own company: internal dispatch never books revenue.

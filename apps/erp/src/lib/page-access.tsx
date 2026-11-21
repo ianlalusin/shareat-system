@@ -22,10 +22,17 @@
 //    constraint-refusal counter lives; a direct import silently bypasses it.
 import { withOrgPrincipal } from '../app/expenses/lib';
 import { CAPABILITY_LABEL, heldCapabilities, type Actor, type Capability } from '@shareat/auth';
+import { requestMemo } from './request-memo';
 import { requireSession } from './session';
 import { capabilitiesForRoute } from './route-capability';
 import { routeHasNoRule } from './route-open-lists';
 import { isOrgWideRole } from './can-read-at-store';
+
+/**
+ * T-602 S3: the person's held capability set, read ONCE per request (React `cache`, keyed on the two primitive ids, never an object).
+ * Page-level READ gate and nav filter only; `authorize()` / `can()` in domain services and actions are never memoised.
+ */
+export const heldFor = requestMemo((orgId: string, personId: string) => withOrgPrincipal(orgId, (tx) => heldCapabilities(tx, { orgId, personId })));
 
 export interface PageAccess {
   actor: Actor;
@@ -56,7 +63,7 @@ export async function requirePageAccess(route: string): Promise<PageAccess> {
   //    database is switched off for the query. This one reads `person_roles` and `person_grants`,
   //    which are org-scoped: unprincipalled, a read gate would have been consulting rows across
   //    tenancy boundaries. Caught by `tests/unit/no-direct-transaction-in-erp.test.ts`.
-  const held = await withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor));
+  const held = await heldFor(actor.orgId, actor.personId);
   if (accepted.some((c) => held.has(c))) return { actor, refusal: null };
 
   return { actor, refusal: <AccessRefused accepted={accepted} /> };
@@ -64,7 +71,7 @@ export async function requirePageAccess(route: string): Promise<PageAccess> {
 
 /** True when `actor` holds ANY of `capabilities` (org-wide union, the same read the route gate makes). For a page that must degrade, not refuse. */
 export async function holdsAny(actor: Actor, capabilities: readonly Capability[]): Promise<boolean> {
-  const held = await withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor));
+  const held = await heldFor(actor.orgId, actor.personId);
   return capabilities.some((c) => held.has(c));
 }
 
