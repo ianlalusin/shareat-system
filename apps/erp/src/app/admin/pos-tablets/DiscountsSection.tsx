@@ -37,10 +37,11 @@ function PresetForm({ storeId, preset }: { storeId: string; preset?: DiscountPre
             ))}
           </Select>
         </Field>
-        <Field label="Value (a percent up to 100, or pesos off each item)" width="short" rule={POS_DISCOUNT_RULES.value}>
+        <Field label="Value" width="short" rule={POS_DISCOUNT_RULES.value}>
           <Input {...nativeAttrs(POS_DISCOUNT_RULES.value)} defaultValue={preset ? (preset.valueType === 'percent' ? String(Number(preset.value)) : preset.value) : ''} autoComplete="off" />
         </Field>
       </FormGrid>
+      <p className="text-xs text-muted">Value: a percent up to 100, or pesos off each item.</p>
       {preset && <p className="text-xs text-muted">The name stays. To rename a discount, retire it and add a new one.</p>}
       <DialogActions>
         <Button type="submit" variant="primary">
