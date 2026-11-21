@@ -106,52 +106,30 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
       <FlashBanner flash={sp} />
       {sp.ok && <Banner tone="success">{sp.ok}</Banner>}
 
-      {canManage && (
-        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
-          <h2 className="text-lg font-semibold">Item details</h2>
-          <EditableRecord action={editItemAction} rules={MENU_ITEM_EDIT_RULES} label={item.name}
-            summary={[
-              { label: 'Name', value: item.name },
-              { label: 'Description', value: item.description },
-              { label: 'Category', value: data.categories.find((c) => c.id === item.categoryId)?.name },
-              { label: 'Sort order', value: String(item.sortOrder) },
-              { label: 'Status', value: item.status === 'active' ? 'Active' : 'Retired' },
-            ]}
-            hidden={{ menuItemId: item.id }} typed={typedFor(sp, MENU_ITEM, item.id, actor.personId)}>
-            <FormGrid>
-              <Field label="Name" className="text-sm" rule={MENU_ITEM_EDIT_RULES.name}>
-                <Input {...nativeAttrs(MENU_ITEM_EDIT_RULES.name)} defaultValue={item.name} className="w-full" />
-              </Field>
-              <Field label="Description" className="text-sm">
-                <Input name="description" defaultValue={item.description ?? ''} className="w-full" />
-              </Field>
-              <Field label="Category" className="text-sm">
-                <Select name="categoryId" defaultValue={item.categoryId} className="w-full">
-                  {data.categories
-                    .filter((c) => c.status === 'active' || c.id === item.categoryId)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </Select>
-              </Field>
-              <Field label="Sort order" className="text-sm" rule={MENU_ITEM_EDIT_RULES.sortOrder}>
-                <Input {...nativeAttrs(MENU_ITEM_EDIT_RULES.sortOrder)} defaultValue={String(item.sortOrder)} className="w-full" />
-              </Field>
-              <Field label="Status" className="text-sm">
-                <Select name="status" defaultValue={item.status} className="w-full">
-                  <option value="active">Active</option>
-                  <option value="retired">Retired</option>
-                </Select>
-              </Field>
-            </FormGrid>
-          </EditableRecord>
-        </section>
-      )}
 
+      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
       <section className="space-y-4 rounded-[14px] border border-surface-border p-4">
-        <h2 className="text-lg font-semibold">Variants and what a sale uses up</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Variants and stock use</h2>
+          {canAddItem && (
+            <FormModal trigger="+ Add variant" triggerVariant="secondary" title="Add a variant" size="sm">
+              <CheckedForm rules={MENU_VARIANT_RULES} action={addVariantAction} className="space-y-3">
+                <input type="hidden" name="menuItemId" value={item.id} />
+                <FormGrid>
+                  <Field label="Label (for example Large)" className="text-sm" rule={MENU_VARIANT_RULES.label}>
+                    <Input {...nativeAttrs(MENU_VARIANT_RULES.label)} className="w-full" />
+                  </Field>
+                </FormGrid>
+                <DialogActions>
+                  <Button type="submit" variant="secondary">
+                    Save
+                  </Button>
+                </DialogActions>
+              </CheckedForm>
+            </FormModal>
+          )}
+        </div>
         {data.variants.map((v) => {
           const rules = data.rules.filter((r) => r.variantId === v.id);
           return (
@@ -186,7 +164,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                 </Table>
               )}
               {canRule && v.status === 'active' && (
-                <FormModal trigger="Set stock rule" title={`Set stock rule — ${v.label ?? 'Default'}`} size="md">
+                <FormModal trigger="Set stock rule" triggerVariant={rules.length === 0 ? 'primary' : 'secondary'} title={`Set stock rule — ${v.label ?? 'Default'}`} size="md">
                 <CheckedForm rules={MENU_DEPLETION_RULES} action={setDepletionRuleAction} className="space-y-3">
                   <input type="hidden" name="menuItemId" value={item.id} />
                   <input type="hidden" name="variantId" value={v.id} />
@@ -236,51 +214,52 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
             </div>
           );
         })}
-        {canAddItem && (
-          <CheckedForm rules={MENU_VARIANT_RULES} action={addVariantAction} className="space-y-3 border-t border-surface-border pt-3">
-            <input type="hidden" name="menuItemId" value={item.id} />
-            <h3 className="font-medium">Add a variant</h3>
-            <FormGrid>
-              <Field label="Label (for example Large)" className="text-sm" rule={MENU_VARIANT_RULES.label}>
-                <Input {...nativeAttrs(MENU_VARIANT_RULES.label)} className="w-full" />
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="secondary">
-              Save
-            </Button>
-          </CheckedForm>
-        )}
       </section>
 
       <OptionGroups data={data} canManage={canManage} sp={sp} actorId={actor.personId} />
-
-      {item.itemType === 'package' && (
+        </div>
+        <div className="min-w-0 space-y-6">
+      {canManage && (
         <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
-          <h2 className="text-lg font-semibold">Refills this package allows</h2>
-          {data.variants.map((v) => {
-            const ticked = data.refillsByVariant.get(v.id) ?? new Set<string>();
-            return (
-              <div key={v.id} className="space-y-2">
-                <h3 className="font-medium">{v.label ?? 'Default'}</h3>
-                {!canManage ? (
-                  <p className="text-sm">{data.refillChoices.filter((r) => ticked.has(r.id)).map((r) => r.name).join(', ') || 'No refills.'}</p>
-                ) : data.refillChoices.length === 0 ? (
-                  <p className="text-sm text-muted">There are no refill items yet.</p>
-                ) : (
-                  <form action={setPackageRefillsAction} className="flex flex-wrap items-center gap-4">
-                    <input type="hidden" name="menuItemId" value={item.id} />
-                    <input type="hidden" name="packageVariantId" value={v.id} />
-                    {data.refillChoices.map((r) => (
-                      <Checkbox key={r.id} name="refillItemIds" value={r.id} defaultChecked={ticked.has(r.id)} label={r.name} />
+          <h2 className="text-lg font-semibold">Item details</h2>
+          <EditableRecord action={editItemAction} rules={MENU_ITEM_EDIT_RULES} label={item.name}
+            summary={[
+              { label: 'Name', value: item.name },
+              { label: 'Description', value: item.description },
+              { label: 'Category', value: data.categories.find((c) => c.id === item.categoryId)?.name },
+              { label: 'Sort order', value: String(item.sortOrder) },
+              { label: 'Status', value: item.status === 'active' ? 'Active' : 'Retired' },
+            ]}
+            hidden={{ menuItemId: item.id }} typed={typedFor(sp, MENU_ITEM, item.id, actor.personId)}>
+            <FormGrid>
+              <Field label="Name" className="text-sm" rule={MENU_ITEM_EDIT_RULES.name}>
+                <Input {...nativeAttrs(MENU_ITEM_EDIT_RULES.name)} defaultValue={item.name} className="w-full" />
+              </Field>
+              <Field label="Description" className="text-sm">
+                <Input name="description" defaultValue={item.description ?? ''} className="w-full" />
+              </Field>
+              <Field label="Category" className="text-sm">
+                <Select name="categoryId" defaultValue={item.categoryId} className="w-full">
+                  {data.categories
+                    .filter((c) => c.status === 'active' || c.id === item.categoryId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
                     ))}
-                    <Button type="submit" variant="secondary">
-                      Save
-                    </Button>
-                  </form>
-                )}
-              </div>
-            );
-          })}
+                </Select>
+              </Field>
+              <Field label="Sort order" className="text-sm" rule={MENU_ITEM_EDIT_RULES.sortOrder}>
+                <Input {...nativeAttrs(MENU_ITEM_EDIT_RULES.sortOrder)} defaultValue={String(item.sortOrder)} className="w-full" />
+              </Field>
+              <Field label="Status" className="text-sm">
+                <Select name="status" defaultValue={item.status} className="w-full">
+                  <option value="active">Active</option>
+                  <option value="retired">Retired</option>
+                </Select>
+              </Field>
+            </FormGrid>
+          </EditableRecord>
         </section>
       )}
 
@@ -320,6 +299,38 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
           </Link>
         </p>
       </section>
+
+      {item.itemType === 'package' && (
+        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
+          <h2 className="text-lg font-semibold">Refills this package allows</h2>
+          {data.variants.map((v) => {
+            const ticked = data.refillsByVariant.get(v.id) ?? new Set<string>();
+            return (
+              <div key={v.id} className="space-y-2">
+                <h3 className="font-medium">{v.label ?? 'Default'}</h3>
+                {!canManage ? (
+                  <p className="text-sm">{data.refillChoices.filter((r) => ticked.has(r.id)).map((r) => r.name).join(', ') || 'No refills.'}</p>
+                ) : data.refillChoices.length === 0 ? (
+                  <p className="text-sm text-muted">There are no refill items yet.</p>
+                ) : (
+                  <form action={setPackageRefillsAction} className="flex flex-wrap items-center gap-4">
+                    <input type="hidden" name="menuItemId" value={item.id} />
+                    <input type="hidden" name="packageVariantId" value={v.id} />
+                    {data.refillChoices.map((r) => (
+                      <Checkbox key={r.id} name="refillItemIds" value={r.id} defaultChecked={ticked.has(r.id)} label={r.name} />
+                    ))}
+                    <Button type="submit" variant="secondary">
+                      Save
+                    </Button>
+                  </form>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      )}
+        </div>
+      </div>
     </Page>
   );
 }
@@ -329,7 +340,75 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
   const where = (g: OptionGroupView) => (g.variantId === null ? 'the whole item' : `the ${data.variants.find((v) => v.id === g.variantId)?.label ?? 'Default'} variant`);
   return (
     <section className="space-y-4 rounded-[14px] border border-surface-border p-4">
-      <h2 className="text-lg font-semibold">Option groups</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Option groups</h2>
+      {canManage && (
+                  <div className="flex flex-wrap items-center gap-3">
+          <FormModal trigger="Add an existing group" triggerVariant="secondary" title="Add an existing group" size="md">
+          <form action={linkOptionGroupAction} className="space-y-3">
+            <input type="hidden" name="menuItemId" value={itemId} />
+            <FormGrid>
+              <Field label="Group" className="text-sm">
+                <Select name="optionGroupId" defaultValue="" className="w-full">
+                  <option value="">-</option>
+                  {data.allGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="To" className="text-sm">
+                <Select name="variantId" defaultValue="" className="w-full">
+                  <option value="">The whole item</option>
+                  {data.variants.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {`Only the ${v.label ?? 'Default'} variant`}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </FormGrid>
+            <DialogActions>
+              <Button type="submit" variant="secondary">
+                Save
+              </Button>
+            </DialogActions>
+          </form>
+          </FormModal>
+          <FormModal trigger="+ New option group" triggerVariant="secondary" title="Add an option group" size="md">
+          <CheckedForm rules={MENU_OPTION_GROUP_RULES} action={createOptionGroupAction} className="space-y-3">
+            <input type="hidden" name="menuItemId" value={itemId} />
+            <FormGrid>
+              <Field label="Group name (for example Flavour)" className="text-sm" rule={MENU_OPTION_GROUP_RULES.name}>
+                <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.name)} className="w-full" />
+              </Field>
+              <Field label="Guests pick" className="text-sm">
+                <Select name="selectionMode" defaultValue="single" className="w-full">
+                  <option value="single">One</option>
+                  <option value="multi">Several</option>
+                </Select>
+              </Field>
+              <Field label="At least" className="text-sm" rule={MENU_OPTION_GROUP_RULES.minSelections}>
+                <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.minSelections)} defaultValue="0" className="w-full" />
+              </Field>
+              <Field label="At most" className="text-sm" rule={MENU_OPTION_GROUP_RULES.maxSelections}>
+                <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.maxSelections)} defaultValue="1" className="w-full" />
+              </Field>
+              <Field label="Options, one per line" span="full" className="text-sm">
+                <Textarea name="values" rows={3} className="w-full" />
+              </Field>
+            </FormGrid>
+            <DialogActions>
+              <Button type="submit" variant="primary">
+                Save
+              </Button>
+            </DialogActions>
+          </CheckedForm>
+          </FormModal>
+          </div>
+      )}
+      </div>
       {data.optionGroups.length === 0 && <p className="text-sm text-muted">No option groups are attached.</p>}
       {data.optionGroups.map((g) => (
         <div key={g.linkId} className="space-y-2 border-t border-surface-border pt-3 first:border-t-0 first:pt-0">
@@ -399,86 +478,27 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
                   </Field>
                 </FormGrid>
               </EditableRecord>
-              <CheckedForm rules={MENU_OPTION_VALUE_RULES} action={addOptionValueAction} className="space-y-3">
-                <input type="hidden" name="menuItemId" value={itemId} />
-                <input type="hidden" name="optionGroupId" value={g.group.id} />
-                <FormGrid>
-                  <Field label="New option" className="text-sm" rule={MENU_OPTION_VALUE_RULES.name}>
-                    <Input {...nativeAttrs(MENU_OPTION_VALUE_RULES.name)} className="w-full" />
-                  </Field>
-                </FormGrid>
-                <Button type="submit" variant="secondary">
-                  Save
-                </Button>
-              </CheckedForm>
+              <FormModal trigger="+ Add choice" triggerVariant="ghost" title={`Add a choice to ${g.group.name}`} size="sm">
+                <CheckedForm rules={MENU_OPTION_VALUE_RULES} action={addOptionValueAction} className="space-y-3">
+                  <input type="hidden" name="menuItemId" value={itemId} />
+                  <input type="hidden" name="optionGroupId" value={g.group.id} />
+                  <FormGrid>
+                    <Field label="New option" className="text-sm" rule={MENU_OPTION_VALUE_RULES.name}>
+                      <Input {...nativeAttrs(MENU_OPTION_VALUE_RULES.name)} className="w-full" />
+                    </Field>
+                  </FormGrid>
+                  <DialogActions>
+                    <Button type="submit" variant="secondary">
+                      Save
+                    </Button>
+                  </DialogActions>
+                </CheckedForm>
+              </FormModal>
             </>
           )}
         </div>
       ))}
 
-      {canManage && (
-        <div className="space-y-4 border-t border-surface-border pt-3">
-          <form action={linkOptionGroupAction} className="space-y-3">
-            <input type="hidden" name="menuItemId" value={itemId} />
-            <h3 className="font-medium">Attach an existing group</h3>
-            <FormGrid>
-              <Field label="Group" className="text-sm">
-                <Select name="optionGroupId" defaultValue="" className="w-full">
-                  <option value="">-</option>
-                  {data.allGroups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="To" className="text-sm">
-                <Select name="variantId" defaultValue="" className="w-full">
-                  <option value="">The whole item</option>
-                  {data.variants.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {`Only the ${v.label ?? 'Default'} variant`}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="secondary">
-              Save
-            </Button>
-          </form>
-          <FormModal trigger="+ New option group" title="Add an option group" size="md">
-          <CheckedForm rules={MENU_OPTION_GROUP_RULES} action={createOptionGroupAction} className="space-y-3">
-            <input type="hidden" name="menuItemId" value={itemId} />
-            <FormGrid>
-              <Field label="Group name (for example Flavour)" className="text-sm" rule={MENU_OPTION_GROUP_RULES.name}>
-                <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.name)} className="w-full" />
-              </Field>
-              <Field label="Guests pick" className="text-sm">
-                <Select name="selectionMode" defaultValue="single" className="w-full">
-                  <option value="single">One</option>
-                  <option value="multi">Several</option>
-                </Select>
-              </Field>
-              <Field label="At least" className="text-sm" rule={MENU_OPTION_GROUP_RULES.minSelections}>
-                <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.minSelections)} defaultValue="0" className="w-full" />
-              </Field>
-              <Field label="At most" className="text-sm" rule={MENU_OPTION_GROUP_RULES.maxSelections}>
-                <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.maxSelections)} defaultValue="1" className="w-full" />
-              </Field>
-              <Field label="Options, one per line" span="full" className="text-sm">
-                <Textarea name="values" rows={3} className="w-full" />
-              </Field>
-            </FormGrid>
-            <DialogActions>
-              <Button type="submit" variant="primary">
-                Save
-              </Button>
-            </DialogActions>
-          </CheckedForm>
-          </FormModal>
-        </div>
-      )}
     </section>
   );
 }

@@ -20,7 +20,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, DialogActions, FormGrid, FormModal, HelpTip, Input, NumTd, Select, Table, Td, Th } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, DialogActions, DisclosureCard, FormGrid, FormModal, HelpTip, Input, NumTd, Select, Table, Td, Th } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { PAYROLL_PAY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { chargeRepaymentLabel } from '../staff/deduction-labels';
@@ -92,25 +92,26 @@ export default async function PayrollPage({
   const repayments = latest ? await chargeRepaymentsFor(actor, latest.id) : {};
 
   return (
-    <Page density="table">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold">Payroll</h1>
-          <PageDescription>
-            Pay worked out from attendance: gross pay, minus advances and agreed repayments already taken. Posting <strong>locks</strong> the days it paid. After that,
-            fix a mistake through payroll, not by changing the day.
-          </PageDescription>
-        </div>
-        <span className="flex shrink-0 flex-wrap gap-x-4 text-sm">
-          <a href="/payroll/thirteenth-month" className={NAV_LINK}>
+    <Page
+      density="table"
+      title="Payroll"
+      description={
+        <>
+          Pay worked out from attendance: gross pay, minus advances and agreed repayments already taken. Posting <strong>locks</strong> the days it paid. After that,
+          fix a mistake through payroll, not by changing the day.
+        </>
+      }
+      actions={
+        <>
+          <a href="/payroll/thirteenth-month" className={SECONDARY_LINK}>
             13th-month pay
           </a>
-          <a href="/payroll/separations" className={NAV_LINK}>
+          <a href="/payroll/separations" className={SECONDARY_LINK}>
             Separations
           </a>
-        </span>
-      </div>
-
+        </>
+      }
+    >
       {/* T-448: one compact filter row; widths by kind of value. */}
       <form method="get">
         <FormGrid layout="fields">
@@ -136,65 +137,76 @@ export default async function PayrollPage({
               </Select>
             </Field>
           )}
-          <Field label="From" width="date">
-            <Input name="start" type="date" defaultValue={periodStart} className="w-full" />
-          </Field>
-          <Field label="To" width="date">
-            <Input name="end" type="date" defaultValue={periodEnd} className="w-full" />
-          </Field>
           <div className="!flex-none self-end">
             <Button type="submit" variant="secondary" icon={null}>
               Preview
             </Button>
           </div>
         </FormGrid>
+        {/* T-599 S8: the dates stay inside this same GET form, so the request is identical. Open when no periods exist or the dates match none. */}
+        <details className="mt-2" open={periodOptions.length === 0 || !periodOptions.some((p) => p.start === periodStart && p.end === periodEnd)}>
+          <summary className="flex min-h-11 cursor-pointer items-center text-sm text-neutral-600 dark:text-neutral-400">Other dates</summary>
+          <FormGrid layout="fields">
+            <Field label="From" width="date">
+              <Input name="start" type="date" defaultValue={periodStart} className="w-full" />
+            </Field>
+            <Field label="To" width="date">
+              <Input name="end" type="date" defaultValue={periodEnd} className="w-full" />
+            </Field>
+          </FormGrid>
+        </details>
       </form>
 
       {/* ⭐ The premium settings this run is computed under. ⚠️ These were constants in code until
           T-189b; a number that decides somebody's pay belongs on the screen that spends it. */}
       {cfg && (
-        <p className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-xs text-neutral-500">
-          <a href={`/settings/attendance?store=${storeId}`} className={NAV_LINK}>
-            Edit these settings
-          </a>
-          <span>
-            Shift <b className="text-neutral-700 dark:text-neutral-300">{cfg.requiredHoursPerShift}h</b>
-          </span>
-          <span>
-            Overtime{' '}
-            <b className="text-neutral-700 dark:text-neutral-300">
-              {cfg.overtimeMode === 'fixed'
-                ? `${peso(Number(cfg.overtimeFixedHourly ?? 0))} / hour, flat`
-                : `×${cfg.overtimeMultiplier}`}
-            </b>
-          </span>
-          <span>
-            Night diff <b className="text-neutral-700 dark:text-neutral-300">&times;{cfg.nightDiffMultiplier}</b>
-          </span>
-          <span>
-            Holiday{' '}
-            <b className="text-neutral-700 dark:text-neutral-300">
-              regular &times;{cfg.holidayRegularMultiplier} · special non-working &times;
-              {cfg.holidaySpecialNonWorkingMultiplier} · special working &times;
-              {cfg.holidaySpecialWorkingMultiplier}
-            </b>
-          </span>
-          <span>
-            Periods{' '}
-            <b className="text-neutral-700 dark:text-neutral-300">
-              {cfg.payrollPeriodType === 'semi_monthly' ? 'twice a month' : cfg.payrollPeriodType}
-              {cfg.payrollPeriodType === 'semi_monthly' && `, cut on the ${cfg.semiMonthlyCutoffDay}th`}
-            </b>
-            {cfg.payoutMode === 'fixed_days'
-              ? `, paid on the ${cfg.payoutDays.join(' & ')}`
-              : cfg.payoutLagDays > 0
-                ? `, paid ${cfg.payoutLagDays}d after`
-                : ''}
-          </span>
-          <span className="text-muted">
+        <DisclosureCard
+          id="pay-settings"
+          title="Pay settings for this store"
+          action={null}
+          meta={`Shift ${cfg.requiredHoursPerShift}h · overtime ${cfg.overtimeMode === 'fixed' ? `${peso(Number(cfg.overtimeFixedHourly ?? 0))} / hour, flat` : `×${cfg.overtimeMultiplier}`} · ${cfg.payrollPeriodType === 'semi_monthly' ? 'twice a month' : cfg.payrollPeriodType}`}
+        >
+          <dl className="grid gap-x-5 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]">
+            <dt className="text-neutral-500">Shift</dt>
+            <dd><b className="text-neutral-700 dark:text-neutral-300">{cfg.requiredHoursPerShift}h</b></dd>
+            <dt className="text-neutral-500">Overtime</dt>
+            <dd>
+              <b className="text-neutral-700 dark:text-neutral-300">
+                {cfg.overtimeMode === 'fixed'
+                  ? `${peso(Number(cfg.overtimeFixedHourly ?? 0))} / hour, flat`
+                  : `×${cfg.overtimeMultiplier}`}
+              </b>
+            </dd>
+            <dt className="text-neutral-500">Night diff</dt>
+            <dd><b className="text-neutral-700 dark:text-neutral-300">&times;{cfg.nightDiffMultiplier}</b></dd>
+            <dt className="text-neutral-500">Holiday</dt>
+            <dd>
+              <b className="text-neutral-700 dark:text-neutral-300">
+                regular &times;{cfg.holidayRegularMultiplier} · special non-working &times;
+                {cfg.holidaySpecialNonWorkingMultiplier} · special working &times;
+                {cfg.holidaySpecialWorkingMultiplier}
+              </b>
+            </dd>
+            <dt className="text-neutral-500">Periods</dt>
+            <dd>
+              <b className="text-neutral-700 dark:text-neutral-300">
+                {cfg.payrollPeriodType === 'semi_monthly' ? 'twice a month' : cfg.payrollPeriodType}
+                {cfg.payrollPeriodType === 'semi_monthly' && `, cut on the ${cfg.semiMonthlyCutoffDay}th`}
+              </b>
+              {cfg.payoutMode === 'fixed_days'
+                ? `, paid on the ${cfg.payoutDays.join(' & ')}`
+                : cfg.payoutLagDays > 0
+                  ? `, paid ${cfg.payoutLagDays}d after`
+                  : ''}
+            </dd>
+          </dl>
+          <p className="text-xs text-muted">
             Hours count in half-hour steps. Anything under half an hour is not paid. Late time is counted exactly.
-          </span>
-        </p>
+          </p>
+          <a href={`/settings/attendance?store=${storeId}`} className={NAV_LINK}>
+            Change pay settings
+          </a>
+        </DisclosureCard>
       )}
 
       <FlashBanner flash={sp} />
@@ -361,6 +373,65 @@ export default async function PayrollPage({
         </section>
       )}
 
+      {/* ------------------------------------------------------------------ history */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium">Runs</h2>
+        {runs.length === 0 ? (
+          <p className="rounded-[20px] border border-dashed border-surface-border p-6 text-center text-sm text-muted">
+            No pay run yet at this store. Posting a preview creates the first run.
+          </p>
+        ) : (
+          runs.map((run) => (
+            <div
+              key={run.id}
+              className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+            >
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-sm font-medium">{periodLabel(run)}</span>
+                <Badge status={run.status} />
+                {run.voidReason && (
+                  <span className="text-xs text-neutral-500">Voided: {run.voidReason}</span>
+                )}
+              </div>
+
+              {run.id === latest?.id && latestSlips.length > 0 && (
+                <ul className="text-xs text-neutral-600 dark:text-neutral-400">
+                  {latestSlips.map((s) => (
+                    <li key={s.id}>
+                      {s.personName} — {s.daysWorked} {Number(s.daysWorked) === 1 ? 'day' : 'days'}, net{' '}
+                      <span className="font-mono">{peso(Number(s.netPay))}</span>
+                      {compare(money(s.advanceRecovered), ZERO) > 0 &&
+                        (repayments[s.journalEntryId ?? ''] ?? [{ amount: s.advanceRecovered, signedOn: '' }])
+                          .map((r) => ` · ${chargeRepaymentLabel(r.signedOn)} −${peso(Number(r.amount))}`)
+                          .join('')}
+                      {` · SSS ${peso(Number(s.sssEe))}, PhilHealth ${peso(Number(s.philhealthEe))}, Pag-IBIG ${peso(Number(s.pagibigEe))}, tax ${peso(Number(s.withholding))}`}
+                      {s.skippedAgencies.length > 0 &&
+                        ` · not deducted: no ${s.skippedAgencies.map((x) => (x === 'sss' ? 'SSS' : x === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.`}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {run.status === 'posted' && (
+                <form action={voidPayRunAction} className="flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="storeId" value={storeId} />
+                  <input type="hidden" name="runId" value={run.id} />
+                  <Input name="reason" placeholder="Why void it?" className="min-w-0 flex-1 basis-48" />
+                  <ConfirmDestructive
+                    tier="admin-pin"
+                    label="Void pay run"
+                    consequence="Voids this pay run and reverses its entries. An administrator must approve with their own PIN."
+                  />
+                  <span className="text-xs text-neutral-500">
+                    Reverses the entries and unfreezes the days, so the period is payable again.
+                  </span>
+                </form>
+              )}
+            </div>
+          ))
+        )}
+      </section>
+
       {/* ------------------------------------------------------------------ rates */}
       <section className="space-y-3">
         <div className="flex items-center gap-1">
@@ -432,67 +503,10 @@ export default async function PayrollPage({
           </tbody>
         </Table>
       </section>
-
-      {/* ------------------------------------------------------------------ history */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium">Runs</h2>
-        {runs.length === 0 ? (
-          <p className="rounded-[20px] border border-dashed border-surface-border p-6 text-center text-sm text-muted">
-            No pay run yet at this store. Posting a preview creates the first run.
-          </p>
-        ) : (
-          runs.map((run) => (
-            <div
-              key={run.id}
-              className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
-            >
-              <div className="flex flex-wrap items-baseline gap-2">
-                <span className="text-sm font-medium">{periodLabel(run)}</span>
-                <Badge status={run.status} />
-                {run.voidReason && (
-                  <span className="text-xs text-neutral-500">Voided: {run.voidReason}</span>
-                )}
-              </div>
-
-              {run.id === latest?.id && latestSlips.length > 0 && (
-                <ul className="text-xs text-neutral-600 dark:text-neutral-400">
-                  {latestSlips.map((s) => (
-                    <li key={s.id}>
-                      {s.personName} — {s.daysWorked} {Number(s.daysWorked) === 1 ? 'day' : 'days'}, net{' '}
-                      <span className="font-mono">{peso(Number(s.netPay))}</span>
-                      {compare(money(s.advanceRecovered), ZERO) > 0 &&
-                        (repayments[s.journalEntryId ?? ''] ?? [{ amount: s.advanceRecovered, signedOn: '' }])
-                          .map((r) => ` · ${chargeRepaymentLabel(r.signedOn)} −${peso(Number(r.amount))}`)
-                          .join('')}
-                      {` · SSS ${peso(Number(s.sssEe))}, PhilHealth ${peso(Number(s.philhealthEe))}, Pag-IBIG ${peso(Number(s.pagibigEe))}, tax ${peso(Number(s.withholding))}`}
-                      {s.skippedAgencies.length > 0 &&
-                        ` · not deducted: no ${s.skippedAgencies.map((x) => (x === 'sss' ? 'SSS' : x === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.`}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {run.status === 'posted' && (
-                <form action={voidPayRunAction} className="flex flex-wrap items-end gap-2">
-                  <input type="hidden" name="storeId" value={storeId} />
-                  <input type="hidden" name="runId" value={run.id} />
-                  <Input name="reason" placeholder="Why void it?" className="min-w-0 flex-1 basis-48" />
-                  <ConfirmDestructive
-                    tier="admin-pin"
-                    label="Void pay run"
-                    consequence="Voids this pay run and reverses its entries. An administrator must approve with their own PIN."
-                  />
-                  <span className="text-xs text-neutral-500">
-                    Reverses the entries and unfreezes the days, so the period is payable again.
-                  </span>
-                </form>
-              )}
-            </div>
-          ))
-        )}
-      </section>
     </Page>
   );
 }
 
+/** T-599 S8: a sub-page link drawn as a quiet secondary button (44 px) in the page header. */
+const SECONDARY_LINK = 'inline-flex min-h-11 items-center rounded-[12px] border border-field-border px-4 text-sm font-medium';
 const LABEL = 'text-xs font-medium text-neutral-600 dark:text-neutral-400';

@@ -26,7 +26,7 @@ import { BUDGET_CAP_EDIT } from './typed-forms';
 import { accountLabel } from '@/lib/account-label';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { BUDGET_CAP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Banner, Checkbox, ConfirmDestructive, DisclosureCard, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Budgets — Shareat System' };
@@ -38,6 +38,18 @@ const GROUP_LABEL: Record<string, string> = {
   CAPEX: 'Equipment and assets',
   PERSONAL: 'Owner personal',
 };
+
+/** T-599 S6: rows gathered under their group, in the order each group first appears. */
+function inGroups<T>(rows: readonly T[], groupOf: (r: T) => string): [string, T[]][] {
+  const map = new Map<string, T[]>();
+  for (const r of rows) {
+    const g = groupOf(r);
+    const list = map.get(g);
+    if (list) list.push(r);
+    else map.set(g, [r]);
+  }
+  return [...map.entries()];
+}
 
 /**
  * T-215 — the expense envelope, per store, per category, per period.
@@ -147,8 +159,11 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
           <section className="space-y-2">
             <h2 className="font-medium">Caps for {periodLabel(periodKey)}</h2>
             {(
-              <div className="space-y-2">
-                {budgets.map((b) => {
+              <div className="space-y-4">
+                {inGroups(budgets, (b) => b.categoryGroup).map(([group, groupBudgets]) => (
+                <div key={group} className="space-y-2">
+                <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-400">{GROUP_LABEL[group] ?? group}</h3>
+                {groupBudgets.map((b) => {
                   // T-371 C4/R4: the decisions are made on re-minted database values, never a float — `capped` on the
                   // brand, the amber threshold ("past 90%") as consumed × 10 > cap × 9 in exact centavos. `pct` is only
                   // the bar's width.
@@ -165,8 +180,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                         <span className="font-medium">
                           {b.categoryLabel}
                           <span className="ml-2 text-xs font-normal text-neutral-500 dark:text-neutral-400">
-                            {GROUP_LABEL[b.categoryGroup] ?? b.categoryGroup}
-                            {b.accountCode ? ` · ${accountLabel(b.accountCode)}` : ' · no account set'}
+                            {b.accountCode ? accountLabel(b.accountCode) : 'no account set'}
                           </span>
                         </span>
                         <span className="tabular-nums">
@@ -203,8 +217,8 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
 
                       {/* T-389: a reopened (or too-long-to-keep) cap must be visible, so its <details> opens. */}
                       <details open={typedFor(sp, BUDGET_CAP_EDIT, b.categoryId, actor.personId) !== null}>
-                        <summary className="cursor-pointer text-xs text-neutral-500 dark:text-neutral-400">
-                          Edit or remove
+                        <summary className="flex min-h-11 cursor-pointer items-center text-sm text-neutral-600 dark:text-neutral-400">
+                          Change or remove cap
                         </summary>
                         <div className="mt-2 flex flex-wrap items-start gap-2">
                           <CapForm
@@ -232,13 +246,15 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                     </div>
                   );
                 })}
+                </div>
+                ))}
               </div>
             )}
           </section>
           )}
 
           <section className="space-y-2">
-            <h2 className="font-medium">No cap set</h2>
+            <h2 className="font-medium">Categories with no cap</h2>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               A category listed here has no limit. A cap of 0.00 means spend nothing in that
               category.
@@ -246,17 +262,20 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
             {uncapped.length === 0 ? (
               <p className="text-sm text-neutral-500 dark:text-neutral-400">Every category has a cap.</p>
             ) : (
-              <div className="space-y-1">
-                {uncapped.map((c) => (
-                  <details key={c.id} className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
-                    <summary className="cursor-pointer text-sm">
-                      {c.label}
-                      <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{GROUP_LABEL[c.group] ?? c.group}</span>
-                    </summary>
-                    <div className="mt-2">
-                      <CapForm storeId={storeId} periodKey={periodKey} categoryId={c.id} />
+              <div className="space-y-2">
+                {inGroups(uncapped, (c) => c.group).map(([group, rows]) => (
+                  <DisclosureCard key={group} id={`nocap-${group}`} title={GROUP_LABEL[group] ?? group} action={null} meta={`${rows.length} without a cap`}>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {rows.map((c) => (
+                        <details key={c.id} className="rounded border border-neutral-200 px-2 dark:border-neutral-800">
+                          <summary className="flex min-h-11 cursor-pointer items-center text-sm">{c.label}</summary>
+                          <div className="pb-2">
+                            <CapForm storeId={storeId} periodKey={periodKey} categoryId={c.id} />
+                          </div>
+                        </details>
+                      ))}
                     </div>
-                  </details>
+                  </DisclosureCard>
                 ))}
               </div>
             )}

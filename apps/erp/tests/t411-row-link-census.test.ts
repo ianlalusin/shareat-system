@@ -100,7 +100,6 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/payroll/statutory-payments/page.tsx', // T-193 S5: rows with something outstanding are a LinkRow to the record form
   'app/prepaid/[id]/page.tsx',
   'app/remittance/page.tsx',
-  'app/sales-days/SalesDayForm.tsx',
   'app/settings/expense-categories/page.tsx',
   'app/statutory-discounts/page.tsx',
   'app/trade/returns/page.tsx',

@@ -12,13 +12,14 @@
 import type { ReactNode } from 'react';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { peso } from '@/lib/format';
-import { Button, Input } from '@/components/ui';
+import { Button, HelpTip, Input, SaveBar } from '@/components/ui';
 import { RuleCheck } from '@/components/forms';
 import { DraftMemory } from './DraftMemory';
 import { accountLabel } from '@/lib/account-label';
 import type { ChannelOption } from './lib';
 
 const FIELD = 'w-full text-right tabular-nums';
+const CARD = 'space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800';
 const LABEL = 'text-xs font-medium text-neutral-500 dark:text-neutral-400';
 
 export interface SalesDayDefaults {
@@ -55,194 +56,145 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
   return (
     <>
       <DraftMemory personId={draft.personId} storeId={draft.storeId} businessDate={businessDate} dateFieldName={dateEditable ? 'businessDate' : undefined} />
-      <section className="grid gap-4 sm:grid-cols-2">
-        {storeLabel !== undefined && (
-          <div className="flex flex-col gap-1">
-            <span className={LABEL}>Store</span>
-            <p className="rounded border border-neutral-300 bg-neutral-50 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
-              {storeLabel}
-            </p>
-          </div>
-        )}
-        {dateEditable ? (
-          dateField
-        ) : (
-          <div className="flex flex-col gap-1">
-            <span className={LABEL}>Business date</span>
-            <p className="rounded border border-neutral-300 bg-neutral-50 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
-              {formatBusinessDayLong(businessDate)}
-            </p>
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Revenue</h2>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <strong>Unlimited plus à la carte must equal the total.</strong> À la carte includes dine-in à la
-          carte, take-out and delivery.
+      {dateEditable ? (
+        <section className="grid gap-4 sm:grid-cols-2">
+          {storeLabel !== undefined && (
+            <div className="flex flex-col gap-1">
+              <span className={LABEL}>Store</span>
+              <p className="rounded border border-neutral-300 bg-neutral-50 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
+                {storeLabel}
+              </p>
+            </div>
+          )}
+          {dateField}
+        </section>
+      ) : (
+        <p className="text-xs text-muted">
+          {storeLabel !== undefined && <>{storeLabel} · </>}
+          {formatBusinessDayLong(businessDate)}
         </p>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Money name="totalSales" label="Total sales" value={fig('totalSales')} />
-          <Money name="unliSales" label="Unlimited" value={fig('unliSales')} />
-          <Money name="alaCarteSales" label="À la carte" value={fig('alaCarteSales')} />
-        </div>
-      </section>
+      )}
 
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Discounts and comps</h2>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Senior and PWD discounts are listed separately because the tax rules require it. Comps are recorded
-          on their own, not as a discount.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-4">
-          <Money name="seniorDiscount" label="Senior" value={fig('seniorDiscount')} />
-          <Money name="pwdDiscount" label="PWD" value={fig('pwdDiscount')} />
-          <Money name="otherDiscount" label="Other" value={fig('otherDiscount')} />
-          <Money name="comps" label="Comps" value={fig('comps')} />
-        </div>
-      </section>
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <div className="space-y-4">
+          <section className={CARD}>
+            <Heading help="Unlimited plus à la carte must equal the total. À la carte includes dine-in à la carte, take-out and delivery.">Revenue</Heading>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Money name="totalSales" label="Total sales" value={fig('totalSales')} />
+              <Money name="unliSales" label="Unlimited" value={fig('unliSales')} />
+              <Money name="alaCarteSales" label="À la carte" value={fig('alaCarteSales')} />
+            </div>
+          </section>
 
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Charges</h2>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Leftover, packaging and other charges <strong>are income</strong>. A <strong>service charge</strong> is
-          not: by law all of it goes to staff, so it is held and paid out through payroll, and it never counts as revenue.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Money name="serviceCharge" label="Service charge (held for staff)" value={fig('serviceCharge')} />
-          <Money name="otherCharges" label="Other charges (leftover, packaging)" value={fig('otherCharges')} />
-        </div>
-      </section>
+          <section className={CARD}>
+            <Heading help="Senior and PWD discounts are listed separately because the tax rules require it. Comps are recorded on their own, not as a discount.">Discounts and comps</Heading>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <Money name="seniorDiscount" label="Senior" value={fig('seniorDiscount')} />
+              <Money name="pwdDiscount" label="PWD" value={fig('pwdDiscount')} />
+              <Money name="otherDiscount" label="Other" value={fig('otherDiscount')} />
+              <Money name="comps" label="Comps" value={fig('comps')} />
+            </div>
+          </section>
 
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Tender — where the money went</h2>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Everything taken in plus everything given away <strong>must equal everything earned</strong>:
-          cash + online + credit + channels settled later + discounts + comps = gross sales + charges.
-          Card payments go under online.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Money name="cashCollected" label="Cash (at the cashier)" value={fig('cashCollected')} />
-          <Money name="onlineCollected" label="Online / e-wallet" value={fig('onlineCollected')} />
-          <Money name="creditSales" label="Credit / on account" value={fig('creditSales')} />
-        </div>
-      </section>
+          <section className={CARD}>
+            <Heading help="Leftover, packaging and other charges are income. A service charge is not: by law all of it goes to staff, so it is held and paid out through payroll, and it never counts as revenue.">Charges</Heading>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Money name="serviceCharge" label="Service charge (held for staff)" value={fig('serviceCharge')} />
+              <Money name="otherCharges" label="Other charges (leftover, packaging)" value={fig('otherCharges')} />
+            </div>
+          </section>
 
-      {channels.length > 0 && (
-        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="font-medium">Sales channels</h2>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            A channel that <strong>reaches the till</strong> is counted with the day&apos;s cash. One that{' '}
-            <strong>settles later</strong> (Foodpanda, GrabFood) is paid to a bank afterwards. Every channel needs an amount,
-            or <em>No sales</em> ticked. <strong>A zero is not the same as no sales.</strong> You can save with a box blank
-            and finish later, but the day cannot be submitted until each one is filled.
-          </p>
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
-                <th className="py-2 font-medium">Channel</th>
-                <th className="py-2 font-medium">Remittance</th>
-                <th className="py-2 text-right font-medium">Amount</th>
-                <th className="py-2 text-center font-medium">No sales</th>
-              </tr>
-            </thead>
-            <tbody>
-              {channels.map((c) => {
-                const prior = defaults?.channels?.[c.id];
-                return (
-                  <tr key={c.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="py-2">{c.name}</td>
-                    <td className="py-2">
-                      {c.isRemittedDaily ? (
-                        <span className="text-xs text-neutral-500 dark:text-neutral-400">reaches the till</span>
-                      ) : (
-                        <span className="text-xs text-warning-ink">
-                          settles later → {accountLabel(c.receivableAccountCode)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2">
+          <section className={CARD}>
+            <Heading help="Everything taken in plus everything given away must equal everything earned: cash + online + credit + channels settled later + discounts + comps = gross sales + charges. Card payments go under online.">How it was paid</Heading>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Money name="cashCollected" label="Cash (at the cashier)" value={fig('cashCollected')} />
+              <Money name="onlineCollected" label="Online / e-wallet" value={fig('onlineCollected')} />
+              <Money name="creditSales" label="Credit / on account" value={fig('creditSales')} />
+            </div>
+          </section>
+        </div>
+
+        <div className="space-y-4">
+          {channels.length > 0 && (
+            <section className={CARD}>
+              <Heading help="A channel that reaches the till is counted with the day's cash. One that settles later (Foodpanda, GrabFood) is paid to a bank afterwards. Every channel needs an amount, or No sales ticked. A zero is not the same as no sales. You can save with a box blank and finish later, but the day cannot be submitted until each one is filled.">Sales channels</Heading>
+              <ul role="list" className="divide-y divide-neutral-100 dark:divide-neutral-900">
+                {channels.map((c) => {
+                  const prior = defaults?.channels?.[c.id];
+                  return (
+                    <li key={c.id} className="grid min-h-11 grid-cols-[1fr_8rem] items-center gap-x-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate">{c.name}</p>
+                        {c.isRemittedDaily ? (
+                          <p className="text-xs text-neutral-500 dark:text-neutral-400">reaches the till</p>
+                        ) : (
+                          <p className="text-xs text-warning-ink">settles later → {accountLabel(c.receivableAccountCode)}</p>
+                        )}
+                      </div>
                       <Input
                         name={`channel_${c.id}`}
+                        aria-label={`Amount for ${c.name}`}
                         inputMode="decimal"
                         placeholder="0.00"
                         defaultValue={prior && !prior.noSales ? prior.amount : undefined}
                         className={FIELD}
                       />
-                    </td>
-                    <td className="py-2 text-center">
-                      <input type="checkbox" name={`nosales_${c.id}`} defaultChecked={prior?.noSales ?? false} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {/* T-504: the rule, live. Zero-with-no-tick and amount-with-tick turn Save off; a blank only warns (a draft may carry it). */}
-          <RuleCheck id="salesDay.channels.tickedOrTyped" facts={channelFacts} />
-          <RuleCheck id="salesDay.channels.blankHint" facts={channelFacts} />
-        </section>
-      )}
+                      <label className="col-span-2 flex min-h-11 items-center justify-end gap-2 text-xs text-neutral-600 dark:text-neutral-400">
+                        <input type="checkbox" name={`nosales_${c.id}`} defaultChecked={prior?.noSales ?? false} />
+                        No sales
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+              {/* T-504: the rule, live. Zero-with-no-tick and amount-with-tick turn Save off; a blank only warns (a draft may carry it). */}
+              <RuleCheck id="salesDay.channels.tickedOrTyped" facts={channelFacts} />
+              <RuleCheck id="salesDay.channels.blankHint" facts={channelFacts} />
+            </section>
+          )}
 
-      {/* ⭐ DEF-068 — WHERE the online money landed. NOT the same question as the channel
-          breakdown above: a channel says where the sale came FROM, this says where the money
-          WENT. A Foodpanda sale can settle into any wallet, so neither answers the other. */}
-      {wallets.length > 0 && (
-        <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <div>
-            <h2 className="font-medium">Where the online money landed</h2>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Must add up to the online figure above. Each peso has to say which wallet it reached.
-            </p>
-          </div>
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
-                <th className="py-2 font-medium">Wallet</th>
-                <th className="py-2 font-medium">Held by</th>
-                <th className="py-2 font-medium">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {wallets.map((w) => (
-                <tr key={w.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                  <td className="py-2">{w.name}</td>
-                  <td className="py-2 text-xs text-neutral-500 dark:text-neutral-400">{w.custodian}</td>
-                  <td className="py-2">
-                    <Input name={`tender_${w.id}`} inputMode="decimal" placeholder="0.00" defaultValue={defaults?.tenders?.[w.id]} className={FIELD} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+          {/* ⭐ DEF-068 — WHERE the online money landed. NOT the same question as the channel
+              breakdown above: a channel says where the sale came FROM, this says where the money
+              WENT. A Foodpanda sale can settle into any wallet, so neither answers the other. */}
+          {wallets.length > 0 && (
+            <section className={CARD}>
+              <Heading help="Must add up to the online figure above. Each peso has to say which wallet it reached.">Which wallet the online money reached</Heading>
+              <ul role="list" className="divide-y divide-neutral-100 dark:divide-neutral-900">
+                {wallets.map((w) => (
+                  <li key={w.id} className="grid min-h-11 grid-cols-[1fr_8rem] items-center gap-x-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate">{w.name}</p>
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400">{w.custodian}</p>
+                    </div>
+                    <Input name={`tender_${w.id}`} aria-label={`Amount into ${w.name}`} inputMode="decimal" placeholder="0.00" defaultValue={defaults?.tenders?.[w.id]} className={FIELD} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-      {retiredTenders && retiredTenders.length > 0 && (
-        <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="font-medium">Wallets no longer in use</h2>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Money this day already recorded against wallets that have since been retired. It stays as it
-            is and cannot be changed here. Verifying still needs all wallets, these included, to add up to the online figure.
-          </p>
-          <ul className="text-sm">
-            {retiredTenders.map((t) => (
-              <li key={t.name} className="flex justify-between gap-4 py-1">
-                <span>{t.name}</span>
-                <span className="tabular-nums">{peso(t.amount)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+          {retiredTenders && retiredTenders.length > 0 && (
+            <section className={CARD}>
+              <Heading help="Money this day already recorded against wallets that have since been retired. It stays as it is and cannot be changed here. Verifying still needs all wallets, these included, to add up to the online figure.">Wallets no longer in use</Heading>
+              <ul role="list" className="text-sm">
+                {retiredTenders.map((t) => (
+                  <li key={t.name} className="flex justify-between gap-4 py-1">
+                    <span>{t.name}</span>
+                    <span className="tabular-nums">{peso(t.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+      </div>
 
       {/* T-589 B8 G8: the long form scrolls under the save, so it is never off-screen on a phone (same bar as admin/users). */}
-      <div className="sticky bottom-0 z-10 -mx-2 border-t border-surface-border bg-canvas/95 px-2 py-3 backdrop-blur">
+      <SaveBar>
         <Button type="submit" variant="primary">
           {submitLabel}
         </Button>
-      </div>
+      </SaveBar>
     </>
   );
 }
@@ -253,5 +205,14 @@ function Money({ name, label, value }: { name: string; label: string; value?: st
       <span className={LABEL}>{label}</span>
       <Input name={name} placeholder="0.00" defaultValue={value} className={FIELD} />
     </label>
+  );
+}
+
+function Heading({ children, help }: { children: string; help: string }) {
+  return (
+    <h2 className="flex items-center gap-2 font-medium">
+      {children}
+      <HelpTip label={children}>{help}</HelpTip>
+    </h2>
   );
 }

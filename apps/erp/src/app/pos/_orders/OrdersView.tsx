@@ -31,12 +31,15 @@ export interface OrdersViewProps {
   /** T-528: prints the last receipt again (REPRINT). Absent or false: no button. */
   canReprint?: boolean;
   onReprint?: () => void;
+  /** T-620: the "Void table" control. Absent: none. `blockedNote` set (a cashier offline): the control is drawn off and says why. */
+  voidTable?: { onVoid: (sessionId: string) => void; blockedNote: string | null };
 }
 
 // Plain literals: the touch-target census reads them. `min-h-12` is 3rem (POS_TOUCH), `min-h-16` is 4rem; both come from the spacing scale.
 const SEAT = 'min-h-16 inline-flex items-center justify-center gap-2 rounded-full border border-transparent bg-brand px-6 text-base font-semibold text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-canvas';
 const TAKE_OUT = 'min-h-16 inline-flex items-center justify-center gap-2 rounded-full border border-surface-border bg-surface px-6 text-base font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 const SECONDARY = 'min-h-12 min-w-12 inline-flex items-center justify-center gap-2 rounded-full border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
+const VOID = 'min-h-12 min-w-12 inline-flex items-center justify-center gap-2 rounded-full border border-danger bg-surface px-4 text-sm font-semibold text-danger hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:cursor-not-allowed disabled:opacity-60';
 const STEP = 'min-h-12 min-w-12 inline-flex items-center justify-center rounded-full border border-surface-border bg-surface text-xl font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 const PAY = 'min-h-16 w-full inline-flex items-center justify-center rounded-full border border-transparent bg-brand px-6 text-base font-semibold text-white disabled:bg-surface-border disabled:text-muted disabled:cursor-not-allowed';
 const TILE = 'flex min-h-24 w-full flex-col gap-1 rounded-2xl border bg-surface p-4 text-left hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
@@ -140,9 +143,11 @@ interface PanelProps {
   onAddItems: () => void;
   onCancelLine: (lineId: string) => void;
   onPay?: () => void;
+  onVoid?: () => void;
+  voidBlockedNote?: string | null;
 }
 
-function Panel({ tile, session, readOnly, nowMs, onHeads, onAddItems, onCancelLine, onPay }: PanelProps) {
+function Panel({ tile, session, readOnly, nowMs, onHeads, onAddItems, onCancelLine, onPay, onVoid, voidBlockedNote }: PanelProps) {
   const lines = session?.lines.filter((l) => !l.cancelled) ?? [];
   const canPay = onPay !== undefined && tile.paid !== true && session?.loaded === true && lines.length > 0;
   const clock = tileClock(tile.openedAtDevice, nowMs, null); // the panel shows only the label
@@ -186,6 +191,14 @@ function Panel({ tile, session, readOnly, nowMs, onHeads, onAddItems, onCancelLi
           <button type="button" data-erp-size="free" className={PAY} disabled={!canPay} aria-disabled={!canPay} onClick={onPay}>
             {tile.paid ? 'Paid, sending' : 'Pay'}
           </button>
+          {onVoid && tile.paid !== true ? (
+            <>
+              <button type="button" data-erp-size="free" className={VOID} disabled={!!voidBlockedNote} aria-disabled={!!voidBlockedNote} onClick={onVoid}>
+                Void table
+              </button>
+              {voidBlockedNote ? <p className="text-xs text-muted">{voidBlockedNote}</p> : null}
+            </>
+          ) : null}
         </div>
       )}
     </aside>
@@ -244,6 +257,7 @@ export function OrdersView(p: OrdersViewProps) {
           onAddItems={() => p.onAddItems(selected.sessionId)}
           onCancelLine={p.onCancelLine}
           {...(p.onPay ? { onPay: () => p.onPay!(selected.sessionId) } : {})}
+          {...(p.voidTable ? { onVoid: () => p.voidTable!.onVoid(selected.sessionId), voidBlockedNote: p.voidTable.blockedNote } : {})}
         />
       ) : null}
     </div>

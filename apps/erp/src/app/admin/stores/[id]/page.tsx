@@ -15,7 +15,7 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { ADMIN_STORE_DETAILS_RULES, ADMIN_STORE_OPENING_DATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Field, Input, Textarea } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, DisclosureCard, FlashBanner, FormGrid, Field, Input, Textarea } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { STORE_DETAILS, STORE_OPENING_DATE, STORE_POS_MODE, STORE_STOCK_MODEL } from '../typed-forms';
@@ -30,7 +30,9 @@ export const dynamic = 'force-dynamic';
 /** T-587 S4: what the stored values mean, in words. A value the maps do not know is shown as it is. */
 const STOCK_WORDS: Record<string, string> = { single_room: 'One room', multi_room: 'Several rooms' };
 const CASH_WORDS: Record<string, string> = { daily: 'Cash remitted daily', every_3_days: 'Cash remitted every 3 days', weekly: 'Cash remitted weekly', monthly: 'Cash remitted monthly' };
-const SECTION_LINK = 'inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas';
+const CARD = 'space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800';
+/** T-599 S1: a settings link is a full-width row; the chevron is drawn by CSS so the link text stays plain words. */
+const SECTION_LINK = "flex min-h-11 items-center justify-between gap-3 rounded-lg px-2 text-sm font-semibold text-ink hover:bg-canvas after:text-neutral-500 after:content-['›']";
 
 /** One saved value, or "Not set" in muted text. */
 function Row({ label, value }: { label: string; value: string | null | undefined }) {
@@ -124,26 +126,10 @@ export default async function StoreDetailPage({
         </Banner>
       )}
 
-      <nav aria-label="Store settings" className="flex flex-wrap gap-2">
-        <Link href={`/kitchen?store=${id}`} className={SECTION_LINK}>
-          Kitchen stations
-        </Link>
-        <Link href={`/menu/hours?store=${id}`} className={SECTION_LINK}>
-          Menu hours
-        </Link>
-        <Link href={`/settings/sales-channels?store=${id}`} className={SECTION_LINK}>
-          Sales channels and payouts
-        </Link>
-        <Link href={`/settings/pos-link?store=${id}`} className={SECTION_LINK}>
-          Link to POS store
-        </Link>
-        <Link href={`/remittance?store=${id}`} className={SECTION_LINK}>
-          Cash settings
-        </Link>
-      </nav>
-
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      {/* T-599 S1: on a phone one column in reading order (the `order-*` classes work through the `contents` wrappers); from lg, main 2/3 and side 1/3. */}
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3 lg:items-start xl:gap-4">
+        <div className="contents lg:col-span-2 lg:block lg:min-w-0 lg:space-y-4">
+        <section className={`${CARD} order-1 lg:order-none`}>
           <h2 className="text-sm font-medium">Readiness</h2>
           {/* Closed when every check passes; open, with the count, when one does not. */}
           <details open={failing > 0} className="group">
@@ -183,53 +169,9 @@ export default async function StoreDetailPage({
           </details>
         </section>
 
-        <section className="space-y-4">
-          {/**
-            * ⭐ T-533 S1 — which POS owns this store's sales days. `off` and `test` book nothing; `live` from a date means the new POS closes the day and the v1 day
-            * feed stops from that date. Admin and super-admin only (the page itself is `manage_stores`; `setStorePosMode` checks the role again).
-            */}
-          <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <h2 className="text-sm font-medium">New POS</h2>
-            <p className="text-sm">
-              Mode: <strong>{pos.mode === 'live' && pos.liveFrom ? `Live from ${niceDay(pos.liveFrom)}` : pos.mode === 'test' ? 'Test' : 'Off'}</strong>
-            </p>
-            <p className="text-xs text-neutral-500">
-              {pos.changedAt ? `Last changed by ${pos.changedByName ?? 'someone'} on ${formatBusinessDateTime(pos.changedAt, { dateStyle: 'long', timeStyle: 'short' })}.` : 'Never switched on for this store.'}
-            </p>
-            <p className="text-sm">
-              Pre-flight:{' '}
-              {pos.preflight.blocking.length === 0
-                ? 'nothing blocks going live'
-                : `${pos.preflight.blocking.length} thing${pos.preflight.blocking.length === 1 ? '' : 's'} block${pos.preflight.blocking.length === 1 ? 's' : ''} going live`}
-              {pos.preflight.warnings.length > 0 ? `, ${pos.preflight.warnings.length} warning${pos.preflight.warnings.length === 1 ? '' : 's'}` : ''}.{' '}
-              <Link href={`/admin/stores/${id}/pos-preflight`} className={ACTION_LINK}>
-                See the pre-flight list →
-              </Link>
-            </p>
-            {sp.needsConfirmation && posTyped?.kind === 'typed' ? (
-              <form action={setStorePosModeAction} className="space-y-3 text-sm">
-                <input type="hidden" name="storeId" value={store.id} />
-                <input type="hidden" name="mode" value={one(posTypedFields.mode) ?? ''} />
-                <input type="hidden" name="liveFrom" value={one(posTypedFields.liveFrom) ?? ''} />
-                <input type="hidden" name="reason" value={one(posTypedFields.reason) ?? ''} />
-                <Banner tone="warning">{sp.needsConfirmation}</Banner>
-                <p className="text-neutral-600 dark:text-neutral-400">Reason: {one(posTypedFields.reason)}</p>
-                <div className="flex flex-wrap items-center gap-3">
-                  <SubmitButton variant="primary" pendingLabel="Switching…" icon={null}>
-                    Confirm and switch
-                  </SubmitButton>
-                  <Link href={`/admin/stores/${id}`} className={ACTION_LINK}>
-                    Cancel
-                  </Link>
-                </div>
-              </form>
-            ) : (
-              <PosModeForm storeId={store.id} storeName={store.name} currentMode={pos.mode} today={pos.today} typed={posTyped} />
-            )}
-          </section>
-
-          <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <h2 className="text-sm font-medium">Details</h2>
+        <section className={`${CARD} order-3 lg:order-none`}>
+          <h2 className="text-sm font-medium">About this store</h2>
+          <div className="space-y-3">
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
               <Row label="Name" value={store.name} />
               <Row label="Trading address" value={store.address} />
@@ -275,8 +217,8 @@ export default async function StoreDetailPage({
                 .
               </p>
             </EditableRecord>
-          </section>
-
+          </div>
+          <div className="space-y-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
           {/**
             * ⭐ T-346 S1 (DEF-428). Its own form, not a field on Details above — same reasoning as
             * `stock_model` below: `setStoreOpeningDate` carries a refusal (has this store already
@@ -288,9 +230,13 @@ export default async function StoreDetailPage({
             * is that refusal's OWN message, shown verbatim as an in-page step — never
             * `window.confirm()` — with a resubmit that carries the plan token as `confirmedPlan`.
             */}
-          <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <h2 className="text-sm font-medium">Opening date</h2>
-            {/* No date saved: the add form below IS the read view, so a "Not set" line above it would only repeat its label. */}
+            {/* T-599 S1: with a date saved, the EditableRecord below is the read view. With none, a one-line row says so and the "Set" disclosure holds the add form. */}
+            {store.openingDate === null && (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 text-sm">
+                <dt className="text-neutral-600 dark:text-neutral-400">Opening date</dt>
+                <dd className="text-muted italic">Not opened yet</dd>
+              </dl>
+            )}
             {store.openingDate !== null && (
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 text-sm">
                 <Row label="Opening date" value={formatBusinessDayLong(store.openingDate)} />
@@ -343,7 +289,8 @@ export default async function StoreDetailPage({
                   </FormGrid>
                 </EditableRecord> 
                 ) : (
-                  /* No date saved yet: an ADD, open with Save (A6 rule 1). */
+                  /* No date saved yet: an ADD, folded into "Set the opening date"; it opens by itself on a confirm step or a typed refill. */
+                  <DisclosureCard id="opening-date" title="Set the opening date" action="Set" open={Boolean(sp.confirm) || typedFor(sp, STORE_OPENING_DATE, store.id, actor.personId) !== null}>
                   <CheckedForm rules={ADMIN_STORE_OPENING_DATE_RULES} action={setStoreOpeningDateAction} className="space-y-3">
                     <input type="hidden" name="storeId" value={store.id} />
                     {sp.confirm ? <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} /> : null}
@@ -360,11 +307,12 @@ export default async function StoreDetailPage({
                       Save
                     </Button>
                   </CheckedForm>
+                  </DisclosureCard>
                 )}
               </>
             )}
-          </section>
-
+          </div>
+          <div className="space-y-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
           {/**
             * ⭐ T-284 / DEF-316 — Ian: *"shareat lipa needs more than 1 storage room, i can not
             * edit the store."* `stores.stock_model` was created by migration `0062` and has had
@@ -375,8 +323,7 @@ export default async function StoreDetailPage({
             * a room-count pre-flight the database does not have on this side (DEF-316) — folding
             * it in would route the column past that check.
             */}
-          <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <h2 className="text-sm font-medium">How this store keeps stock</h2>
+            <h3 className="text-sm font-medium">How this store keeps stock</h3>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 text-sm">
               <Row label="Stock is kept in" value={STOCK_WORDS[store.stockModel] ?? store.stockModel} />
             </dl>
@@ -429,22 +376,86 @@ export default async function StoreDetailPage({
 
             </div>
             </EditableRecord>
+          </div>
+        </section>
+        </div>
+
+        <div className="contents lg:block lg:min-w-0 lg:space-y-4">
+          {/**
+            * ⭐ T-533 S1 — which POS owns this store's sales days. `off` and `test` book nothing; `live` from a date means the new POS closes the day and the v1 day
+            * feed stops from that date. Admin and super-admin only (the page itself is `manage_stores`; `setStorePosMode` checks the role again).
+            */}
+          <section className={`${CARD} order-2 lg:order-none`}>
+            <h2 className="text-sm font-medium">New POS</h2>
+            <p className="text-sm">
+              Mode: <strong>{pos.mode === 'live' && pos.liveFrom ? `Live from ${niceDay(pos.liveFrom)}` : pos.mode === 'test' ? 'Test' : 'Off'}</strong>
+            </p>
+            <p className="text-xs text-neutral-500">
+              {pos.changedAt ? `Last changed by ${pos.changedByName ?? 'someone'} on ${formatBusinessDateTime(pos.changedAt, { dateStyle: 'long', timeStyle: 'short' })}.` : 'Never switched on for this store.'}
+            </p>
+            <p className="text-sm">
+              Pre-flight:{' '}
+              {pos.preflight.blocking.length === 0
+                ? 'nothing blocks going live'
+                : `${pos.preflight.blocking.length} thing${pos.preflight.blocking.length === 1 ? '' : 's'} block${pos.preflight.blocking.length === 1 ? 's' : ''} going live`}
+              {pos.preflight.warnings.length > 0 ? `, ${pos.preflight.warnings.length} warning${pos.preflight.warnings.length === 1 ? '' : 's'}` : ''}.{' '}
+              <Link href={`/admin/stores/${id}/pos-preflight`} className={ACTION_LINK}>
+                See the pre-flight list →
+              </Link>
+            </p>
+            {sp.needsConfirmation && posTyped?.kind === 'typed' ? (
+              <form action={setStorePosModeAction} className="space-y-3 text-sm">
+                <input type="hidden" name="storeId" value={store.id} />
+                <input type="hidden" name="mode" value={one(posTypedFields.mode) ?? ''} />
+                <input type="hidden" name="liveFrom" value={one(posTypedFields.liveFrom) ?? ''} />
+                <input type="hidden" name="reason" value={one(posTypedFields.reason) ?? ''} />
+                <Banner tone="warning">{sp.needsConfirmation}</Banner>
+                <p className="text-neutral-600 dark:text-neutral-400">Reason: {one(posTypedFields.reason)}</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <SubmitButton variant="primary" pendingLabel="Switching…" icon={null}>
+                    Confirm and switch
+                  </SubmitButton>
+                  <Link href={`/admin/stores/${id}`} className={ACTION_LINK}>
+                    Cancel
+                  </Link>
+                </div>
+              </form>
+            ) : (
+              <PosModeForm storeId={store.id} storeName={store.name} currentMode={pos.mode} today={pos.today} typed={posTyped} />
+            )}
           </section>
 
-          <DaypartsSection storeId={store.id} dayparts={hours.dayparts} canManage={hours.canManage} />
-        </section>
+          <section className={`${CARD} order-4 lg:order-none`}>
+            <h2 className="text-sm font-medium">Store settings</h2>
+            <nav aria-label="Store settings" className="-mx-2">
+              <ul>
+                <li><Link href={`/kitchen?store=${id}`} className={SECTION_LINK}>Kitchen stations</Link></li>
+                <li><Link href={`/menu/hours?store=${id}`} className={SECTION_LINK}>Menu hours</Link></li>
+                <li><Link href={`/settings/sales-channels?store=${id}`} className={SECTION_LINK}>Sales channels and payouts</Link></li>
+                <li><Link href={`/settings/pos-link?store=${id}`} className={SECTION_LINK}>Link to POS store</Link></li>
+                <li><Link href={`/remittance?store=${id}`} className={SECTION_LINK}>Cash settings</Link></li>
+              </ul>
+            </nav>
+          </section>
+
+          <div className="order-5 lg:order-none">
+            <DaypartsSection storeId={store.id} dayparts={hours.dayparts} canManage={hours.canManage} />
+          </div>
+        </div>
       </div>
 
       {store.isActive ? (
         <form
           action={deactivateStoreAction}
-          className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
         >
-          <h2 className="text-sm font-medium">Close this store</h2>
           <input type="hidden" name="storeId" value={store.id} />
-          <p className="text-xs text-neutral-500">
-            Closing never deletes anything. Its journal entries, attendance and stock stay.
-          </p>
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-sm font-medium">Close this store</h2>
+            <p className="text-xs text-neutral-500">
+              Closing never deletes anything. Its journal entries, attendance and stock stay.
+            </p>
+          </div>
           <ConfirmDestructive
             tier="retype"
             label="Close this store"
@@ -456,13 +467,15 @@ export default async function StoreDetailPage({
       ) : (
         <form
           action={reactivateStoreAction}
-          className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
         >
-          <h2 className="text-sm font-medium">Reopen this store</h2>
           <input type="hidden" name="storeId" value={store.id} />
-          <p className="text-xs text-neutral-500">
-            Reopening gives every admin access to this store again, including any admin added while it was closed.
-          </p>
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-sm font-medium">Reopen this store</h2>
+            <p className="text-xs text-neutral-500">
+              Reopening gives every admin access to this store again, including any admin added while it was closed.
+            </p>
+          </div>
           <Button type="submit" variant="secondary">
             Reactivate
           </Button>

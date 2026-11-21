@@ -209,10 +209,12 @@ export function projectOrders(server: OrdersServer, pending: readonly PosEvent[]
   };
 
   const paidSessions = new Set<string>();
+  const voidedSessions = new Set<string>(); // T-620: a queued void takes the table off the open list at once
   for (const e of pending) {
     const p = e.payload as Payload;
     const sessionId = str(p.sessionId);
     if (e.kind === 'sale.completed' && sessionId) paidSessions.add(sessionId);
+    else if (e.kind === 'session.voided' && sessionId) voidedSessions.add(sessionId);
     else if (e.kind === 'stand.opened' && sessionId) {
       if (!tiles.has(sessionId)) {
         const standId = str(p.standId);
@@ -262,6 +264,7 @@ export function projectOrders(server: OrdersServer, pending: readonly PosEvent[]
   const sessions: Record<string, ProjectedSession> = {};
   const out: Tile[] = [];
   for (const [id, t] of tiles) {
+    if (voidedSessions.has(id)) continue;
     const w = work.get(id)!;
     w.lines.sort(byPlace);
     const packages = w.lines.filter((l) => w.kinds.get(l.id) === 'package' && !l.cancelled);
