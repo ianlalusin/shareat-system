@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
 import { organizationsRepo, posV2Repo, storesRepo } from '@shareat/db';
-import { findSalesReceiptByNo, listTodaysSalesReceipts, receiptIdentityOf, readReceiptLookupDays } from '@shareat/domain';
+import { findSalesReceiptByNo, listTodaysSalesReceipts, listWalletPaymentsToCheck, receiptIdentityOf, readReceiptLookupDays } from '@shareat/domain';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { add, money, ZERO } from '@shareat/core/money';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
@@ -15,6 +15,7 @@ import { printSettingsOf } from '../_payment/logic';
 import { CorrectPayment } from './CorrectPayment';
 import { FindReceipt } from './FindReceipt';
 import { RefundReceipt } from './RefundReceipt';
+import { WalletChecksSection } from './WalletChecks';
 
 export const metadata = { title: 'Receipts — Shareat POS' };
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,7 @@ const pad6 = (n: number) => String(n).padStart(6, '0');
  * T-601 S2: the list of the receipts since the last close (Z), newest first. On a paired tablet only that till's receipts show. Reprinting an old receipt comes after the soak.
  * T-534 S3: a receipt not yet in a Z has "Wrong payment method"; its "Paid by" shows the corrected method with a small "corrected" note.
  * T-534 S4: every receipt with something left to refund has "Refund" (before or after its Z); a refunded receipt shows "Refunded ₱x" under its status.
+ * T-623: a person who holds `approve_pos_correction` also sees "Wallet payments to check" (the last 7 days' unchecked ones) above the receipts, with a Checked button each; others never see it.
  * T-613 D4: "Find a receipt" - `?find=<receipt number>` looks one up among the store's last 30 days (an earlier day has no row in the list above) and shows it with the same buttons.
  */
 export default async function PosReceiptsPage({ searchParams }: { searchParams: Promise<{ storeId?: string; find?: string }> }) {
@@ -43,7 +45,9 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
     const found = findText === '' ? null : (await findSalesReceiptByNo(tx, actor, { storeId, receiptNo: findText })).receipts;
     // T-614 S2: the look-up window is the business rule pos.receipt_lookup_days.
     const lookupDays = await readReceiptLookupDays(tx, actor.orgId, toBusinessDate());
-    if (!pairing) return { receipts, tenders, canApprove, paired: false, slip: null, found, lookupDays };
+    // T-623: the manager's list; `canCheck: false` (no right) hides the section.
+    const walletChecks = await listWalletPaymentsToCheck(tx, actor, { storeId });
+    if (!pairing) return { receipts, tenders, canApprove, paired: false, slip: null, found, lookupDays, storeId, walletChecks };
     const till = await posV2Repo.getTerminalForPairing(tx, actor.orgId, storeId, pairing.pairingId);
     // T-534 S4: what the refund slip needs: the issuer header (T-585) and the till's paper.
     const store = await storesRepo.getById(tx, actor.orgId, storeId);
@@ -52,7 +56,7 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
       context: { storeName: store?.name ?? 'Store', vatRegistered: (await posV2Repo.getOrgTaxType(tx, actor.orgId)) === 'vat', identity: org && store ? receiptIdentityOf(org, store) : undefined, mode: (await posV2Repo.getPosStore(tx, actor.orgId, storeId))?.mode },
       layout: printSettingsOf({ receiptPaperMm: till?.receiptPaperMm === 80 ? 80 : 58, receiptCopies: 1 }).layout,
     };
-    return { receipts: receipts.filter((r) => r.terminalId === till?.id), tenders, canApprove, paired: true, slip, found, lookupDays };
+    return { receipts: receipts.filter((r) => r.terminalId === till?.id), tenders, canApprove, paired: true, slip, found, lookupDays, storeId, walletChecks };
   });
   if (!data) {
     return (
@@ -62,7 +66,7 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
     );
   }
 
-  const { receipts, tenders, canApprove, paired, slip, found, lookupDays } = data;
+  const { receipts, tenders, canApprove, paired, slip, found, lookupDays, storeId, walletChecks } = data;
   const gaps = missingSeqs(receipts);
   const total = receipts.reduce((sum, r) => add(sum, money(r.total)), ZERO);
   return (
@@ -74,6 +78,11 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
           {gaps.length === 0 ? 'Numbers: no gaps' : `Missing numbers: ${gaps.map((g) => pad6(g.seq)).join(', ')} — write these down`}
         </p>
       </div>
+      <WalletChecksSection
+        canCheck={walletChecks.canCheck}
+        storeId={storeId}
+        payments={walletChecks.payments.map((p) => ({ paymentId: p.paymentId, receiptNo: p.receiptNo, when: formatBusinessDateTime(p.issuedAtDevice, { dateStyle: 'medium', timeStyle: 'short' }), tenderName: p.tenderName, amount: p.amount, referenceNo: p.referenceNo }))}
+      />
       <FindReceipt value={findText} storeId={requested} days={lookupDays} />
       {found === null ? null : found.length === 0 ? (
         <Banner tone="info">No receipt numbered {findText} at this store in the last {lookupDays} days. Check the number on the printed receipt.</Banner>
