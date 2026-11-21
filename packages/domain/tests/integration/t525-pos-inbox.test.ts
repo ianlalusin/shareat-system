@@ -1163,3 +1163,45 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     await expectRefusal(snapshot(f), 'This tablet has no till number yet. Ask a manager.');
   });
 });
+
+// ==============================================================================================================================
+describe('T-620 - the till builds the void event the inbox understands', () => {
+  async function table(f: Fx, startSeq: number) {
+    const sessionId = uuid();
+    const r = await send(f, [
+      ev(startSeq, 'stand.opened', f.counterId, standOpenedPayload(sessionId, (await newStand(f)).id)),
+      ev(startSeq + 1, 'lines.added', f.counterId, linesAddedPayload(sessionId, [{ lineId: uuid(), item: f.menu.pork, qty: 2 }])),
+    ]);
+    expect(statuses(r)).toEqual(['applied', 'applied']);
+    return sessionId;
+  }
+  // The payload the till's voidSessionEvent builds (apps/erp/.../_orders/payloads.ts; a package test may not import an app,
+  // so its shape is pinned against the inbox spec by apps/erp/tests/t620-void-stand.test.ts).
+  const built = (seq: number, personId: string, i: { sessionId: string; offline: boolean; pin?: string }) =>
+    ev(seq, 'session.voided', personId, {
+      sessionId: i.sessionId, reason: 'Walked out', voidedAtDevice: new Date().toISOString(), offline: i.offline,
+      ...(i.pin ? { approval: { pin: i.pin } } : {}),
+    });
+
+  it('voidSessionEvent with a manager PIN, sent through the inbox, voids the table and writes pos.session_voided', async () => {
+    const f = await fixture();
+    await signedIn(f, f.counterId);
+    const sessionId = await table(f, 1);
+    const r = await sendOne(f, built(3, f.counterId, { sessionId, offline: false, pin: await pinOf(f, f.managerId) }));
+    expect(r.status, JSON.stringify(r)).toBe('applied');
+    expect((await sessionRow(sessionId))?.status).toBe('voided');
+    const [a] = await auditRows(f, 'pos.session_voided');
+    expect(a).toMatchObject({ entity_id: sessionId, after: { status: 'voided', reason: 'Walked out', offline: false, approvedBy: f.managerId } });
+  });
+
+  it('voidSessionEvent without a PIN, from a person who may approve and offline, is applied and marked voidedOffline', async () => {
+    const f = await fixture();
+    await signedIn(f, f.counterId, f.adminId);
+    const sessionId = await table(f, 1);
+    const r = await sendOne(f, built(3, f.adminId, { sessionId, offline: true }));
+    expect(r.status, JSON.stringify(r)).toBe('applied');
+    expect((await sessionRow(sessionId))?.status).toBe('voided');
+    const [a] = await auditRows(f, 'pos.session_voided');
+    expect(a).toMatchObject({ entity_id: sessionId, after: { offline: true, approvedBy: f.adminId } });
+  });
+});

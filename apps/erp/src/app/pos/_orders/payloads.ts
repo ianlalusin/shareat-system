@@ -102,6 +102,66 @@ export function cancelLineEvent(i: { personId: string; lineId: string; reason: s
   return { kind: 'line.cancelled', personId: i.personId, occurredAtDevice: i.now.toISOString(), payload: { lineId: i.lineId, reason: i.reason, ...i.approval } };
 }
 
+/** T-620: the server's `session.voided` spec (inbox.ts): sessionId, reason, voidedAtDevice and offline always; `approval: { pin }` only when a manager PIN was typed. */
+export function voidSessionEvent(i: { personId: string; sessionId: string; reason: string; now: Date; offline: boolean; pin?: string }): NewPosEvent {
+  const at = i.now.toISOString();
+  return { kind: 'session.voided', personId: i.personId, occurredAtDevice: at, payload: { sessionId: i.sessionId, reason: i.reason, voidedAtDevice: at, offline: i.offline, ...(i.pin ? { approval: { pin: i.pin } } : {}) } };
+}
+
+export const VOID_OFFLINE_NOTE = 'A manager must approve voiding a table, and that needs the internet.';
+export const VOID_NOT_SENT = 'Could not reach the server, so the table was not voided. Try again.';
+/**
+ * Who may void, as the server decides it (sale.ts voidUnpaidSession, row 356):
+ *   direct  - the signed-in person holds `approve_pos_correction`: no PIN, saved to the outbox like any action (works offline; the event says `offline: true`).
+ *   pin     - anyone else, online: a manager's PIN, sent at once and never saved (`sendVoidNow`).
+ *   blocked - anyone else, offline: nothing is sent; the screen says why.
+ */
+export type VoidAccess = 'direct' | 'pin' | 'blocked';
+export const voidAccess = (a: { canApprove: boolean; online: boolean }): VoidAccess => (a.canApprove ? 'direct' : a.online ? 'pin' : 'blocked');
+
+/**
+ * T-620: sends ONE event to the server now, outside the outbox, so a typed manager PIN is never written to the tablet's storage. It takes a fresh `seq` and the bound
+ * pairing, posts a one-event batch, and turns the answer into `ok` or the one sentence for the dialog. A refusal (wrong PIN, table already paid) is the server's own sentence.
+ */
+export async function sendVoidNow(deps: { reserveSeq: () => Promise<{ seq: number; pairingId: string }>; fetch: typeof fetch }, event: NewPosEvent): Promise<{ ok: true; event: PosEvent } | { ok: false; message: string }> {
+  try {
+    const { seq, pairingId } = await deps.reserveSeq();
+    const sent: PosEvent = { seq, pairingId, ...event };
+    const res = await deps.fetch('/api/pos/events', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ pairingId, events: [sent] }),
+    });
+    const j = (await res.json().catch(() => null)) as { results?: { seq: number; status: string; error?: string }[] } | null;
+    const r = res.ok ? j?.results?.find((x) => x.seq === seq) : undefined;
+    if (r?.status === 'applied' || r?.status === 'duplicate') return { ok: true, event: sent };
+    if (r?.status === 'quarantined' && r.error) return { ok: false, message: r.error.replace(/^[A-Z][A-Z0-9_]+: /, '') };
+    return { ok: false, message: VOID_NOT_SENT };
+  } catch {
+    return { ok: false, message: VOID_NOT_SENT };
+  }
+}
+
+export const VOID_STILL_SENDING = 'This table is still sending. Try again in a moment.';
+/**
+ * T-620: what the Void dialog's confirm does. No PIN: the event is saved to the outbox like any action (`submit`). A typed PIN: sent now (`sendNow`), never saved, and only when nothing for
+ * this table is still waiting in the outbox (`stillSending`), because a direct send would jump that queue. `onSent` gets the sent copy WITHOUT the PIN.
+ */
+export async function confirmVoidTable(
+  d: { stillSending: boolean; submit: (e: NewPosEvent) => Promise<string | null>; sendNow: (e: NewPosEvent) => Promise<{ ok: true; event: PosEvent } | { ok: false; message: string }>; onSent: (e: PosEvent) => void },
+  event: NewPosEvent,
+): Promise<string | null> {
+  if (!('approval' in event.payload)) return d.submit(event);
+  if (d.stillSending) return VOID_STILL_SENDING;
+  const sent = await d.sendNow(event);
+  if (!sent.ok) return sent.message;
+  const { approval: _pin, ...payload } = sent.event.payload;
+  d.onSent({ ...sent.event, payload });
+  return null;
+}
+
 /** The one write path: save to the tablet's outbox first, and only then ask for a send. A failed save changes nothing and says so. */
 export async function submitPosEvent(
   deps: { enqueue: (e: NewPosEvent) => Promise<PosEvent>; requestDrain: () => void },
