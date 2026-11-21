@@ -175,10 +175,13 @@ export async function wantedDefaultsForPersonAtStore(
     .from(positionCapabilityDefaults)
     .innerJoin(employmentPositions, eq(employmentPositions.positionId, positionCapabilityDefaults.positionId))
     .innerJoin(employments, eq(employments.id, employmentPositions.employmentId))
+    // DEF-425: a deactivated position justifies no grant (as migration 0152 and T-341's backfill already decided).
+    .innerJoin(positions, eq(positions.id, positionCapabilityDefaults.positionId))
     .where(
       and(
         eq(positionCapabilityDefaults.storeId, input.storeId),
         isNull(positionCapabilityDefaults.revokedAt),
+        eq(positions.isActive, true),
         eq(employments.personId, input.personId),
         eq(employments.storeId, input.storeId),
         isNull(employments.endedOn),

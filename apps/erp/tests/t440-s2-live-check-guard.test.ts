@@ -37,6 +37,7 @@ import { join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import { buildIndex, callees, lineOf, noSpace, parse, reachable, read, toSources, walk, wordRe, type FnDef, type Index, type Sources } from './helpers/ts-index';
 import { describe, expect, it } from 'vitest';
+import { lowerCounts } from '../../../tests/helpers/census-write';
 
 const ERP_SRC = resolve(__dirname, '..', 'src');
 const APP_ROOT = join(ERP_SRC, 'app');
@@ -402,7 +403,7 @@ const EXEMPT: Record<string, { count: number; reason: string }> = {
   'remittance/page.tsx': { count: 2, reason: `lineAmount_\${i} / lineOverage_\${i}: ${REPEATED}` },
   'sales-days/[id]/page.tsx': { count: 1, reason: `channel_\${c.id} per-channel amounts: ${REPEATED}` },
   'settings/attendance/page.tsx': { count: 2, reason: 'local number-field helpers: name arrives as a prop, one component for many callers' },
-  'commissary/orders/page.tsx': { count: 3, reason: 'repeated line family, S8' },
+  'commissary/orders/page.tsx': { count: 2, reason: 'repeated line family, S8' },
   'commissary/orders/[id]/page.tsx': { count: 1, reason: 'repeated line family, S8' },
   'inventory/deliveries/NewDeliveryForm.tsx': { count: 5, reason: 'repeated line family, S8' },
   'inventory/deliveries/[id]/page.tsx': { count: 1, reason: 'repeated line family, S8' },
@@ -504,6 +505,7 @@ describe('T-440 S2 census + ratchet over the real tree', () => {
   it('G1: unconverted ruled controls per file never exceed the baseline, and the baseline is never stale', () => {
     const { counts, stale } = exemptApplied(realScan().g1);
     expect(stale).toEqual([]);
+    lowerCounts(BASELINE_FILE, counts, 'unconverted');
     expect(ratchet(counts, loadBaseline().unconverted)).toEqual([]);
   });
 
@@ -547,7 +549,8 @@ describe('T-440 S2 census + ratchet over the real tree', () => {
     const sets = ruleSets(toSources(ruleFiles, key));
     const r = serverOnly(parseCensus(read(CENSUS_DOC)), new Set(tsxFiles.map(key)), formsByFile, sets);
     expect(r.stale).toEqual([]);
-    expect(ratchet(r.counts, base)).toEqual([]);
+    lowerCounts(BASELINE_FILE, r.counts, 'serverOnly');
+    expect(ratchet(r.counts, loadBaseline().serverOnly)).toEqual([]);
   });
 
   it('prints the census (informational)', () => {

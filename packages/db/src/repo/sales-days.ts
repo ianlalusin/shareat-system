@@ -249,15 +249,16 @@ export async function receivableAccountFor(
   tx: Tx,
   orgId: string,
   code: string,
-): Promise<{ code: string; name: string; isPostable: boolean; requiresParty: boolean; status: string } | null> {
+): Promise<{ code: string; name: string; type: string; isPostable: boolean; requiresParty: boolean; status: string } | null> {
   const [row] = (await tx.execute(sql`
-    select code, name, is_postable, requires_party, status from accounts
+    select code, name, type, is_postable, requires_party, status from accounts
      where org_id = ${orgId} and code = ${code} limit 1
   `)) as unknown as Record<string, unknown>[];
   if (!row) return null;
   return {
     code: String(row.code),
     name: String(row.name),
+    type: String(row.type),
     isPostable: Boolean(row.is_postable),
     requiresParty: Boolean(row.requires_party),
     status: String(row.status),
@@ -273,11 +274,21 @@ export async function lockChannel(tx: Tx, orgId: string, channelId: string): Pro
   return channelById(tx, orgId, channelId);
 }
 
-/** The receivable picker's list — postable, active, and party-bearing (invariant 4). */
+/**
+ * T-618 (DEF-927): a channel's sales are owed on 1210 (customer receivable) or 1220 (channel receivable) only. Cash, clearing, advances, due-from-store, payable and equity accounts also carry a party or sit near them, so "postable and party-bearing" alone
+ * offered them. One definition for the picker (`receivableAccountOptions`) and the server check (`validateWiring`).
+ * Chart constants, not business settings: an explicit list, extended here if the chart ever gains another channel receivable.
+ */
+export const CHANNEL_RECEIVABLE_CODES = ['1210', '1220'] as const;
+export function isReceivableAccount(account: { code: string; type: string }): boolean {
+  return account.type === 'asset' && (CHANNEL_RECEIVABLE_CODES as readonly string[]).includes(account.code);
+}
+
+/** The receivable picker's list — postable, active, party-bearing (invariant 4), and a receivable (DEF-927). */
 export async function receivableAccountOptions(tx: Tx, orgId: string): Promise<{ code: string; name: string }[]> {
   const rows = (await tx.execute(sql`
     select code, name from accounts
-     where org_id = ${orgId} and is_postable and requires_party and status = 'active'
+     where org_id = ${orgId} and is_postable and requires_party and status = 'active' and type = 'asset' and code in (${sql.join(CHANNEL_RECEIVABLE_CODES.map((c) => sql`${c}`), sql`, `)})
      order by code
   `)) as unknown as Record<string, unknown>[];
   return rows.map((r) => ({ code: String(r.code), name: String(r.name) }));
@@ -1011,6 +1022,17 @@ export async function getChannelsForDay(tx: Tx, salesDayId: string): Promise<Sal
     .innerJoin(salesChannels, eq(salesChannels.id, salesDayChannels.channelId))
     .where(eq(salesDayChannels.salesDayId, salesDayId))
     .orderBy(asc(salesChannels.name));
+}
+
+/**
+ * T-618 (DEF-926): share-locks the channel rows a day posts to (in id order), so a channel edit or retire that holds the row lock finishes first, and verify then posts
+ * on the receivable the channel has NOW, not the one it had when the guard read the balance.
+ */
+export async function shareLockChannelsOfDay(tx: Tx, salesDayId: string): Promise<void> {
+  await tx.execute(sql`
+    select 1 from sales_channels where id in (select channel_id from sales_day_channels where sales_day_id = ${salesDayId})
+    order by id for share
+  `);
 }
 
 /** T-371 C2 — `amount` is a `Money` brand. */

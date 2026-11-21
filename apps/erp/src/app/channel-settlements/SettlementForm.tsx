@@ -21,6 +21,8 @@
  * returns money; v1 filtered to `amount > 0` and silently overstated fees by exactly the credit.
  */
 import { accountLabel } from '@/lib/account-label';
+import { peso } from '@/lib/format';
+import { ZERO, compare, money as parseMoney } from '@shareat/core/money';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Banner, Button, Field, FormGrid, FormSection, Input, Select, SplitWorkspace, Textarea } from '@/components/ui';
@@ -86,14 +88,18 @@ type DeductionName = (typeof DEDUCTIONS)[number]['name'];
 const INPUT =
   'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
+// DEF-726: the exact peso formatter (decimal strings are never run through `Number`).
 function money(v: string): string {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '—';
-  return new Intl.NumberFormat('en-PH', {
-    style: 'currency',
-    currency: 'PHP',
-    minimumFractionDigits: 2,
-  }).format(n === 0 ? 0 : n);
+  return Number.isFinite(Number(v)) ? peso(v) : '—';
+}
+
+/** DEF-726: zero test in exact money; an unreadable figure is not "zero", so it still shows. */
+export function isZeroAmount(v: string): boolean {
+  try {
+    return compare(parseMoney(v), ZERO) === 0;
+  } catch {
+    return false;
+  }
 }
 
 export function SettlementForm({
@@ -588,18 +594,18 @@ export function SettlementPreviewFigures({ preview }: { preview: PreviewShape })
       </p>
     );
   }
-  const reconciles = Number(preview.variance) === 0 && Number(preview.settlementGain) === 0;
+  const reconciles = isZeroAmount(preview.variance) && isZeroAmount(preview.settlementGain);
   return (
     <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
       <Row label={`${preview.channelName} is owed`} value={money(preview.outstanding)} />
       <Row label="This settlement clears" value={money(preview.outstandingCleared)} />
       <Row label="Deductions" value={money(preview.feesTotal)} />
-      {Number(preview.loanDeduction) !== 0 && <Row label="Loan docked" value={money(preview.loanDeduction)} />}
+      {!isZeroAmount(preview.loanDeduction) && <Row label="Loan docked" value={money(preview.loanDeduction)} />}
       <Row label="Banked" value={money(preview.netDeposited)} />
-      {Number(preview.variance) !== 0 && (
+      {!isZeroAmount(preview.variance) && (
         <Row label="Shortfall → Channel settlement variance" value={money(preview.variance)} tone="warn" />
       )}
-      {Number(preview.settlementGain) !== 0 && (
+      {!isZeroAmount(preview.settlementGain) && (
         <Row label="Excess → Platform settlement gain" value={money(preview.settlementGain)} tone="warn" />
       )}
       {reconciles && (

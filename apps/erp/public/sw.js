@@ -11,6 +11,7 @@
  * The saved shell is one signed-in person's page. It is replaced on every online visit, deleted the moment the server answers /pos with anything
  * but a plain 200 (signed out = a redirect), and deleted by the page itself before it signs out (offline-sw.ts purgePosShell).
  * The cache name carries the build (`sw.js?v=<build>`): a deploy installs a new worker, which deletes every other shareat-pos-* cache.
+ * T-614 S3: after install (and on the page's precache message) every /pos tab's HTML is fetched once and the hashed files it names are saved, so a tab never opened online opens offline too.
  * Pure routing is `strategyFor`; the tests drive this whole file through a fake worker scope.
  */
 'use strict';
@@ -20,6 +21,8 @@ const SHELL_KEY = '/pos-shell';
 const VERSION = new URLSearchParams(self.location.search).get('v') || 'dev';
 const CACHE = PREFIX + VERSION;
 const NETWORK_TIMEOUT_MS = 5000;
+/** T-614 S3: every /pos tab. Each one's HTML is fetched once after install and the hashed files it names are saved, so a tab never opened online still opens offline. A test pins this to the tabs in _shell/tabs.ts plus Printer. */
+const POS_TAB_PATHS = ['/pos', '/pos/kitchen', '/pos/refills', '/pos/receipts', '/pos/till', '/pos/printer'];
 
 /** Which strategy a request gets. Pure; the one place that decides what may be cached. */
 function strategyFor(url, origin, method, mode) {
@@ -36,6 +39,18 @@ function strategyFor(url, origin, method, mode) {
   if (mode === 'navigate' && p === '/pos') return 'shell';
   if (mode === 'navigate' && p.startsWith('/pos/')) return 'page';
   return 'network-only';
+}
+
+/** The hashed static files a tab's HTML names (script/link tags and the escaped Next payload). Pure; returns same-origin /_next/static/... paths, de-duplicated. */
+function chunkUrlsIn(html) {
+  const found = new Set();
+  const re = /(?:\/_next\/)?static\/(?:chunks|css|media)\/[^"'\\\s<>)]+/g;
+  let m;
+  while ((m = re.exec(String(html))) !== null) {
+    const raw = m[0].split('\\u0026').join('&');
+    found.add(raw.startsWith('/_next/') ? raw : '/_next/' + raw);
+  }
+  return [...found];
 }
 
 /** Keep the answer as the shell only when it is the plain /pos page; any other answer (a redirect to sign-in, 401, 404) deletes it. A 5xx changes nothing. */
@@ -76,9 +91,8 @@ async function navigation(request, isShell) {
   return res;
 }
 
-/** The page tells us which hashed files it loaded (the first visit happened before this worker controlled it) and we make sure a shell is saved. */
-async function precache(urls) {
-  const cache = await caches.open(CACHE);
+/** Save these hashed files (cache-first routes only; anything else, /api included, is ignored). */
+async function cacheStatic(cache, urls) {
   const wanted = (Array.isArray(urls) ? urls : []).filter((u) => typeof u === 'string' && strategyFor(u, self.location.origin, 'GET', 'no-cors') === 'cache-first');
   await Promise.all(
     wanted.map(async (u) => {
@@ -91,14 +105,38 @@ async function precache(urls) {
       }
     }),
   );
+}
+
+/** T-614 S3: fetch each tab's HTML once and save the hashed files it names. The HTML itself is never saved (only /pos as the shell). A signed-out answer (a redirect) saves nothing. */
+async function precacheTabs() {
+  const cache = await caches.open(CACHE);
+  for (const tab of POS_TAB_PATHS) {
+    try {
+      const res = await fetch(tab);
+      if (res.status !== 200 || res.redirected || res.type !== 'basic') continue;
+      await cacheStatic(cache, chunkUrlsIn(await res.text()));
+    } catch {
+      // offline: the next online load tries again
+    }
+  }
+}
+
+/** The page tells us which hashed files it loaded (the first visit happened before this worker controlled it) and we make sure a shell is saved. */
+async function precache(urls) {
+  const cache = await caches.open(CACHE);
+  await cacheStatic(cache, urls);
   try {
     if (!(await cache.match(SHELL_KEY))) await storeShell(cache, await fetch('/pos'));
   } catch {
     // offline: nothing to save
   }
+  await precacheTabs();
 }
 
-self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+  event.waitUntil(precacheTabs().catch(() => undefined));
+});
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -120,4 +158,4 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'precache') event.waitUntil(precache(event.data.urls));
 });
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { strategyFor, PREFIX, SHELL_KEY, CACHE };
+if (typeof module !== 'undefined' && module.exports) module.exports = { strategyFor, chunkUrlsIn, POS_TAB_PATHS, PREFIX, SHELL_KEY, CACHE };

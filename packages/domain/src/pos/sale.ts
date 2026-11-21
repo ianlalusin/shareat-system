@@ -6,6 +6,8 @@
  * tolerance), takes the payments (change only from cash), writes one statutory row per senior/PWD diner, freezes lines / discounts / payments and
  * ends the session `paid` - all in the caller's ONE transaction (migration 0240 refuses a child appended under an earlier transaction's receipt).
  */
+import { toBusinessDate } from '@shareat/core/datetime';
+import { readReceiptLookupDays } from '../business-rules/pos-rules';
 import { add, compare, fromCentavos, money, subtract, toCentavos, type Money } from '@shareat/core/money';
 import { authorize, can, verifyPosManagerApproval, POS_TERMINAL_NOT_REGISTERED, type Actor } from '@shareat/auth';
 import { advisoryLocksRepo, posV1Repo, posV2Repo, statutoryDiscountsRepo, type Tx } from '@shareat/db';
@@ -14,7 +16,7 @@ import { assertFieldRules } from '../shared/field-rules-assert';
 import { parseMoneyInput } from '../shared/money-input';
 import { POS_PAYMENT_REFERENCE_RULES, POS_REASON_RULES, POS_STATUTORY_HOLDER_RULES } from '../field-rules/pos';
 import { availableByPayment, keptOf, tenderNetsAfterCorrections } from './tender-correction';
-import { refundableByPayment, refundAmountsOfLine, refundNoOf } from './refund';
+import { refundRoutes, refundAmountsOfLine, refundNoOf } from './refund';
 import { priceSession, type PricedSession } from './price';
 import { isUniqueViolation, lockOpenSession } from './order';
 import { earlierUsesOfCard } from './senior-repeat';
@@ -437,7 +439,31 @@ export async function listTodaysSalesReceipts(tx: Tx, actor: Actor, input: { sto
   await requireStoreScope(tx, actor, input.storeId);
   const since = await posV2Repo.lastDayCloseEnd(tx, actor.orgId, input.storeId);
   // T-601 S2: one query, every existing field plus the table, the till number and the tenders (additive).
-  const rows = await posV2Repo.listReceiptsSinceForList(tx, actor.orgId, input.storeId, since);
+  return receiptsView(tx, actor, input.storeId, await posV2Repo.listReceiptsSinceForList(tx, actor.orgId, input.storeId, since));
+}
+
+/**
+ * T-613 D4 (DEF-937): "Find a receipt" - one receipt by its printed number (<store code>-<till, 2 digits>-<6 digits>; the store code may be left off), among the store's last
+ * `pos.receipt_lookup_days` days, in the SAME shape as the list so the Refund dialog opens on it unchanged. A number that is not found (or is older) answers an empty list, not an error.
+ * T-614 S2: the window is the business rule `pos.receipt_lookup_days` (default 30, set on Settings > Business rules); the Receipts screen reads the same rule to say it.
+ */
+export async function findSalesReceiptByNo(tx: Tx, actor: Actor, input: { storeId: string; receiptNo: string; now?: Date }) {
+  await requireStoreScope(tx, actor, input.storeId);
+  const lookupDays = await readReceiptLookupDays(tx, actor.orgId, toBusinessDate(input.now ?? new Date()));
+  const parts = String(input.receiptNo ?? '').trim().toUpperCase().split('-');
+  const seq = /^\d{1,6}$/.test(parts.at(-1) ?? '') ? Number(parts.at(-1)) : null;
+  const till = /^\d{1,2}$/.test(parts.at(-2) ?? '') ? Number(parts.at(-2)) : null;
+  const code = parts.slice(0, -2).join('-');
+  const storeCode = ((await posV2Repo.getStoreCode(tx, actor.orgId, input.storeId)) ?? '').toUpperCase();
+  const since = new Date((input.now ?? new Date()).getTime() - lookupDays * 86_400_000);
+  const rows = seq === null || till === null || (code !== '' && code !== storeCode)
+    ? []
+    : await posV2Repo.listReceiptsSinceForList(tx, actor.orgId, input.storeId, since, { terminalNo: till, terminalSeq: seq });
+  return receiptsView(tx, actor, input.storeId, rows);
+}
+
+async function receiptsView(tx: Tx, actor: Actor, storeId: string, rows: Awaited<ReturnType<typeof posV2Repo.listReceiptsSinceForList>>) {
+  const input = { storeId };
   const storeCode = (await posV2Repo.getStoreCode(tx, actor.orgId, input.storeId)) ?? '';
   // T-534 S3: what each receipt was REALLY paid by after its wrong-payment-method corrections, and which paid rows can still give some up.
   const ids = rows.map((r) => r.receiptId);
@@ -451,7 +477,7 @@ export async function listTodaysSalesReceipts(tx: Tx, actor: Actor, input: { sto
   const refunds = await posV2Repo.listRefundsOfReceipts(tx, actor.orgId, ids);
   const refundLines = await posV2Repo.listRefundLinesOfReceipts(tx, actor.orgId, ids);
   const refundPays = await posV2Repo.listRefundPaymentsOfReceipts(tx, actor.orgId, ids);
-  const refundLeft = refundableByPayment(payments, refundPays);
+  const refundRoutesOf = refundRoutes(payments, corrections, refundPays);
   const kindOf = new Map(tenderRows.map((t) => [t.id, t.kind as 'cash' | 'wallet']));
   return {
     stateVersion: await stateVersionOf(tx, actor, input.storeId),
@@ -487,10 +513,10 @@ export async function listTodaysSalesReceipts(tx: Tx, actor: Actor, input: { sto
             const amounts = refundAmountsOfLine(l, doneQty, done.reduce((a, x) => a + toCentavos(money(x.amount)), 0n));
             return { lineId: l.id, name: l.name, qty: l.qty, net: l.net, left: l.qty - doneQty, amounts };
           }),
-        /** The paid rows the money can go back to, in payment order, with what each can still take (a refund goes back the way it was paid). */
-        refundPayments: payments
-          .filter((p) => p.receiptId === r.receiptId)
-          .map((p) => ({ paymentId: p.id, tenderId: p.tenderId, tenderName: tenderName.get(p.tenderId) ?? 'Unknown tender', kind: kindOf.get(p.tenderId) ?? 'wallet', left: String(fromCentavos(refundLeft.get(p.id) ?? 0n)) })),
+        /** The ways the money can go back, in payment order (T-613 D1: a paid row's own method, then each method a correction moved part of it to), with what each can still take. `slotId` tells two ways of one paid row apart. */
+        refundPayments: refundRoutesOf
+          .filter((x) => payments.some((p) => p.receiptId === r.receiptId && p.id === x.paymentId))
+          .map((x) => ({ slotId: `${x.paymentId}:${x.tenderId}`, paymentId: x.paymentId, tenderId: x.tenderId, tenderName: tenderName.get(x.tenderId) ?? 'Unknown tender', kind: kindOf.get(x.tenderId) ?? 'wallet', left: String(fromCentavos(x.left)) })),
         payments: payments
           .filter((p) => p.receiptId === r.receiptId)
           .map((p) => ({ paymentId: p.id, tenderId: p.tenderId, tenderName: tenderName.get(p.tenderId) ?? 'Unknown tender', left: String(fromCentavos(left.get(p.id) ?? 0n)) })),

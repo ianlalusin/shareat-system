@@ -42,6 +42,7 @@ import { redirectWithFlash } from '@/lib/flash';
 import { resolveUploadedFile } from '@/lib/uploaded-file';
 import { keepTyping } from '@/lib/keep-typing';
 import { INVOICE_LINES, SUPPLIER_EDIT, VERIFY_INVOICE } from './typed-forms';
+import { supplierPlainFieldsFrom } from './supplier-form';
 import { verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
@@ -121,11 +122,7 @@ export async function editSupplierAction(formData: FormData): Promise<void> {
       editSupplier(tx, actor, {
         supplierId,
         name: str(formData, 'name'),
-        address: str(formData, 'address'),
-        contactNo: str(formData, 'contactNo'),
-        notes: str(formData, 'notes'),
-        vatStatus: (str(formData, 'vatStatus') || null) as never,
-        status: (str(formData, 'status') || 'active') as never,
+        ...supplierPlainFieldsFrom(formData),
         ...supplierFieldsFrom(formData),
       }),
     );

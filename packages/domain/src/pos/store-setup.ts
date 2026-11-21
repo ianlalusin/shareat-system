@@ -75,7 +75,8 @@ export function checkPreset(raw: { name: unknown; valueType: unknown; value: unk
   return { name, valueType: raw.valueType, value };
 }
 
-export async function upsertPosDiscountPreset(tx: Tx, actor: Actor, input: PresetInput): Promise<{ presetId: string; outcome: PresetOutcome }> {
+/** `source` is the caller's own, written on the audit rows (T-615): `'web'` from an admin screen action (the store copy), `'etl'` from the v1 loader. */
+export async function upsertPosDiscountPreset(tx: Tx, actor: Actor, input: PresetInput, source: 'web' | 'etl'): Promise<{ presetId: string; outcome: PresetOutcome }> {
   const storeId = uuidInput(input.storeId, 'That store');
   await authorize(tx, actor, CAPABILITY, { storeId });
   const p = checkPreset(input);
@@ -89,7 +90,7 @@ export async function upsertPosDiscountPreset(tx: Tx, actor: Actor, input: Prese
       entityId: row.id,
       before: null,
       after: { name: p.name, valueType: p.valueType, value: p.value },
-      source: 'etl',
+      source,
     });
     await bump(tx, actor.orgId, storeId);
     return { presetId: row.id, outcome: 'created' };
@@ -103,7 +104,7 @@ export async function upsertPosDiscountPreset(tx: Tx, actor: Actor, input: Prese
     entityId: existing.id,
     before: { name: existing.name, valueType: existing.valueType, value: existing.value },
     after: { name: p.name, valueType: p.valueType, value: p.value },
-    source: 'etl',
+    source,
   });
   await bump(tx, actor.orgId, storeId);
   return { presetId: existing.id, outcome: 'updated' };

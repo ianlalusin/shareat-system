@@ -95,7 +95,7 @@ export interface CustomerReturnRow {
   readonly returnedOn: string;
 }
 
-export async function getReturn(tx: Tx, id: string): Promise<CustomerReturnRow | undefined> {
+export async function getReturn(tx: Tx, orgId: string, id: string): Promise<CustomerReturnRow | undefined> {
   const [row] = await tx
     .select({
       id: customerReturns.id,
@@ -110,7 +110,7 @@ export async function getReturn(tx: Tx, id: string): Promise<CustomerReturnRow |
       returnedOn: customerReturns.returnedOn,
     })
     .from(customerReturns)
-    .where(eq(customerReturns.id, id));
+    .where(and(eq(customerReturns.id, id), eq(customerReturns.orgId, orgId)));
   return row as CustomerReturnRow | undefined;
 }
 

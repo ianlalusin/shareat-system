@@ -41,7 +41,6 @@ import { INVENTORY_LOCATION_RULES, INVENTORY_TRANSFER_RULES } from '../../src/fi
 import { COMMISSARY_LINK_RULES } from '../../src/field-rules/commissary';
 import { CUTOVER_COUNT_RULES, CUTOVER_FIGURE_RULES } from '../../src/field-rules/cutover';
 import { checkField } from '../../src/field-rules/check';
-import { RefusalError } from '../../src/shared/refusal';
 
 const sql = postgres(url, { max: 5 });
 const APP = '../../../../apps/erp/src/app';
@@ -197,20 +196,12 @@ describe('T-440 S5: a bad value is refused with the rule sentence and nothing is
     );
   });
 
-  it('inventory createTransferAction: a negative quantity throws the rule sentence as a refusal; no transfer (mutant: assert removed from createTransferAction)', async () => {
-    const f = await fixture();
-    const act = await load('inventory/transfers/actions', 'createTransferAction');
-    const before = await count('stock_transfers', f.orgId);
-    resetJar();
-    h.actor = f.admin;
-    let thrown: unknown;
-    try {
-      await act(formOf({ storeId: f.storeId, fromLocationId: FAKE_ID, toLocationId: FAKE_ID, itemId: FAKE_ID, quantity: '-1', mode: 'now' }));
-    } catch (e) {
-      thrown = e;
-    }
-    expect(thrown).toBeInstanceOf(RefusalError);
-    expect((thrown as RefusalError).userMessage).toBe(sentence(INVENTORY_TRANSFER_RULES.quantity, '-1'));
-    expect(await count('stock_transfers', f.orgId)).toBe(before);
+  it('inventory createTransferAction: a negative quantity comes back as the rule sentence in the banner; no transfer (mutant: assert removed from createTransferAction)', async () => {
+    // T-598 S8 / DEF-280: this action now carries a refusal back as a flash (a thrown error reaches production as a digest); the sentence is unchanged.
+    await refused(
+      'stock_transfers',
+      (f) => run('inventory/transfers/actions', 'createTransferAction', { storeId: f.storeId, fromLocationId: FAKE_ID, toLocationId: FAKE_ID, itemId: FAKE_ID, quantity: '-1', mode: 'now' }),
+      sentence(INVENTORY_TRANSFER_RULES.quantity, '-1'),
+    );
   });
 });

@@ -265,12 +265,13 @@ export async function partyBalancesByStore(
 /**
  * T-606: what the channel still holds on every account EXCEPT `keepCode` (its current receivable), per account and line store. Computed exactly as `partyBalancesByStore`
  * (party = the channel, posted entries, drafts excluded); a platform-file correction or period charge is refused while this is not empty.
+ * T-618 (DEF-926): `keepCode` null keeps nothing out, so the result is everything the channel holds anywhere (the retire guard).
  */
 export async function partyBalancesOffAccount(
   tx: Tx,
   orgId: string,
   channelId: string,
-  keepCode: string,
+  keepCode: string | null,
 ): Promise<{ accountCode: string; storeId: string; balance: Money }[]> {
   const rows = (await tx.execute(sql`
     select a.code as account_code, jl.store_id::text as store_id, sum(jl.debit - jl.credit)::text as balance
@@ -280,7 +281,7 @@ export async function partyBalancesOffAccount(
     where je.org_id = ${orgId}
       and jl.party_type = ${PARTY_TYPE}
       and jl.party_id = ${channelId}
-      and a.code <> ${keepCode}
+      and (${keepCode}::text is null or a.code <> ${keepCode})
       and je.status <> 'draft'
     group by a.code, jl.store_id
     having sum(jl.debit - jl.credit) <> 0

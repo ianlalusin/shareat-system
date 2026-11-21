@@ -199,7 +199,7 @@ export async function capitalizeFromExpense(
   actor: Actor,
   expenseId: string,
 ): Promise<CapitaliseFromExpenseResult> {
-  return runCapitalise(tx, actor, expenseId, true);
+  return runCapitalise(tx, actor, expenseId, true, undefined);
 }
 
 /**
@@ -224,8 +224,10 @@ export async function capitalizeApprovedExpense(
   tx: Tx,
   actor: Actor,
   expenseId: string,
+  // DEF-941 (T-613 G): the approval already compared the total with the threshold (expenses/approve.ts); pass that answer so it is not decided twice.
+  belowThreshold?: boolean,
 ): Promise<CapitaliseFromExpenseResult> {
-  return runCapitalise(tx, actor, expenseId, false);
+  return runCapitalise(tx, actor, expenseId, false, belowThreshold);
 }
 
 async function runCapitalise(
@@ -233,6 +235,7 @@ async function runCapitalise(
   actor: Actor,
   expenseId: string,
   checkCapability: boolean,
+  belowThresholdDecided: boolean | undefined,
 ): Promise<CapitaliseFromExpenseResult> {
   const expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
   if (!expense) {
@@ -254,9 +257,12 @@ async function runCapitalise(
   // inside the approving transaction, the expense approval itself. v1 refuses the whole expense
   // for exactly this reason: a CAPEX purchase recorded without its asset is a number in 1510
   // that nothing will ever depreciate.
+  // A decided "below" needs no policy (the approval already read it and would have refused); a decided "at or above" still needs it for salvage.
+  if (belowThresholdDecided === true) return { assetId: null, created: false, reason: 'below_threshold' };
   const policy = await readPolicyOrRefuse(tx, actor.orgId);
 
-  if (compare(money(expense.totalAmount), money(policy.threshold)) < 0) {
+  const below = belowThresholdDecided ?? compare(money(expense.totalAmount), money(policy.threshold)) < 0;
+  if (below) {
     return { assetId: null, created: false, reason: 'below_threshold' };
   }
 

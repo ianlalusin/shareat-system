@@ -23,7 +23,7 @@
  * ⛔ **No posting functions here.** Journal SQL lives in `repo/journal.ts` and is reached only
  * through `postEntry` (bible §4.3). This file reads the ledger; it never writes it.
  */
-import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { recordGone } from './record-gone';
 import type { SafeInsert, SafeUpdate } from './numeric-input';
@@ -158,7 +158,7 @@ export async function listPrepaidItems(
  * A single COUNT rather than a list length, because the banner is rendered on every load of the
  * module and the list it filters may be long.
  */
-export async function countNeedingReview(tx: Tx, orgId: string): Promise<number> {
+export async function countNeedingReview(tx: Tx, orgId: string, storeIds?: readonly string[]): Promise<number> {
   const [row] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(prepaidItems)
@@ -167,6 +167,8 @@ export async function countNeedingReview(tx: Tx, orgId: string): Promise<number>
         eq(prepaidItems.orgId, orgId),
         eq(prepaidItems.needsReview, true),
         eq(prepaidItems.status, 'active'),
+        // T-603: only these stores' items (an empty list matches nothing); omitted = every store.
+        storeIds ? (storeIds.length ? inArray(prepaidItems.storeId, [...storeIds]) : sql`false`) : undefined,
       ),
     );
   return row?.n ?? 0;

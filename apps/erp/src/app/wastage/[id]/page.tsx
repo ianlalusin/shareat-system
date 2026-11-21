@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { can } from '@shareat/auth';
 import { asc, eq } from 'drizzle-orm';
 import { orderWastageDispositionLabel, orderWastageRepo, schema } from '@shareat/db';
 import { listPostedSettlementsForStore, matchWastagesToSettlement, type SettleableOrderWastage } from '@shareat/domain';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { peso } from '../../../lib/format';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { canReadAtStore } from '@/lib/can-read-at-store';
 import { withOrgPrincipal } from '../../expenses/lib';
 import {
@@ -41,7 +42,8 @@ export default async function WastageDetailPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/wastage/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/wastage/${id}`);
+  if (refusal) return refusal;
 
   const data = await withOrgPrincipal(actor.orgId, async (tx) => {
     const row = await orderWastageRepo.findById(tx, actor.orgId, id);
@@ -58,7 +60,7 @@ export default async function WastageDetailPage({
       .where(eq(schema.persons.orgId, actor.orgId))
       .orderBy(asc(schema.persons.displayName));
     const settlements =
-      row.typeMode === 'tracked' && row.status !== 'resolved'
+      row.typeMode === 'tracked' && row.status !== 'resolved' && (await can(tx, actor, 'record_ar_collection', { storeId: row.storeId }))
         ? await listPostedSettlementsForStore(tx, actor, { storeId: row.storeId })
         : [];
     return { row, allocations, businessDate: salesDay?.businessDate ?? null, people, settlements };

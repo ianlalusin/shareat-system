@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { listStores, stockSummary } from './lib';
-import { requireSession } from '../../lib/session';
+import { stockSummary } from './lib';
+import { recordInScope, storePageScope } from '../../lib/store-scope';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
@@ -18,10 +18,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
   // The org comes from the SESSION, never the URL (T-138), and `no-client-supplied-actor`
   // fails the build if that ever stops being true.
-  const { actor } = await requireSession('/inventory');
-  const stores = await listStores(actor.orgId);
-
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  const scope = await storePageScope('/inventory', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
   if (!storeId) {
     return (
       <Page density="table" className="">
@@ -32,6 +31,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   }
 
   const summary = await stockSummary(actor.orgId, storeId);
+  // Peso values and the books total are for managers and up at this store (view_financial_reports); everyone else sees quantities.
+  const showValues = await recordInScope(actor, '/reports/income-statement', storeId);
   const drift = (Number(summary.accountValue) - Number(summary.layerValue)).toFixed(2);
   const ties = drift === '0.00' || drift === '-0.00';
 
@@ -84,6 +85,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         equal the subledger "continuously, not at year end" — and until this page, nowhere in the
         product showed it. It lived only inside test assertions.
       */}
+      {showValues && (
       <Card className={`mt-6 ${ties ? '' : 'border-warning bg-warning-soft'}`}>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-semibold">
@@ -113,6 +115,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           </div>
         </dl>
       </Card>
+      )}
 
       {summary.rows.length === 0 ? (
         <EmptyState
@@ -129,13 +132,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           }
         />
       ) : (
-        <Table card={{ title: 'Item', subtitle: 'Where', keys: ['On hand', 'Value'] }}>
+        <Table card={{ title: 'Item', subtitle: 'Where', keys: showValues ? ['On hand', 'Value'] : ['On hand'] }}>
           <thead>
             <tr>
               <Th>Item</Th>
               <Th>Where</Th>
               <Th numeric>On hand</Th>
-              <Th numeric>Value</Th>
+              {showValues && <Th numeric>Value</Th>}
             </tr>
           </thead>
           <tbody>
@@ -155,14 +158,16 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                 <NumTd>
                   {row.quantity} {row.baseUnit}
                 </NumTd>
-                <NumTd>
-                  {/* A balance with no open layer is a real state: stock exists that no receipt valued. */}
-                  {row.value === null ? (
-                    <span className="text-warning-ink">no cost yet</span>
-                  ) : (
-                    `₱${row.value}`
-                  )}
-                </NumTd>
+                {showValues && (
+                  <NumTd>
+                    {/* A balance with no open layer is a real state: stock exists that no receipt valued. */}
+                    {row.value === null ? (
+                      <span className="text-warning-ink">no cost yet</span>
+                    ) : (
+                      `₱${row.value}`
+                    )}
+                  </NumTd>
+                )}
               </tr>
             ))}
           </tbody>

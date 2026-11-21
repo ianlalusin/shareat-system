@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '../../../../lib/page-access';
+import { recordInScope } from '../../../../lib/store-scope';
 import { deleteUsageDraftAction, postUsageAction, voidPullUsageAction, voidUsageAction } from '../actions';
 import { usageRecordDetail } from '../lib';
 import { wastageReasonLabel } from '@shareat/domain';
@@ -41,9 +42,10 @@ export default async function UsageRecordPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/inventory/usage/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/inventory/usage/${id}`);
+  if (refusal) return refusal;
   const detail = await usageRecordDetail(actor.orgId, id);
-  if (!detail) notFound();
+  if (!detail || !(await recordInScope(actor, `/inventory/usage/${id}`, detail.record.storeId))) notFound();
   const { record, locationName, lines, livePullId } = detail;
 
   const canPost = record.status === 'draft';

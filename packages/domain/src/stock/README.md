@@ -16,7 +16,7 @@ Inventory quantity, FIFO cost and the ledger postings that follow stock events (
 - `usage-post-core.ts`: `postLoadedUsageRecord`. `void-pull-usage-record.ts`: `voidPullUsageRecord`. Both are actor-less and deliberately NOT in the domain barrel.
 - `usage-tolerance.ts`: `isWithinUsageTolerance`, `setOrgUsageTolerance`, `setItemUsageTolerance`, `UsageVariance`, `usageVariancesFor`, `listUsageVariances`, `listStoreUsageQueue`, `ToleranceGate`, `snapshotVariancesFor`, `checkUsageTolerance`, `writeToleranceVerified`.
 - `usage-auto-post.ts`: `AutoPostedRecord`, `AutoPostResult`, `autoPostDueUsageDrafts`. `usage-check-report.ts`: `usageCloseRefusal`, `UsageCheckScorecardRow`, `usageCheckScorecard`, `unpostedUsageDraftCount`.
-- `supplier-returns.ts`: `ReturnLineInput`, `RecordReturnInput`, `RecordReturnOutcome`, `recordReturn`, `VoidReturnOutcome`, `voidReturn`, `returnableQuantity`, `supplierCreditBalance`, `RefundCreditInput`, `RefundCreditOutcome`, `refundSupplierCredit`.
+- `supplier-returns.ts`: `ReturnLineInput`, `RecordReturnInput`, `RecordReturnOutcome`, `recordReturn`, `VoidReturnOutcome`, `voidReturn`, `returnableQuantity`, `supplierCreditBalance`, `supplierCreditBalances`, `RefundCreditInput`, `RefundCreditOutcome`, `refundSupplierCredit`.
 - `period-guard.ts`: `closedStockPeriodSentence`, `closedStockPeriodSentenceToday`. `wastage-reasons.ts`: `WASTAGE_REASONS`, `WastageReason`, `WASTAGE_REASON_LABEL`, `wastageReasonLabel`, `isWastageReason`, `RESERVED_USAGE_CATEGORIES`, `isReservedUsageCategory`.
 
 ## Invariants

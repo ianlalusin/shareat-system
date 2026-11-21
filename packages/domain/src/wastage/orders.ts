@@ -156,6 +156,9 @@ interface PostDispositionParams {
   memoSuffix: string;
 }
 
+/** DEF-925 (T-618): a channel paid daily has no receivable, so a wastage credit would sit on 1220 with nothing to ever clear it. */
+const NOTHING_OWED = "This channel is paid daily, so there's nothing owed to adjust. Record the loss as an expense instead.";
+
 /**
  * The one place the posting lives — shared by an `instant` wastage's create-time posting and a
  * `tracked` wastage's resolve-time posting, so the two can never drift into two implementations
@@ -200,7 +203,8 @@ async function postDisposition(trx: Tx, p: PostDispositionParams): Promise<{ jou
   }
 
   lines.push({
-    accountCode: CHANNEL_RECEIVABLE_CODE,
+    // DEF-925: the account the channel's own sales sit on (a wholesale buyer on 1210); 1220 only when it has none.
+    accountCode: channelRow.receivableAccountCode ?? CHANNEL_RECEIVABLE_CODE,
     storeId: p.storeId,
     credit: amount,
     partyType: CHANNEL_PARTY_TYPE,
@@ -303,6 +307,9 @@ export async function recordOrderWastage(
         `recordOrderWastage: '${channelRow.name}' is no longer an active channel at this store, ` +
           'so a new wastage cannot be recorded against it.',
       );
+    }
+    if (channelRow.receivableAccountCode === null) {
+      throw refuse(`recordOrderWastage: channel ${channelRow.id} has no receivable account.`, NOTHING_OWED);
     }
 
     // ⭐ DERIVED, never supplied — bible §13 row 180.
@@ -478,6 +485,9 @@ export async function resolveOrderWastage(
 
     let journalEntryId: string | null = null;
     if (input.disposition !== 'platform_paid') {
+      // A wastage opened before this rule on a channel with no receivable: refused here (the 15-day backstop is left alone so it can still close such a row).
+      const channel = await orderWastageRepo.channelById(trx, actor.orgId, row.channelId);
+      if (channel && channel.receivableAccountCode === null) return { ok: false, reason: NOTHING_OWED };
       const posted = await postDisposition(trx, {
         orgId: actor.orgId,
         storeId: row.storeId,

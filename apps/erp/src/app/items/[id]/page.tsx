@@ -1,6 +1,6 @@
 import { ITEMS_RENAME_RULES, ITEMS_UNIT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { notFound } from 'next/navigation';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { can } from '@shareat/auth';
 import { aliasesOf, expenseCategoryOptions, expenseSubcategoryOptions, getItem, itemPrices, mayDecideItemRequests, peso, retireReadout, sellabilityByStore, soldAsLabel, unitHistoryExists, variationParentOptions, variationsOf, withOrgPrincipal } from '../lib';
 import { whoSells } from '../../ap/lib';
@@ -60,7 +60,8 @@ export default async function ItemDetailPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/items/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/items/${id}`);
+  if (refusal) return refusal;
   const item = await getItem(actor.orgId, id);
   if (!item) notFound();
 

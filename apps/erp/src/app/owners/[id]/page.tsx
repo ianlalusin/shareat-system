@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
+import { recordInScope } from '@/lib/store-scope';
 import {
   closeMonthAction,
   contributionAction,
@@ -55,7 +56,7 @@ export default async function OwnerPage({
   if (refusal) return refusal;
 
   const owner = await getDetail(actor.orgId, id);
-  if (!owner) notFound();
+  if (!owner || !(await recordInScope(actor, '/owners', owner.storeId))) notFound();
   // T-488: minted per render and submitted back, so a double click is a replay of ONE posting and a second genuine
   // transaction on the same day carries its own id (the entry is keyed on it, never on the figures).
   const requestId = crypto.randomUUID();

@@ -29,7 +29,7 @@ export async function chargeEntry(
   amount: string,
   sourceType = 'tillcountshortage',
 ): Promise<string> {
-  const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} limit 1`;
+  const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} and '2026-01-02' between starts_on and ends_on`; // T-600 0270: the period must contain the entry date
   const [adv] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1230'`;
   const [cash] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1130'`;
   return sql.begin(async (tx) => {
@@ -87,7 +87,7 @@ export async function creditEntry(
   personId: string,
   amount: string,
 ): Promise<string> {
-  const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} limit 1`;
+  const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} and '2026-01-03' between starts_on and ends_on`;
   const [adv] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1230'`;
   const [cash] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1130'`;
   return sql.begin(async (tx) => {

@@ -297,6 +297,8 @@ export interface WastageChannelRow {
   readonly name: string;
   readonly isActive: boolean;
   readonly wastageTypeMode: 'tracked' | 'instant';
+  /** DEF-925: the account the channel's own sales sit on (null for a channel remitted daily). */
+  readonly receivableAccountCode: string | null;
 }
 
 export async function findChannelByName(
@@ -306,7 +308,7 @@ export async function findChannelByName(
   channel: string,
 ): Promise<WastageChannelRow | null> {
   const [row] = (await tx.execute(sql`
-    select id, name, is_active, wastage_type_mode from sales_channels
+    select id, name, is_active, wastage_type_mode, receivable_account_code from sales_channels
     where org_id = ${orgId} and store_id = ${storeId}
       and lower(trim(name)) = lower(trim(${channel}))
     limit 1
@@ -317,6 +319,7 @@ export async function findChannelByName(
     name: String(row.name),
     isActive: Boolean(row.is_active),
     wastageTypeMode: String(row.wastage_type_mode) as 'tracked' | 'instant',
+    receivableAccountCode: row.receivable_account_code === null ? null : String(row.receivable_account_code),
   };
 }
 
@@ -331,7 +334,7 @@ export async function channelById(
   channelId: string,
 ): Promise<WastageChannelRow | null> {
   const [row] = (await tx.execute(sql`
-    select id, name, is_active, wastage_type_mode from sales_channels
+    select id, name, is_active, wastage_type_mode, receivable_account_code from sales_channels
     where org_id = ${orgId} and id = ${channelId}
     limit 1
   `)) as unknown as Record<string, unknown>[];
@@ -341,6 +344,7 @@ export async function channelById(
     name: String(row.name),
     isActive: Boolean(row.is_active),
     wastageTypeMode: String(row.wastage_type_mode) as 'tracked' | 'instant',
+    receivableAccountCode: row.receivable_account_code === null ? null : String(row.receivable_account_code),
   };
 }
 

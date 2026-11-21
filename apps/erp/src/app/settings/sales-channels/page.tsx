@@ -255,6 +255,9 @@ function ChannelBand({
   const wallet = channel.destinationMoneyAccountId ? walletNames.get(channel.destinationMoneyAccountId) : null;
   const receivable = accounts.find((a) => a.code === channel.receivableAccountCode);
   const settlesLater = !channel.isRemittedDaily;
+  // T-618 DEF-928: only a delivery platform (or a channel on the channel receivable, waiting to be told which platform) gets the platform wording and the store-code picker.
+  // A wholesale buyer or branch on its own receivable is owed to us like any customer.
+  const platformish = channel.platform !== null || channel.receivableAccountCode === PLATFORM_RECEIVABLE_CODE;
   return (
     <section aria-label={channel.name} className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.2fr)_14rem] lg:gap-6">
@@ -270,7 +273,7 @@ function ChannelBand({
           <ZoneLabel>Where the money goes</ZoneLabel>
           {settlesLater ? (
             <>
-              <p>Owed by the platform until it pays out. Receivable account: <strong>{receivable ? `${receivable.code} · ${receivable.name}` : (channel.receivableAccountCode ?? 'not set')}</strong>.</p>
+              <p>{platformish ? 'Owed by the platform until it pays out.' : 'Owed to us until it is settled.'} Receivable account: <strong>{receivable ? `${receivable.code} · ${receivable.name}` : (channel.receivableAccountCode ?? 'not set')}</strong>.</p>
               {channel.platform && channel.receivableAccountCode !== PLATFORM_RECEIVABLE_CODE && (
                 <p className="text-neutral-600 dark:text-neutral-400">
                   A delivery platform&apos;s sales must go to {PLATFORM_RECEIVABLE_CODE}, which payouts and platform files read. This channel uses {channel.receivableAccountCode ?? 'no account'}.
@@ -316,7 +319,7 @@ function ChannelBand({
 
         {settlesLater && canSetPlatformCode && channel.platform ? (
           <StoreCodeForm channel={channel} storeId={storeId} inline />
-        ) : settlesLater ? (
+        ) : settlesLater && platformish ? (
           <StoreCodeSummary channel={channel} canSetPlatformCode={canSetPlatformCode} />
         ) : (
           <div aria-hidden="true" className="hidden lg:block" />
@@ -362,7 +365,7 @@ function ChannelBand({
         </div>
       </div>
 
-      {settlesLater && canSetPlatformCode && !channel.platform && <StoreCodeForm channel={channel} storeId={storeId} />}
+      {settlesLater && platformish && canSetPlatformCode && !channel.platform && <StoreCodeForm channel={channel} storeId={storeId} />}
     </section>
   );
 }
@@ -476,7 +479,7 @@ function ChannelFields({
           required
           defaultChecked={channel?.isRemittedDaily === false}
           title="Settles later"
-          detail="A platform owes us until it pays out. Needs a receivable account below."
+          detail="A platform or customer owes us until it pays. Needs a receivable account below."
         />
       </fieldset>
 

@@ -1,4 +1,4 @@
-import { expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 /**
  * T-389 S4 (TESTER) - commissary/orders/[id]: the two per-line forms keep what was typed after a refused save (DEF-617).
@@ -12,7 +12,7 @@ import { expect, vi } from 'vitest';
  * (the unpacked-line fulfil form, the Remove/Approve/Decline/Receive forms are adds or commands: out of scope.)
  *
  * CONTRACT PINNED HERE (spec silent; the builder matches):
- *  - allow-lists: lineUpdate = quantity, rate; lineFulfil = quantity, rate, sourceLocationId. NOT orderId, NOT lineId.
+ *  - allow-lists: lineUpdate = quantity (DEF-898: the branch has no rate box); lineFulfil = quantity, rate, sourceLocationId. NOT orderId, NOT lineId.
  *  - the nav: no nav key (the order id is in the path).
  *  - the actions return `redirectWithFlash(path, {}, await perform(...))` with no catch of their own: the builder must carry the
  *    typed slot through `perform`'s Flash (or catch in the action). That is a builder detail, not tested here.
@@ -46,6 +46,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { actor, asOrg, createHarness, LONG, sql, uid, type BaseCtx, type FormCase } from './t389-s4-common';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
+import { captureRedirect, resetJar } from '../helpers/flash-jar';
 
 const { runTypedLegs } = createHarness({ h, seen });
 
@@ -144,17 +145,17 @@ const lineUpdate: FormCase<OrdCtx> = {
   sel: (ctx) => ({ action: 'updateLineAction', hidden: { lineId: ctx.lineA } }),
   has: (ctx) => [`name="lineId" value="${ctx.lineA}"`, 'name="quantity"'],
   hiddenNames: ['orderId', 'lineId'],
-  refused: (ctx, over = {}) => fdOf({ orderId: ctx.orderId, lineId: ctx.lineA, quantity: '0', rate: '333.77' }, over),
+  refused: (ctx, over = {}) => fdOf({ orderId: ctx.orderId, lineId: ctx.lineA, quantity: '0' }, over),
   refusal: /more than zero/i,
-  fields: () => ({ quantity: '0', rate: '333.77' }),
+  fields: () => ({ quantity: '0' }),
   changed: { list: 'quantity', fields: () => ({ quantity: '0' }) },
-  notDrawn: ['333.77'],
+  notDrawn: [],
   stored: (_ctx, seg, m) => {
     expect(m.inputValue(seg, 'quantity'), 'the stored ask is drawn').toBe('20.000');
-    expect(m.inputValue(seg, 'rate'), 'the stored rate is drawn').toBe('310.00');
+    expect(seg, 'DEF-898: the branch edit form has no rate box').not.toContain('name="rate"');
   },
-  tooLong: { rate: LONG },
-  good: (ctx) => lineUpdate.refused(ctx, { quantity: '21', rate: '311' }),
+  tooLong: { quantity: LONG },
+  good: (ctx) => lineUpdate.refused(ctx, { quantity: '21' }),
   ok: /Line updated/,
   siblings: async (ctx) => [{ label: 'the other line', sel: { action: 'updateLineAction', hidden: { lineId: ctx.lineB } }, has: [`name="lineId" value="${ctx.lineB}"`, 'name="quantity"'] }],
 };
@@ -186,3 +187,32 @@ const lineFulfil: FormCase<OrdCtx> = {
   siblings: async (ctx) => [{ label: 'the other line', sel: { action: 'fulfilLineAction', hidden: { lineId: ctx.lineB } }, has: [`name="lineId" value="${ctx.lineB}"`, 'name="sourceLocationId"'] }],
 };
 runTypedLegs(lineFulfil);
+
+// DEF-898 (T-600): only the commissary sets the transfer price. A new-order form that still carries a `rate` (an old tab,
+// a hand-made post) saves the line at the catalogue price, not at the number typed.
+describe('DEF-898 - a branch-typed rate on a new order is ignored', () => {
+  it('rate=0.10 for pork saves the line at the catalogue 310.00', async () => {
+    const ctx = await orderCtx('def898', 'draft');
+    // orderCtx made the pair's one open draft; free the pair so the form can open a new one.
+    await sql`delete from trade_order_lines where order_id = ${ctx.orderId}`;
+    await sql`delete from trade_orders where id = ${ctx.orderId}`;
+    const [pair] = await sql<{ com: string; br: string; pork: string }[]>`
+      select commissary_store_id as com, branch_store_id as br,
+             (select item_id from commissary_item_offerings where org_id = ${ctx.f.orgId} and manual_cost = 310 limit 1) as pork
+      from commissary_links where org_id = ${ctx.f.orgId}`;
+    const fd = new FormData();
+    fd.set('branchStoreId', pair!.br);
+    fd.set('commissaryStoreId', pair!.com);
+    fd.set('orderDate', '2026-08-20');
+    fd.set('itemId', pair!.pork);
+    fd.set('quantity', '2');
+    fd.set('rate', '0.10');
+    resetJar();
+    h.actor = ctx.f.admin;
+    await captureRedirect(async () => (await import('../../src/app/commissary/orders/actions')).createOrderAction(fd));
+    const rows = await sql<{ rate: string }[]>`
+      select l.rate::text as rate from trade_order_lines l join trade_orders o on o.id = l.order_id
+      where o.org_id = ${ctx.f.orgId} and l.item_id = ${pair!.pork}`;
+    expect(rows.map((r) => r.rate)).toEqual(['310.00']);
+  });
+});

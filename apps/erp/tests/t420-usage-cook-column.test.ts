@@ -10,6 +10,16 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const ACTOR = { orgId: 'org-1', personId: 'actor-1' };
 const DATE = '2026-08-10';
 
+// T-603: the pages ask `storePageScope` (route gate + the viewer's stores); this harness stubs the session, so the scope is stubbed to its one store.
+vi.mock('../src/lib/store-scope', () => ({
+  storePageScope: async (_route: string, requested?: string) => ({
+    actor: ACTOR,
+    stores: [{ id: 'store-1', name: 'SmokeStore', code: 'SMK-1' }],
+    storeId: requested ?? 'store-1',
+  }),
+  recordInScope: async () => true,
+  listStoreIds: async () => undefined,
+}));
 vi.mock('../src/lib/session', () => ({
   requireSession: vi.fn(async () => ({ actor: ACTOR })),
 }));

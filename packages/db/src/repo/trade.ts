@@ -18,6 +18,9 @@ import {
   type TradeOrderStatus,
 } from '../../schema/trade';
 
+/** DEF-561: what the loser of a double void reads - one sentence, no id, the same wording the return voids use. */
+export const ORDER_ALREADY_VOIDED = 'This order has already been voided.';
+
 export interface TradeOrderRow {
   id: string;
   orgId: string;
@@ -300,7 +303,7 @@ export async function markVoided(
     .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id), ne(tradeOrders.status, 'void')))
     .returning({ id: tradeOrders.id });
   // Status guard: an already-void order is never overwritten (the first reason and time stand).
-  if (updated.length === 0) throw refuse(`markVoided: order ${id} is already void or does not exist.`, 'This order is already void.');
+  if (updated.length === 0) throw refuse(`markVoided: order ${id} is already void or does not exist.`, ORDER_ALREADY_VOIDED);
 }
 
 /**

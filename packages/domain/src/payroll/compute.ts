@@ -7,7 +7,7 @@
  * ⚠️ **Every peso goes through `@shareat/core/money`**, which is exact bigint centavo arithmetic
  * with round-half-up. Bible §6 bans floats for money, and a payslip is the last place to start.
  */
-import { ZERO, add, compare, compareDecimal, decimal, money, multiply, type Money } from '@shareat/core/money';
+import { ZERO, add, compare, compareDecimal, decimal, money, multiply, multiplyByFraction, type Money } from '@shareat/core/money';
 
 /**
  * ⭐ **Minutes become hours on a HALF-HOUR LADDER, rounded at 25 and 50.**
@@ -92,10 +92,10 @@ export interface Multipliers {
 }
 
 /** ⚠️ An ordinary day never reaches this — `holidayMinutes` is 0, so no premium is computed. */
-function holidayMultiplierFor(m: Multipliers, kind: DayInput['holidayType']): number {
-  if (kind === 'special_non_working') return Number(m.holidaySpecialNonWorkingMultiplier);
-  if (kind === 'special_working') return Number(m.holidaySpecialWorkingMultiplier);
-  return Number(m.holidayRegularMultiplier);
+function holidayMultiplierFor(m: Multipliers, kind: DayInput['holidayType']): string {
+  if (kind === 'special_non_working') return m.holidaySpecialNonWorkingMultiplier;
+  if (kind === 'special_working') return m.holidaySpecialWorkingMultiplier;
+  return m.holidayRegularMultiplier;
 }
 
 export interface ComputedPay {
@@ -159,9 +159,14 @@ export function computePay(days: DayInput[], m: Multipliers): ComputedPay {
   // of becoming NaN, and the "misconfigured shift" guard below orders it in scaled bigint, not as a float.
   const requiredHours = decimal(m.requiredHoursPerShift, '4,2');
   const shiftIsMisconfigured = compareDecimal(requiredHours, decimal('0', '4,2')) <= 0;
-  const required = Number(requiredHours);
-  const otMult = Number(m.overtimeMultiplier);
-  const ndMult = Number(m.nightDiffMultiplier);
+  // DEF-859: premium = rate x hours x multiplier / required, in exact bigint, ONE half-up rounding. Hours come in halves and every
+  // setting is numeric(4,2), so scaling them to whole numbers (halves, hundredths) loses nothing; the 100s cancel.
+  const hundredths = (d: string) => BigInt(decimal(d, '4,2').replace('.', ''));
+  const required = hundredths(requiredHours);
+  const premium = (rate: Money, hours: number, hundredthsOfRate: bigint) =>
+    multiplyByFraction(rate, BigInt(Math.round(hours * 2)) * hundredthsOfRate, 2n * required);
+  const otMult = hundredths(m.overtimeMultiplier);
+  const ndExtra = hundredths(m.nightDiffMultiplier) - 100n;
 
   let daysWorked = 0;
   let minutesWorked = 0;
@@ -215,15 +220,15 @@ export function computePay(days: DayInput[], m: Multipliers): ComputedPay {
       otPay =
         m.overtimeMode === 'fixed'
           ? add(otPay, multiply(money(m.overtimeFixedHourly ?? '0'), factor(otHours)))
-          : add(otPay, multiply(rate, factor((otHours / required) * otMult)));
+          : add(otPay, premium(rate, otHours, otMult));
     }
     if (ndHours > 0) {
-      nightDiffPay = add(nightDiffPay, multiply(rate, factor((ndHours / required) * (ndMult - 1))));
+      nightDiffPay = add(nightDiffPay, premium(rate, ndHours, ndExtra));
     }
     if (holHours > 0) {
       // ⭐ The multiplier depends on WHICH holiday — regular, special non-working, special working.
-      const holMult = holidayMultiplierFor(m, day.holidayType);
-      holidayPay = add(holidayPay, multiply(rate, factor((holHours / required) * (holMult - 1))));
+      const holExtra = hundredths(holidayMultiplierFor(m, day.holidayType)) - 100n;
+      holidayPay = add(holidayPay, premium(rate, holHours, holExtra));
     }
   }
 

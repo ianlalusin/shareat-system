@@ -39,6 +39,7 @@
     "cutover:purge": "tsx scripts/cutover-purge.ts",
     "cutover:rehearse": "tsx scripts/cutover-rehearsal.ts",
     "toc": "tsx scripts/gen-toc.ts",
+    "census:write": "node scripts/census-write.mjs",
     "month-end": "tsx scripts/month-end.ts",
     "dev:seed": "tsx scripts/dev-seed.ts",
     "storage-smoke": "tsx scripts/storage-smoke.ts",

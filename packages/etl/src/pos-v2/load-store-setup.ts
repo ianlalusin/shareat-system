@@ -105,7 +105,7 @@ export async function loadStoreSetup(
       if (skip) { presets.skipped.push(`${d.name} (${skip})`); continue; }
       if (d.isArchived || !d.isEnabled || d.adminSuspended) { presets.skipped.push(`${d.name} (${d.isArchived ? 'archived' : d.isEnabled ? 'suspended' : 'switched off'} in v1)`); continue; }
       try {
-        const r = await upsertPosDiscountPreset(sp, actor, { storeId: input.storeId, name: d.name, valueType: d.type, value: d.value });
+        const r = await upsertPosDiscountPreset(sp, actor, { storeId: input.storeId, name: d.name, valueType: d.type, value: d.value }, 'etl');
         presets[r.outcome].push(d.name.trim());
       } catch (e) {
         // A bad preset is named and left out, never "fixed"; the rule is checked before any SQL, so the transaction is still sound. Anything else aborts.

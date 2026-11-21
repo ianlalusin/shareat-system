@@ -315,7 +315,7 @@ export async function receiveDeliveryDocument(
   actor: Actor,
   input: ReceiveDeliveryDocumentInput,
 ): Promise<ReceiveResult> {
-  const delivery = await deliveriesRepo.getDeliveryDocument(tx, input.deliveryId);
+  const delivery = await deliveriesRepo.getDeliveryDocument(tx, actor.orgId, input.deliveryId);
   if (!delivery) {
     throw gone(`receiveDeliveryDocument: delivery ${input.deliveryId} does not exist`, 'delivery');
   }

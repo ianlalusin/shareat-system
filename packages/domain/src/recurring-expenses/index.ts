@@ -56,7 +56,7 @@ export interface CreateRecurringTemplateInput {
   tillIsDeliberate?: boolean;
 }
 
-function manilaToday(nowMs = Date.now()): string {
+function manilaTodayFromClock(nowMs = Date.now()): string {
   return new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 10);
 }
 
@@ -161,7 +161,7 @@ export async function createRecurringTemplate(
 
     // ⭐ DERIVED, never typed. A template created on the 3rd with a monthly anchor of the 15th is
     // due THIS month — getting that wrong makes every new template a month late, silently.
-    const today = manilaToday();
+    const today = manilaTodayFromClock();
     const startsOn = input.startsOn ?? today;
     if (!storesRepo.isValidDateString(startsOn)) {
       throw refuse(`createRecurringTemplate: startsOn "${startsOn}" is not a date.`, 'Starts from has to be a date (YYYY-MM-DD).');
@@ -285,7 +285,7 @@ export async function updateRecurringTemplate(
     // edit that had nothing to do with timing. Caught in self-review, not by a test.
     const cursorMoved = interval !== template.interval || anchorDay !== template.anchorDay;
 
-    const newCursor = cursorMoved ? firstDueDate(manilaToday(), interval, anchorDay) : null;
+    const newCursor = cursorMoved ? firstDueDate(manilaTodayFromClock(), interval, anchorDay) : null;
     await recurringExpensesRepo.updateTemplate(trx, actor.orgId, input.templateId, {
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
       ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
@@ -336,8 +336,8 @@ export async function setRecurringTemplateStatus(
     // otherwise wake with a due date three months behind and draft its way forward — noise on the
     // morning somebody switched it back on, and the opposite of what "resume" means.
     const resumedCursor =
-      input.status === 'active' && template.nextDueDate < manilaToday()
-        ? firstDueDate(manilaToday(), template.interval, template.anchorDay)
+      input.status === 'active' && template.nextDueDate < manilaTodayFromClock()
+        ? firstDueDate(manilaTodayFromClock(), template.interval, template.anchorDay)
         : null;
     const cursor = resumedCursor !== null ? { nextDueDate: resumedCursor } : {};
     await recurringExpensesRepo.updateTemplate(trx, actor.orgId, input.templateId, {

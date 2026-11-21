@@ -139,6 +139,10 @@ describe('T-159 invariants 5 & 6 — the inbox is create-only, and speaks only f
     await assertFails(setDoc(doc(terminal(), 'inbox/p-5'), { clientPunchId: 'p-5' }));
   });
 
+  it('DEF-863: an event carrying an extra field is refused', async () => {
+    await assertFails(setDoc(doc(terminal(), 'inbox/p-5x'), event('p-5x', { employmentId: 'emp-1' })));
+  });
+
   it('6. update and delete are refused once created', async () => {
     await assertSucceeds(setDoc(doc(terminal(), 'inbox/p-6'), event('p-6')));
     await assertFails(updateDoc(doc(terminal(), 'inbox/p-6'), { assertedIntent: 'out' }));

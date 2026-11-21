@@ -31,7 +31,7 @@ const repoRoot = path.resolve(__dirname, '../..');
  * reach `resolveStorageDriver()` (`packages/domain/src/files/index.ts`), plus the one scheduler
  * entry point known to wrap one (`runOrphanFileSweep`, `packages/domain/src/scheduler/index.ts`).
  */
-const STORAGE_TOUCHING_CALLS = ['uploadFile', 'readFileUrl', 'sweepOrphanedFiles', 'runOrphanFileSweep'];
+const STORAGE_TOUCHING_CALLS = ['uploadFile', 'signFileRead', 'sweepOrphanedFiles', 'runOrphanFileSweep'];
 
 /** The two ways a script can legitimately install the real driver — the shared helper, or the raw
  *  call it wraps (kept for `scripts/orphan-file-sweep.ts`'s pre-T-277 shape and any future script

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
 import { add, compare, money, ZERO } from '@shareat/core/money';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '../../../../lib/page-access';
 import { dispatchOrderAction, postFranchiseCreditAction, receiveOrderAction, setBirInvoiceNoAction, voidOrderAction } from '../actions';
 import { canSeeCreditLimit, creditPreview, orderDetail, peso, storeMoneyAccounts, today } from '../lib';
 import { NAV_LINK } from '@/components/action-link';
@@ -53,7 +53,8 @@ export default async function TradeOrderPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/trade/orders/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/trade/orders/${id}`);
+  if (refusal) return refusal;
   const detail = await orderDetail(actor, id);
   if (!detail) notFound();
   const { order, lines, treatment, sellingStore, receivingStore } = detail;
