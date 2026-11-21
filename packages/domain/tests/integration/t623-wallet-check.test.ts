@@ -137,7 +137,7 @@ describe('T-623 - the list and the Z', () => {
     await check(w, a.paymentId);
     const x = await reading(w, at);
     expect(x.toCheckCount).toBe(1);
-    expect(x.byTender.find((t: { tenderId: string }) => t.tenderId === w.gcash)).toMatchObject({ amount: '500.00' });
+    expect(x.byTender).toEqual(expect.arrayContaining([expect.objectContaining({ tenderId: w.gcash, amount: '500.00' })]));
   });
 
   it('a payment a correction moved is handled: not listed, not counted by the Z, and refused with the plain sentence [kills: dropping the correction exclusion]', async () => {
