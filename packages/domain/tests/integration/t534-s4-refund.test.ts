@@ -409,15 +409,16 @@ describe('T-613 D1 - the refund cap follows an S3 tender correction', () => {
 });
 
 describe('T-613 D3 - a Z of only refunds is no longer "nothing to close"', () => {
-  it('a refund of an earlier day with no new sales reaches the Z, which now speaks for the refund (bigger than what that method took) instead of "no sales to close" [kills: the receipt-count gate]', async () => {
+  it('a refund of an earlier day with no new sales reaches the Z, which now CLOSES (T-614 S1: the refund is all excess, so it posts as its own entry and there is no sales day) instead of "no sales to close" or a refusal [kills: the receipt-count gate]', async () => {
     const w = await world();
     const m = await thousand(w, '1000.00');
     await close(w, AT, await pinOf(w, w.managerId));
     await refund(w, m, { lines: [[0, 1]], pays: [[0, '250.00']] });
     expect(((await reading(w, AT2)) as unknown as { refunds: { count: number } }).refunds.count).toBe(1);
-    const err = await close(w, AT2, await pinOf(w, w.managerId)).then(() => null, (e: unknown) => e);
-    expect(err).toBeInstanceOf(RefusalError);
-    expect((err as RefusalError).userMessage).toMatch(/^The refunds on .* are bigger than what was taken by the same payment method/);
+    const z = await close(w, AT2, await pinOf(w, w.managerId));
+    expect(z.wrote).toBe(true);
+    expect(z.salesDayId).toBeNull();
+    expect((await sql<{ n: number }[]>`select count(*)::int n from journal_entries where org_id = ${w.orgId} and idempotency_key like 'pos_refund_excess:%'`)[0]!.n).toBe(1);
   });
 });
 
@@ -448,5 +449,19 @@ describe('T-613 D4 - find a receipt of an earlier day by its number', () => {
     expect((await find(w, 'hello', soon)).receipts).toHaveLength(0);
     expect((await find(w, `${till}-999999`, soon)).receipts).toHaveLength(0);
     expect((await find(w, no, new Date(manila(D1, '12:00').getTime() + 31 * 86_400_000))).receipts).toHaveLength(0);
+  });
+  it('T-614 S2: the window is the business rule pos.receipt_lookup_days: 5 loses a 10-day-old receipt, 60 finds a 45-day-old one, no row keeps 30 [kills: reading a constant instead of the rule]', async () => {
+    const w = await world();
+    await thousand(w, '1000.00');
+    const no = (await asOrg(w.orgId, (tx) => listTodaysSalesReceipts(tx, w.counter, { storeId: w.storeId }))).receipts[0]!.receiptNo;
+    const day = 86_400_000;
+    const at = (days: number) => new Date(manila(D1, '12:00').getTime() + days * day);
+    expect((await find(w, no, at(10))).receipts, 'default 30: 10 days old is found').toHaveLength(1);
+    expect((await find(w, no, at(45))).receipts, 'default 30: 45 days old is not found').toHaveLength(0);
+    await sql`insert into business_rule_values (org_id, key, value, effective_from, set_by, reason) values (${w.orgId}, 'pos.receipt_lookup_days', '5', '2000-01-01', ${w.managerId}, 'test')`;
+    expect((await find(w, no, at(10))).receipts, 'rule 5: 10 days old is not found').toHaveLength(0);
+    expect((await find(w, no, at(3))).receipts, 'rule 5: 3 days old is found').toHaveLength(1);
+    await sql`insert into business_rule_values (org_id, key, value, effective_from, set_by, reason) values (${w.orgId}, 'pos.receipt_lookup_days', '60', '2000-01-02', ${w.managerId}, 'test')`;
+    expect((await find(w, no, at(45))).receipts, 'rule 60: 45 days old is found').toHaveLength(1);
   });
 });

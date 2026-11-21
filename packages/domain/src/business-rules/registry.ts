@@ -131,6 +131,16 @@ export const RULE_REGISTRY = {
     capability: RULE_ADMIN_CAPABILITY,
     namespace: 'pos',
   },
+  'pos.receipt_lookup_days': {
+    label: 'Days back the POS can look up a receipt by its number',
+    help: 'Find a receipt on the POS searches this many days back. A receipt older than this is not found there, so a refund of an older sale is handled in the back office instead.',
+    unit: 'days',
+    default: '30',
+    min: '1',
+    max: '365',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
+  },
   'pos.require_pin_line_actions': {
     label: 'Manager PIN for cancelling a line or giving a line discount',
     help: 'When On, cancelling a line, giving a discount on a line (including marking it free) and removing a line discount need a manager PIN at the till, unless the person already holds manager approval. Offline the till goes ahead and flags the action for a manager to review. Off by default.',

@@ -1674,6 +1674,13 @@
       "when": 1809574307084,
       "tag": "0272_t602_performance_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 273,
+      "version": "7",
+      "when": 1809660707084,
+      "tag": "0273_t614_pos_receipt_lookup_days",
+      "breakpoints": true
     }
   ]
 }

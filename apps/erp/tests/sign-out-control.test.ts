@@ -24,12 +24,13 @@ const sidebarSource = readFileSync(resolve(shellDir, 'Sidebar.tsx'), 'utf8');
 const iconsSource = readFileSync(resolve(shellDir, 'icons.tsx'), 'utf8');
 
 describe('TopBar (phone, <768) — the "Signed in" slot is now a sign-out control', () => {
-  it('imports signOutAction from the sign-in action module', () => {
-    expect(topBarSource).toMatch(/import\s*\{[^}]*signOutAction[^}]*\}\s*from\s*['"][^'"]*sign-in\/actions['"]/);
+  it('uses SignOutForm (Sidebar.tsx), the form that posts signOutAction and purges the saved /pos page (T-614 S3)', () => {
+    expect(topBarSource).toMatch(/import\s*\{[^}]*SignOutForm[^}]*\}\s*from\s*'\.\/Sidebar'/);
+    expect(sidebarSource).toMatch(/export function SignOutForm[\s\S]*?<form action=\{signOutAction\} onSubmit=\{purgeSavedPosPage\}>/);
   });
 
-  it('renders a form posting to signOutAction with a submit button, not a bare "Signed in" span', () => {
-    expect(topBarSource).toMatch(/<form\s+action=\{signOutAction\}>/);
+  it('renders a sign-out form with a submit button, not a bare "Signed in" span', () => {
+    expect(topBarSource).toMatch(/<SignOutForm>/);
     expect(topBarSource).not.toMatch(/<span[^>]*>Signed in<\/span>/);
   });
 
@@ -125,6 +126,16 @@ describe('icons.tsx — the one new export the placement decision approved', () 
     expect(match).not.toBeNull();
     const iconName = match![1]!;
     expect(sidebarSource).toContain(iconName);
+  });
+});
+
+// T-614 S3: the saved /pos page is purged by every sign-out control, not only the POS shell's.
+describe('T-614 S3 - every ERP sign-out form purges the saved /pos shell', () => {
+  it('both Sidebar forms (expanded and rail) and the shared SignOutForm call purgeSavedPosPage on submit', () => {
+    const forms = sidebarSource.match(/<form action=\{signOutAction\}[^>]*>/g) ?? [];
+    expect(forms).toHaveLength(3);
+    for (const f of forms) expect(f).toContain('onSubmit={purgeSavedPosPage}');
+    expect(sidebarSource).toMatch(/purgeSavedPosPage = \(\) => void purgePosShell\(\)/);
   });
 });
 

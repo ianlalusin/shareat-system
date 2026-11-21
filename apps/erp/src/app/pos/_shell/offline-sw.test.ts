@@ -5,8 +5,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { describe, expect, it } from 'vitest';
-import { SW_CACHE_PREFIX, SW_SHELL_KEY } from './offline-sw';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { purgePosShell, SW_CACHE_PREFIX, SW_SHELL_KEY } from './offline-sw';
 
 const ORIGIN = 'https://erp2.example';
 const SRC = readFileSync(path.join(__dirname, '..', '..', '..', '..', 'public', 'sw.js'), 'utf8');
@@ -52,7 +52,7 @@ function boot(version: string, net: (pathname: string) => Res, store: Store = ne
       this.status = init.status ?? 200;
     }
   }
-  const module = { exports: {} as { strategyFor: (u: string, o: string, m: string, mode: string) => string; PREFIX: string; SHELL_KEY: string } };
+  const module = { exports: {} as { strategyFor: (u: string, o: string, m: string, mode: string) => string; chunkUrlsIn: (html: string) => string[]; POS_TAB_PATHS: string[]; PREFIX: string; SHELL_KEY: string } };
   vm.runInNewContext(src, {
     self,
     caches,
@@ -79,7 +79,7 @@ function boot(version: string, net: (pathname: string) => Res, store: Store = ne
     handlers[name]!({ data, waitUntil: (x: Promise<unknown>) => void (p = x) });
     return p;
   };
-  return { api: module.exports, request, message: (d: unknown) => wait('message', d), activate: () => wait('activate'), store, fetched };
+  return { api: module.exports, request, message: (d: unknown) => wait('message', d), install: () => wait('install'), activate: () => wait('activate'), store, fetched };
 }
 
 const online = (p: string) => res(p);
@@ -222,4 +222,97 @@ describe('T-532 S4 sw.js mutants', () => {
   it('MUTANT static is network-only -> red', async () =>
     expect((await probe(swap("startsWith('/_next/static/')) return 'cache-first';", "startsWith('/_next/static/')) return 'network-only';"))).staticOnce).toBe(false));
   it('MUTANT activate keeps old caches -> red', async () => expect((await probe(swap('n !== CACHE', 'n === CACHE'))).oldDeleted).toBe(false));
+});
+
+// T-614 S3: every /pos tab opens offline, and sign-out clears the saved shell.
+const TAB_HTML: Record<string, string> = {
+  '/pos': '<script src="/_next/static/chunks/orders-aaa.js"></script><link href="/_next/static/css/app-1.css">',
+  '/pos/kitchen': '<script src="/_next/static/chunks/kitchen-bbb.js"></script>',
+  '/pos/refills': '<script src="/_next/static/chunks/refills-ccc.js?dpl=x"></script>',
+  '/pos/receipts': '<script src="/_next/static/chunks/receipts-ddd.js"></script>',
+  '/pos/till': '<script src="/_next/static/chunks/till-eee.js"></script>',
+  '/pos/printer': '<script src="/_next/static/chunks/printer-fff.js"></script>',
+};
+const withText = (p: string, html: string): Res => Object.assign(res(p), { text: async () => html });
+const tabNet = (p: string): Res => (TAB_HTML[p] !== undefined ? withText(p, TAB_HTML[p]) : res(p));
+const ALL_CHUNKS = [
+  '/_next/static/chunks/orders-aaa.js',
+  '/_next/static/css/app-1.css',
+  '/_next/static/chunks/kitchen-bbb.js',
+  '/_next/static/chunks/refills-ccc.js',
+  '/_next/static/chunks/receipts-ddd.js',
+  '/_next/static/chunks/till-eee.js',
+  '/_next/static/chunks/printer-fff.js',
+];
+
+describe('T-614 S3 precache of every /pos tab', () => {
+  it('the tab list is the six tabs, and every tabs.ts href is in it', () => {
+    const { api } = boot('t1', online);
+    expect(api.POS_TAB_PATHS).toEqual(['/pos', '/pos/kitchen', '/pos/refills', '/pos/receipts', '/pos/till', '/pos/printer']);
+    const tabsSrc = readFileSync(path.join(__dirname, 'tabs.ts'), 'utf8');
+    const hrefs = [...tabsSrc.matchAll(/href: '(\/pos[^']*)'/g)].map((m) => m[1]!);
+    expect(hrefs.length).toBeGreaterThanOrEqual(5);
+    for (const href of hrefs) expect(api.POS_TAB_PATHS).toContain(href);
+  });
+
+  it('chunkUrlsIn finds script and escaped-payload files, once each, and nothing else', () => {
+    const { api } = boot('t1', online);
+    const html = '<script src="/_next/static/chunks/a.js"></script><script src="/_next/static/chunks/a.js"></script>\\"static/chunks/b.js\\" <img src="/logo.png"> /api/x';
+    expect(api.chunkUrlsIn(html)).toEqual(['/_next/static/chunks/a.js', '/_next/static/chunks/b.js']);
+  });
+
+  it('install fetches each tab HTML once and saves every file it names; /api is never fetched or saved', async () => {
+    const w = boot('t1', tabNet);
+    await w.install();
+    expect([...cacheOf(w.store)!.keys()].sort()).toEqual([...ALL_CHUNKS].sort());
+    for (const tab of Object.keys(TAB_HTML)) expect(w.fetched.filter((f) => f === tab)).toHaveLength(1);
+    expect(w.fetched.some((f) => f.startsWith('/api'))).toBe(false);
+  });
+
+  it('a tab never opened online: after install, offline, its own files come from the cache with no network', async () => {
+    const store: Store = new Map();
+    await boot('t1', tabNet, store).install();
+    const off = boot('t1', offline, store);
+    for (const f of ALL_CHUNKS) expect(await off.request(f)).toBeDefined();
+    expect(off.fetched).toEqual([]);
+  });
+
+  it('a signed-out answer (redirect) saves nothing; an offline install does not throw', async () => {
+    const redirected = boot('t1', (p) => Object.assign(res(p, { redirected: true }), { text: async () => TAB_HTML['/pos']! }));
+    await redirected.install();
+    expect([...(cacheOf(redirected.store)?.keys() ?? [])]).toEqual([]);
+    await expect(boot('t1', offline).install()).resolves.toBeUndefined();
+  });
+
+  it('the precache message also precaches every tab', async () => {
+    const w = boot('t1', tabNet);
+    await w.message({ type: 'precache', urls: [] });
+    expect([...cacheOf(w.store)!.keys()].sort()).toEqual([...ALL_CHUNKS, SW_SHELL_KEY].sort());
+  });
+
+  it('MUTANT empty tab list -> red (install saves no tab files)', async () => {
+    const w = boot('t1', tabNet, new Map(), SRC.replace(/const POS_TAB_PATHS = \[[^\]]*\];/, 'const POS_TAB_PATHS = [];'));
+    await w.install();
+    expect([...(cacheOf(w.store)?.keys() ?? [])].sort()).not.toEqual([...ALL_CHUNKS].sort());
+  });
+});
+
+describe('T-614 S3 sign-out purge (purgePosShell, called by the POS shell and the ERP sidebar)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('deletes the saved shell from every shareat-pos-* cache and leaves other caches and hashed files alone', async () => {
+    const store: Store = new Map([
+      [`${SW_CACHE_PREFIX}a`, new Map([[SW_SHELL_KEY, res('/pos')], ['/_next/static/x.js', res('/x')]])],
+      [`${SW_CACHE_PREFIX}b`, new Map([[SW_SHELL_KEY, res('/pos')]])],
+      ['other', new Map([[SW_SHELL_KEY, res('/pos')]])],
+    ]);
+    vi.stubGlobal('caches', {
+      keys: async () => [...store.keys()],
+      open: async (n: string) => ({ delete: async (k: string) => store.get(n)!.delete(k) }),
+    });
+    await purgePosShell();
+    expect(store.get(`${SW_CACHE_PREFIX}a`)!.has(SW_SHELL_KEY)).toBe(false);
+    expect(store.get(`${SW_CACHE_PREFIX}a`)!.has('/_next/static/x.js')).toBe(true);
+    expect(store.get(`${SW_CACHE_PREFIX}b`)!.has(SW_SHELL_KEY)).toBe(false);
+    expect(store.get('other')!.has(SW_SHELL_KEY)).toBe(true);
+  });
 });

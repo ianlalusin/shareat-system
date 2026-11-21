@@ -32,7 +32,7 @@ afterAll(async () => {
 const MIGRATIONS = join(__dirname, '..', '..', '..', 'db', 'migrations');
 const KEY = 'pos.require_pin_line_actions';
 const FILE = '0256_t576_pos_require_pin_line_actions.sql';
-const SEEDS = ['0239_', '0241_', '0245_', '0248_', '0255_', '0256_'];
+const SEEDS = ['0239_', '0241_', '0245_', '0248_', '0255_', '0256_', '0273_'];
 
 const fileOf = (prefix: string): string => {
   const f = readdirSync(MIGRATIONS).find((n) => n.startsWith(prefix));

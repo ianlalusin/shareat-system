@@ -1,6 +1,7 @@
 import type { ComponentProps } from 'react';
 import { organizationsRepo, posV2Repo, storesRepo } from '@shareat/db';
-import { findSalesReceiptByNo, listTodaysSalesReceipts, receiptIdentityOf, RECEIPT_LOOKUP_DAYS } from '@shareat/domain';
+import { findSalesReceiptByNo, listTodaysSalesReceipts, receiptIdentityOf, readReceiptLookupDays } from '@shareat/domain';
+import { toBusinessDate } from '@shareat/core/datetime';
 import { add, money, ZERO } from '@shareat/core/money';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess, StoreNotAvailable } from '@/lib/page-access';
@@ -40,7 +41,9 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
     if (!storeId) return null;
     const { receipts, tenders, canApprove } = await listTodaysSalesReceipts(tx, actor, { storeId });
     const found = findText === '' ? null : (await findSalesReceiptByNo(tx, actor, { storeId, receiptNo: findText })).receipts;
-    if (!pairing) return { receipts, tenders, canApprove, paired: false, slip: null, found };
+    // T-614 S2: the look-up window is the business rule pos.receipt_lookup_days.
+    const lookupDays = await readReceiptLookupDays(tx, actor.orgId, toBusinessDate());
+    if (!pairing) return { receipts, tenders, canApprove, paired: false, slip: null, found, lookupDays };
     const till = await posV2Repo.getTerminalForPairing(tx, actor.orgId, storeId, pairing.pairingId);
     // T-534 S4: what the refund slip needs: the issuer header (T-585) and the till's paper.
     const store = await storesRepo.getById(tx, actor.orgId, storeId);
@@ -49,7 +52,7 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
       context: { storeName: store?.name ?? 'Store', vatRegistered: (await posV2Repo.getOrgTaxType(tx, actor.orgId)) === 'vat', identity: org && store ? receiptIdentityOf(org, store) : undefined, mode: (await posV2Repo.getPosStore(tx, actor.orgId, storeId))?.mode },
       layout: printSettingsOf({ receiptPaperMm: till?.receiptPaperMm === 80 ? 80 : 58, receiptCopies: 1 }).layout,
     };
-    return { receipts: receipts.filter((r) => r.terminalId === till?.id), tenders, canApprove, paired: true, slip, found };
+    return { receipts: receipts.filter((r) => r.terminalId === till?.id), tenders, canApprove, paired: true, slip, found, lookupDays };
   });
   if (!data) {
     return (
@@ -59,7 +62,7 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
     );
   }
 
-  const { receipts, tenders, canApprove, paired, slip, found } = data;
+  const { receipts, tenders, canApprove, paired, slip, found, lookupDays } = data;
   const gaps = missingSeqs(receipts);
   const total = receipts.reduce((sum, r) => add(sum, money(r.total)), ZERO);
   return (
@@ -71,9 +74,9 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
           {gaps.length === 0 ? 'Numbers: no gaps' : `Missing numbers: ${gaps.map((g) => pad6(g.seq)).join(', ')} — write these down`}
         </p>
       </div>
-      <FindReceipt value={findText} storeId={requested} days={RECEIPT_LOOKUP_DAYS} />
+      <FindReceipt value={findText} storeId={requested} days={lookupDays} />
       {found === null ? null : found.length === 0 ? (
-        <Banner tone="info">No receipt numbered {findText} at this store in the last {RECEIPT_LOOKUP_DAYS} days. Check the number on the printed receipt.</Banner>
+        <Banner tone="info">No receipt numbered {findText} at this store in the last {lookupDays} days. Check the number on the printed receipt.</Banner>
       ) : (
         <ReceiptTable label="Receipt found" showDate rows={found} paired={paired} tenders={tenders} canApprove={canApprove} slip={slip} />
       )}

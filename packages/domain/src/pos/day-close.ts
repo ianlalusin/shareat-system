@@ -32,8 +32,10 @@ import {
 } from '@shareat/auth';
 import { addDays, businessDayRange, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
-import { add, compare, fromCentavos, money, toCentavos, ZERO, type Money } from '@shareat/core/money';
-import { accessRepo, advisoryLocksRepo, auditLogRepo, moneyAccountsRepo, posV1Repo, posV2Repo, RefusalError, salesDaysRepo, withOrgPrincipal, type Tx } from '@shareat/db';
+import { add, compare, fromCentavos, money, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
+import { accessRepo, advisoryLocksRepo, auditLogRepo, journalRepo, moneyAccountsRepo, posV1Repo, posV2Repo, RefusalError, salesDaysRepo, withOrgPrincipal, type Tx } from '@shareat/db';
+import { buildPeriodFacts, periodRefusal } from '../business-rules';
+import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { gone, internalFault, refuse } from '../shared/refusal';
 import { routeSalesDay } from '../sales-days/routing';
 import { isUniqueViolation } from './order';
@@ -366,13 +368,17 @@ async function writeZ(
   const convertEntries = (await posV2Repo.getPosStore(tx, orgId, c.storeId))?.mode === 'live'
     ? await postConversionsForZ(tx, actor, { storeId: c.storeId, closeId: z.closeId, businessDate: z.businessDate, conversions: z.conversions, tenders: await posV1Repo.listTendersByStore(tx, orgId, c.storeId) })
     : [];
+  // T-614 S1 (DEF-940): what a method refunded beyond what it took posts as its own entry beside the sales day (the day holds no negative method). LIVE stores only.
+  const excessEntries = (await posV2Repo.getPosStore(tx, orgId, c.storeId))?.mode === 'live'
+    ? await postRefundExcessForZ(tx, actor, { storeId: c.storeId, closeId: z.closeId, businessDate: z.businessDate, reading: z.reading, tenders: await posV1Repo.listTendersByStore(tx, orgId, c.storeId) })
+    : [];
   await audit(tx, actor, 'pos.day_closed', {
     storeId: c.storeId, entityId: z.closeId, pairingId: c.pairingId, at: c.at, before: null,
     after: {
       zNo: z.zNo, businessDate: z.businessDate, windowStart: z.windowStart.toISOString(), windowEnd: z.windowEnd.toISOString(), receiptCount: z.reading.receiptCount,
       grossTotal: z.reading.grossTotal, byTender: z.reading.byTender.map((t) => ({ tenderId: t.tenderId, amount: t.amount })), approvedBy: c.approverId, salesDayId,
       convert: { cashIn: z.reading.convert.cashIn, cashOut: z.reading.convert.cashOut, count: z.reading.convert.count, entries: convertEntries },
-      refunds: { total: z.reading.refunds.total, cash: z.reading.refunds.cash, count: z.reading.refunds.count },
+      refunds: { total: z.reading.refunds.total, cash: z.reading.refunds.cash, count: z.reading.refunds.count, excessEntries },
     },
   });
   return { salesDayId };
@@ -534,6 +540,83 @@ export async function closeBacklog(tx: Tx, actor: Actor, input: CloseBacklogInpu
 // ---------------------------------------------------------------------------------------------------------------------
 // R4 the ERP sales day from the Z
 // ---------------------------------------------------------------------------------------------------------------------
+type TenderRow = { id: string; name: string; kind: string; moneyAccountId: string | null };
+
+/** What each method netted in the Z (after refunds): cash, and each wallet summed per money account. A method may be NEGATIVE here (refunded more than it took). */
+function methodTotals(reading: Reading, tenders: ReadonlyMap<string, TenderRow>, storeId: string): { cash: Money; wallets: Map<string, Money> } {
+  let cash: Money = ZERO;
+  const wallets = new Map<string, Money>();
+  for (const line of reading.byTender) {
+    const t = tenders.get(line.tenderId);
+    if (!t) throw internalFault(`day close: tender ${line.tenderId} is not a tender of store ${storeId}`);
+    if (t.kind === 'cash') {
+      cash = add(cash, line.amount);
+      continue;
+    }
+    if (compare(line.amount, ZERO) === 0) continue; // T-534 S4: a wallet fully refunded (or moved by a correction) has nothing to book
+    if (!t.moneyAccountId) {
+      throw refuse(`pos: wallet tender ${t.id} has no money account`, `The tender ${t.name} has no money account. An admin fixes it under Settings › POS link, then the day can be closed.`);
+    }
+    wallets.set(t.moneyAccountId, add(wallets.get(t.moneyAccountId) ?? ZERO, line.amount));
+  }
+  return { cash, wallets };
+}
+
+/** T-614 S1: the part of each method's refunds that is more than it took (positive amounts, only for methods below zero). */
+function excessOf(t: { cash: Money; wallets: ReadonlyMap<string, Money> }): { cash: Money; wallets: Map<string, Money>; total: Money } {
+  const cash = compare(t.cash, ZERO) < 0 ? subtract(ZERO, t.cash) : ZERO;
+  const wallets = new Map<string, Money>();
+  for (const [id, v] of t.wallets) if (compare(v, ZERO) < 0) wallets.set(id, subtract(ZERO, v));
+  return { cash, wallets, total: add(cash, ...wallets.values()) };
+}
+
+/**
+ * T-614 S1 (DEF-940), POSTING-PATTERNS `sale.pos-refund-excess`: for each method whose refunds are more than its takings in the Z's window, the EXCESS posts as its own entry,
+ * dated the Z business date: Dr 4950 sales returns and voids (this store) / Cr the money place the refund came out of (cash = the cashier drawer 1110 at the store; a
+ * wallet = 1140 with its money account as party). Key `pos_refund_excess:<closeId>:<cash|moneyAccountId>`: a replay writes nothing twice. Called for a LIVE store only, in the
+ * close's transaction (a refusal rolls the close back). Like the Converts of a Z, the entry is PERMANENT: a sales day built from a Z can never be voided (T-531), so no day
+ * void reverses it; a later refund or correction is the way to change it.
+ */
+async function postRefundExcessForZ(
+  tx: Tx,
+  actor: Actor,
+  input: { storeId: string; closeId: string; businessDate: string; reading: Reading; tenders: readonly TenderRow[] },
+): Promise<string[]> {
+  const { orgId } = actor;
+  const excess = excessOf(methodTotals(input.reading, new Map(input.tenders.map((t) => [t.id, t])), input.storeId));
+  if (compare(excess.total, ZERO) === 0) return [];
+  const month = periodRefusal(buildPeriodFacts(await journalRepo.findPeriodForDate(tx, orgId, input.businessDate)), { override: false });
+  if (month) throw refuse(`pos: the fiscal period covering ${input.businessDate} is ${month.kind}`, month.sentence);
+  const parts: { key: string; name: string; amount: Money; credit: Pick<PostEntryLine, 'accountCode' | 'partyType' | 'partyId'> }[] = [];
+  if (compare(excess.cash, ZERO) > 0) parts.push({ key: 'cash', name: 'Cash', amount: excess.cash, credit: { accountCode: '1110' } });
+  for (const [accountId, amount] of [...excess.wallets].sort(([a], [b]) => a.localeCompare(b))) {
+    const account = await moneyAccountsRepo.getById(tx, orgId, accountId);
+    const name = input.tenders.find((x) => x.moneyAccountId === accountId)?.name ?? 'A wallet tender';
+    if (!account || !account.isActive) {
+      throw refuse(`pos: money account ${accountId} of tender "${name}" is retired or missing`, `${name}'s money account is no longer active, so ${input.businessDate} can't be closed. An admin sets ${name}'s account under Settings › POS link.`);
+    }
+    parts.push({ key: accountId, name, amount, credit: { accountCode: '1140', partyType: 'money_account', partyId: accountId } });
+  }
+  const entries: string[] = [];
+  for (const p of parts) {
+    const posted = await postEntry(tx, {
+      orgId,
+      entryDate: input.businessDate,
+      sourceType: 'pos_refund_excess',
+      sourceId: uuidv5(p.key, input.closeId),
+      idempotencyKey: `pos_refund_excess:${input.closeId}:${p.key}`,
+      memo: `Refund of ${p.name} beyond what it took - ${input.businessDate}`,
+      postedBy: actor.personId,
+      lines: [
+        { accountCode: '4950', storeId: input.storeId, debit: String(p.amount) },
+        { ...p.credit, storeId: input.storeId, credit: String(p.amount) },
+      ],
+    });
+    entries.push(posted.entryId);
+  }
+  return entries;
+}
+
 const dateText = (d: string): string => d; // ISO YYYY-MM-DD in every sentence (ruling 5)
 
 /**
@@ -554,30 +637,21 @@ export async function deriveSalesDayFromZ(
   // T-613 D3: a Z of nothing sold and nothing refunded (Converts only) has no sales to book; the Converts post beside it (`postConversionsForZ`).
   if (reading.receiptCount === 0 && reading.refunds.count === 0) return null;
   const date = dateText(close.businessDate);
-  const existing = await salesDaysRepo.findByBusinessDate(tx, orgId, storeId, close.businessDate);
-  if (existing) throw refuse(`pos: a ${existing.source} sales day already holds ${date}`, `A sales day for ${date} already exists (${existing.source}). Ask an accountant.`);
 
   // Where the money went, as the v1-feed import resolves it: cash is the till's; each wallet tender lands in its own money account (summed per account).
   const tenders = new Map((await posV1Repo.listTendersByStore(tx, orgId, storeId)).map((t) => [t.id, t]));
-  let cash: Money = ZERO;
-  const wallets = new Map<string, Money>();
-  for (const line of reading.byTender) {
-    const t = tenders.get(line.tenderId);
-    if (!t) throw internalFault(`day close: tender ${line.tenderId} is not a tender of store ${storeId}`);
-    if (t.kind === 'cash') {
-      cash = add(cash, line.amount);
-      continue;
-    }
-    if (compare(line.amount, ZERO) === 0) continue; // T-534 S4: a wallet fully refunded (or moved by a correction) has nothing to book
-    if (!t.moneyAccountId) {
-      throw refuse(`pos: wallet tender ${t.id} has no money account`, `The tender ${t.name} has no money account. An admin fixes it under Settings › POS link, then the day can be closed.`);
-    }
-    wallets.set(t.moneyAccountId, add(wallets.get(t.moneyAccountId) ?? ZERO, line.amount));
-  }
-  // T-534 S4: refunds paid out of a method come off what it took; a method refunded below zero cannot post (the sales day has no negative cash or wallet).
-  if (compare(cash, ZERO) < 0 || [...wallets.values()].some((v) => compare(v, ZERO) < 0)) {
-    throw refuse(`pos: refunds exceed what a method took on ${date}`, `The refunds on ${date} are bigger than what was taken by the same payment method, so the day cannot be booked. Ask an accountant.`);
-  }
+  const raw = methodTotals(reading, tenders, storeId);
+  // T-614 S1 (DEF-940): refunds paid out of a method come off what it took; a method refunded below zero is floored at 0 here and its EXCESS posts as its own entry at the Z
+  // (`postRefundExcessForZ`), so the day's `refunds` figure drops by the same excess and nothing is counted twice.
+  const excess = excessOf(raw);
+  const cash = compare(raw.cash, ZERO) < 0 ? ZERO : raw.cash;
+  const wallets = new Map([...raw.wallets].filter(([, v]) => compare(v, ZERO) >= 0));
+  const dayRefunds = subtract(reading.refunds.total, excess.total);
+  // A Z whose only movement is refunds of earlier days, all of them excess, has no sales to book: the excess entry is the whole of it.
+  if (reading.receiptCount === 0 && compare(dayRefunds, ZERO) === 0) return null;
+  const existing = await salesDaysRepo.findByBusinessDate(tx, orgId, storeId, close.businessDate);
+  if (existing) throw refuse(`pos: a ${existing.source} sales day already holds ${date}`, `A sales day for ${date} already exists (${existing.source}). Ask an accountant.`);
+
   for (const accountId of wallets.keys()) {
     const account = await moneyAccountsRepo.getById(tx, orgId, accountId);
     if (!account || !account.isActive) {
@@ -591,7 +665,7 @@ export async function deriveSalesDayFromZ(
   const routed = routeSalesDay({
     totalSales: reading.subtotal, unliSales: reading.unliSales, alaCarteSales: reading.alaCarteSales,
     seniorDiscount: reading.discounts.senior, pwdDiscount: reading.discounts.pwd, otherDiscount: reading.discounts.other,
-    comps: ZERO, serviceCharge: ZERO, otherCharges: ZERO, cashCollected: cash, onlineCollected: online, creditSales: ZERO, refunds: reading.refunds.total,
+    comps: ZERO, serviceCharge: ZERO, otherCharges: ZERO, cashCollected: cash, onlineCollected: online, creditSales: ZERO, refunds: dayRefunds,
     allowShortPayment: true, channels: [], tenders: [...wallets.entries()].map(([moneyAccountId, amount]) => ({ moneyAccountId, amount })),
   });
   if (!routed.ok) throw refuse(`pos: the day ${date} cannot post: ${routed.reason}`, `The day ${date} cannot be booked as it stands: ${routed.reason}. Nothing was closed.`);
@@ -601,7 +675,7 @@ export async function deriveSalesDayFromZ(
       orgId, storeId, businessDate: close.businessDate, posDayCloseId: close.id, createdBy: actor.personId, posSourcedAt: input.at,
       totalSales: reading.subtotal, unliSales: reading.unliSales, alaCarteSales: reading.alaCarteSales,
       seniorDiscount: reading.discounts.senior, pwdDiscount: reading.discounts.pwd, otherDiscount: reading.discounts.other,
-      cashCollected: cash, onlineCollected: online, refunds: reading.refunds.total,
+      cashCollected: cash, onlineCollected: online, refunds: dayRefunds,
     });
     await salesDaysRepo.replaceTenders(tx, id, [...wallets.entries()].map(([moneyAccountId, amount]) => ({ moneyAccountId, amount })));
     return id;
@@ -610,7 +684,7 @@ export async function deriveSalesDayFromZ(
   await salesDaysRepo.markSubmitted(tx, orgId, salesDayId, actor.personId);
   await audit(tx, actor, 'sales_day.derived_from_z', {
     storeId, entityId: salesDayId, pairingId: input.pairingId, at: input.at, before: null,
-    after: { businessDate: close.businessDate, posDayCloseId: close.id, totalSales: reading.subtotal, cashCollected: cash, onlineCollected: online, refunds: reading.refunds.total },
+    after: { businessDate: close.businessDate, posDayCloseId: close.id, totalSales: reading.subtotal, cashCollected: cash, onlineCollected: online, refunds: dayRefunds },
   });
   await audit(tx, actor, 'sales_day.submitted', { storeId, entityId: salesDayId, pairingId: input.pairingId, at: input.at, before: { status: 'open' }, after: { status: 'submitted' } });
   return salesDayId;
