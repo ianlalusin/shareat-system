@@ -161,7 +161,7 @@ export async function setTillPrinterAction(fd: FormData): Promise<void> {
 export async function savePresetAction(fd: FormData): Promise<void> {
   const actor = await requireActor(RETURN_TO);
   const storeId = str(fd, 'storeId');
-  const name = str(fd, 'name');
+  const name = str(fd, 'name').trim();
   let ok: string;
   try {
     // Authorize first, then the form's own rules (T-440 S9); the domain call decides again and owns every refusal sentence and audit row.
