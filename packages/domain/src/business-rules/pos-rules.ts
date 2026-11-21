@@ -43,6 +43,26 @@ export async function readReceiptLookupDays(tx: Tx, orgId: string, onDate: strin
   return (await ruleValue(tx, orgId, 'pos.receipt_lookup_days', onDate)).days();
 }
 
+/** T-621: what the tablet uses while offline. Display and timing only; the server never enforces either. */
+export interface PosOfflineRules {
+  /** `pos.offline_unsent_warn_amount` in centavos: unsent sales at or above it show the warning band. */
+  readonly offlineUnsentWarnCentavos: bigint;
+  /** `pos.offline_xslip_hours`: whole hours offline between automatic offline X-slips. */
+  readonly offlineXSlipHours: number;
+}
+
+/**
+ * T-621 reader. Its own function, not `PosRules` fields: like `readReceiptLookupDays` it is read only by the snapshot, so the injectable `readRules` and every
+ * test that pins the `PosRules` shape stay as they are.
+ */
+export async function readPosOfflineRules(tx: Tx, orgId: string, onDate: string): Promise<PosOfflineRules> {
+  const book = await loadRuleBook(tx, orgId, ['pos.offline_unsent_warn_amount', 'pos.offline_xslip_hours']);
+  return {
+    offlineUnsentWarnCentavos: book.valueOn('pos.offline_unsent_warn_amount', onDate).centavos(),
+    offlineXSlipHours: book.valueOn('pos.offline_xslip_hours', onDate).hours(),
+  };
+}
+
 /** T-575 reader, see above. */
 export async function readSeniorIdRepeatDays(tx: Tx, orgId: string, onDate: string): Promise<number> {
   return (await ruleValue(tx, orgId, 'pos.senior_id_repeat_days', onDate)).days();

@@ -15,9 +15,10 @@ import { signOutAction } from '@/app/sign-in/actions';
 import { printerMode } from '@/lib/pos-print/adapter';
 import { installPrinterBridge } from '@/lib/pos-print/native';
 import { purgePosShell, registerPosServiceWorker } from './offline-sw';
-import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHeldSalesMessage, posHttpErrorMessage, testBandText } from './messages';
+import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, POS_UPDATE_HELD, posHeldSalesMessage, posHttpErrorMessage, testBandText } from './messages';
 import { SwitchCashierDialog } from './SwitchCashierDialog';
 import { posOfflineBandText } from './offline-band';
+import { showUnsentWarning, unsentSalesCentavos, unsentWarningText } from './unsent-total';
 import { asStoreMenu, type MenuLike } from '../_orders/menu-filter';
 import { projectOrders, refusalNotices, type SessionBody, type ServerStand } from '../_orders/project';
 import { PosContext } from './pos-context';
@@ -26,8 +27,13 @@ import { tabCount, visibleTabs } from './tabs';
 import { useDeviceSync } from './use-device-sync';
 import { useMenuClock } from './use-menu-clock';
 import { usePosState } from './use-pos-state';
+import { useUpdateGate } from './use-update-gate';
+import { useOfflineXSlip } from './use-offline-xslip';
 import { useOutageReplay } from '../_kitchen/use-outage-replay';
 
+
+/** One stable empty list, so the memo below does not recompute on every render. */
+const NO_EVENTS: never[] = [];
 export interface PosShellProps {
   person: { personId: string; displayName: string };
   /** The POS capabilities the signed-in person holds (from the server). Offline, the offline actor's own list replaces them. */
@@ -66,6 +72,9 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   const clockAt = useMenuClock(menuHours, sync.ordersSnapshot?.nextChangeAt ?? null);
   // T-529 R3: orders saved in the ~6 s before the poll says Offline still print, once.
   useOutageReplay({ paired: pairedStoreId !== null, online: state.online, snapshot: sync.ordersSnapshot, pending: sync.pendingEvents, loaded: sync.pendingLoaded, openStands: state.body?.openStands ?? null });
+  // T-621 S1: a deploy's new code waits until nothing is waiting to send, no payment screen is open and the till is online.
+  const sendable = sync.sendableEvents ?? NO_EVENTS; // test doubles of useDeviceSync may omit it
+  const updateHeld = useUpdateGate({ waiting: sendable.length, online: state.online });
   const [switching, setSwitching] = useState(false);
   const [offlineSince, setOfflineSince] = useState<number | null>(null);
   const [now, setNow] = useState(0);
@@ -129,6 +138,11 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   }, [actor, person.personId, state.online, sync]);
 
   const sinceMs = state.failingSinceMs ?? offlineSince;
+  // T-621 S3: the sales waiting to send, in exact centavos; offline at or above the rule, everyone at the till sees the warning (the manager is the one called).
+  const unsentCentavos = useMemo(() => unsentSalesCentavos(sendable), [sendable]);
+  const unsentWarn = showUnsentWarning({ online: state.online, unsentCentavos, warnCentavos: sync.ordersSnapshot?.offlineUnsentWarnCentavos ?? null });
+  // T-621 S4: an offline X-slip every N hours offline, once per period (remembered in the device meta store, so a reload never reprints).
+  const xslip = useOfflineXSlip({ paired: pairedStoreId !== null, online: state.online, offlineSinceMs: offline ? sinceMs : null, hours: sync.ordersSnapshot?.offlineXSlipHours ?? null, pendingEvents: sync.pendingEvents, payment: sync.ordersSnapshot?.payment, printer });
   const pillInput = { online: state.online, sending: sync.sending, pending: sync.pending, offlineForMs: sinceMs === null ? 0 : Math.max(0, now - sinceMs), signedOut: state.signedOut === true };
   const pill = statusPillLabel(pillInput);
   const pillShort = statusPillShort(pillInput);
@@ -268,6 +282,19 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
             {posOfflineBandText(sinceMs ?? now)}
           </div>
         ) : null}
+        {/* T-621 S3: unsent offline sales at or above the rule. A warning only; selling never stops. */}
+        {unsentWarn ? (
+          <div role="alert" className="w-full bg-danger-surface px-4 py-3 text-sm font-bold text-danger">
+            {unsentWarningText(unsentCentavos)}
+          </div>
+        ) : null}
+
+        {/* T-621 S1: a quiet note while a new version is held back. Never a modal; selling goes on. */}
+        {updateHeld ? (
+          <p role="status" className="w-full px-4 py-1 text-center text-xs text-muted">
+            {POS_UPDATE_HELD}
+          </p>
+        ) : null}
 
         {tabs.length > 0 ? (
           <nav aria-label="POS sections" className={NAV}>
@@ -298,6 +325,20 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
             </Banner>
           ))}
           {sync.heldSales > 0 ? <Banner tone="warning">{posHeldSalesMessage(sync.heldSales)}</Banner> : null}
+          {/* T-621 S4: no printer (or it failed): the offline X-slip on screen, with Print. Selling goes on around it. */}
+          {xslip.onScreen ? (
+            <section aria-label="Offline X-slip" className="rounded-2xl border border-surface-border bg-surface p-4">
+              <pre className="overflow-x-auto font-mono text-xs leading-snug text-ink">{xslip.onScreen.join('\n')}</pre>
+              <div className="mt-3 flex gap-2">
+                <Button icon={null} className="min-h-12" onClick={xslip.printOnScreen}>
+                  Print
+                </Button>
+                <Button icon={null} className="min-h-12" onClick={xslip.dismiss}>
+                  Close
+                </Button>
+              </div>
+            </section>
+          ) : null}
           {sync.conflicts > 0 ? (
             <Banner tone="warning">
               {POS_CONFLICT_MESSAGE}{' '}

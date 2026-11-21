@@ -11,6 +11,8 @@
  * The saved shell is one signed-in person's page. It is replaced on every online visit, deleted the moment the server answers /pos with anything
  * but a plain 200 (signed out = a redirect), and deleted by the page itself before it signs out (offline-sw.ts purgePosShell).
  * The cache name carries the build (`sw.js?v=<build>`): a deploy installs a new worker, which deletes every other shareat-pos-* cache.
+ * T-621 S1: a new worker WAITS after install (no skipWaiting there). The page posts { type: 'activate-now' } only when the outbox is empty, no payment
+ *   screen is open and the till is online (offline-sw.ts mayActivateUpdate), then reloads once. A first install (no worker yet) activates at once, as browsers do.
  * T-614 S3: after install (and on the page's precache message) every /pos tab's HTML is fetched once and the hashed files it names are saved, so a tab never opened online opens offline too.
  * Pure routing is `strategyFor`; the tests drive this whole file through a fake worker scope.
  */
@@ -21,6 +23,8 @@ const SHELL_KEY = '/pos-shell';
 const VERSION = new URLSearchParams(self.location.search).get('v') || 'dev';
 const CACHE = PREFIX + VERSION;
 const NETWORK_TIMEOUT_MS = 5000;
+/** T-621 S1: the one message that lets a waiting worker take over. Must equal SW_ACTIVATE_NOW in offline-sw.ts (a test pins both). */
+const ACTIVATE_NOW = 'activate-now';
 /** T-614 S3: every /pos tab. Each one's HTML is fetched once after install and the hashed files it names are saved, so a tab never opened online still opens offline. A test pins this to the tabs in _shell/tabs.ts plus Printer. */
 const POS_TAB_PATHS = ['/pos', '/pos/kitchen', '/pos/refills', '/pos/receipts', '/pos/till', '/pos/printer'];
 
@@ -133,8 +137,8 @@ async function precache(urls) {
   await precacheTabs();
 }
 
+// T-621 S1: no skipWaiting here. A deploy during service must not swap the code under an open till; the page says when (ACTIVATE_NOW).
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
   event.waitUntil(precacheTabs().catch(() => undefined));
 });
 
@@ -156,6 +160,7 @@ self.addEventListener('fetch', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'precache') event.waitUntil(precache(event.data.urls));
+  else if (event.data && event.data.type === ACTIVATE_NOW) self.skipWaiting();
 });
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { strategyFor, chunkUrlsIn, POS_TAB_PATHS, PREFIX, SHELL_KEY, CACHE };
+if (typeof module !== 'undefined' && module.exports) module.exports = { strategyFor, chunkUrlsIn, POS_TAB_PATHS, PREFIX, SHELL_KEY, CACHE, ACTIVATE_NOW };

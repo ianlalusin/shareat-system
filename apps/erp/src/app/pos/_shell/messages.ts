@@ -15,3 +15,5 @@ export const posHttpErrorMessage = (status: number): string => `Something went w
 export const POS_TEST_BAND = 'TEST MODE — practice only. Nothing here is a real sale.';
 /** The band's sentence for a store's mode: only `test` has one. */
 export const testBandText = (mode: 'off' | 'test' | 'live' | undefined): string | null => (mode === 'test' ? POS_TEST_BAND : null);
+/** T-621 S1: the quiet note while a new version waits for a safe moment (outbox empty, no payment open, online). Never a modal. */
+export const POS_UPDATE_HELD = 'An update is ready. It loads when the waiting sales have sent.';

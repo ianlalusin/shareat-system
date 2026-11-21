@@ -35,6 +35,8 @@ export interface RuleValue {
   hour(): number;
   /** Minutes only: a whole number of minutes. Throws for any other unit or a stored figure that is not a whole number. */
   minutes(): number;
+  /** Hours only (T-621): a whole number of hours, a length of time. Throws for any other unit or a stored figure that is not a whole number. */
+  hours(): number;
   /** Days only: a whole number of days. Throws for any other unit or a stored figure that is not a whole number. */
   days(): number;
   /** Flag only: true for 1, false for 0. Throws for any other unit or a stored figure that is neither. */
@@ -64,7 +66,7 @@ function hundredths(text: string, what: string): bigint {
   return n / 10_000n;
 }
 
-const KIND_WORD: Record<RuleUnit, string> = { money: 'money', percent: 'a percent', hour: 'an hour', minutes: 'minutes', days: 'days', flag: 'a flag' };
+const KIND_WORD: Record<RuleUnit, string> = { money: 'money', percent: 'a percent', hour: 'an hour', minutes: 'minutes', hours: 'hours', days: 'days', flag: 'a flag' };
 
 function valueOf(key: BusinessRuleKey, text: string): RuleValue {
   const unit = RULE_REGISTRY[key].unit as RuleUnit; // widened: no `flag` key exists yet (T-576 adds the first)
@@ -90,6 +92,12 @@ function valueOf(key: BusinessRuleKey, text: string): RuleValue {
       if (unit !== 'minutes') throw internalFault(`business rule ${key} is ${unit}, not minutes`);
       const n = scaled(text, key);
       if (n % 1_000_000n !== 0n) throw internalFault(`business rule ${key}: ${text} is not a whole number of minutes`);
+      return Number(n / 1_000_000n);
+    },
+    hours() {
+      if (unit !== 'hours') throw internalFault(`business rule ${key} is ${unit}, not hours`);
+      const n = scaled(text, key);
+      if (n % 1_000_000n !== 0n) throw internalFault(`business rule ${key}: ${text} is not a whole number of hours`);
       return Number(n / 1_000_000n);
     },
     days() {

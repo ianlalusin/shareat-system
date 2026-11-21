@@ -1069,6 +1069,15 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     expect(((await snapshot(f, injected)).body.rules as Record<string, unknown>).tableWarnMinutes).toBe(45);
   });
 
+  it('rules (T-621): the snapshot carries the seeded offline rules (5,000,000 centavos, 4 hours) and a dated change shows through [kills: either offline rule dropped from the snapshot body]', async () => {
+    const f = await fixture();
+    const rules = (await snapshot(f)).body.rules as Record<string, unknown>;
+    expect(rules.offlineUnsentWarnCentavos).toBe(5_000_000);
+    expect(rules.offlineXSlipHours).toBe(4);
+    await putRule(sql, f.orgId, 'pos.offline_xslip_hours', '6.000000', '2000-01-02');
+    expect(((await snapshot(f)).body.rules as Record<string, unknown>).offlineXSlipHours).toBe(6);
+  });
+
   it('staff: who may sign in now, with the 3-digit code and ONLY the POS capabilities they hold; nobody who may not; no PIN material anywhere', async () => {
     const f = await fixture();
     await signedIn(f, f.counterId, f.kitchenId); // creates their PIN credentials (secret and lookup hashes now exist)

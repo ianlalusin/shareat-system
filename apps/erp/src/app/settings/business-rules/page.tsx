@@ -21,7 +21,7 @@ const HISTORY_SHOWN = 3;
 const HOUR_BOX = { type: 'number', inputMode: 'numeric', step: 1, min: 0, max: 23 } as const;
 const MINUTES_BOX = { type: 'number', inputMode: 'numeric', step: 1, min: 1, max: 600 } as const;
 
-const NEW_VALUE_LABEL: Record<BusinessRuleItem['unit'], string> = { money: 'New value (pesos)', percent: 'New value (percent)', hour: 'New value (hour, 0–23)', minutes: 'New value (minutes)', days: 'New value (days)', flag: 'New setting' };
+const NEW_VALUE_LABEL: Record<BusinessRuleItem['unit'], string> = { money: 'New value (pesos)', percent: 'New value (percent)', hour: 'New value (hour, 0–23)', minutes: 'New value (minutes)', hours: 'New value (hours)', days: 'New value (days)', flag: 'New setting' };
 
 /**
  * `/settings/business-rules`. T-512 (T-511 S5c).
@@ -87,7 +87,7 @@ export default async function BusinessRulesPage({ searchParams }: { searchParams
                               ))}
                             </Select>
                           ) : (
-                            <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} {...(item.unit === 'hour' ? HOUR_BOX : item.unit === 'minutes' ? MINUTES_BOX : item.unit === 'days' ? { type: 'number', inputMode: 'numeric', step: 1, min: Number(item.min), max: Number(item.max) } as const : { inputMode: 'decimal' as const })} defaultValue={inputValue(item.unit, item.current)} className="w-full text-right" />
+                            <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} {...(item.unit === 'hour' ? HOUR_BOX : item.unit === 'minutes' ? MINUTES_BOX : item.unit === 'days' || item.unit === 'hours' ? { type: 'number', inputMode: 'numeric', step: 1, min: Number(item.min), max: Number(item.max) } as const : { inputMode: 'decimal' as const })} defaultValue={inputValue(item.unit, item.current)} className="w-full text-right" />
                           )}
                         </Field>
                         <Field label="Starts on" rule={SETTINGS_BUSINESS_RULE_RULES.effectiveFrom}>

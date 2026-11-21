@@ -16,6 +16,7 @@ import { receiptIdentityOf, type ReceiptIdentity } from './receipt-identity';
 import { POS_NOT_SWITCHED_ON, type PosPairing } from './inbox';
 import { listKitchenQueue, listOpenStands, listRefillableTables, listRefillQueue } from './sale';
 import { businessDateOf, readRules, requireStoreScope, type PosDeps } from './shared';
+import { readPosOfflineRules } from '../business-rules/pos-rules';
 
 /** The POS capabilities the tablet greys its buttons by (the closed list of R7's `staff`). */
 const POS_CAPABILITIES = ['record_sale', 'request_pos_refill', 'serve_pos_ticket', 'confirm_pos_heads', 'approve_pos_correction'] as const;
@@ -28,7 +29,7 @@ export interface PosSnapshot {
     stands: { id: string; number: number }[];
     tenders: { id: string; name: string; kind: string }[];
     discountPresets: { id: string; name: string; valueType: string; value: string }[];
-    rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number; tableWarnMinutes: number; /** T-558: display hint only (centavos); the tablet never enforces it. */ saleVarianceToleranceCentavos: number; /** T-576: the tablet asks for a manager PIN on a line cancel / line discount when true. */ requirePinLineActions: boolean };
+    rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number; tableWarnMinutes: number; /** T-558: display hint only (centavos); the tablet never enforces it. */ saleVarianceToleranceCentavos: number; /** T-576: the tablet asks for a manager PIN on a line cancel / line discount when true. */ requirePinLineActions: boolean; /** T-621: unsent offline sales (centavos) at or above which the till warns; display only. */ offlineUnsentWarnCentavos: number; /** T-621: whole hours offline between automatic offline X-slips. */ offlineXSlipHours: number };
     staff: { personId: string; displayName: string; employeeId: string; posCapabilities: string[] }[];
     device: { pairingId: string; lastSeq: number; lastTerminalSeq: number };
     businessDate: string;
@@ -48,6 +49,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
   const menu = await loadStoreMenu(tx, orgId, storeId, undefined, { showWithdrawnStore: true }); // T-527b: a sold-out dish stays on the tablet, greyed (row 307)
   const businessDate = await businessDateOf(tx, orgId, storeId, deps);
   const rules = await readRules(tx, orgId, businessDate, deps);
+  const offline = await readPosOfflineRules(tx, orgId, businessDate); // T-621: its own reader (not in the injectable PosRules)
 
   // Who may sign in at this store NOW, with the 3-digit code they type and only the POS capabilities authorize() grants them here.
   const staff: PosSnapshot['body']['staff'] = [];
@@ -72,6 +74,8 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
       tableWarnMinutes: rules.tableWarnMinutes,
       saleVarianceToleranceCentavos: Number(rules.saleVarianceToleranceCentavos),
       requirePinLineActions: rules.requirePinLineActions === true,
+      offlineUnsentWarnCentavos: Number(offline.offlineUnsentWarnCentavos),
+      offlineXSlipHours: offline.offlineXSlipHours,
     },
     staff,
     device: {

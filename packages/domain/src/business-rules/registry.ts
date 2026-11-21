@@ -20,8 +20,8 @@ export interface RuleDefinition {
   readonly label: string;
   /** One sentence saying what the number does. */
   readonly help: string;
-  /** `days` and `flag` are whole numbers: `days` a count of days, `flag` an on/off switch stored as 0 or 1 (T-575). */
-  readonly unit: 'money' | 'percent' | 'hour' | 'minutes' | 'days' | 'flag';
+  /** `days` and `flag` are whole numbers: `days` a count of days, `flag` an on/off switch stored as 0 or 1 (T-575). `hours` (T-621) is a whole number of hours (a length of time), not `hour`, which is a time of day 0-23. */
+  readonly unit: 'money' | 'percent' | 'hour' | 'minutes' | 'hours' | 'days' | 'flag';
   readonly default: string;
   readonly min: string;
   readonly max: string;
@@ -138,6 +138,26 @@ export const RULE_REGISTRY = {
     default: '30',
     min: '1',
     max: '365',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
+  },
+  'pos.offline_unsent_warn_amount': {
+    label: 'Unsent offline sales that warn the manager',
+    help: 'While the till has no internet, its sales wait on the tablet until they can be sent. When the sales waiting add up to this many pesos or more, the till shows a warning to call the manager. Selling continues; it only warns.',
+    unit: 'money',
+    default: '50000.00',
+    min: '1000',
+    max: '1000000',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
+  },
+  'pos.offline_xslip_hours': {
+    label: 'Hours offline between automatic X-slips',
+    help: 'While the till has no internet, it prints an offline X-slip (its own count of the sales on the tablet) after this many hours, and again every this many hours until the internet is back. Not a BIR reading; selling never stops.',
+    unit: 'hours',
+    default: '4',
+    min: '1',
+    max: '24',
     capability: RULE_ADMIN_CAPABILITY,
     namespace: 'pos',
   },

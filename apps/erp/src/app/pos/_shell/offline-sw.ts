@@ -6,6 +6,18 @@
 /** Must equal `PREFIX` and `SHELL_KEY` in `public/sw.js` (a test pins both). */
 export const SW_CACHE_PREFIX = 'shareat-pos-';
 export const SW_SHELL_KEY = '/pos-shell';
+/** T-621 S1: the message that lets a waiting worker take over. Must equal `ACTIVATE_NOW` in `public/sw.js` (a test pins it). */
+export const SW_ACTIVATE_NOW = 'activate-now';
+
+/** T-621 S1: what the update gate looks at. `waiting` is the outbox's count of events not yet sent. */
+export interface UpdateGateInput {
+  waiting: number;
+  paymentOpen: boolean;
+  online: boolean;
+}
+
+/** T-621 S1: a held update may take over only when nothing is waiting to send, no payment screen is open, and the till is online. Pure. */
+export const mayActivateUpdate = (i: UpdateGateInput): boolean => i.waiting === 0 && !i.paymentOpen && i.online;
 
 const swSupported = () => typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
 
@@ -26,6 +38,42 @@ export async function registerPosServiceWorker(): Promise<void> {
     reg.active?.postMessage({ type: 'precache', urls: hashedFilesLoaded() });
   } catch {
     // no service worker: the app still works online, it just cannot cold-start offline
+  }
+}
+
+/**
+ * T-621 S1: tells `onReady(true)` while a new worker is installed and waiting behind a controlling one (an update held back), `false` otherwise.
+ * A first install has no controller, so it never counts as held: it activates at once. Returns a stop function. Never throws.
+ */
+export function watchPosUpdate(onReady: (ready: boolean) => void): () => void {
+  if (process.env.NODE_ENV !== 'production' || !swSupported()) return () => undefined;
+  let stopped = false;
+  const sw = navigator.serviceWorker;
+  void sw.ready
+    .then((reg) => {
+      const check = () => {
+        if (!stopped) onReady(Boolean(reg.waiting) && Boolean(sw.controller));
+      };
+      check();
+      reg.addEventListener('updatefound', () => reg.installing?.addEventListener('statechange', check));
+    })
+    .catch(() => undefined);
+  return () => {
+    stopped = true;
+  };
+}
+
+/** T-621 S1: let the waiting worker take over, then reload once when it controls the page. Call only when `mayActivateUpdate` says yes. Never throws. */
+export async function activatePosUpdate(): Promise<void> {
+  if (!swSupported()) return;
+  try {
+    const sw = navigator.serviceWorker;
+    const reg = await sw.ready;
+    if (!reg.waiting) return;
+    sw.addEventListener('controllerchange', () => window.location.reload(), { once: true });
+    reg.waiting.postMessage({ type: SW_ACTIVATE_NOW });
+  } catch {
+    // the old code keeps running; the next check tries again
   }
 }
 

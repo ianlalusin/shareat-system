@@ -187,3 +187,22 @@ export interface ZSlipView extends ReadingSlipView {
   /** True: the paper carries the line `REPRINT`. */
   reprint: boolean;
 }
+
+/**
+ * T-621 S4: the offline X-slip. Built only from the tablet's own outbox (the server reading is out of reach offline), so it is a count of what the tablet
+ * holds, NOT a BIR reading and not the server's X. Every figure is ALREADY COMPUTED by the caller (`offlineXSlipFigures`); times arrive formatted.
+ */
+export interface OfflineXSlipView {
+  header: ReceiptHeader;
+  terminalNo: number;
+  offlineSinceLocal: string;
+  printedAtLocal: string;
+  saleCount: number;
+  total: Money;
+  /** Paid per tender, net of change given. Together with `shortPaid` they add up to `total`. */
+  tenders: { name: string; amount: Money }[];
+  /** Bills paid short (inside the variance tolerance); zero is not printed. */
+  shortPaid: Money;
+  /** Every event still waiting to send (sales and the rest). */
+  waitingCount: number;
+}

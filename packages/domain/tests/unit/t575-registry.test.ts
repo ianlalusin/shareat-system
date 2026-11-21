@@ -30,6 +30,6 @@ describe('T-575 registry - pos.senior_id_repeat_days', () => {
 
   it('the POS keys are the four earlier ones plus this one and the T-576 one (nothing else crept in)', () => {
     const pos = Object.keys(RULE_REGISTRY).filter((k) => k.startsWith('pos.')).sort();
-    expect(pos).toEqual(['pos.business_day_start_hour', 'pos.receipt_lookup_days', 'pos.require_pin_line_actions', 'pos.sale_variance_tolerance', 'pos.senior_id_repeat_days', 'pos.senior_pwd_discount_percent', 'pos.table_warn_minutes']);
+    expect(pos).toEqual(['pos.business_day_start_hour', 'pos.offline_unsent_warn_amount', 'pos.offline_xslip_hours', 'pos.receipt_lookup_days', 'pos.require_pin_line_actions', 'pos.sale_variance_tolerance', 'pos.senior_id_repeat_days', 'pos.senior_pwd_discount_percent', 'pos.table_warn_minutes']);
   });
 });

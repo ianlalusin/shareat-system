@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { purgePosShell, SW_CACHE_PREFIX, SW_SHELL_KEY } from './offline-sw';
+import { mayActivateUpdate, purgePosShell, SW_ACTIVATE_NOW, SW_CACHE_PREFIX, SW_SHELL_KEY } from './offline-sw';
 
 const ORIGIN = 'https://erp2.example';
 const SRC = readFileSync(path.join(__dirname, '..', '..', '..', '..', 'public', 'sw.js'), 'utf8');
@@ -23,6 +23,7 @@ type Store = Map<string, Map<string, Res>>;
 function boot(version: string, net: (pathname: string) => Res, store: Store = new Map(), src: string = SRC) {
   const handlers: Record<string, (e: unknown) => void> = {};
   const fetched: string[] = [];
+  const skips = { n: 0 };
   const keyOf = (r: unknown) => new URL(typeof r === 'string' ? r : (r as { url: string }).url, ORIGIN).pathname;
   const caches = {
     open: async (name: string) => {
@@ -40,7 +41,7 @@ function boot(version: string, net: (pathname: string) => Res, store: Store = ne
   const self = {
     location: new URL(`${ORIGIN}/sw.js?v=${version}`),
     addEventListener: (t: string, h: (e: unknown) => void) => void (handlers[t] = h),
-    skipWaiting: () => undefined,
+    skipWaiting: () => void (skips.n += 1),
     clients: { claim: async () => undefined },
   };
   class FakeResponse {
@@ -52,7 +53,7 @@ function boot(version: string, net: (pathname: string) => Res, store: Store = ne
       this.status = init.status ?? 200;
     }
   }
-  const module = { exports: {} as { strategyFor: (u: string, o: string, m: string, mode: string) => string; chunkUrlsIn: (html: string) => string[]; POS_TAB_PATHS: string[]; PREFIX: string; SHELL_KEY: string } };
+  const module = { exports: {} as { strategyFor: (u: string, o: string, m: string, mode: string) => string; chunkUrlsIn: (html: string) => string[]; POS_TAB_PATHS: string[]; PREFIX: string; SHELL_KEY: string; ACTIVATE_NOW: string } };
   vm.runInNewContext(src, {
     self,
     caches,
@@ -79,7 +80,7 @@ function boot(version: string, net: (pathname: string) => Res, store: Store = ne
     handlers[name]!({ data, waitUntil: (x: Promise<unknown>) => void (p = x) });
     return p;
   };
-  return { api: module.exports, request, message: (d: unknown) => wait('message', d), install: () => wait('install'), activate: () => wait('activate'), store, fetched };
+  return { api: module.exports, request, message: (d: unknown) => wait('message', d), install: () => wait('install'), activate: () => wait('activate'), store, fetched, skips };
 }
 
 const online = (p: string) => res(p);
@@ -185,7 +186,7 @@ describe('T-532 S4 sw.js behaviour', () => {
 
   it('the worker constants match the page-side ones', () => {
     const { api } = boot('t1', online);
-    expect([api.PREFIX, api.SHELL_KEY]).toEqual([SW_CACHE_PREFIX, SW_SHELL_KEY]);
+    expect([api.PREFIX, api.SHELL_KEY, api.ACTIVATE_NOW]).toEqual([SW_CACHE_PREFIX, SW_SHELL_KEY, SW_ACTIVATE_NOW]);
   });
 });
 
@@ -314,5 +315,42 @@ describe('T-614 S3 sign-out purge (purgePosShell, called by the POS shell and th
     expect(store.get(`${SW_CACHE_PREFIX}a`)!.has('/_next/static/x.js')).toBe(true);
     expect(store.get(`${SW_CACHE_PREFIX}b`)!.has(SW_SHELL_KEY)).toBe(false);
     expect(store.get('other')!.has(SW_SHELL_KEY)).toBe(true);
+  });
+});
+
+// T-621 S1: the update gate. A deploy's worker waits; the page lets it in only when nothing is waiting, no payment is open, and the till is online.
+describe('T-621 S1 update gate', () => {
+  it.each([
+    [{ waiting: 0, paymentOpen: false, online: true }, true],
+    [{ waiting: 1, paymentOpen: false, online: true }, false],
+    [{ waiting: 0, paymentOpen: true, online: true }, false],
+    [{ waiting: 0, paymentOpen: false, online: false }, false],
+    [{ waiting: 3, paymentOpen: true, online: false }, false],
+  ])('mayActivateUpdate(%o) -> %s', (input, want) => expect(mayActivateUpdate(input)).toBe(want));
+
+  it('install no longer calls skipWaiting: the new worker waits', async () => {
+    const w = boot('t2', tabNet);
+    await w.install();
+    expect(w.skips.n).toBe(0);
+  });
+
+  it('the activate-now message calls skipWaiting once; other messages do not', async () => {
+    const w = boot('t2', online);
+    await w.message({ type: 'something-else' });
+    expect(w.skips.n).toBe(0);
+    await w.message({ type: SW_ACTIVATE_NOW });
+    expect(w.skips.n).toBe(1);
+  });
+
+  it('activate still claims the open pages (clients.claim)', () => {
+    expect(SRC).toContain('.then(() => self.clients.claim())');
+  });
+
+  it('MUTANT skipWaiting back on install -> red', async () => {
+    const mutated = SRC.replace("self.addEventListener('install', (event) => {", "self.addEventListener('install', (event) => {\n  self.skipWaiting();");
+    expect(mutated).not.toBe(SRC);
+    const w = boot('t2', tabNet, new Map(), mutated);
+    await w.install();
+    expect(w.skips.n).not.toBe(0);
   });
 });

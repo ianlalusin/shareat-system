@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { countPending, drain, isSnapshotUsable, listPending, listVerifiers, readSnapshot, type CachedSnapshot, type PosEvent, type PosEventResult } from '@/lib/pos-device';
 import { POS_DRAIN_INTERVAL_MS, POS_OFFLINE_ACTOR_KEY, POS_OFFLINE_SNAPSHOT_MAX_AGE_MS, POS_POLL_INTERVAL_MS, POS_SNAPSHOT_REFRESH_MS } from './constants';
 import { makePosSend } from './drain-send';
-import { heldSalesCount, nextHeldOrigins } from './held-sales';
+import { heldSalesCount, nextHeldOrigins, sendableEvents } from './held-sales';
 import { POS_STATE_REFRESH_EVENT } from './use-pos-state';
 import { browserPromoteJar, promoteAfterTabletSignIn } from './pending-verifier';
 import { showNeedsInternetOnce } from './offline-band';
@@ -32,6 +32,9 @@ export interface SnapshotOrdersPart {
   requirePinLineActions?: boolean;
   /** T-528: what the Payment screen prices and pays with. Null when the cached snapshot is older than the fields it needs (the tablet must go online once). */
   payment?: SnapshotPaymentPart | null;
+  /** T-621: the offline safety rails. Each null when the cached snapshot is older than the rule (that rail stays off until the next refresh). */
+  offlineUnsentWarnCentavos?: number | null;
+  offlineXSlipHours?: number | null;
 }
 export interface DeviceSync {
   /** The cached snapshot's staff list (empty until one exists). */
@@ -40,6 +43,8 @@ export interface DeviceSync {
   ordersSnapshot: SnapshotOrdersPart | null;
   /** The outbox as it stands (the events not yet sent), oldest first: the Orders tab applies them on top of the server's list (T-527). */
   pendingEvents: PosEvent[];
+  /** T-621: `pendingEvents` minus the sales held for another pairing (the ones this till can actually send). */
+  sendableEvents: PosEvent[];
   /** True once the outbox has been read at least once (T-529: the outage print must not judge a list that is still empty because it was not loaded). */
   pendingLoaded: boolean;
   /** Asks for a send now; a request made while one is running is sent right after it (T-527). */
@@ -70,7 +75,19 @@ function ordersPartOf(s: CachedSnapshot | null): SnapshotOrdersPart | null {
   if (!b || !Array.isArray(b.stands) || !b.menu) return null;
   const warn = (b.rules as { tableWarnMinutes?: unknown } | undefined)?.tableWarnMinutes;
   const requirePin = (b.rules as { requirePinLineActions?: unknown } | undefined)?.requirePinLineActions === true;
-  return { stands: b.stands, menu: b.menu, nextChangeAt: snapshotNextChangeAt(s), tableWarnMinutes: typeof warn === 'number' ? warn : null, requirePinLineActions: requirePin, payment: paymentPartOf(b) };
+  const rules = b.rules as { offlineUnsentWarnCentavos?: unknown; offlineXSlipHours?: unknown } | undefined;
+  const unsentWarn = rules?.offlineUnsentWarnCentavos;
+  const xslipHours = rules?.offlineXSlipHours;
+  return {
+    stands: b.stands,
+    menu: b.menu,
+    nextChangeAt: snapshotNextChangeAt(s),
+    tableWarnMinutes: typeof warn === 'number' ? warn : null,
+    requirePinLineActions: requirePin,
+    payment: paymentPartOf(b),
+    offlineUnsentWarnCentavos: typeof unsentWarn === 'number' && Number.isSafeInteger(unsentWarn) && unsentWarn > 0 ? unsentWarn : null,
+    offlineXSlipHours: typeof xslipHours === 'number' && Number.isInteger(xslipHours) && xslipHours >= 1 ? xslipHours : null,
+  };
 }
 
 const sameEvents = (a: PosEvent[], b: PosEvent[]): boolean => a.length === b.length && a.every((e, i) => e.seq === b[i]!.seq);
@@ -238,10 +255,12 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
     return () => clearInterval(timer);
   }, [actor, snapshot, setOfflineActor]);
 
+  const pairingNow = (snapshot?.body as Partial<SnapshotBody> | undefined)?.device?.pairingId ?? null;
   return {
     staff: staffOf(snapshot),
     ordersSnapshot: ordersPartOf(snapshot),
     pendingEvents,
+    sendableEvents: sendableEvents(pendingEvents, heldOrigins, pairingNow),
     pendingLoaded,
     requestDrain,
     setResultsHandler,
@@ -250,7 +269,7 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
     pending,
     sending,
     conflicts,
-    heldSales: heldSalesCount(pendingEvents, heldOrigins, (snapshot?.body as Partial<SnapshotBody> | undefined)?.device?.pairingId ?? null),
+    heldSales: heldSalesCount(pendingEvents, heldOrigins, pairingNow),
     clearConflicts: () => setConflicts(0),
     refreshPending,
     drainNow,
