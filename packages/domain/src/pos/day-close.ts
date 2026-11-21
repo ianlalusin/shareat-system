@@ -589,7 +589,7 @@ async function postRefundExcessForZ(
   if (month) throw refuse(`pos: the fiscal period covering ${input.businessDate} is ${month.kind}`, month.sentence);
   const parts: { key: string; name: string; amount: Money; credit: Pick<PostEntryLine, 'accountCode' | 'partyType' | 'partyId'> }[] = [];
   if (compare(excess.cash, ZERO) > 0) parts.push({ key: 'cash', name: 'Cash', amount: excess.cash, credit: { accountCode: '1110' } });
-  for (const [accountId, amount] of [...excess.wallets].sort(([a], [b]) => (a < b ? -1 : 1))) {
+  for (const [accountId, amount] of [...excess.wallets].sort(([a], [b]) => a.localeCompare(b))) {
     const account = await moneyAccountsRepo.getById(tx, orgId, accountId);
     const name = input.tenders.find((x) => x.moneyAccountId === accountId)?.name ?? 'A wallet tender';
     if (!account || !account.isActive) {
