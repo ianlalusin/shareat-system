@@ -26,7 +26,7 @@ describe('T-512 registry - closed set', () => {
   it('holds the five T-512 keys, unchanged in name (T-539 adds the POS keys on top, pinned in t539-pos-rule-keys; T-519 adds its own later) [kills: a missing or renamed T-512 key]', () => {
     const have = Object.keys(RULE_REGISTRY);
     for (const k of KEYS) expect(have, k).toContain(k);
-    expect(have.filter((k) => !(KEYS as readonly string[]).includes(k)).sort()).toEqual(['pos.business_day_start_hour', 'pos.receipt_lookup_days', 'pos.require_pin_line_actions', 'pos.sale_variance_tolerance', 'pos.senior_id_repeat_days', 'pos.senior_pwd_discount_percent', 'pos.table_warn_minutes']); // T-575 added pos.senior_id_repeat_days; T-576 added pos.require_pin_line_actions
+    expect(have.filter((k) => !(KEYS as readonly string[]).includes(k)).sort()).toEqual(['pos.business_day_start_hour', 'pos.offline_unsent_warn_amount', 'pos.offline_xslip_hours', 'pos.receipt_lookup_days', 'pos.require_pin_line_actions', 'pos.sale_variance_tolerance', 'pos.senior_id_repeat_days', 'pos.senior_pwd_discount_percent', 'pos.table_warn_minutes']); // T-575 added pos.senior_id_repeat_days; T-576 added pos.require_pin_line_actions; T-621 added the two pos.offline_* keys
   });
 
   it('every entry carries label, help, unit, default, min, max, capability and namespace', () => {
@@ -64,12 +64,12 @@ describe('T-512 registry - closed set', () => {
       const min = Number(e.min);
       const max = Number(e.max);
       const def = Number(e.default);
-      expect(min, `${key} min`).toBe(key === 'pos.table_warn_minutes' || key === 'pos.senior_id_repeat_days' || key === 'pos.receipt_lookup_days' ? 1 : 0); // T-539 S3: a warning after 0 minutes would be red at once; T-575: a repeat window of 0 days would never warn
+      expect(min, `${key} min`).toBe(key === 'pos.offline_unsent_warn_amount' ? 1000 : key === 'pos.table_warn_minutes' || key === 'pos.senior_id_repeat_days' || key === 'pos.receipt_lookup_days' || key === 'pos.offline_xslip_hours' ? 1 : 0); // T-621: a warning below PHP 1,000 would fire all day; an X-slip every 0 hours is not a period // T-539 S3: a warning after 0 minutes would be red at once; T-575: a repeat window of 0 days would never warn
       expect(Number.isFinite(max), `${key} max finite`).toBe(true);
       expect(def, `${key} default >= min`).toBeGreaterThanOrEqual(min);
       expect(def, `${key} default <= max`).toBeLessThanOrEqual(max);
       if (e.unit === 'percent') expect(max, `${key} percent max`).toBeLessThanOrEqual(100);
-      if (e.unit === 'money') expect(max, `${key} money max`).toBeLessThanOrEqual(100000);
+      if (e.unit === 'money') expect(max, `${key} money max`).toBeLessThanOrEqual(key === 'pos.offline_unsent_warn_amount' ? 1000000 : 100000); // T-621: the unsent-sales warning is a day's takings, up to PHP 1,000,000
     }
     const r = RULE_REGISTRY as Record<string, { max: unknown }>;
     expect(Number(r['settlement.variance_floor_amount']!.max)).toBe(100000);

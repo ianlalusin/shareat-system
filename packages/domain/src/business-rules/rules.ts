@@ -47,6 +47,7 @@ function checkedBounds(def: RuleDefinition, key: string, value: string): void {
   const n = hundredths(value);
   if (def.unit === 'hour' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole hour`, `${def.label} must be a whole hour from 0 to 23.`);
   if (def.unit === 'minutes' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole number of minutes`, `${def.label} must be a whole number of minutes.`);
+  if (def.unit === 'hours' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole number of hours`, `${def.label} must be a whole number of hours.`);
   if (def.unit === 'days' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole number of days`, `${def.label} must be a whole number of days.`);
   if (def.unit === 'flag' && n !== 0n && n !== 100n) throw refuse(`business rule ${key}: not 0 or 1`, `${def.label} must be On or Off.`);
   if (n < hundredths(def.min) || n > hundredths(def.max)) {

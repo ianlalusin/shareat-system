@@ -87,7 +87,7 @@ export default async function BusinessRulesPage({ searchParams }: { searchParams
                               ))}
                             </Select>
                           ) : (
-                            <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} {...(item.unit === 'hour' ? HOUR_BOX : item.unit === 'minutes' ? MINUTES_BOX : item.unit === 'days' ? { type: 'number', inputMode: 'numeric', step: 1, min: Number(item.min), max: Number(item.max) } as const : { inputMode: 'decimal' as const })} defaultValue={inputValue(item.unit, item.current)} className="w-full text-right" />
+                            <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} {...(item.unit === 'hour' ? HOUR_BOX : item.unit === 'minutes' ? MINUTES_BOX : item.unit === 'days' || item.unit === 'hours' ? { type: 'number', inputMode: 'numeric', step: 1, min: Number(item.min), max: Number(item.max) } as const : { inputMode: 'decimal' as const })} defaultValue={inputValue(item.unit, item.current)} className="w-full text-right" />
                           )}
                         </Field>
                         <Field label="Starts on" rule={SETTINGS_BUSINESS_RULE_RULES.effectiveFrom}>
