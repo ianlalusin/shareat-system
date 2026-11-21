@@ -280,9 +280,6 @@ export default async function UserAccessPage({
               <thead>
                 <tr>
                   <Th>Account</Th>
-                  <Th>
-                    <span className="sr-only">Unlink</span>
-                  </Th>
                 </tr>
               </thead>
               <tbody>
@@ -305,8 +302,6 @@ export default async function UserAccessPage({
                           {c.externalId ? ' · ' : ''}
                           added {formatBusinessDateTime(c.createdAt, { dateStyle: 'long' })}
                         </span>
-                      </Td>
-                      <Td>
                         {c.kind === 'firebase' && (
                           // ⭐ T-239 / DEF-229 — a revocation records why. Same shape as the revoke form
                           //    on `/staff/[employmentId]/credentials`, so the two read as one system.
@@ -315,7 +310,7 @@ export default async function UserAccessPage({
                           <CheckedForm
                             rules={ADMIN_UNLINK_RULES}
                             action={unlinkCredentialAction}
-                            className="flex flex-wrap items-center gap-2"
+                            className="mt-3 flex flex-wrap items-end gap-2"
                           >
                             <input type="hidden" name="personId" value={personId} />
                             <input type="hidden" name="credentialId" value={c.id} />
