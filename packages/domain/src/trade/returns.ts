@@ -24,13 +24,14 @@
  * `fulfilledQuantity`/`quantity` (what was actually sold) — reported here, not silently assumed.
  */
 import { advisoryLocksRepo, arRepo, commissaryRepo, customerReturnsRepo, customersRepo, interEntityRepo, itemsRepo, journalRepo, moneyAccountsRepo, moneyTransfersRepo, stockLayersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import type {
   CustomerReturnSettlement,
   CustomerReturnTreatment,
   StockMovementKind,
 } from '@shareat/db/schema';
 import { add, compare, decimal, money, multiply, subtract, ZERO, type Money } from '@shareat/core/money';
+import { logger } from '@shareat/core/logger';
 import { parseMoneyInput } from '../shared/money-input';
 import { perBaseUnit } from '../deliveries/receive';
 import { refuse } from '../shared/refusal';
@@ -551,6 +552,8 @@ export interface VoidCustomerReturnOutcome {
   readonly reason?: string;
 }
 
+const RETURN_VOID_OUT_OF_REACH = 'That return does not exist, or it is not at a store where you may void it.';
+
 /**
  * ⭐ Invariant 13 — reverses every leg in one transaction, refused once the credit has been
  * redeemed or refunded. ⚠️ "Redeemed" is checked the same way T-170's `voidReturn` checks it:
@@ -565,8 +568,21 @@ export async function voidCustomerReturn(
 ): Promise<VoidCustomerReturnOutcome> {
   const run = async (trx: Tx): Promise<VoidCustomerReturnOutcome> => {
     const ret = await customerReturnsRepo.getReturn(trx, actor.orgId, returnId);
-    if (!ret) return { ok: false, reason: `return ${returnId} does not exist.` };
-    await authorize(trx, actor, 'void_customer_return', { storeId: ret.storeId });
+    // T-615 (the twin of DEF-562, DEF-546's shape): a missing return and one the caller may not void are ONE refusal,
+    // so the answer is no oracle for which return ids exist. The lookup stays first only to find the gate's store.
+    if (!ret) {
+      const raw = `voidCustomerReturn: no return ${returnId}`;
+      logger.warn({ returnId, actorOrgId: actor.orgId }, raw);
+      throw new AuthorizationError(raw, 'void_customer_return', RETURN_VOID_OUT_OF_REACH);
+    }
+    try {
+      await authorize(trx, actor, 'void_customer_return', { storeId: ret.storeId });
+    } catch (err) {
+      if (!(err instanceof AuthorizationError)) throw err;
+      const uniform = new AuthorizationError(`voidCustomerReturn: ${err.message}`, 'void_customer_return', RETURN_VOID_OUT_OF_REACH);
+      uniform.cause = err;
+      throw uniform;
+    }
     // DEF-880 (T-595 audit): the customer row lock first (same order as applyCredit and recordCollection: customer, then the rest), and the return re-read
     // under it, so a concurrent spend of this return's credit or a second void queues instead of reading a stale balance.
     await customersRepo.lockForCredit(trx, ret.orgId, ret.customerId);

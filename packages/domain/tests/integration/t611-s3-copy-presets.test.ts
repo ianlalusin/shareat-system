@@ -22,7 +22,7 @@ async function world(hint: string): Promise<World> {
   return { ...c, storeC: r!.id };
 }
 const preset = (c: Cast, storeId: string, name: string, valueType: 'percent' | 'fixed', value: string) =>
-  asOrg(c.orgId, (tx) => upsertPosDiscountPreset(tx, c.admin, { storeId, name, valueType, value })).then((r) => r.presetId);
+  asOrg(c.orgId, (tx) => upsertPosDiscountPreset(tx, c.admin, { storeId, name, valueType, value }, 'etl')).then((r) => r.presetId);
 const copy = (c: Cast, who: Cast['admin'], source: string, target: string, replace = false) =>
   asOrg(c.orgId, (tx) => copySettingsToStore(who, { kind: 'presets', sourceStoreId: source, targetStoreId: target, replace, approverPersonId: c.admin.personId }, tx));
 const preview = (c: Cast, who: Cast['admin'], source: string, target: string, replace = false) =>
@@ -140,3 +140,21 @@ describe('T-611 S3: the audit trail', () => {
     expect(rows[0]!.after).toMatchObject({ kind: 'presets', sourceStoreId: c.storeA, added: 2, replaced: 0, skipped: 0, replace: false, approverPersonId: c.admin.personId });
   });
 });
+
+describe("T-615: the preset audit rows carry the caller's source", () => {
+  it("8: a copy writes created and replaced rows as web; the loader's own call (etl) still writes etl", async () => {
+    const c = await world('t615-src');
+    await preset(c, c.storeA, 'Promo', 'percent', '15.00');
+    await preset(c, c.storeA, 'Staff meal', 'percent', '20.00');
+    const promoB = await preset(c, c.storeB, 'Promo', 'fixed', '30.00'); // written through the loader's call: etl
+    const sourcesOf = async (storeId: string) =>
+      (await sql<{ source: string; name: string }[]>`
+        select source, "after"->>'name' as name from audit_log where store_id = ${storeId} and action = 'pos.discount_preset_set' order by recorded_at, id`).map((r) => `${r.name}:${r.source}`);
+    expect(await sourcesOf(c.storeB)).toEqual(['Promo:etl']);
+    await copy(c, c.admin, c.storeA, c.storeB, true); // adds Staff meal, replaces Promo in place
+    const rows = await sourcesOf(c.storeB);
+    expect([...rows].sort()).toEqual(['Promo:etl', 'Promo:web', 'Staff meal:web']);
+    expect(promoB).toBeTruthy();
+  });
+});
+
