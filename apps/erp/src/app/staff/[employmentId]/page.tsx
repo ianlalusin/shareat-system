@@ -20,7 +20,7 @@ import { DeductionAgreementsSection } from './DeductionAgreementsSection';
 import { Avatar } from './Avatar';
 import { RefillForm } from './RefillForm';
 import { DocumentsSection } from './DocumentsSection';
-import { accessOffAtStoreFor, deductionAgreementsFor, documentsFor, employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import { accessOffAtStoreFor, deductionAgreementsFor, documentsFor, employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, pinResetPendingFor, positionsForStore } from '../lib';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
@@ -79,7 +79,7 @@ export default async function EmploymentDetailPage({
 
   const isEnded = detail.employment.endedOn !== null;
   const roleOnly = detail.role === 'manager' || detail.role === 'admin' || detail.role === 'super_admin';
-  const [positions, livePin, otherBranches, govIds, media, agreements, documents, accessOff] = await Promise.all([
+  const [positions, livePin, otherBranches, govIds, media, agreements, documents, accessOff, pinReset] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
     livePinFor(actor, detail.employment.personId),
     // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
@@ -93,6 +93,8 @@ export default async function EmploymentDetailPage({
     documentsFor(actor, employmentId, detail.employment.storeId),
     // T-609: an ended employment shows whether the person's access is really off here.
     isEnded ? accessOffAtStoreFor(actor, detail.employment.personId, detail.employment.storeId) : Promise.resolve(false),
+    // T-619: a promotion retired the PIN; say so until a new one is set.
+    pinResetPendingFor(actor, detail.employment.personId),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
@@ -378,7 +380,9 @@ export default async function EmploymentDetailPage({
                     isEnded ? (
                       <span className="block text-muted">Not needed — this employment has ended</span>
                     ) : (
-                      <span className="block text-warning-ink">Not issued — this person cannot sign in</span>
+                      <span className="block text-warning-ink">
+                        {pinReset ? 'PIN reset: set a new PIN. Their role was raised, so the old PIN no longer works.' : 'Not issued — this person cannot sign in'}
+                      </span>
                     )
                   )}
                 </span>

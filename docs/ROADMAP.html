@@ -172,12 +172,12 @@
       payroll once the statutory data arrives, the remaining admin screens, and then the cutover itself.
     </p>
     <div class="facts">
-      <div class="fact done"><span class="n">271</span><span class="l">tasks done</span></div>
-      <div class="fact active"><span class="n">14</span><span class="l">in progress or partly done</span></div>
-      <div class="fact"><span class="n">19</span><span class="l">still to build</span></div>
+      <div class="fact done"><span class="n">329</span><span class="l">tasks done</span></div>
+      <div class="fact active"><span class="n">24</span><span class="l">in progress or partly done</span></div>
+      <div class="fact"><span class="n">26</span><span class="l">still to build</span></div>
       <div class="fact crit"><span class="n">0</span><span class="l">open money defects (push closed; 2 deferred by your ruling)</span></div>
     </div>
-    <div class="asat">As at <b>25 October 2026</b> &middot; production at <b>fb17323</b> (main) &middot; PRs #43, #46-#53, #55, #58, #59 merged and live &middot; open: #60 (T-398 S2b), #54 POS v2, #57 &middot; next free migration <b>0218</b></div>
+    <div class="asat">As at <b>22 November 2026</b> &middot; main is deployed through the 19&ndash;22 Nov batch &middot; open: T-599, T-619, T-607, DEF-923, DEF-943, the Lipa printing check and go-live</div>
   </header>
 
   <section>
@@ -273,10 +273,10 @@
   <section>
     <div class="sec-head">
       <h2>Every task, by area</h2>
-      <p>270 cards. A filled dot is done, an amber card is in progress, a hollow dot is still to build.</p>
+      <p>379 cards. A filled dot is done, an amber card is in progress, a hollow dot is still to build.</p>
     </div>
     <nav class="jump" aria-label="Jump to area">
-      <a href="#p1">Spine</a><a href="#p2">Money documents</a><a href="#money">Money hardening</a><a href="#p3">Inventory</a><a href="#p4">Attendance</a><a href="#p5">Payroll</a><a href="#p6">Reporting</a><a href="#p7">Admin screens</a><a href="#platform">Platform</a><a href="#p8">Cutover</a><a href="#deferred">Deferred</a>
+      <a href="#p1">Spine</a><a href="#p2">Money documents</a><a href="#money">Money hardening</a><a href="#p3">Inventory</a><a href="#p4">Attendance</a><a href="#p5">Payroll</a><a href="#p6">Reporting</a><a href="#p7">Admin screens</a><a href="#nov">19&ndash;22 Nov</a><a href="#platform">Platform</a><a href="#p8">Cutover</a><a href="#deferred">Deferred</a>
     </nav>
   </section>
 
@@ -717,9 +717,74 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-424</div><div class="task-what">POS v2 server: manager-PIN approvals, refunds, tender corrections, server-gated void</div><div class="task-note">Live 17 Oct (PR #34); POS v2 not in use yet</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-425</div><div class="task-what">POS v2 offline rules (PC-5)</div><div class="task-note">In open draft PR #44 (branch claude/pos-v2-907a29); not merged</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-398 S2b&ndash;S7</div><div class="task-what">Padre Garcia franchise organisation, remaining slices</div><div class="task-note">S1, S2a, S3, S4 live (S3/S4 = #53, migrations 0213/0214, production prechecks all zero). S2b in open PR #60 (DEF-421 closed in code). S5 (inter-entity sale) in progress on lane/t398-s5: plan done, S5a posting patterns and S5b migration 0218 built and audited, 6 audit findings to fix, S5c-S5f to come; Ian chose QI-1 (a), row 388. S6-S7 next; Q5 VAT due 13 Nov</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-426 &middot; T-427</div><div class="task-what">POS v2 senior/PWD discounts and Convert</div><div class="task-note">In open draft PR #44; T-426 pay-less comparison fixed 22 Oct; not merged</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-426 &middot; T-427</div><div class="task-what">POS v2 senior/PWD discounts and Convert</div><div class="task-note">Convert shipped as T-534; discounts in open draft PR #44; T-426 pay-less comparison fixed 22 Oct; not merged</div></div>
         <div class="task "><div class="task-id"><span class="dot"></span>T-428 &middot; T-429</div><div class="task-what">POS v2 till screen &middot; reserved</div><div class="task-note">T-428 research done; T-429 reserved</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>DEF-585</div><div class="task-what">Production has no fiscal period before October 2026</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="nov" class="inv">
+    <h2>19&ndash;22 November &middot; POS go-live and the sweep</h2>
+    <p class="sec-note">Everything here is merged and deployed unless the card is amber or hollow.</p>
+    <div class="wave">
+      <div class="wave-head"><h3>POS v2 at Lipa</h3><span class="chip c-part">printing check open</span><span class="why">Money-safe till, printing and the soak; the last step happens on the real tablet at Lipa.</span></div>
+      <div class="tasks">
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>D2 grant</div><div class="task-what">Managers approve POS corrections (a permission grant, no task id)</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-534</div><div class="task-what">POS Convert, wrong-tender correction and refunds</div><div class="task-note">S1&ndash;S4</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-532</div><div class="task-what">POS printing and offline: printer bridge, Android shell app (net.shareat.erppos) with a CI-built APK, and an offline /pos service worker</div><div class="task-note">S1&ndash;S4 live. S5, the real-tablet printing check at Lipa, is NOT done</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-601</div><div class="task-what">Soak readiness: a TEST line on the screen, one receipt number, and blocking checks before the live switch</div><div class="task-note">S1&ndash;S6</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-614</div><div class="task-what">POS follow-ups: refund-excess handling, a look-up days setting, offline on every tab</div></div>
+        <div class="task"><div class="task-id"><span class="dot"></span>Lipa</div><div class="task-what">Printing check on the real tablet (T-532 S5), then Lipa go-live</div></div>
+        <div class="task"><div class="task-id"><span class="dot"></span>T-588</div><div class="task-what">Retire pos2</div><div class="task-note">After the Lipa go-live</div></div>
+      </div>
+    </div>
+    <div class="wave">
+      <div class="wave-head"><h3>Money and books follow-ups</h3><span class="chip c-done">complete</span><span class="why">Interest, receivables and the channel store code.</span></div>
+      <div class="tasks">
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-608</div><div class="task-what">Loan interest is split out of the instalment</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-613</div><div class="task-what">Money follow-ups</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-600</div><div class="task-what">Money, part 2</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-606</div><div class="task-what">Channel receivable 1220</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-592</div><div class="task-what">Sales channels carry a store code</div></div>
+      </div>
+    </div>
+    <div class="wave">
+      <div class="wave-head"><h3>Access and staff</h3><span class="chip c-part">one card open</span><span class="why">Who can see and do what, and when it ends.</span></div>
+      <div class="tasks">
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-609</div><div class="task-what">Ending an employment revokes all of that person&rsquo;s access</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-612</div><div class="task-what">Account status: pending, active, suspended, ended</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-616</div><div class="task-what">Access is deny-by-default at runtime</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-617</div><div class="task-what">Thirteen routes put behind a permission gate</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-603</div><div class="task-what">Store-scope read gates: a person reads only their own stores</div><div class="task-note">S1&ndash;S5</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-619</div><div class="task-what">PIN reset on promotion</div><div class="task-note">Building</div></div>
+      </div>
+    </div>
+    <div class="wave">
+      <div class="wave-head"><h3>Menus and stores</h3><span class="chip c-done">complete</span><span class="why">Setting up a store without retyping.</span></div>
+      <div class="tasks">
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-610</div><div class="task-what">Overlapping menu hours are refused</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-611</div><div class="task-what">Copy a menu from another store</div><div class="task-note">S1&ndash;S3</div></div>
+      </div>
+    </div>
+    <div class="wave">
+      <div class="wave-head"><h3>Defect sweeps, speed and CI</h3><span class="chip c-done">complete</span><span class="why">Open defects closed in batches; the pages and the pipeline got faster.</span></div>
+      <div class="tasks">
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-593 &middot; T-594 &middot; T-595 &middot; T-596 &middot; T-597</div><div class="task-what">Defect-sweep batches</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-598</div><div class="task-what">The whole defect sweep, including S10</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-618</div><div class="task-what">Open defects 921 (partial), 922 and 925&ndash;930</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-615</div><div class="task-what">Small follow-ups</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-602</div><div class="task-what">Performance</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-604</div><div class="task-what">Faster CI</div></div>
+      </div>
+    </div>
+    <div class="wave">
+      <div class="wave-head"><h3>Still open</h3><span class="chip c-active">in progress</span><span class="why">Waiting on a build, on your data, or on a production check.</span></div>
+      <div class="tasks">
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-599</div><div class="task-what">Long pages redesign</div><div class="task-note">S0&ndash;S3 and E1 done on the DELL PC branch; E2 and E3 in progress; not merged</div></div>
+        <div class="task"><div class="task-id"><span class="dot"></span>T-607</div><div class="task-what">Xlice through wholesale orders</div><div class="task-note">Waits for your data</div></div>
+        <div class="task"><div class="task-id"><span class="dot"></span>DEF-923</div><div class="task-what">Remittance repair</div><div class="task-note">Needs a production check first</div></div>
+        <div class="task"><div class="task-id"><span class="dot"></span>DEF-943</div><div class="task-what">Inter-store pair lock for AP, AR, loans, expenses, payroll and trade returns</div></div>
       </div>
     </div>
   </section>
