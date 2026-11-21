@@ -1013,6 +1013,17 @@ export async function getChannelsForDay(tx: Tx, salesDayId: string): Promise<Sal
     .orderBy(asc(salesChannels.name));
 }
 
+/**
+ * T-618 (DEF-926): share-locks the channel rows a day posts to (in id order), so a channel edit or retire that holds the row lock finishes first, and verify then posts
+ * on the receivable the channel has NOW, not the one it had when the guard read the balance.
+ */
+export async function shareLockChannelsOfDay(tx: Tx, salesDayId: string): Promise<void> {
+  await tx.execute(sql`
+    select 1 from sales_channels where id in (select channel_id from sales_day_channels where sales_day_id = ${salesDayId})
+    order by id for share
+  `);
+}
+
 /** T-371 C2 — `amount` is a `Money` brand. */
 export interface InsertChannelInput {
   channelId: string;
