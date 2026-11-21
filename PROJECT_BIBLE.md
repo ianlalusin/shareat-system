@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1818` 13. Decision log
-- `1819–1838` 14. Amendment protocol
-- `1839–1843` 15. Engineering standards — the industry practices this project follows
-  - `1844–1849` 15.1 Build order: walking skeleton first
-  - `1850–1861` 15.2 Golden-master testing — the most important practice here
-  - `1862–1870` 15.3 Strangler Fig, not big-bang cutover
-  - `1871–1875` 15.4 No dual-write
-  - `1876–1884` 15.5 Expand/contract migrations
-  - `1885–1893` 15.6 Observability from day zero, not later
-  - `1894–1898` 15.7 CI gates
-  - `1899–1903` 15.8 Backups and a tested restore
-  - `1904–1908` 15.9 Twelve-Factor config
-  - `1909–1916` 15.10 Append-only ledgers — but not event sourcing
-  - `1917–1921` 15.11 Defence in depth
-  - `1922–1950` 15.12 Skills are lenses, not assurance
-  - `1951–1957` 15.13 Reconciliation is a permanent feature
-- `1958–1962` 16. The accounting spine
-  - `1963–1994` 16.0 What we are actually fixing — the diagnosis
-  - `1995–2038` 16.1 The ten invariants — non-negotiable
-  - `2039–2053` 16.2 The oracle: how "correct" is tested
-  - `2054–2075` 16.3 The model — header + lines, not legs
-  - `2076–2095` 16.4 Deliberately simpler than ERPNext
-  - `2096–2165` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2166–2190` 16.6 What v1 already gets right — preserve the intent
-  - `2191–2212` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2213–2227` 16.8 What v1's accounting already gets right
-  - `2228–2271` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2272–2322` 16.10 Posting patterns — one canonical pattern per business event
-  - `2323–2355` 16.11 Inventory's accounting integration
+- `1350–1831` 13. Decision log
+- `1832–1851` 14. Amendment protocol
+- `1852–1856` 15. Engineering standards — the industry practices this project follows
+  - `1857–1862` 15.1 Build order: walking skeleton first
+  - `1863–1874` 15.2 Golden-master testing — the most important practice here
+  - `1875–1883` 15.3 Strangler Fig, not big-bang cutover
+  - `1884–1888` 15.4 No dual-write
+  - `1889–1897` 15.5 Expand/contract migrations
+  - `1898–1906` 15.6 Observability from day zero, not later
+  - `1907–1911` 15.7 CI gates
+  - `1912–1916` 15.8 Backups and a tested restore
+  - `1917–1921` 15.9 Twelve-Factor config
+  - `1922–1929` 15.10 Append-only ledgers — but not event sourcing
+  - `1930–1934` 15.11 Defence in depth
+  - `1935–1963` 15.12 Skills are lenses, not assurance
+  - `1964–1970` 15.13 Reconciliation is a permanent feature
+- `1971–1975` 16. The accounting spine
+  - `1976–2007` 16.0 What we are actually fixing — the diagnosis
+  - `2008–2051` 16.1 The ten invariants — non-negotiable
+  - `2052–2066` 16.2 The oracle: how "correct" is tested
+  - `2067–2088` 16.3 The model — header + lines, not legs
+  - `2089–2108` 16.4 Deliberately simpler than ERPNext
+  - `2109–2178` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2179–2203` 16.6 What v1 already gets right — preserve the intent
+  - `2204–2225` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2226–2240` 16.8 What v1's accounting already gets right
+  - `2241–2284` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2285–2335` 16.10 Posting patterns — one canonical pattern per business event
+  - `2336–2368` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1815,6 +1815,19 @@ just a patch.**
 | 482 | 2026-11-17 | **T-586: THE BUILDER'S DEVIATIONS FROM THE DEEPSEEK PROMPT ARE ACCEPTED, AND THE SETTINGS-HUB "WHO CAN EDIT" NOTE IS SKIPPED.** Ian had DeepSeek write the T-586 prompt and told BOSS to evaluate it and build according to BOSS's assessment. BOSS corrected four points before building (keep the same-day phone fix in the shared header, re-measure the t348 SW4 count, make any "who can edit" note true, do not touch shared form components). The builder skipped the hub note because the cards already show a "View only" tag to anyone who cannot edit. PR #300 merged. | Ian, 17 Nov: "i askedd that from deepseek . evaluate it build according to your assessment". BOSS accepted the builder's deviations. | Yes |
 | 483 | 2026-11-17 | **TOUCH-TARGET CENSUS: A LINK INSIDE SENTENCE TEXT IS EXEMPT FROM THE 44 PX RULE (WCAG 2.5.8 INLINE EXCEPTION). IT IS COUNTED AS "INLINE-EXEMPT", NOT AS A FAILURE.** Triggered by T-586: two description links moved into the shared page header's `description` prop, where the checker could no longer see them; they sit inside a sentence and were unchanged from main. T-589 B9 teaches the census to resolve links in Page `description` and `crumb` props. Links that stand alone (crumbs, buttons, list links) keep the full 44 px rule. | BOSS, 17 Nov, ruling on the UI UX lane's question (fix to 44 px, or keep them counted): the links are exempt from the tap-size rule under the WCAG 2.5.8 inline exemption. | Yes (a census rule) |
 | 484 | 2026-11-19 | ⛔ **BUSINESS DOCUMENTS NEVER GO IN THE REPO. FRANCHISE AGREEMENTS, MANUALS, SOPS, MEMOS, POLICIES, TRAINING GUIDES, CONTRACTS AND REVIEWS OF THEM LIVE ONLY IN THE LOCAL, GIT-IGNORED `shareat-knowledge/` FOLDER.** Ian, 19 Nov: "inspect the business docs like franchise agreements manuals and memos inside the repo ... put them on shareat knowledge folder and add that to git ignore", then "add the rule on how to handle similar files onto the bible". **Why:** the GitHub repo is PUBLIC; `knowledge/` (32 files: franchise terms, roles, SOPs, policies) and `docs/operations/inventory-monitoring-responsibilities.docx` were tracked and pushed. **The rule:** (1) every new business document, whatever its format, goes into `shareat-knowledge/<topic>/` at the repo root on the machine that holds it, never under `docs/`, `knowledge/` or anywhere tracked; (2) `.gitignore` refuses `shareat-knowledge/`, `knowledge/`, `*.docx`, `*.doc` and `*.pdf`, so a stray copy is not committed by `git add -A`; (3) code and specs may CITE a business rule (quote the sentence the code enforces, as task specs do) but never copy a whole document; (4) the `knowledge-intake` skill writes to `shareat-knowledge/`; (5) a document found tracked is untracked (`git rm --cached`) in its own PR and moved into `shareat-knowledge/` first, so no checkout loses it on pull; (6) other machines (the DELL builder PC, CI) do not have the folder; a task that needs a business rule puts the rule's words in its spec. **Not done:** removing the old files from the PUBLIC git history needs a history rewrite and force-push, which this project forbids; making the repository private is Ian's open decision and is what actually closes that exposure. Supersedes the `knowledge/` location in the knowledge-intake skill and AGENTS.md. | The repository is public; a business document committed once stays readable in its history forever. | Yes, the folder name can change; the rule that business documents stay out of git does not. |
+| 485 | 2026-11-19 | **THE GRAB QUICK CASH LOAN IS RECORDED AS A LIPA LOAN, AND PLATFORM SETTLEMENTS FOLLOW THE PLATFORM'S OWN STATEMENT.** Ian, 19 Nov: "follow grab statement". The ₱150,000 Grab Quick Cash loan of 12 Oct 2026 (90 daily payments of ₱1,771.88) is a loan owned by Lipa on erp2; Grab 1-9 Nov were booked from Grab's statement figures, which tied to the Grab transfers file to the centavo. | The platform's statement is what the money actually did; POS figures can differ by late orders. | Yes, per platform, if a statement proves wrong. |
+| 486 | 2026-11-19 | **LOANS STAY OWNED BY ONE STORE; ANY STORE'S PLATFORM PAYOUT MAY REPAY THEM, AND THE STORE-TO-STORE 1250/2150 ENTRIES ARE KEPT.** Ian, 19 Nov: "yes keep it" (keeping the inter-store entries rather than making loans company-wide). | Each store's own books stay honest about who funded whom. | Yes. |
+| 487 | 2026-11-19 | **A SCHEDULED LOAN REPAID FROM A PLATFORM PAYOUT SPLITS EVERY PESO INTO PRINCIPAL AND INTEREST IN THE FIXED RATIO INTEREST ÷ TOTAL-TO-REPAY (OPTION 2), WITH CUMULATIVE ROUNDING; LEGS ALREADY BOOKED AS ALL PRINCIPAL ARE CAUGHT UP AUTOMATICALLY.** Ian, 19 Nov: "option 2". Total interest = repayment × term − principal. Built as T-608 (#320, migration 0267: `accounts.optional_party_type`, so 7200 accepts a loan party). | Puts interest in the month and year it is paid; the loan crosses a year end. | Yes. |
+| 488 | 2026-11-19 | **EVERY STORE MANAGER MAY APPROVE POS CORRECTIONS AND THE END-OF-DAY CLOSE BY ROLE (`approve_pos_correction`, manager = yes).** Ian, 19 Nov: "b" (ruling D2 of T-601). Built #312. | Less setup per store; the soak check and the live switch still need an approver other than the only seller (T-601 S6). | Yes. |
+| 489 | 2026-11-19 | **POS CONVERT (GCASH CASH-IN/OUT) IS BUILT BEFORE GO-LIVE; A REFUND GOES BACK THE WAY IT WAS PAID, MAY COVER SOME ITEMS ONLY, AND NEEDS A MANAGER PIN AND THE INTERNET.** Ian, 19 Nov: "1. A 2. a". Supersedes row 351's cash-only refund limit. Built T-534 (#313, migration 0265; #318, migration 0266) with T-613 and T-614 follow-ups. A refund larger than a method's takings posts its excess at the Z as its own entry `pos_refund_excess`, which is permanent like Convert because a Z-built day cannot be voided (BOSS ruling, 21 Nov). | Convert is about 3.7 a day at Lipa; refunds are rare but partial. | Yes. |
+| 490 | 2026-11-19 | **ENDING A STAFF MEMBER'S LAST EMPLOYMENT SWITCHES OFF ALL THEIR ERP AND POS ACCESS AT ONCE, FROM ONE PLACE: THE STAFF RECORD.** Ian, 19 Nov: "terminating a staff employment must deactivate all its erp and pos access immediately"; "one switch". PIN, role, grants, scopes, sessions and clock badges are revoked; tablets drop the offline verifier at the next sync. Built T-609 (#319). | A terminated person must not sign in anywhere. | Yes. |
+| 491 | 2026-11-19 | **`shareat-knowledge/` HOLDS EVERY AI'S AND PERSON'S SHAREAT BUSINESS WORK (CLAUDE, CHATGPT, DEEPSEEK), WITH A REGISTER, AN INDEX, AN INBOX AND A DAILY 6 AM TIDY BOT THAT BACKS IT UP TO GOOGLE DRIVE.** Ian, 19 Nov: the folder "will now contain every ai yours, chatgpt and deepseek works"; "yes 6am, google drive backup". Scheduled task `shareat-knowledge-tidy`. Extends row 484. | One findable place for business knowledge, kept tidy and backed up. | Yes. |
+| 492 | 2026-11-19 | **A MENU HOUR THAT OVERLAPS ANOTHER ACTIVE HOUR OF THE SAME STORE IS REFUSED AT SAVE; BACK-TO-BACK HOURS ARE ALLOWED.** Ian, 19 Nov: "refuse overlapping hours". Built T-610 (#323). | The clash used to surface only later, when a price failed. | Yes. |
+| 493 | 2026-11-19 | **"COPY FROM ANOTHER STORE" EXISTS ON FOUR SCREENS (MENU HOURS, PRICES, KITCHEN STATIONS AND ROUTES, DISCOUNT PRESETS): ADMIN ONLY, PREVIEW FIRST, ADDITIVE UNLESS "REPLACE" IS TICKED, ADMIN PIN, WITHIN ONE ORG.** Ian, 19 Nov: "A, go" after the ROI study. Built T-611 (#324, #327). Never copied: money accounts, tenders, platform store codes, devices, POS mode, store identity. | The biggest saving is at new-store setup and price pushes. | Yes. |
+| 494 | 2026-11-20 | **EVERY PERSON'S ACCOUNT HAS ONE STATUS: PENDING, ACTIVE, SUSPENDED OR ENDED. A NEW HIRE STARTS PENDING UNTIL A MANAGER OR ADMIN ACTIVATES; SUSPEND SIGNS OUT EVERYWHERE AND KEEPS RIGHTS PAUSED (OPTION A); ENDED FOLLOWS ROW 490.** Ian, 19-20 Nov: approved superseding row 340 and T-609's no-suspend non-goal; "A"; "go ahead" on the backfill (people with no open job become Ended; admins exempt). BOSS rulings: clock-in stays employment-based, so pending and suspended staff still clock in; only an Ended person goes back to Pending on re-hire. Built T-612 (#325, migration 0268). Supersedes row 340. | A hire should not sign in before a manager says so. | Yes. |
+| 495 | 2026-11-22 | **THE ROUTE MAP IS DENY-BY-DEFAULT, IN CI AND AT RUNTIME; THE 13 ROUTES THAT HAD NO RULE GOT IAN'S APPROVED DEFAULTS, AND `/opening-balances` IS MANAGERS AND ADMINS.** Ian, 22 Nov: "approve the defaults", then "a" for opening balances. Built T-603 S2-S5 (#333, #335), T-616 (#342), T-617 (#343). | No page renders for a person it was never meant for. | Yes, per route. |
+| 496 | 2026-11-22 | **A PROMOTION RESETS THE PIN: WHEN A PERSON IS RAISED TO MANAGER OR ADMIN THEIR OLD PIN STOPS WORKING AND THEIR SESSIONS END; A LATERAL OR LOWER CHANGE KEEPS IT.** Ian, 22 Nov: "yes" (DEF-920). Spec T-619, building. | A cashier's PIN is often known to others. | Yes. |
+| 497 | 2026-11-19 | **WORKING PRACTICE: BOSS PUSHES BUILDERS' FINISHED BRANCHES ITSELF (NEVER MAIN, NEVER FORCE), AND BOTH PCs ARE KEPT BUSY. THE DELL PC (192.168.1.2, SSH KEY FROM THE LAPTOP, ITS OWN LOCAL TEST DB) TAKES ONE BUILDER AND THE LAPTOP ONE.** Ian, 19-21 Nov: "push them yourself", "keep both pcs busy", "keep building the pos too". | Subagent pushes are refused by the permission check; more build capacity under the 90% memory cap. | Yes. |
 
 ## 14. Amendment protocol
 
