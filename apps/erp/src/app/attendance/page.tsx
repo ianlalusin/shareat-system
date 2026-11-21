@@ -15,7 +15,7 @@ import type { LeaveRow } from '@shareat/domain';
 import { NAV_LINK } from '@/components/action-link';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th } from '@/components/ui';
+import { Badge, Banner, Button, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th } from '@/components/ui';
 
 export const metadata = { title: 'Attendance review — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -85,6 +85,16 @@ export default async function AttendanceReviewPage({
           to the original punches and never replaces them.
         </PageDescription>
       </div>
+
+      {fallback.noPolicy && !sp.from && !sp.to && (
+        <Banner tone="warning">
+          This store has no attendance policy yet, so the screen shows today only. Set one up in{' '}
+          <Link href="/settings/attendance" className={NAV_LINK}>
+            attendance settings
+          </Link>{' '}
+          to see the whole payroll period.
+        </Banner>
+      )}
 
       <form method="get" className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">

@@ -28,7 +28,8 @@ vi.mock('../src/expenses/approve', () => ({
   approveExpense: (...args: unknown[]) => approveExpense(...args),
 }));
 
-vi.mock('../src/expenses/create', () => ({ createExpense: vi.fn() }));
+// DEF-533: ap/index.ts reads this list at import time, so the mock must carry it.
+vi.mock('../src/expenses/create', () => ({ createExpense: vi.fn(), CREATE_EXPENSE_CAPABILITIES: ['create_expense'] }));
 vi.mock('../src/expenses/void', () => ({ voidExpense: vi.fn() }));
 vi.mock('../src/expenses/delete', () => ({ deleteExpenseDraft: vi.fn() }));
 vi.mock('../src/items', () => ({ validateInvoiceLines: vi.fn() }));

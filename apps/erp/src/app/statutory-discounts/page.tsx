@@ -1,4 +1,4 @@
-import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
+import { formatBusinessDayLong, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { listStatutoryDiscounts, summariseStatutoryDiscounts } from '@shareat/domain';
 // ⛔ `peso()` and NOT `₱${formatMoney(...)}` — formatMoney already emits the symbol, and
 // prefixing another rendered every figure on this page as ₱₱0.00. See lib/format.ts's header:
@@ -35,7 +35,16 @@ function monthBounds(businessDate: string): { from: string; to: string } {
   return { from: `${y}-${pad(m + 1)}-01`, to: `${y}-${pad(m + 1)}-${pad(last)}` };
 }
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** DEF-514: a real calendar date (the core parser), so 2026-02-30 falls back like any other bad value. */
+function isRealDate(v: string | undefined): v is string {
+  if (!v) return false;
+  try {
+    parseBusinessDate(v);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default async function StatutoryDiscountsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -48,8 +57,8 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
 
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : undefined;
   const defaults = monthBounds(toBusinessDate());
-  const from = sp.from && ISO_DATE.test(sp.from) ? sp.from : defaults.from;
-  const to = sp.to && ISO_DATE.test(sp.to) ? sp.to : defaults.to;
+  const from = isRealDate(sp.from) ? sp.from : defaults.from;
+  const to = isRealDate(sp.to) ? sp.to : defaults.to;
   const includeVoided = sp.showVoided === '1';
 
   const query = { storeId, from, to, includeVoided };

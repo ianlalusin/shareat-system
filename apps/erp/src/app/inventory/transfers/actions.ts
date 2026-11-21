@@ -50,13 +50,18 @@ export async function createTransferAction(fd: FormData): Promise<void> {
     actor,
   };
 
-  const result = await withOrgPrincipal(actor.orgId, async (tx) => {
-    // T-440 S9 (iii): the field check runs only for a caller `transferNow`/`saveDraft`'s first authorize() would let in
-    // ('transfer_stock' at this store); anyone else is refused by that gate before any field sentence.
-    if (await can(tx, actor, 'transfer_stock', { storeId })) assertFieldRules(INVENTORY_TRANSFER_RULES, fd);
-    return mode === 'two_step' ? saveDraft(tx, input) : transferNow(tx, input);
-  });
-  if (!result.ok) throw new Error(result.reason);
+  try {
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check runs only for a caller `transferNow`/`saveDraft`'s first authorize() would let in
+      // ('transfer_stock' at this store); anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'transfer_stock', { storeId })) assertFieldRules(INVENTORY_TRANSFER_RULES, fd);
+      return mode === 'two_step' ? saveDraft(tx, input) : transferNow(tx, input);
+    });
+    if (!result.ok) throw new Error(result.reason);
+  } catch (err) {
+    // DEF-280: a thrown server-action error reaches a production page as a digest; the sentence has to travel as a flash.
+    return await redirectWithFlash('/inventory/transfers', {}, { error: errorMessage(err) });
+  }
 
   revalidatePath('/inventory/transfers');
 }
@@ -64,16 +69,24 @@ export async function createTransferAction(fd: FormData): Promise<void> {
 export async function dispatchTransferAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/transfers');
   const transferId = str(fd, 'transferId');
-  const result = await withOrgPrincipal(actor.orgId, (tx) => dispatch(tx, actor, transferId));
-  if (!result.ok) throw new Error(result.reason);
+  try {
+    const result = await withOrgPrincipal(actor.orgId, (tx) => dispatch(tx, actor, transferId));
+    if (!result.ok) throw new Error(result.reason);
+  } catch (err) {
+    return await redirectWithFlash('/inventory/transfers', {}, { error: errorMessage(err) });
+  }
   revalidatePath('/inventory/transfers');
 }
 
 export async function receiveTransferAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/transfers');
   const transferId = str(fd, 'transferId');
-  const result = await withOrgPrincipal(actor.orgId, (tx) => receiveTransfer(tx, actor, transferId));
-  if (!result.ok) throw new Error(result.reason);
+  try {
+    const result = await withOrgPrincipal(actor.orgId, (tx) => receiveTransfer(tx, actor, transferId));
+    if (!result.ok) throw new Error(result.reason);
+  } catch (err) {
+    return await redirectWithFlash('/inventory/transfers', {}, { error: errorMessage(err) });
+  }
   revalidatePath('/inventory/transfers');
 }
 

@@ -38,6 +38,7 @@ import { closeDb, transaction, type Tx } from '../packages/db/src/client';
 import { systemTransaction } from '@shareat/db';
 import * as schedulerRepo from '../packages/db/src/repo/scheduler';
 import * as fiscalPeriodsRepo from '../packages/db/src/repo/fiscal-periods';
+import { forEachOrg } from './lib/each-org';
 import { fiscalPeriodSeedWindow } from '../packages/domain/src/organizations';
 
 interface OrgReport {
@@ -111,13 +112,18 @@ async function main(): Promise<void> {
     return;
   }
 
-  for (const org of orgs) {
-    const report = confirm ? await transaction((tx) => seedOneOrg(tx, org)) : await previewOneOrg(org);
-    printReport(report);
-  }
+  // DEF-410: one org failing does not stop the rest, and the summary prints even then.
+  const { done, failed } = await forEachOrg(orgs, (org) =>
+    confirm ? transaction((tx) => seedOneOrg(tx, org)) : previewOneOrg(org),
+  );
+  for (const report of done) printReport(report);
 
   console.log('');
-  if (!confirm) {
+  for (const f of failed) console.log(`  FAILED  ${f.org.name.padEnd(28)} ${f.message}`);
+  if (failed.length > 0) {
+    console.log(`${failed.length} of ${orgs.length} organisations failed; the others ${confirm ? 'were committed' : 'previewed fine'}.`);
+    process.exitCode = 1;
+  } else if (!confirm) {
     console.log('DRY RUN — nothing was written. Re-run with --confirm to do it.');
   } else {
     console.log('DONE — committed, one org at a time.');

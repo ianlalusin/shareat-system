@@ -6,7 +6,7 @@
  * The FACT BUILDERS (`buildSupplierFacts`, `buildReceiptFacts`, ...) turn repo rows into the facts a check reads. The page
  * loader and the domain both call them, so both judge identical facts and neither derives a status or a VAT rule itself.
  */
-import { businessDayRange, formatBusinessDateTime, parseBusinessDate } from '@shareat/core/datetime';
+import { mediumBusinessDate, parseBusinessDate } from '@shareat/core/datetime';
 import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
 import { block, defineCheck, typed, warn } from './check';
 
@@ -328,7 +328,7 @@ function invoicePhrase(c: CapacityFacts): string {
   if (c.invoiceNo) return `invoice ${c.invoiceNo} from ${c.supplierName}`;
   try {
     const date = parseBusinessDate(c.invoiceDate);
-    return `the ${formatBusinessDateTime(businessDayRange(date).start, { dateStyle: 'medium' })} invoice from ${c.supplierName}`;
+    return `the ${mediumBusinessDate(date)} invoice from ${c.supplierName}`;
   } catch {
     return `the invoice from ${c.supplierName}`;
   }

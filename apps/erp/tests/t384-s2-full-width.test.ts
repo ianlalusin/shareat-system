@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { lowerCounts, lowerList } from '../../../tests/helpers/census-write';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = resolve(here, '..', 'src');
@@ -217,20 +218,23 @@ describe('T-384 S2a G3 - no fixed-width form control outside a <td> (per-file ra
   const exemptSnips = (file: string) => EXEMPT.filter((e) => e.file === file).map((e) => e.snippet);
 
   it('no file exceeds its baseline count, and a count that is now too low must be lowered', () => {
-    const base = loadBaseline<Record<string, number>>('form-width-baseline.json');
     const over: string[] = [];
     const lower: string[] = [];
     const counts = new Map<string, number>();
+    const found = new Map<string, string[]>();
     for (const f of allFiles()) {
       const rel = relSrc(f);
       const hits = fixedWidthControls(readFileSync(f, 'utf8')).filter(
         (h) => !exemptSnips(rel).some((s) => h.snippet.includes(s) || h.cls.includes(s)),
       );
       counts.set(rel, hits.length);
+      found.set(rel, hits.map((h) => h.cls.match(FIXED_WIDTH)?.[0] ?? ''));
+    }
+    lowerCounts(join(baselineDir, 'form-width-baseline.json'), Object.fromEntries(counts), 'files');
+    const base = loadBaseline<Record<string, number>>('form-width-baseline.json');
+    for (const [rel, n] of counts) {
       const allowed = base[rel] ?? 0;
-      if (hits.length > allowed) {
-        over.push(`${rel}: ${hits.length} > baseline ${allowed} (${hits.map((h) => h.cls.match(FIXED_WIDTH)?.[0]).join(', ')})`);
-      }
+      if (n > allowed) over.push(`${rel}: ${n} > baseline ${allowed} (${(found.get(rel) ?? []).join(', ')})`);
     }
     for (const [k, allowed] of Object.entries(base)) {
       const now = counts.get(k) ?? 0;
@@ -247,11 +251,12 @@ describe('T-384 S2a G3 - no fixed-width form control outside a <td> (per-file ra
 // ---------------------------------------------------------------- G4
 describe('T-384 S2a G4 - action forms with >=3 labelled controls use FormGrid (per-file ratchet)', () => {
   it('every such file imports FormGrid, is in the baseline, or is EXEMPT; a baseline entry that now passes must be removed', () => {
-    const base = new Set(loadBaseline<string[]>('form-grid-baseline.json'));
     const exemptFiles = new Set(EXEMPT.map((e) => e.file));
     const need = allFiles()
       .map(relSrc)
       .filter((rel) => needsFormGrid(readSrc(rel)!));
+    lowerList(join(baselineDir, 'form-grid-baseline.json'), 'files', need);
+    const base = new Set(loadBaseline<string[]>('form-grid-baseline.json'));
     const missing = need.filter((r) => !base.has(r) && !exemptFiles.has(r));
     const stale = [...base].filter((r) => !need.includes(r));
     expect(missing, 'new multi-field form without FormGrid: wrap its fields in FormGrid + Field').toEqual([]);

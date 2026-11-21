@@ -37,6 +37,7 @@ createFakeFirestore
 createFakeIdb
 createPaymentConversionServer
 currentBusinessDate
+customerCreditBalance
 customerReturnableQuantity
 datesInWeek
 dayIdOf
@@ -186,6 +187,7 @@ stalePackageIds
 storedAnywhere
 sumTender
 summarizeConversions
+supplierCreditBalance
 tablesWithScope
 tilesTheMonth
 totalOf

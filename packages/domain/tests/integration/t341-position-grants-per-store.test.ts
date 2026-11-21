@@ -585,3 +585,17 @@ describe('T-343 S2b — I6b (⛔): positionGrantsElsewhere itself, on a BYPASSRL
     expect(rows).toEqual([]);
   });
 });
+
+describe('T-598 S7 / DEF-425 - a deactivated position justifies no grant', () => {
+  it('re-enabling a default while its position is deactivated grants nothing - Mutant: drop the is_active filter -> the grant comes back, red', async () => {
+    const f = await fixture('def425');
+    await setDefault(f.orgId, f.admin, f.cashierId, f.storeBId, 'record_sale', true);
+    const { personId } = await hireStaff(f, { storeId: f.storeBId, positionIds: [f.cashierId] });
+    expect((await activeGrants(personId)).map((g) => g.grant_name)).toContain('record_sale');
+
+    await sql`update positions set is_active = false where id = ${f.cashierId}`;
+    await setDefault(f.orgId, f.admin, f.cashierId, f.storeBId, 'record_sale', false);
+    await setDefault(f.orgId, f.admin, f.cashierId, f.storeBId, 'record_sale', true);
+    expect((await activeGrants(personId)).map((g) => g.grant_name)).not.toContain('record_sale');
+  });
+});

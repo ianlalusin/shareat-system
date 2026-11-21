@@ -67,10 +67,10 @@ export default async function ExpenseDetailPage({
   // T-577 (DEF-834): an expense outside the viewer's stores is the same not-found as a forged id. The page's own actions are edit (own draft), approve and void.
   if (!expense || !(await withOrgPrincipal(orgId, (tx) => canReadAtStore(tx, actor, expense.storeId, ['create_expense', 'edit_own_expense', 'approve_expense'])))) notFound();
 
-  const [payments, stores, persons, categories] = await Promise.all([
-    withOrgPrincipal(orgId, (tx) => expensesRepo.getPaymentsForExpense(tx, expense.id)),
+  const payments = await withOrgPrincipal(orgId, (tx) => expensesRepo.getPaymentsForExpense(tx, expense.id));
+  const [stores, persons, categories] = await Promise.all([
     listStores(orgId),
-    listActingPersons(orgId),
+    listActingPersons(orgId, expense.storeId, [expense.createdBy, expense.approvedBy, expense.voidedBy, ...payments.map((p) => p.staffId)]),
     listCategoriesGrouped(orgId),
   ]);
 

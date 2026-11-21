@@ -11,7 +11,7 @@
  * named error; the trigger is the backstop that holds regardless of code path.
  */
 import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
-import { businessDayRange, formatBusinessDateTime, parseBusinessDate } from '@shareat/core/datetime';
+import { mediumBusinessDate, parseBusinessDate } from '@shareat/core/datetime';
 import { compare, money, type Decimal, type Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import { refuse } from '../refusal';
@@ -105,12 +105,19 @@ export async function insertSupplier(
   return row!;
 }
 
-export async function getSupplierById(tx: Tx, orgId: string, id: string): Promise<SupplierRow | undefined> {
-  const [row] = await tx
+/** `forUpdate` (DEF-532): lock the row, so a read-then-edit sees the other editor's committed values, not a stale copy. */
+export async function getSupplierById(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  opts: { forUpdate?: boolean } = {},
+): Promise<SupplierRow | undefined> {
+  const q = tx
     .select()
     .from(suppliers)
     .where(and(eq(suppliers.id, id), eq(suppliers.orgId, orgId)))
     .limit(1);
+  const [row] = await (opts.forUpdate ? q.for('update') : q);
   return row as SupplierRow | undefined;
 }
 
@@ -476,9 +483,9 @@ export async function owedByInvoice(tx: Tx, orgId: string): Promise<Map<string, 
 }
 
 /** R4.6 — `${inv}`/`${Inv}`: the invoice named by number when one exists, else the no-number
- *  fallback, both from `rule 2`. `formatBusinessDateTime`/`businessDayRange` are the exact pair
- *  `@shareat/domain`'s `humanDate` calls (no second date formatter) — inlined here, not imported,
- *  because `packages/db` cannot depend on `@shareat/domain` (the dependency runs the other way).
+ *  fallback, both from `rule 2`. `mediumBusinessDate` (core) is the one formatter
+ *  `@shareat/domain`'s `humanDate` also calls (no second date formatter); `packages/db` cannot depend on
+ *  `@shareat/domain` (the dependency runs the other way).
  *  `invoiceDate` is parsed here, lazily, only for the no-number branch that actually needs it
  *  (S5.2 follow-up #4) — a malformed value falls back to the number-less, date-less phrase rather
  *  than failing the whole refusal it is meant to help explain. */
@@ -486,7 +493,7 @@ function invoicePhrase(capacity: InvoiceCapacity): string {
   if (capacity.invoiceNo) return `invoice ${capacity.invoiceNo} from ${capacity.supplierName}`;
   try {
     const date = parseBusinessDate(capacity.invoiceDate);
-    return `the ${formatBusinessDateTime(businessDayRange(date).start, { dateStyle: 'medium' })} invoice from ${capacity.supplierName}`;
+    return `the ${mediumBusinessDate(date)} invoice from ${capacity.supplierName}`;
   } catch {
     return `the invoice from ${capacity.supplierName}`;
   }
@@ -674,6 +681,9 @@ export interface OpenItem {
   creditAmount: string;
   allocatedAmount: string;
   outstanding: string;
+  /** DEF-404: the bill's number and due date, so "oldest first" can be checked by eye. */
+  invoiceNo?: string | null;
+  dueDate?: string | null;
 }
 
 /**
@@ -699,7 +709,11 @@ export async function openItems(
   storeId: string,
 ): Promise<OpenItem[]> {
   const rows = (await tx.execute(
-    openItemsQuery(orgId, sql`and e.supplier_id = ${supplierId} and e.store_id = ${storeId}`, sql``),
+    openItemsQuery(
+      orgId,
+      sql`and e.supplier_id = ${supplierId} and e.store_id = ${storeId}`,
+      sql`, si.invoice_no as invoice_no, si.due_date::text as due_date`,
+    ),
   )) as unknown as Record<string, string>[];
   return rows.map((r) => ({
     expenseId: String(r.expense_id ?? r.expenseId),
@@ -711,6 +725,8 @@ export async function openItems(
     creditAmount: Number(r.credit_amount ?? r.creditAmount).toFixed(2),
     allocatedAmount: Number(r.allocated_amount ?? r.allocatedAmount).toFixed(2),
     outstanding: Number(r.outstanding).toFixed(2),
+    invoiceNo: r.invoice_no ?? null,
+    dueDate: r.due_date ?? null,
   }));
 }
 

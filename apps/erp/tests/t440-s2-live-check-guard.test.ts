@@ -37,6 +37,7 @@ import { join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import { buildIndex, callees, lineOf, noSpace, parse, reachable, read, toSources, walk, wordRe, type FnDef, type Index, type Sources } from './helpers/ts-index';
 import { describe, expect, it } from 'vitest';
+import { lowerCounts } from '../../../tests/helpers/census-write';
 
 const ERP_SRC = resolve(__dirname, '..', 'src');
 const APP_ROOT = join(ERP_SRC, 'app');
@@ -504,6 +505,7 @@ describe('T-440 S2 census + ratchet over the real tree', () => {
   it('G1: unconverted ruled controls per file never exceed the baseline, and the baseline is never stale', () => {
     const { counts, stale } = exemptApplied(realScan().g1);
     expect(stale).toEqual([]);
+    lowerCounts(BASELINE_FILE, counts, 'unconverted');
     expect(ratchet(counts, loadBaseline().unconverted)).toEqual([]);
   });
 
@@ -547,7 +549,8 @@ describe('T-440 S2 census + ratchet over the real tree', () => {
     const sets = ruleSets(toSources(ruleFiles, key));
     const r = serverOnly(parseCensus(read(CENSUS_DOC)), new Set(tsxFiles.map(key)), formsByFile, sets);
     expect(r.stale).toEqual([]);
-    expect(ratchet(r.counts, base)).toEqual([]);
+    lowerCounts(BASELINE_FILE, r.counts, 'serverOnly');
+    expect(ratchet(r.counts, loadBaseline().serverOnly)).toEqual([]);
   });
 
   it('prints the census (informational)', () => {

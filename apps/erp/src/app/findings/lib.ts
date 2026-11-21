@@ -13,7 +13,7 @@ import {
   readinessOf,
 } from '@shareat/domain';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
-import { storesRepo } from '@shareat/db';
+import { fiscalPeriodsRepo, storesRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -80,7 +80,7 @@ export async function findingsFor(orgId: string, period: string, storeIds?: read
         readiness: null,
       };
     }
-    return { feed, readiness: readinessOf(feed) };
+    return { feed, readiness: readinessOf(feed, await fiscalPeriodsRepo.hasOpenPeriodInMonth(tx, orgId, period)) };
   });
 }
 

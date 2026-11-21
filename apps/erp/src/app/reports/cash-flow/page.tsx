@@ -1,5 +1,7 @@
 import { getCashFlow } from '@shareat/domain';
 import { reportScope, runReport } from '../lib';
+import { isRealDate } from '../expense-items/range';
+import { Banner } from '@/components/ui';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { ReportBasis } from '@/components/reports/ReportBasis';
@@ -46,6 +48,16 @@ export default async function CashFlowPage({
   // Defaults to EXCLUDING the year-close entry — same reasoning as the income statement
   // (packages/domain/src/reports/cash-flow.ts's own top comment).
   const includeYearClose = sp.yearClose === 'include' ? true : sp.yearClose === 'exclude' ? false : false;
+
+  // DEF-566: a typed date the calendar does not have (2026-02-30) is refused in a sentence here, not left to throw into the error page.
+  if ([sp.from, sp.to].some((d) => d !== undefined && !isRealDate(d))) {
+    return (
+      <Page density="wide">
+        <h1 className="text-2xl font-semibold">Cash Flow</h1>
+        <Banner tone="error">Those dates are not both real calendar dates. Write each as year-month-day, for example 2026-02-28.</Banner>
+      </Page>
+    );
+  }
 
   const result = await runReport(orgId, (tx) =>
     getCashFlow(tx, { orgId, storeId, fromDate, toDate, includeYearClose }),

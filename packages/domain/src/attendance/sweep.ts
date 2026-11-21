@@ -17,6 +17,7 @@
  * settled by the sweep must not be distinguishable-by-accident depending on which rule caught it.
  */
 import { attendanceDaysRepo, type Tx } from '@shareat/db';
+import { refuse } from '../shared/refusal';
 import { sql } from 'drizzle-orm';
 
 /**
@@ -116,7 +117,11 @@ export async function sweepStore(
     from store_attendance_config
     where store_id = ${input.storeId} and superseded_at is null`);
   const policy = (config as unknown as SweepPolicy[])[0];
-  if (!policy) return { swept: [], leftOpen: 0 };
+  // DEF-252: "could not check" is not "none left open" -- refuse, so the scheduler names the store.
+  if (!policy) {
+    const why = 'No attendance policy is set for this store, so its open days cannot be settled.';
+    throw refuse(why, why);
+  }
 
   const rows = (await tx.execute(sql`
     select d.id::text as "id", d.shift_day::text as "shiftDay", d.anchor_minute as "anchorMinute",

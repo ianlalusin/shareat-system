@@ -214,6 +214,11 @@ export function lastCompletedPeriod(today = new Date()): string {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
+/** DEF-856: a real calendar month, YYYY-MM -- `2026-13` and `2026-00` are not periods. */
+export function isValidPeriod(period: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
+}
+
 /**
  * The scheduler's one way to enumerate organisations to run a job for. Centralised so
  * `systemTransaction` has exactly one call site to reach through here, not seven independently
@@ -366,9 +371,11 @@ async function runSweepForOrg(
     // failure below can name the store, never its id.
     const stores = await asSystem(org.id, (tx) =>
       tx.execute(
+        // DEF-251: a LEFT join, so an active store with no live config is in the population and
+        // fails by name below, instead of vanishing and leaving a clean run over nothing.
         sql`select s.id::text as "id", s.name as "name", s.code as "code" from stores s
-             join store_attendance_config c on c.store_id = s.id and c.superseded_at is null
-            where s.org_id = ${org.id}`,
+             left join store_attendance_config c on c.store_id = s.id and c.superseded_at is null
+            where s.org_id = ${org.id} and (c.store_id is not null or s.is_active)`,
       ),
     );
 

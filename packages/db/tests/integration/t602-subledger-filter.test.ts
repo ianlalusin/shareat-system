@@ -332,11 +332,12 @@ describe('T-602 S5 - the narrowed CTEs return what the old SQL returned', () => 
       let compared = 0;
 
       for (const [sup, store] of [[a.supS1, a.storeA], [a.supS1, a.storeB], [a.supS2, a.storeA], [a.supS2, a.storeB]] as const) {
-        const old = await rowsOf(tx, oldOpenItemsQuery(a.orgId, dsql`and e.supplier_id = ${sup} and e.store_id = ${store}`, dsql``));
+        const old = await rowsOf(tx, oldOpenItemsQuery(a.orgId, dsql`and e.supplier_id = ${sup} and e.store_id = ${store}`, dsql`, si.invoice_no as invoice_no, si.due_date::text as due_date`));
         const now = await apRepo.openItems(tx, a.orgId, sup, store);
         expect(now).toEqual(old.map((r) => ({
           expenseId: String(r.expense_id), supplierId: String(r.supplier_id), supplierInvoiceId: String(r.supplier_invoice_id), storeId: String(r.store_id),
           businessDate: String(r.business_date), particulars: String(r.particulars), creditAmount: f2(r.credit_amount), allocatedAmount: f2(r.allocated_amount), outstanding: f2(r.outstanding),
+          invoiceNo: r.invoice_no ?? null, dueDate: r.due_date ?? null,
         })));
         compared += old.length;
       }

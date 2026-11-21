@@ -18,14 +18,17 @@ const feedOf = (findings: Finding[]): FindingsFeed => ({
 
 describe('readinessOf', () => {
   it('an acknowledged hard finding still blocks', () => {
-    const r = readinessOf(feedOf([finding('hard', 'acknowledged', 'a')]));
+    const r = readinessOf(feedOf([finding('hard', 'acknowledged', 'a')]), true);
     expect(r.ready).toBe(false);
     expect(r.blocking.map((f) => f.key)).toEqual(['a']);
   });
   it('a soft finding never blocks, open or acknowledged', () => {
-    expect(readinessOf(feedOf([finding('soft', 'open', 'a'), finding('soft', 'acknowledged', 'b')]))).toEqual({ ready: true, blocking: [] });
+    expect(readinessOf(feedOf([finding('soft', 'open', 'a'), finding('soft', 'acknowledged', 'b')]), true)).toEqual({ ready: true, blocking: [], noOpenPeriod: false });
   });
   it('an empty feed is ready', () => {
-    expect(readinessOf(feedOf([]))).toEqual({ ready: true, blocking: [] });
+    expect(readinessOf(feedOf([]), true)).toEqual({ ready: true, blocking: [], noOpenPeriod: false });
+  });
+  it('DEF-439: a clean feed with no open period is not ready', () => {
+    expect(readinessOf(feedOf([]), false)).toEqual({ ready: false, blocking: [], noOpenPeriod: true });
   });
 });

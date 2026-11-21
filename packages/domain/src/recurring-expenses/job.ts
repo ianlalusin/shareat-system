@@ -66,7 +66,7 @@ import type { ExpensePaymentMethod } from '../expenses/routing';
 export const CATCH_UP_CAP = 12;
 
 /** Manila, the same +8 shift every other job in this codebase uses. */
-function manilaToday(nowMs: number): string {
+function manilaTodayFromClock(nowMs: number): string {
   return new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 10);
 }
 
@@ -99,7 +99,7 @@ export async function runRecurringExpenses(
 ): Promise<RecurringExpenseRunResult> {
   const trigger = options.trigger ?? 'cron';
   const nowMs = options.nowMs ?? Date.now();
-  const today = manilaToday(nowMs);
+  const today = manilaTodayFromClock(nowMs);
   // ⚠️ `scheduler_runs.period` is shaped `YYYY-MM` by a CHECK, and a daily job has no month of its
   // own, so it records the Manila month it RAN in — the same choice every daily job here makes.
   const period = today.slice(0, 7);
