@@ -143,6 +143,13 @@ async function validateWiring(
         'so a sales day posting this channel to it would be refused. Use a receivable control account such as 1220.',
     );
   }
+  // T-618 DEF-927: a cash, payable or equity account is not somewhere a channel's sales can be owed (the picker lists receivables only; this is the server's own check).
+  if (!salesDaysRepo.isReceivableAccount(account)) {
+    throw refuse(
+      `Account ${account.code} is a ${account.type} account, not a receivable.`,
+      `Account ${account.code} ${account.name} is not a receivable account, so a channel's sales cannot be owed on it. Pick a receivable such as 1210 or 1220.`,
+    );
+  }
   // T-606: last, so the refusals above keep their messages.
   if (onPlatform && account.code !== PLATFORM_RECEIVABLE_CODE) {
     throw refuse(
@@ -152,6 +159,11 @@ async function validateWiring(
     );
   }
   return account.code;
+}
+
+/** What a channel holds, in words. Never a negative amount on screen: a credit balance is "in its favour". */
+function heldSentence(total: ReturnType<typeof add>, where: string): string {
+  return compare(total, ZERO) < 0 ? `has ${formatMoney(negate(total))} in its favour on ${where}` : `still has ${formatMoney(total)} owed on ${where}`;
 }
 
 function cleanName(raw: string): string {
@@ -234,9 +246,12 @@ async function refuseIfLinkedToPos(tx: Tx, orgId: string, channelId: string): Pr
  * one form that does both retires a channel as a side effect of fixing a typo.
  */
 export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSalesChannelInput): Promise<void> {
-  const channel = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
-  if (!channel) throw new Error('updateSalesChannel: that sales channel does not exist in this organisation.');
-  await authorize(tx, actor, CAPABILITY, { storeId: channel.storeId });
+  const seen = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
+  if (!seen) throw new Error('updateSalesChannel: that sales channel does not exist in this organisation.');
+  await authorize(tx, actor, CAPABILITY, { storeId: seen.storeId });
+  // DEF-926: the row lock comes before the balance guard below, so a sales day verified at the same moment waits and posts on the account this edit leaves.
+  const channel = await salesDaysRepo.lockChannel(tx, actor.orgId, seen.id);
+  if (!channel) throw refuse(`updateSalesChannel: channel ${seen.id} vanished under the lock.`, 'That channel no longer exists.');
   // T-592 R1: a store code belongs only on a settle-later channel. The CHECK `sales_channels_platform_only_settle_later_check` is the authority.
   if (input.isRemittedDaily && channel.platform) {
     throw refuse(
@@ -264,9 +279,7 @@ export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSale
     if (balances.length > 0) {
       const total = add(...balances.map((b) => b.balance));
       const oldAccount = await salesDaysRepo.receivableAccountFor(tx, actor.orgId, old);
-      // Never a negative amount on screen: a credit balance is "in its favour".
-      const where = `${old}${oldAccount ? ` ${oldAccount.name}` : ''}`;
-      const held = compare(total, ZERO) < 0 ? `has ${formatMoney(negate(total))} in its favour on ${where}` : `still has ${formatMoney(total)} owed on ${where}`;
+      const held = heldSentence(total, `${old}${oldAccount ? ` ${oldAccount.name}` : ''}`);
       throw refuse(
         `updateSalesChannel: channel ${channel.id} still has ${total} on ${old}; its receivable account cannot change.`,
         channel.platform
@@ -303,7 +316,7 @@ export async function moveChannelToChannelReceivable(
   input: { channelId: string; requestId: string },
   /** Tests only: the Manila business date to date the entry by (the screen never passes one). */
   today?: string,
-): Promise<{ moved: boolean; entryId: string | null; total: string }> {
+): Promise<{ moved: boolean; entryId: string | null; total: string; replayed?: true }> {
   await authorize(tx, actor, 'manage_chart_of_accounts', {});
   const seen = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
   if (!seen) throw refuse(`moveChannelToChannelReceivable: channel ${input.channelId} does not exist in this organisation.`, 'That channel no longer exists.');
@@ -360,8 +373,9 @@ export async function moveChannelToChannelReceivable(
       postedBy: actor.personId,
       lines,
     });
-    // A replay of a press whose entry was written (and later reversed): nothing new was posted, so nothing else happens either.
-    if (!posted.created) return { moved: false, entryId: posted.entryId, total: '0.00' };
+    // A replay of a press whose entry was written (and later reversed): nothing new was posted, so nothing else happens either. DEF-929: `total` is what sits on another account NOW
+    // (the reversal put it back), so the screen can say so instead of "nothing to do".
+    if (!posted.created) return { moved: false, entryId: posted.entryId, total: String(total), replayed: true };
     entryId = posted.entryId;
   }
   if (old !== PLATFORM_RECEIVABLE_CODE) {
@@ -557,7 +571,21 @@ export async function setSalesChannelActive(
   const channel = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
   if (!channel) throw new Error('setSalesChannelActive: that sales channel does not exist in this organisation.');
   await authorize(tx, actor, CAPABILITY, { storeId: channel.storeId });
-  if (!input.isActive) await refuseIfLinkedToPos(tx, actor.orgId, input.channelId);
+  if (!input.isActive) {
+    await refuseIfLinkedToPos(tx, actor.orgId, input.channelId);
+    // T-618 DEF-926: retiring a channel that still holds a balance strands it: a new channel starts at zero and the old one's receivable is never collected. Lock the row first
+    // (a sales day verifying now waits), then read what is held on any account.
+    await salesDaysRepo.lockChannel(tx, actor.orgId, channel.id);
+    const held = await channelSettlementsRepo.partyBalancesOffAccount(tx, actor.orgId, channel.id, null);
+    if (held.length > 0) {
+      const total = add(...held.map((b) => b.balance));
+      const where = [...new Set(held.map((b) => b.accountCode))].join(', ');
+      throw refuse(
+        `setSalesChannelActive: channel ${channel.id} still holds ${total} on ${where}; it cannot be retired.`,
+        `${channel.name} ${heldSentence(total, where)}. Collect or settle that first, then retire the channel.`,
+      );
+    }
+  }
   // T-592 R2: reactivating must not make a second active channel on one platform at the store. The unique index is the authority.
   // T-606 audit: and a platform channel may not come back on a receivable the platform paths do not read (the same rule the sales-day verify applies).
   if (input.isActive && channel.platform && channel.receivableAccountCode !== PLATFORM_RECEIVABLE_CODE) {

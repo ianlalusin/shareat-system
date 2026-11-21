@@ -8,7 +8,7 @@ Order and channel wastage (T-178): a refunded or remade channel ORDER (for examp
 
 ## Invariants
 - Never touch `stock_layers` or `stock_movements` here; doing so conflates two unrelated "wastage" systems.
-- Account `1220` (channel receivable) is the credit in every disposition that posts. `platform_paid` posts nothing, because the channel settlement already clears `1220`.
+- The credit goes to the channel's own receivable account (1220 for a platform channel) in every disposition that posts. A channel with no receivable (paid daily) is refused for record and resolve: "nothing owed to adjust, record the loss as an expense" (DEF-925). `platform_paid` posts nothing, because the channel settlement already clears `1220`.
 - `charged` (including a multi-person split) is refused while `isPhase5StaffAdvancesAvailable()` is false; the backstop then degrades a charge to store-absorbed and records that on the entry memo. It is a policy gate, not a missing capability.
 - The backstop acts after `BACKSTOP_DAYS`; an auto-charge can be reversed only within `AUTO_CHARGE_REVERSAL_DAYS`.
 - `matchWastagesToSettlement` is pure (no `Tx`), matches at channel-day granularity on `channelId` and business date (not by name), and only PROPOSES; a manager disposes via `resolveOrderWastage`.

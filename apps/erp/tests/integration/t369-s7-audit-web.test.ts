@@ -98,7 +98,8 @@ async function fixture(hint: string) {
   };
   const staffId = await mk('Staff', 'staff');
   const managerId = await mk('Manager', 'manager');
-  const [channel] = await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${storeId}, 'Walk-in', true) returning id`;
+  // T-618 DEF-925: order wastage needs a channel with a receivable (a real platform channel has one), so the fixture settles later on 1220.
+  const [channel] = await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code) values (${orgId}, ${storeId}, 'Walk-in', false, '1220') returning id`;
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
     values (${orgId}, ${storeId}, ${staffId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
