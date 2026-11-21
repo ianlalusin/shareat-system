@@ -3,9 +3,9 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { staffStoresFor } from '../../staff/lib';
 import { clearLockAction, registerTabletAction, revokeTabletAction } from './actions';
-import { deviceTail, loadCopyStores, loadPosTablets, loadTills, revokeConfirmName, type PosTabletLinkView, type TerminalLockView } from './lib';
+import { deviceTail, loadCopyStores, loadDiscounts, loadPosTablets, loadTills, revokeConfirmName, type PosTabletLinkView, type TerminalLockView } from './lib';
 import { TillsSection } from './TillsSection';
-import { CopyFromStoreDialog } from '../../copy-from-store/CopyFromStoreDialog';
+import { DiscountsSection } from './DiscountsSection';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
@@ -95,8 +95,9 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
 
   const { active, revoked, terminals } = await loadPosTablets(actor, store.id);
   const tills = await loadTills(actor, store.id);
-  // T-611 S3: there is no discounts screen yet (T-535), so the copy button sits here, for an administrator only (presentation; the domain and a PIN gate the write).
-  const copyStores = await loadCopyStores(actor, store.id);
+  // T-622: the store's named discounts. T-611 S3: the Copy button sits in that section, for an administrator only (presentation; the domain and a PIN gate the write).
+  const discounts = await loadDiscounts(actor, store.id);
+  const copyStores = discounts.canManage ? await loadCopyStores(actor, store.id) : null;
   const activeLock = active ? terminals.find((t) => t.personId === active.terminalPersonId) : undefined;
   const otherLogins = terminals.filter((t) => t.personId !== active?.terminalPersonId);
 
@@ -240,15 +241,7 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
         )}
       </section>
 
-      {copyStores && (
-        <section className="space-y-3 rounded-lg border border-surface-border p-4">
-          <h2 className="font-medium">Discounts</h2>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Copy the named discounts the cashier can pick (for example Staff meal 20%) from one store to others. Senior and PWD discounts are the same everywhere and are not copied.
-          </p>
-          <CopyFromStoreDialog kind="presets" currentStoreId={store.id} stores={copyStores} />
-        </section>
-      )}
+      <DiscountsSection store={store} presets={discounts.presets} canManage={discounts.canManage} copyStores={copyStores} />
 
       <TillsSection store={store} tills={tills} returnTo={RETURN_TO} />
     </Page>

@@ -6,8 +6,8 @@
  * (`provisionPosTerminalLink`, `revokePosTerminalLink`, `resetApprovalPinCap`). The read gate here is the same capability the writes
  * check, at the store: `provision_clock_terminal` (admin, super admin).
  */
-import { accessRepo, pinAttemptsRepo, posTerminalLinksRepo } from '@shareat/db';
-import { authorize, type Actor } from '@shareat/auth';
+import { accessRepo, pinAttemptsRepo, posTerminalLinksRepo, posV2Repo } from '@shareat/db';
+import { authorize, can, type Actor } from '@shareat/auth';
 import { listPosTerminals } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { copyChoicesFor } from '../../copy-from-store/lib';
@@ -52,6 +52,33 @@ export async function loadTills(actor: Actor, storeId: string) {
 /** T-611 S3: the stores the discounts Copy window offers, or null when the button is not drawn (not an administrator, or no other active store). */
 export async function loadCopyStores(actor: Actor, storeId: string) {
   return withOrgPrincipal(actor.orgId, (tx) => copyChoicesFor(tx, actor, storeId));
+}
+
+export interface DiscountPresetView {
+  readonly id: string;
+  readonly name: string;
+  readonly valueType: 'percent' | 'fixed';
+  /** Two decimals, as stored. */
+  readonly value: string;
+}
+
+/**
+ * T-622: the store's active named discounts for the Discounts section. `canManage` (`manage_store_settings` at the store, asked with the
+ * non-logging `can`) only decides whether Add, Change and Retire are drawn; every write is gated again in the domain.
+ */
+export async function loadDiscounts(actor: Actor, storeId: string): Promise<{ presets: DiscountPresetView[]; canManage: boolean }> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const rows = await posV2Repo.listActivePresets(tx, actor.orgId, storeId);
+    return {
+      canManage: await can(tx, actor, 'manage_store_settings', { storeId }),
+      presets: rows.map((p) => ({ id: p.id, name: p.name, valueType: p.valueType, value: p.value })),
+    };
+  });
+}
+
+/** "20%" or "50.00 off each" (display only; `peso` is the caller's money formatter). A percent drops trailing zeros: 12.50 reads "12.5%". */
+export function presetText(p: Pick<DiscountPresetView, 'valueType' | 'value'>, peso: (v: string) => string): string {
+  return p.valueType === 'fixed' ? `${peso(p.value)} off each` : `${Number(p.value)}%`;
 }
 
 /** The number the Add till box starts at: the first number from 1 that no till of the store uses (1 to 99; 1 when the store is full, the domain then refuses). */
