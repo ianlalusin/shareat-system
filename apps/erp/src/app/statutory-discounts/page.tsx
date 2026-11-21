@@ -5,7 +5,7 @@ import { listStatutoryDiscounts, summariseStatutoryDiscounts } from '@shareat/do
 // five screens each grew their own broken copy, which is why there is one helper.
 import { peso } from '../../lib/format';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import { recordStatutoryDiscountAction, voidStatutoryDiscountAction } from './actions';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { STATUTORY_DISCOUNT_RECORD_RULES, STATUTORY_DISCOUNT_VOID_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
@@ -52,7 +52,8 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
   // ⭐ The org comes from the SESSION, not the URL — and RLS refuses cross-org reads underneath
   // even if someone edits the query string. That matters more here than on most screens: this
   // table holds customers' names and government ID numbers.
-  const { actor } = await requireSession('/statutory-discounts');
+  const { actor, refusal } = await requirePageAccess('/statutory-discounts');
+  if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
 
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : undefined;

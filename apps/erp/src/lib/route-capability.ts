@@ -130,9 +130,9 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // /budgets only sets and removes caps (`manage_expense_budgets`). A spender still sees what is left on /expenses/new, which stays open.
   '/budgets': 'manage_expense_budgets',
   '/cash-requests': ['create_expense', 'approve_expense'],
-  // T-511 S4: uploading a Grab / Foodpanda statement. `ingestSettlementFile` checks the same word at the store the file belongs to. The longer prefix wins over the open /channel-settlements.
+  // T-511 S4: uploading a Grab / Foodpanda statement. `ingestSettlementFile` checks the same word at the store the file belongs to. The longer prefix wins over /channel-settlements (record_ar_collection, T-617).
   '/channel-settlements/upload': 'upload_settlement_files',
-  // T-511 S5b: reading, rejecting and reopening the staged days. The list and detail are scoped per store inside the domain by the same word `rejectDay` checks (recording a channel settlement); the longer prefix wins over the open /channel-settlements.
+  // T-511 S5b: reading, rejecting and reopening the staged days. The list and detail are scoped per store inside the domain by the same word `rejectDay` checks (recording a channel settlement); the longer prefix wins over /channel-settlements (T-617).
   '/channel-settlements/review': 'record_ar_collection',
   // T-390 S5: the opening count (costs), the opening figures (party names, balances) and the count sheet. The domain's writes check
   // the same word; this is the read layer. The prefix covers /opening-balances/stock-count/sheet.
@@ -181,6 +181,31 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/franchise/sales': 'view_franchise_sales',
   '/franchise/stock': 'view_franchise_sales',
   '/franchise/access-log': 'view_franchise_access_log',
+
+  // --- T-617 (Ian, 22 Nov 2026, "approve the defaults"): the 13 routes that awaited a decision. Existing words only; each is the screen's own acts, any ONE opens it.
+  // Longer keys elsewhere in this map still win (/attendance/terminals, /channel-settlements/upload, /opening-balances/stock-count ...).
+  '/attendance': 'manage_attendance',
+  // A signed-in person's OWN leave (balance, request, their requests) stays open to everyone; the store-wide half is drawn only for `manage_attendance` and every read is store-checked in the domain.
+  '/attendance/leave': null,
+  // Recording, voiding and reviewing a settlement all need record_ar_collection at the store (domain). Admin-only payout account (set_channel_payout) sits on top inside the page.
+  '/channel-settlements': 'record_ar_collection',
+  // Commissary floor staff hold fulfil_branch_order at the commissary (a read of what is offered and what is short); the writes keep their own manage/resolve words in the domain.
+  '/commissary/catalogue': ['manage_commissary_offerings', 'manage_commissary_map', 'fulfil_branch_order'],
+  '/commissary/discrepancies': ['resolve_trade_discrepancy', 'fulfil_branch_order'],
+  // Both sides of an internal order: the branch (place), the commissary (fulfil, dispatch), signing for goods (confirm_receipt) and the thread (post_order_message).
+  '/commissary/orders': ['place_branch_order', 'fulfil_branch_order', 'dispatch_branch_order', 'confirm_receipt', 'post_order_message'],
+  // The item master: manage (manager+), approve (super admin) or decide a request (admin).
+  '/items': ['manage_items', 'approve_item', 'approve_item_request'],
+  // The CSV import is the admin's; `importItems` checks approve_item_request.
+  '/items/import': 'approve_item_request',
+  // Attesting a store's opening step is a manager's (run_cutover, store-checked); posting the opening entry stays admin-only in the domain behind an administrator PIN.
+  '/opening-balances': 'run_cutover',
+  // The SC/PWD register: `listStatutoryDiscounts` reads by record_statutory_discount at the store, so a cashier (who transcribes the paper logbook) keeps the screen; managers and admins hold it by role.
+  '/statutory-discounts': 'record_statutory_discount',
+  // The same three words `orderDetail` already opens an order by.
+  '/trade/orders': ['create_wholesale_order', 'approve_buyer', 'record_ar_collection'],
+  // The franchisor's actions; the domain asks view_franchise_sales on every press. /franchise/access-log keeps its own longer key.
+  '/franchise': 'view_franchise_sales',
 };
 
 /**

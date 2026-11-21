@@ -1,11 +1,10 @@
 import Link from 'next/link';
 import { lowStockRepo } from '@shareat/db';
-import { requireSession } from '../../../lib/session';
+import { storePageScope } from '../../../lib/store-scope';
 import { createOrderAction } from './actions';
 import {
   BRANCH_ORDER_STAGE_LABEL,
   branchOrderStage,
-  listStores,
   newOrderPanelData,
   peso,
   today,
@@ -37,9 +36,10 @@ const NEW_ORDER_ROWS = [1, 2, 3];
 
 export default async function BranchOrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/commissary/orders');
-  const stores = await listStores(actor.orgId);
-  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+  // T-617: the route gate, then only the stores where one of its words is held (a branch manager sees their own store's orders).
+  const scope = await storePageScope('/commissary/orders', sp.store);
+  if ('refusal' in scope) return scope.refusal;
+  const { actor, stores, storeId } = scope;
 
   if (!storeId) {
     return (

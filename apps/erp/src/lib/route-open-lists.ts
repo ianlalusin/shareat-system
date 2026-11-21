@@ -18,26 +18,10 @@ export const APPROVED_OPEN_ROUTES: Readonly<Record<string, string>> = {
 };
 
 /**
- * ⚠️ TEMPORARY - KNOWN GAP, reported not hidden: routes that are unmapped and have no decision that they are open. They keep the old
- * behaviour (readable by any signed-in person) at runtime until Ian rules on each: map it to a capability and gate the page, or record a
- * decision that it is open. Ian's decision is pending (T-603 S5, T-616). The coverage test fails when an entry here is mapped or gone, so
- * this list can only shrink.
+ * T-617: EMPTY, on purpose. The 13 routes that awaited Ian's decision were mapped on 22 Nov 2026 ("approve the defaults"). The export stays so the
+ * coverage test and `routeHasNoRule` keep one place to look; ⛔ do not add to it - an unmapped page with no decision is refused and is a defect to report.
  */
-export const ROUTES_AWAITING_A_DECISION: readonly string[] = [
-  '/attendance',
-  '/attendance/leave',
-  '/channel-settlements',
-  '/channel-settlements/record',
-  '/commissary/catalogue',
-  '/commissary/discrepancies',
-  '/commissary/orders',
-  '/franchise',
-  '/items',
-  '/items/import',
-  '/opening-balances',
-  '/statutory-discounts',
-  '/trade/orders',
-];
+export const ROUTES_AWAITING_A_DECISION: readonly string[] = [];
 
 /** `route` is `key` or sits under it (a `/` boundary, never a bare prefix; `/` itself matches only `/`). */
 const under = (route: string, key: string): boolean => route === key || (key !== '/' && route.startsWith(`${key}/`));
