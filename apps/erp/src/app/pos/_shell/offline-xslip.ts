@@ -40,8 +40,10 @@ export function offlineXSlipFigures(events: readonly PosEvent[], tenders: readon
   let shortPaidCentavos = 0n;
   for (const e of events) {
     if (e.kind !== 'sale.completed') continue;
-    const total = cents((e.payload.device as { total?: unknown } | undefined)?.total);
-    if (total === null) continue;
+    const goods = cents((e.payload.device as { total?: unknown } | undefined)?.total);
+    if (goods === null) continue;
+    // T-627: the amount due is the goods plus the store charges.
+    const total = goods + (cents((e.payload.device as { chargeTotal?: unknown } | undefined)?.chargeTotal) ?? 0n);
     saleCount += 1;
     totalCentavos += total;
     const rows = (Array.isArray(e.payload.payments) ? (e.payload.payments as { tenderId?: unknown; amount?: unknown }[]) : [])

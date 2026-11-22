@@ -89,6 +89,13 @@ export function formatReceipt(view: ReceiptView, layout: PrintLayout): string[] 
     out.push(...justify(`VAT (${vat.vatRateLabel})`, printAmount(vat.vatAmount), cols));
   }
 
+  // 5b. T-627: the store's charges, after discounts and VAT and outside the VAT block, then what is due.
+  if (view.charges && view.charges.length > 0) {
+    out.push(rule(cols));
+    for (const c of view.charges) out.push(...justify(c.qty > 1 ? `${c.name} x${c.qty}` : c.name, printAmount(c.amount), cols));
+    out.push(...justify('AMOUNT DUE', printAmount(view.amountDue ?? view.total), cols));
+  }
+
   // 6. The tenders, then the change.
   out.push(rule(cols));
   for (const tender of view.tenders) {

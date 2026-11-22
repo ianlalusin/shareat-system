@@ -13,12 +13,14 @@
  * T-622: `savePresetAction` and `retirePresetAction` (the Discounts section) are the same: `upsertPosDiscountPreset` / `retirePosDiscountPreset` authorize
  * `manage_store_settings` at the store first and own every rule and refusal sentence. Both are safe to repeat (same value: nothing written; already retired:
  * nothing written), so they carry no request key.
+ *
+ * T-627: `saveChargeAction` and `retireChargeAction` (the Charges section) are the same, over `upsertPosChargePreset` / `retirePosChargePreset`.
  */
 import { revalidatePath } from 'next/cache';
 import { posTerminalLinksRepo, refuse } from '@shareat/db';
 import { authorize, resetApprovalPinCap } from '@shareat/auth';
-import { assertFieldRules, createTerminal, linkTerminal, provisionPosTerminalLink, retirePosDiscountPreset, revokePosTerminalLink, setTerminalPrinter, upsertPosDiscountPreset } from '@shareat/domain';
-import { POS_DISCOUNT_RULES, POS_TABLET_REGISTER_RULES, POS_TILL_ADD_RULES } from '@shareat/domain/field-rules';
+import { assertFieldRules, createTerminal, linkTerminal, provisionPosTerminalLink, retirePosChargePreset, retirePosDiscountPreset, revokePosTerminalLink, setTerminalPrinter, upsertPosChargePreset, upsertPosDiscountPreset } from '@shareat/domain';
+import { POS_CHARGE_RULES, POS_DISCOUNT_RULES, POS_TABLET_REGISTER_RULES, POS_TILL_ADD_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '../../../lib/flash';
@@ -190,4 +192,39 @@ export async function retirePresetAction(fd: FormData): Promise<void> {
   }
   revalidatePath(RETURN_TO);
   return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok: 'Discount retired. Cashiers stop seeing it. Past sales keep it.' });
+}
+
+/** T-627: add a named charge, or change the amount / per-unit of the active one with that name (the name is the key; the domain decides which). */
+export async function saveChargeAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(RETURN_TO);
+  const storeId = str(fd, 'storeId');
+  const name = str(fd, 'name').trim();
+  let ok: string;
+  try {
+    // Authorize first, then the form's own rules (T-440 S9); the domain call decides again and owns every refusal sentence and audit row.
+    if (!UUID.test(storeId)) throw refuse(`saveChargeAction: store ${storeId} is not an id`, 'Pick a store.');
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_store_settings', { storeId }));
+    const checked = assertFieldRules(POS_CHARGE_RULES, fd);
+    const { outcome } = await withOrgPrincipal(actor.orgId, (tx) =>
+      upsertPosChargePreset(tx, actor, { storeId, name: checked.name, amount: checked.amount, perUnit: str(fd, 'perUnit') === 'on' }, 'web'),
+    );
+    ok = outcome === 'created' ? `Added the charge ${name}. Cashiers see it after the tablet's next refresh.` : outcome === 'updated' ? `Changed ${name}. Cashiers see it after the tablet's next refresh.` : `${name} already has that amount. Nothing changed.`;
+  } catch (err) {
+    return await redirectWithFlash(RETURN_TO, { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath(RETURN_TO);
+  return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok });
+}
+
+/** T-627: retire a named charge. Nothing is deleted: past sales keep it; cashiers stop seeing it. */
+export async function retireChargeAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(RETURN_TO);
+  const storeId = str(fd, 'storeId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => retirePosChargePreset(tx, actor, { storeId, presetId: str(fd, 'presetId') }));
+  } catch (err) {
+    return await redirectWithFlash(RETURN_TO, { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath(RETURN_TO);
+  return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok: 'Charge retired. Cashiers stop seeing it. Past sales keep it.' });
 }

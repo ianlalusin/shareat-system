@@ -1334,6 +1334,18 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-523 R13: a discount on a frozen line of an org’s own sales receipt; carries its own org_id, never the holder’s name or ID.',
   },
+  pos_charge_presets: {
+    scope: 'org_column',
+    reason: 'T-627: a store’s named charges (master data); the store belongs to one org, the policy is the org backstop and the repo filters by store.',
+  },
+  table_session_charges: {
+    scope: 'org_column',
+    reason: 'T-627: a charge on an org’s own open table session; carries its own org_id and store_id, the repo filters by both.',
+  },
+  pos_sales_receipt_charges: {
+    scope: 'org_column',
+    reason: 'T-627: a charge frozen on an org’s own sales receipt; carries its own org_id.',
+  },
   pos_payment_conversions: {
     scope: 'org_column',
     reason: 'T-534 S1: an org’s own Convert (GCash cash-in / cash-out) records at its own store; org isolation is the point.',

@@ -29,6 +29,8 @@ export interface PosSnapshot {
     stands: { id: string; number: number }[];
     tenders: { id: string; name: string; kind: string }[];
     discountPresets: { id: string; name: string; valueType: string; value: string }[];
+    /** T-627: the store's active charges (leftover, an extra griller), for the till's Add charge list. An older cached snapshot lacks it. */
+    chargePresets: { id: string; name: string; amount: string; perUnit: boolean }[];
     rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number; tableWarnMinutes: number; /** T-558: display hint only (centavos); the tablet never enforces it. */ saleVarianceToleranceCentavos: number; /** T-576: the tablet asks for a manager PIN on a line cancel / line discount when true. */ requirePinLineActions: boolean; /** T-621: unsent offline sales (centavos) at or above which the till warns; display only. */ offlineUnsentWarnCentavos: number; /** T-621: whole hours offline between automatic offline X-slips. */ offlineXSlipHours: number };
     staff: { personId: string; displayName: string; employeeId: string; posCapabilities: string[] }[];
     device: { pairingId: string; lastSeq: number; lastTerminalSeq: number };
@@ -67,6 +69,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
     stands: (await posV2Repo.listActiveStands(tx, orgId, storeId)).map((s) => ({ id: s.id, number: s.number })),
     tenders: (await posV1Repo.listTendersByStore(tx, orgId, storeId)).filter((t) => t.isActive).map((t) => ({ id: t.id, name: t.name, kind: t.kind })),
     discountPresets: (await posV2Repo.listActivePresets(tx, orgId, storeId)).map((p) => ({ id: p.id, name: p.name, valueType: p.valueType, value: p.value })),
+    chargePresets: (await posV2Repo.listActiveChargePresets(tx, orgId, storeId)).map((p) => ({ id: p.id, name: p.name, amount: p.amount, perUnit: p.perUnit })),
     rules: {
       vatPercentBasisPoints: Number(rules.vatPercentBasisPoints),
       scPwdPercentBasisPoints: Number(rules.scPwdPercentBasisPoints),

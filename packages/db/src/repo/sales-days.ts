@@ -464,6 +464,8 @@ export interface InsertPosReceiptsDayInput {
   onlineCollected: Money;
   /** T-534 S4: the refunds the Z collected (posts as Dr 4950; cash and wallets above are net of them). Absent = 0. */
   refunds?: Money;
+  /** T-627: the Z's store charges (leftover, an extra griller), posted to 4500 by the router. Absent = 0. */
+  otherCharges?: Money;
 }
 
 export async function insertPosReceiptsDay(tx: Tx, input: InsertPosReceiptsDayInput): Promise<{ id: string }> {

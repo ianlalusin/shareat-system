@@ -12,7 +12,8 @@ import { TRIGGER_REGISTRY } from '../../packages/db/src/triggers/registry';
  * R1-R3 and R13 pos_discount_presets are configuration -> keep. R4-R10 and the two R13 discount tables -> purge (row 436: v1 receives Lipa's December day
  * totals through T-531's bridge, so no booked figure lives only in these tables).
  */
-const KEEP = ['pos_stores', 'pos_stands', 'pos_terminals', 'pos_discount_presets'];
+// T-627 (migration 0275) adds pos_charge_presets (keep) and table_session_charges + pos_sales_receipt_charges (purge, guarded), classified the same way.
+const KEEP = ['pos_stores', 'pos_stands', 'pos_terminals', 'pos_discount_presets', 'pos_charge_presets'];
 const PURGE = [
   'table_sessions',
   'table_session_lines',
@@ -24,6 +25,8 @@ const PURGE = [
   'pos_events',
   'table_session_line_discounts',
   'pos_sales_receipt_line_discounts',
+  'table_session_charges',
+  'pos_sales_receipt_charges',
 ];
 /** Every table that carries a history guard (R4-R10, R13 discounts); R1-R3 and the presets have none. */
 const GUARDED = PURGE;

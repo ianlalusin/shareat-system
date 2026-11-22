@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   checkValueAgainstDocs,
   checkValuesDiffer,
+  NEW_STORAGE_BUCKET,
+  oldBucketAllowed,
   STORAGE_BUCKET_EXPECTATION,
 } from '../../scripts/lib/config-contract';
 
@@ -31,17 +33,34 @@ describe('checkValueAgainstDocs — DEF-311, FIREBASE_STORAGE_BUCKET', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('State 3 — passes on the correct, documented value', () => {
-    const result = checkValueAgainstDocs('shareat-hub-v2', STORAGE_BUCKET_EXPECTATION);
+  it('State 3 — passes on the correct, documented value (T-625: v2 own bucket)', () => {
+    const result = checkValueAgainstDocs('shareat-system.firebasestorage.app', STORAGE_BUCKET_EXPECTATION);
     expect(result.ok).toBe(true);
+    expect(NEW_STORAGE_BUCKET).toBe('shareat-system.firebasestorage.app');
+  });
+
+  it('T-625 — the OLD v1 bucket is refused by default (this is what stops a half-finished cut-over)', () => {
+    expect(checkValueAgainstDocs('shareat-hub-v2', STORAGE_BUCKET_EXPECTATION).ok).toBe(false);
+  });
+
+  it('T-625 — the old bucket is accepted ONLY through oldBucketAllowed() (the rollback check), and the new one still is', () => {
+    const rollback = oldBucketAllowed();
+    expect(checkValueAgainstDocs('shareat-hub-v2', rollback).ok).toBe(true);
+    expect(checkValueAgainstDocs(NEW_STORAGE_BUCKET, rollback).ok).toBe(true);
+    // ...and the historical wrong variants stay wrong even in rollback mode.
+    expect(checkValueAgainstDocs('shareat-hub-v2.firebasestorage.app', rollback).ok).toBe(false);
+    expect(checkValueAgainstDocs('shareat-hub-v2.appspot.com', rollback).ok).toBe(false);
+    // the shared expectation object is not mutated by building the rollback one
+    expect(STORAGE_BUCKET_EXPECTATION.allowedValues).toEqual([NEW_STORAGE_BUCKET]);
   });
 
   it('a wrong value never silently matches by substring or case', () => {
-    expect(checkValueAgainstDocs('Shareat-Hub-V2', STORAGE_BUCKET_EXPECTATION).ok).toBe(false);
-    expect(checkValueAgainstDocs('shareat-hub-v2 ', STORAGE_BUCKET_EXPECTATION).ok).toBe(false);
-    expect(checkValueAgainstDocs('prefix-shareat-hub-v2', STORAGE_BUCKET_EXPECTATION).ok).toBe(
-      false,
-    );
+    expect(checkValueAgainstDocs('Shareat-System.firebasestorage.app', STORAGE_BUCKET_EXPECTATION).ok).toBe(false);
+    expect(checkValueAgainstDocs('shareat-system.firebasestorage.app ', STORAGE_BUCKET_EXPECTATION).ok).toBe(false);
+    expect(checkValueAgainstDocs('shareat-system', STORAGE_BUCKET_EXPECTATION).ok).toBe(false);
+    expect(
+      checkValueAgainstDocs('prefix-shareat-system.firebasestorage.app', STORAGE_BUCKET_EXPECTATION).ok,
+    ).toBe(false);
   });
 
   it('message content — the failure names both documented citations, not just that it failed', () => {
@@ -49,8 +68,8 @@ describe('checkValueAgainstDocs — DEF-311, FIREBASE_STORAGE_BUCKET', () => {
       'shareat-hub-v2.firebasestorage.app',
       STORAGE_BUCKET_EXPECTATION,
     );
-    expect(result.message).toContain('.env.example:55-60');
-    expect(result.message).toContain('docs/reference/private-bucket-storage-rules.md:62-63');
+    expect(result.message).toContain('.env.example:66-73');
+    expect(result.message).toContain('docs/ops/firebase-move-runbook.md step 2.3');
     expect(result.message).toContain('FIREBASE_STORAGE_BUCKET');
   });
 
@@ -61,8 +80,8 @@ describe('checkValueAgainstDocs — DEF-311, FIREBASE_STORAGE_BUCKET', () => {
   });
 });
 
-describe('checkValuesDiffer — .env.example:56,71-73, FIREBASE_STORAGE_BUCKET vs NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET', () => {
-  const CITATION = '.env.example:56,71-73';
+describe('checkValuesDiffer — .env.example:66-73, FIREBASE_STORAGE_BUCKET vs NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET', () => {
+  const CITATION = '.env.example:66-73';
 
   it('State 4a — fails when both variables hold the same string', () => {
     const result = checkValuesDiffer(

@@ -215,6 +215,16 @@ also `ALTER TABLE … DISABLE ROW LEVEL SECURITY`, which hands back exactly what
 And ⛔ **do not let it own tables** — a table's owner bypasses RLS by default (migration `0011`'s own
 comments record why), so ownership would defeat the whole exercise as surely as `BYPASSRLS` did.
 
+### ⭐ Identity, storage and clock Firestore move to their own project `shareat-system` (T-625, from 22 Nov 2026)
+
+v2 stops borrowing v1's projects. Identity (`studio-7300228488-a394e`), the private bucket (`shareat-hub-v2`) and the clock
+Firestore all move to Firebase project **`shareat-system`**; the private bucket becomes `shareat-system.firebasestorage.app`
+(deny-all, `firebase/storage.rules`). Steps for Ian, in order, with rollback: **`docs/ops/firebase-move-runbook.md`**
+(scripts in `scripts/firebase-move/`, key installer `docs/ops/install-firebase-key.sh`). Until the cut-over night the values
+below describe the OLD setup. `npm run storage-smoke` accepts only the new bucket; `-- --allow-old-bucket` is the rollback check.
+⚠️ `/srv/shareat-shared/pos2.env` and every `POS_*` / `CAPTURE_*` value stay on `shareat-hub-v2` (POS and CUSTOMER tablets are not part of this move).
+⚠️ `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` stays blank: in one project the private bucket is the default bucket, and `storage-smoke` refuses the same value in both.
+
 ### ⛔ The storage bucket — corrected 2026-09-12 (DEF-311)
 
 `FIREBASE_STORAGE_BUCKET` on the host was **`shareat-hub-v2.firebasestorage.app`**, which is **v1's**

@@ -12,6 +12,7 @@ import { accessRepo, auditLogRepo, posV2Repo, RefusalError, withOrgPrincipal, ty
 import { POS_REDACTED } from '../field-rules/pos';
 import { canonicalJson } from '../menu/project';
 import { gone, refuse } from '../shared/refusal';
+import { addCharge, removeCharge } from './charges';
 import { addLineDiscount, applyPresetToAllLines, removeLineDiscount } from './discounts';
 import { addLines, cancelLine, isUniqueViolation, openStand, requestRefill, setHeadsCashier } from './order';
 import { completeSale, voidUnpaidSession } from './sale';
@@ -147,6 +148,17 @@ const HANDLERS: ReadonlyMap<string, Handler> = new Map<string, Handler>([
     },
   ],
   [
+    'charge.added',
+    {
+      spec: { req: { chargeId: uuid, sessionId: uuid, qty: int, addedAtDevice: time }, opt: { presetId: uuid, name: str, unitAmount: str } },
+      run: (tx, a, b, p) => addCharge(tx, a, { ...p, ...b } as unknown as Parameters<typeof addCharge>[2]),
+    },
+  ],
+  [
+    'charge.removed',
+    { spec: { req: { chargeId: uuid, removedAtDevice: time } }, run: (tx, a, b, p) => removeCharge(tx, a, { ...p, ...b } as unknown as Parameters<typeof removeCharge>[2]) },
+  ],
+  [
     'session.voided',
     {
       spec: { req: { sessionId: uuid, reason: str, voidedAtDevice: time, offline: bool }, opt: { approval: obj({ req: { pin: str } }) } },
@@ -164,7 +176,7 @@ const HANDLERS: ReadonlyMap<string, Handler> = new Map<string, Handler>([
           terminalSeq: int,
           issuedAtDevice: time,
           offline: bool,
-          device: obj({ req: { subtotal: str, discountTotal: str, total: str, lines: list(obj({ req: { lineId: uuid, gross: str, discountTotal: str, net: str } }), MAX_ITEMS) } }),
+          device: obj({ req: { subtotal: str, discountTotal: str, total: str, lines: list(obj({ req: { lineId: uuid, gross: str, discountTotal: str, net: str } }), MAX_ITEMS) }, opt: { chargeTotal: str } }), // T-627: absent on a sale queued before charges existed (= 0.00)
           payments: list(obj({ req: { tenderId: uuid, amount: str, toCheck: bool }, opt: { referenceNo: str } }), MAX_ITEMS),
           seniors: list(obj({ req: { dinerNo: int, kind: oneOf('senior', 'pwd'), idNumber: str, holderName: str } }), MAX_ITEMS),
         },
