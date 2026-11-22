@@ -22,7 +22,9 @@
  * ## ⛔ The PRE-FLIGHT block above check 1 — DEF-311, T-280
  *
  * Checks 1-5 all ask "is THE CONFIGURED BUCKET reachable and private?" — none of them asks
- * "is it the RIGHT bucket?" Production ran `FIREBASE_STORAGE_BUCKET=shareat-hub-v2.
+ * "is it the RIGHT bucket?" (T-625: the right bucket is now `shareat-system.firebasestorage.app`;
+ * `--allow-old-bucket` accepts the old `shareat-hub-v2` for the rollback check only.)
+ * Production ran `FIREBASE_STORAGE_BUCKET=shareat-hub-v2.
  * firebasestorage.app` (v1's bucket) for the deployment's entire life and all five checks
  * passed, every run, because v1's bucket is reachable and private too. The pre-flight block
  * compares the configured value against `.env.example` and `docs/reference/
@@ -36,6 +38,7 @@ import { firebaseConfigFromEnv, firebaseStorageDriver } from '@shareat/storage-f
 import {
   checkValueAgainstDocs,
   checkValuesDiffer,
+  oldBucketAllowed,
   STORAGE_BUCKET_EXPECTATION,
 } from './lib/config-contract';
 
@@ -66,7 +69,12 @@ async function main() {
   // PRE-FLIGHT — configuration vs documentation (DEF-311). Reachability proves nothing about
   // whether this is the RIGHT bucket; v1's bucket was reachable and private too, and every check
   // below went green against it for the deployment's entire life.
-  const bucketCheck = checkValueAgainstDocs(cfg.bucket, STORAGE_BUCKET_EXPECTATION);
+  // T-625: only the new project's bucket passes. `--allow-old-bucket` is for the ROLLBACK check alone
+  // (after putting the old env back, to prove the old bucket still answers); it is never the default.
+  const expectation = process.argv.includes('--allow-old-bucket')
+    ? oldBucketAllowed()
+    : STORAGE_BUCKET_EXPECTATION;
+  const bucketCheck = checkValueAgainstDocs(cfg.bucket, expectation);
   if (!bucketCheck.ok) bad(bucketCheck.message);
   ok(`FIREBASE_STORAGE_BUCKET matches documentation (${cfg.bucket})`);
 
@@ -76,7 +84,7 @@ async function main() {
       envVar: 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
       value: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() || undefined,
     },
-    '.env.example:56,71-73',
+    '.env.example:66-73',
   );
   if (!differCheck.ok) bad(differCheck.message);
   ok('FIREBASE_STORAGE_BUCKET is not the public default bucket');

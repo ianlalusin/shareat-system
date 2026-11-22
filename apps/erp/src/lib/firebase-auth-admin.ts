@@ -28,8 +28,9 @@
  *
  * ## ⛔ Its own admin app, and never the storage driver's
  *
- * v2's identity project and its STORAGE project are **different projects on purpose** (decision 1;
- * `.env.example`: identity is v1's `studio-…`, storage is `shareat-hub-v2`). So this file
+ * v2's identity project and its STORAGE project were **different projects on purpose** (decision 1;
+ * until T-625 identity was v1's `studio-…` and storage `shareat-hub-v2`; both are now `shareat-system`, but
+ * the two admin apps below stay separate: different credentials, no shared state). So this file
  * initialises its own `firebase-admin` app under its own name, configured with a project id and no
  * credential. `@shareat/storage-firebase` keeps `'shareat-storage'`, initialised with a
  * service-account `cert()`. Neither can inherit the other's project or credential, which is what

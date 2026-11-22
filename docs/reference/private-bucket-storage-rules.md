@@ -1,5 +1,10 @@
 # The private bucket's Storage rules — paste this, and read the two warnings first
 
+> ⭐ **T-625 (22 Nov 2026): superseded for v2.** v2 now has its own Firebase project `shareat-system` and deploys
+> `firebase/storage.rules` (this same deny-all) from this repo — see `docs/ops/firebase-move-runbook.md`. Everything
+> below describes the OLD shared `shareat-hub-v2` project and stays as the record of why deny-all is the rule; the
+> "never add a firebase.json" warning in §3 applied to that shared project only.
+
 > **Bucket:** `gs://shareat-hub-v2` · **Project:** `shareat-hub-v2` · T-141 §8, bible row 155.
 > **Paste in the Firebase console** (Storage → Rules), never from this repo. See §3.
 
