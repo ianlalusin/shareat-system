@@ -10,10 +10,10 @@
  */
 import { kitchenRepo, menuRepo, posV1Repo, daypartsRepo, RefusalError, type Tx } from '@shareat/db';
 import {
-  addMenuVariant, addOptionValue, createDaypart, createKitchenStation, createMenuCategory, createMenuItem, createOptionGroup, createTender, linkOptionGroup,
+  addMenuVariant, addOptionValue, createDaypart, createKitchenStation, createMenuCategory, createMenuItem, createOptionGroup, createTender, editMenuVariant, linkOptionGroup,
   normalizePosV1Alias, setDepletionRule, setKitchenRoute, setMenuOffer, setOptionOffer, setPackageRefills, updateTender,
 } from '@shareat/domain';
-import { key, type MenuPlan, type PlannedSlot } from './plan-store-menu';
+import { defaultVariantLabel, key, refillLinkStep, type MenuPlan, type PlannedSlot } from './plan-store-menu';
 
 type Actor = Parameters<typeof createDaypart>[0];
 
@@ -30,6 +30,8 @@ export interface MenuSetupReport {
   /** Refused in words by a domain rule, named and left out. */
   readonly refused: { name: string; reason: string }[];
   readonly skipped: string[];
+  /** T-626 audit rulings 6, 7: plain facts from the plan (not a gap). */
+  readonly notes: string[];
   /** New menu things that got the placeholder "uses no stock" rule. */
   readonly noStockRule: string[];
   /** Wallet payment methods that need a money account before they can be made. */
@@ -44,7 +46,7 @@ export async function applyMenuPlan(sp: Tx, actor: Actor, storeId: string, plan:
   const { orgId } = actor;
   const report: MenuSetupReport = {
     created: Object.fromEntries(PARTS.map((p) => [p, [] as string[]])) as Record<MenuPart, string[]>,
-    unchanged: 0, differences: [], refused: [], skipped: [...plan.skipped], noStockRule: [], walletsNeedAccount: [], notCopied: [...plan.notCopied],
+    unchanged: 0, differences: [], refused: [], skipped: [...plan.skipped], notes: [...plan.notes], noStockRule: [], walletsNeedAccount: [], notCopied: [...plan.notCopied],
   };
   const made = (part: MenuPart, name: string): void => { report.created[part].push(name); };
   const same = (): void => { report.unchanged++; };
@@ -108,6 +110,7 @@ export async function applyMenuPlan(sp: Tx, actor: Actor, storeId: string, plan:
   const routes = new Map<string, string>(); // item id -> station id (read once, kept current)
   for (const r of await kitchenRepo.listRoutes(sp, orgId, storeId)) routes.set(r.menuItemId, r.stationId);
   const route = async (itemId: string, name: string, stationName: string | null): Promise<void> => {
+    // Ruling 5: no station in v1 (unset or switched off) is already a named line in plan.skipped and a GAP in the check.
     if (!stationName) return;
     const sid = stationId[key(stationName)];
     if (!sid) { report.skipped.push(`${name}: its kitchen station ${stationName} could not be set up, so it has no route`); return; }
@@ -217,16 +220,27 @@ export async function applyMenuPlan(sp: Tx, actor: Actor, storeId: string, plan:
     await route(it.itemId, p.name, p.stationName);
     const want = p.refillNames.map((n) => refillItem[key(n)]?.itemId).filter((x): x is string => !!x);
     const have = await menuRepo.refillItemIdsOfPackage(sp, orgId, it.variantId);
-    const missing = want.filter((id) => !have.includes(id));
     if (want.length < p.refillNames.length) report.skipped.push(`${p.name}: some refills in v1's list could not be set up, so they are not linked`);
-    if (missing.length === 0) { same(); continue; }
-    if (await step(`Refills for ${p.name}`, (t) => setPackageRefills(actor, { packageVariantId: it.variantId, refillItemIds: [...have, ...missing] }, t))) made('refill links', `${p.name}: ${missing.length} refill${missing.length === 1 ? '' : 's'}`);
+    // Ruling 4: links are added only to a package with none; a package that already has its own list here keeps it.
+    const links = refillLinkStep(have, want);
+    if (links.kind === 'same') { same(); continue; }
+    if (links.kind === 'differ') {
+      const names = p.refillNames.filter((n) => links.missing.includes(refillItem[key(n)]?.itemId ?? ''));
+      differ(`${p.name}: v1 also allows ${names.join(', ')}; this package already has its own refill list here, so they were not added`);
+      continue;
+    }
+    if (await step(`Refills for ${p.name}`, (t) => setPackageRefills(actor, { packageVariantId: it.variantId, refillItemIds: links.ids }, t))) made('refill links', `${p.name}: ${links.ids.length} refill${links.ids.length === 1 ? '' : 's'}`);
   }
 
   // ---- à la carte ------------------------------------------------------------------------------------------------------------------
   for (const i of plan.items) {
     const it = await ensureItem('a_la_carte', i.name, i.category, i.sortOrder, { soldALaCarte: true, soldInPackageSession: true, dinerOrderable: i.dinerOrderable }, 'items');
     if (!it) continue;
+    // Ruling 3: an all-labelled item reuses its unlabelled, unpriced default as the first labelled variant, so no unpriced default is left behind.
+    const current = await menuRepo.variantsOfItem(sp, orgId, it.itemId);
+    const priced = new Set((await menuRepo.offersInForce(sp, storeId, now)).filter((o) => o.channel === 'store').map((o) => o.variantId));
+    const relabel = defaultVariantLabel(i.variants, current.map((x) => ({ label: x.label, isDefault: x.isDefault, active: x.status === 'active', priced: priced.has(x.id) })));
+    if (relabel !== null && (await step(`${i.name} ${relabel}`, (t) => editMenuVariant(actor, { id: it.variantId, label: relabel }, t)))) made('items', `${i.name} ${relabel}`);
     for (const v of i.variants) {
       let variantId = it.variantId;
       if (v.label !== null) {
@@ -273,6 +287,7 @@ export function formatMenuSetupReport(r: MenuSetupReport, dryRun: boolean): stri
   lines.push(`  DIFFERENT here, left as they are (Ian decides): ${r.differences.length}${r.differences.map((d) => `\n    ${d}`).join('')}`);
   lines.push(`  refused in words: ${r.refused.length}${r.refused.map((x) => `\n    ${x.name}: ${x.reason}`).join('')}`);
   lines.push(`  left out of v1: ${r.skipped.length}${r.skipped.map((s) => `\n    ${s}`).join('')}`);
+  lines.push(`  notes: ${r.notes.length}${r.notes.map((n) => `\n    ${n}`).join('')}`);
   lines.push(`  given the placeholder "uses no stock" (set the real stock use in the ERP): ${r.noStockRule.length} (${list(r.noStockRule)})`);
   lines.push(`  wallet payment methods that need a money account first (add them in POS link settings): ${r.walletsNeedAccount.length} (${list(r.walletsNeedAccount)})`);
   lines.push('NOT COPIED (reported only):', ...r.notCopied.map((n) => `  ${n}`));

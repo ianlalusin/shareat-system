@@ -11,10 +11,12 @@
  *
  * v1 -> v2 mapping (v1 is read as requirements; planned in `plan-store-menu.ts`, written in `load-store-menu.ts`; all paths under `stores/{id}/` unless noted):
  *   kitchenLocations (name, slaMinutes, printOnOutage, sortOrder) -> kitchen station, same fields
- *   menuSchedules (days, startTime, endTime)                       -> store hours (daypart) of the same name; no times = skipped, its packages go all-day (as v1)
+ *   menuSchedules (days, startTime, endTime)                       -> store hours (daypart) of the same name, only if a package is priced in them; no times = a GAP, its
+ *                                                                     packages go all-day (as v1); hours switched off = their packages are not on sale (a NOTE)
  *   storePackages (pricePerHead | bundlePrice+bundleMaxCap+bundleExtraHeadPrice, kitchenLocationId, refillsAllowed, menuScheduleId)
  *                                                                  -> ONE package item "base name" (LT-/DT- prefix dropped), per-head or bundle price per hours; two
- *                                                                     copies at one price = one all-day price; empty refillsAllowed = every enabled refill; disabled = not loaded
+ *                                                                     copies at one price = one all-day price; empty refillsAllowed = every enabled refill (a NOTE);
+ *                                                                     disabled = not loaded; refill links only added to a package that has none
  *   storeRefills + root refills (isEnabled, requiresFlavor, allowedFlavorIds, kitchenLocationId) -> refill item (free offer) routed to its station
  *   storeFlavors + root flavors (isEnabled)                        -> option values of the refill's single-choice group "Flavour" (a store switch = an option offer, +0.00)
  *   inventory where isAddon (name, groupName+variantLabel, subCategory, sellingPrice, kitchenLocationId, customerEnabled)

@@ -51,11 +51,60 @@ export interface MenuPlan {
   stations: PlannedStation[]; dayparts: PlannedDaypart[]; refills: PlannedRefill[]; packages: PlannedPackage[]; items: PlannedItem[]; tenders: PlannedTender[];
   /** Things v1 has that the plan leaves out, each with the reason (names only). */
   skipped: string[];
+  /**
+   * T-626 audit (BOSS ruling 1, 5): the lines of `skipped` that are something v1 SELLS and POS v2 will not (a package or item with no usable or pairable price,
+   * hours a package needs that cannot be set up, a sold thing with no kitchen station). The parity check prints each as a GAP and fails.
+   */
+  gaps: string[];
+  /** T-626 audit (rulings 6, 7): plain facts the check prints as NOTE and never fails on. */
+  notes: string[];
   /** Plain lines about what is never copied. */
   notCopied: string[];
 }
 
 export const key = (s: string): string => s.trim().toLowerCase();
+
+/**
+ * T-626 audit ruling 7: what an EMPTY v1 `refillsAllowed` lets the cashier add. v1's package type documents empty as "every refill" (docs/tasks/401 R8 and :54, read from
+ * the POS repo); the refill modal (RefillPOSModal.tsx ~:484) was not on the builder's PC to re-read, so this is the one switch to flip if it says otherwise.
+ */
+export const EMPTY_REFILL_LIST_MEANS_ALL = true;
+
+/**
+ * T-626 audit ruling 4: what the loader does with a package's refill links. Links are ADDED only to a package that has none; a package that already has its own list here
+ * keeps it, and the v1 refills missing from it are a difference for Ian.
+ */
+export function refillLinkStep(have: readonly string[], want: readonly string[]): { kind: 'same' } | { kind: 'add'; ids: string[] } | { kind: 'differ'; missing: string[] } {
+  const missing = want.filter((id) => !have.includes(id));
+  if (missing.length === 0) return { kind: 'same' };
+  return have.length === 0 ? { kind: 'add', ids: [...missing] } : { kind: 'differ', missing };
+}
+
+/**
+ * T-626 audit ruling 3: an item whose v1 rows are ALL labelled ("Iced Tea" Glass / Pitcher) must not keep the unlabelled default variant `createMenuItem` makes, which would
+ * sit there with no price. The loader names that default after the first label instead of adding a new variant. Only an unlabelled, unpriced default is reused, and only
+ * when no variant already carries the label. Returns the label to give the default, or null.
+ */
+export function defaultVariantLabel(
+  planned: readonly { label: string | null }[],
+  variants: readonly { label: string | null; isDefault: boolean; active: boolean; priced: boolean }[],
+): string | null {
+  const first = planned[0]?.label;
+  if (!first || planned.some((v) => v.label === null)) return null;
+  const def = variants.find((v) => v.isDefault && v.active);
+  if (!def || def.label !== null || def.priced) return null;
+  return variants.some((v) => v.label !== null && key(v.label) === key(first)) ? null : first;
+}
+
+/** T-626 audit ruling 1: one failing parity-check row per thing v1 sells that the plan leaves out (`plan.gaps`). */
+export function planGapRows(plan: Pick<MenuPlan, 'gaps'>): { kind: string; name: string; ok: boolean; detail: string }[] {
+  return plan.gaps.map((line) => ({ kind: 'Not loadable from v1', name: line, ok: false, detail: 'v1 sells it; POS v2 will not until it is fixed' }));
+}
+
+/** T-626 audit ruling 3: variants of a priced item that are on sale with NO price (the parity check fails on each). */
+export function unpricedOrderable(variants: readonly { label: string | null; channels: { store: { orderable: boolean; amount?: string | null } } }[]): string[] {
+  return variants.filter((v) => v.channels.store.orderable && (v.channels.store.amount ?? null) === null).map((v) => v.label ?? 'default');
+}
 
 /** The one number-to-text edge, as v1-methods R4: whole centavos only (within 0.001), never negative; null otherwise. */
 export function pesoText(n: number | null | undefined): string | null {
@@ -90,8 +139,22 @@ const sameSlot = (a: PlannedSlot, b: PlannedSlot): boolean => a.amount === b.amo
 
 export function planStoreMenu(v1: V1MenuSetup): MenuPlan {
   const skipped: string[] = [];
+  const gaps: string[] = [];
+  const notes: string[] = [];
+  /** Left out AND something v1 sells: the check fails on it (ruling 1). */
+  const gap = (line: string): void => { skipped.push(line); gaps.push(line); };
   const stationById = new Map(v1.stations.filter((s) => s.isActive).map((s) => [s.id, s.name.trim()]));
+  const anyStationById = new Map(v1.stations.map((s) => [s.id, s.name.trim()]));
   const stationOf = (id: string | null): string | null => (id ? stationById.get(id) ?? null : null);
+  /** Ruling 5: a sold thing whose v1 station is unset or switched off gets no route; it is named as a GAP, never left silent. */
+  const stationFor = (what: string, ids: readonly (string | null)[]): string | null => {
+    const found = ids.map(stationOf).find((n) => n !== null) ?? null;
+    if (found === null) {
+      const off = ids.map((id) => (id ? anyStationById.get(id) : undefined)).find((n) => n !== undefined);
+      gap(`${what}: no kitchen station in v1 (${off ? `its station ${off} is switched off` : 'none set'}), so it has no route`);
+    }
+    return found;
+  };
 
   const stations: PlannedStation[] = [];
   for (const s of v1.stations) {
@@ -100,15 +163,17 @@ export function planStoreMenu(v1: V1MenuSetup): MenuPlan {
     stations.push({ name: s.name.trim(), sortOrder: s.sortOrder, slaMinutes: sla, printOnOutage: s.printOnOutage });
   }
 
-  const dayparts: PlannedDaypart[] = [];
-  const daypartOfSchedule = new Map<string, string>();
+  // Hours: worked out per schedule now, but only the ones a package ends up priced in are set up (ruling 2, after the packages below).
+  const scheduleById = new Map(v1.schedules.map((s) => [s.id, s]));
+  const loadable = new Map<string, PlannedDaypart>();
+  const unloadable = new Map<string, string>();
   for (const s of v1.schedules) {
     if (!s.isActive || s.isArchived) continue;
     const d = planDaypart(s);
-    if ('skip' in d) { skipped.push(`Hours ${d.skip}`); continue; }
-    dayparts.push(d.ok);
-    daypartOfSchedule.set(s.id, d.ok.name);
+    if ('skip' in d) unloadable.set(s.id, d.skip);
+    else loadable.set(s.id, d.ok);
   }
+  const hoursGapped = new Set<string>();
 
   // Flavours: one value per flavour a refill may take; a store's switch is an offer on the value (v2 flavours are option values of the refill's group).
   const flavourById = new Map(v1.flavors.filter((f) => f.globallyActive).map((f) => [f.id, f]));
@@ -123,20 +188,32 @@ export function planStoreMenu(v1: V1MenuSetup): MenuPlan {
       const picked = ids.map((id) => flavourById.get(id)!).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
       if (picked.length) flavour = { group: r.allowedFlavorIds.length ? `Flavour - ${r.name.trim()}` : 'Flavour', values: picked.map((f) => ({ name: f.name.trim(), onAtStore: f.isEnabled })) };
     }
-    refills.push({ name: r.name.trim(), sortOrder: r.sortOrder, stationName: stationOf(r.stationId), flavour });
+    refills.push({ name: r.name.trim(), sortOrder: r.sortOrder, stationName: stationFor(`Refill ${r.name.trim()}`, [r.stationId]), flavour });
   }
 
   // Packages: pair the lunch and dinner copies by name, then price them (ruled by Ian, rows 441-442).
   const rows = new Map<string, { name: string; rows: { r: V1Package; slot: PlannedSlot }[] }>();
   for (const p of v1.packages) {
     if (!p.isEnabled) { skipped.push(`Package ${p.name} (switched off in v1)`); continue; }
+    // Ruling 6: a package tied to hours that are switched off (or archived) in v1 is not on sale there; it is not priced all day here.
+    const sched = p.scheduleId ? scheduleById.get(p.scheduleId) : undefined;
+    if (sched && (!sched.isActive || sched.isArchived)) {
+      const line = `Package ${p.name}: not on sale in v1 (its hours are off)`;
+      skipped.push(line);
+      notes.push(line);
+      continue;
+    }
     const bundle = p.isBundle;
     const amount = pesoText(bundle ? p.bundlePrice : p.pricePerHead);
     const extra = bundle ? pesoText(p.bundleExtraHeadPrice ?? 0) : null;
     const heads = bundle && p.bundleMaxCap !== null && Number.isInteger(p.bundleMaxCap) && p.bundleMaxCap >= 1 ? p.bundleMaxCap : null;
-    if (amount === null || amount === '0.00' || (bundle && (heads === null || extra === null))) { skipped.push(`Package ${p.name} (no usable price in v1)`); continue; }
-    const scheduleName = p.scheduleId ? daypartOfSchedule.get(p.scheduleId) ?? null : null;
-    if (p.scheduleId && scheduleName === null) skipped.push(`Package ${p.name}: its hours are not loadable, so it is priced all day (v1 did the same)`);
+    if (amount === null || amount === '0.00' || (bundle && (heads === null || extra === null))) { gap(`Package ${p.name} (no usable price in v1)`); continue; }
+    const scheduleName = p.scheduleId ? loadable.get(p.scheduleId)?.name ?? null : null;
+    if (p.scheduleId && scheduleName === null) {
+      const why = unloadable.get(p.scheduleId);
+      if (why !== undefined && !hoursGapped.has(p.scheduleId)) { hoursGapped.add(p.scheduleId); gap(`Hours ${why}`); }
+      gap(`Package ${p.name}: its hours are not loadable, so it is priced all day (v1 did the same)`);
+    }
     const name = baseName(p.name) || p.name.trim();
     const g = rows.get(key(name)) ?? { name, rows: [] };
     g.rows.push({ r: p, slot: { daypart: scheduleName, amount, bundleHeads: heads, extraHeadAmount: extra } });
@@ -151,36 +228,50 @@ export function planStoreMenu(v1: V1MenuSetup): MenuPlan {
     } else {
       const names = g.rows.map((x) => x.slot.daypart);
       if (names.some((n) => n === null) || new Set(names.map((n) => key(n!))).size !== names.length) {
-        skipped.push(`Package ${g.name} (its copies have different prices but not one window each: pair them by hand)`);
+        gap(`Package ${g.name} (its copies have different prices but not one window each: pair them by hand)`);
         continue;
       }
       slots = g.rows.map((x) => x.slot);
     }
     const wantsAll = g.rows.some((x) => x.r.refillIds.length === 0);
-    const refillNames = wantsAll ? [...refillNameById.values()] : [...new Set(g.rows.flatMap((x) => x.r.refillIds).map((id) => refillNameById.get(id)).filter((n): n is string => !!n))];
-    const station = g.rows.map((x) => stationOf(x.r.stationId)).find((n) => n !== null) ?? null;
+    if (wantsAll) notes.push(`Package ${g.name}: v1 lists no refills for it, so it gets ${EMPTY_REFILL_LIST_MEANS_ALL ? 'every enabled refill' : 'none'} (as v1's cashier screen)`);
+    const listed = [...new Set(g.rows.flatMap((x) => x.r.refillIds).map((id) => refillNameById.get(id)).filter((n): n is string => !!n))];
+    const refillNames = wantsAll && EMPTY_REFILL_LIST_MEANS_ALL ? [...refillNameById.values()] : listed;
+    const station = stationFor(`Package ${g.name}`, g.rows.map((x) => x.r.stationId));
     packages.push({ name: g.name, sortOrder: Math.min(...g.rows.map((x) => x.r.sortOrder)), stationName: station, refillNames, slots });
   }
 
+  // Ruling 2: only the hours some package is priced in are set up; the rest are named and left out.
+  const used = new Set(packages.flatMap((p) => p.slots.flatMap((s) => (s.daypart === null ? [] : [key(s.daypart)]))));
+  const dayparts: PlannedDaypart[] = [];
+  for (const d of loadable.values()) {
+    if (dayparts.some((x) => key(x.name) === key(d.name))) continue;
+    if (used.has(key(d.name))) dayparts.push(d);
+    else skipped.push(`Hours ${d.name} (no package on sale is priced in them, so they are not set up)`);
+  }
+  for (const [id, why] of unloadable) if (!hoursGapped.has(id)) skipped.push(`Hours ${why}`);
+
   // À la carte: v1's add-ons (an inventory row switched on as an add-on). Grouped rows ("Soda" 8oz / 12oz) become one item with variants.
   const itemRows = new Map<string, PlannedItem>();
+  const itemStationIds = new Map<string, (string | null)[]>();
   let withModifiers = 0;
   for (const i of v1.items) {
     if (!i.isAddon) continue;
     if (!i.isActive || i.isArchived) { skipped.push(`Item ${i.name} (switched off or archived in v1)`); continue; }
     const amount = pesoText(i.sellingPrice);
-    if (amount === null || amount === '0.00') { skipped.push(`Item ${i.name} (no usable price in v1)`); continue; }
+    if (amount === null || amount === '0.00') { gap(`Item ${i.name} (no usable price in v1)`); continue; }
     const grouped = i.kind === 'variant' && !!i.groupName?.trim() && !!i.variantLabel?.trim();
     const name = grouped ? i.groupName!.trim() : i.variantLabel?.trim() ? `${i.name.trim()} (${i.variantLabel.trim()})` : i.name.trim();
     const label = grouped ? i.variantLabel!.trim() : null;
     if (i.hasModifiers) withModifiers++;
     const cur = itemRows.get(key(name)) ?? { name, category: i.subCategory?.trim() || 'Add-ons', sortOrder: 0, stationName: null, dinerOrderable: false, variants: [] };
-    if (cur.variants.some((v) => (v.label === null ? '' : key(v.label)) === (label === null ? '' : key(label)))) { skipped.push(`Item ${i.name} (same name twice in v1)`); continue; }
+    if (cur.variants.some((v) => (v.label === null ? '' : key(v.label)) === (label === null ? '' : key(label)))) { gap(`Item ${i.name} (same name twice in v1)`); continue; }
     cur.variants.push({ label, amount });
-    cur.stationName ??= stationOf(i.stationId);
+    itemStationIds.set(key(name), [...(itemStationIds.get(key(name)) ?? []), i.stationId]);
     cur.dinerOrderable ||= i.customerEnabled;
     itemRows.set(key(name), cur);
   }
+  for (const it of itemRows.values()) it.stationName = stationFor(`Item ${it.name}`, itemStationIds.get(key(it.name)) ?? []);
 
   const tenders: PlannedTender[] = [];
   for (const m of v1.payModes) {
@@ -198,5 +289,5 @@ export function planStoreMenu(v1: V1MenuSetup): MenuPlan {
     ...(v1.refills.some((r) => r.isOther) ? ['v1 lists some refills under "Other refills"; v2 has no such flag, so they sit with the rest.'] : []),
   ];
 
-  return { stations, dayparts, refills, packages, items: [...itemRows.values()], tenders, skipped, notCopied };
+  return { stations, dayparts, refills, packages, items: [...itemRows.values()], tenders, skipped, gaps, notes, notCopied };
 }

@@ -52,7 +52,7 @@ export interface PreflightFacts {
   readonly keyFileConfigured: boolean;
   /** T-626: packages on sale now at the store (any hours). */
   readonly packagesOnSale: number;
-  /** T-626: packages priced for some of the store's hours but not all, as "Name (no Dinner price)". */
+  /** T-626: packages priced for some of the store's hours but not all, as "Name (no Dinner price)" (`packagesMissingHours`: only hours some package is priced in count). */
   readonly packagesMissingHours: readonly string[];
   /** T-626: packages on sale with no kitchen station. */
   readonly packagesWithoutStation: readonly string[];
@@ -72,6 +72,21 @@ const nameList = (names: readonly string[]): string => (names.length <= 5 ? name
 /** One approver who is also the only seller cannot approve their own close. Shared with the soak checklist's `approver` check. */
 export function hasSeparateApprover(approvers: ReadonlySet<string>, sellers: readonly string[]): boolean {
   return approvers.size >= 1 && (approvers.size >= 2 || sellers.some((p) => !approvers.has(p)));
+}
+
+/**
+ * T-626 audit ruling 2: packages priced for some hours but not all, as "Name (no Dinner price)". A package is judged only against the hours in which at least one package
+ * of the store is priced (an active daypart nothing is sold in, e.g. a breakfast window, is not a missing price). An all-day price misses nothing. Pure.
+ */
+export function packagesMissingHours(
+  packages: readonly { name: string; allDay: boolean; daypartIds: readonly string[] }[],
+  hours: readonly { id: string; name: string }[],
+): string[] {
+  const priced = new Set(packages.flatMap((p) => p.daypartIds));
+  const sold = hours.filter((h) => priced.has(h.id));
+  return packages
+    .filter((p) => !p.allDay && sold.some((h) => !p.daypartIds.includes(h.id)))
+    .map((p) => `${p.name} (no ${sold.filter((h) => !p.daypartIds.includes(h.id)).map((h) => h.name).join(' or ')} price)`);
 }
 
 export function evaluatePreflight(f: PreflightFacts): PreflightResult {
@@ -171,9 +186,7 @@ export async function posPreflight(tx: Tx, actor: Actor, input: { storeId: strin
     separateApprover: hasSeparateApprover(approvers, sellers),
     keyFileConfigured: deps.keyFilePresent(),
     packagesOnSale: packages.length,
-    packagesMissingHours: packages
-      .filter((p) => !p.allDay && hours.some((h) => !p.daypartIds.includes(h.id)))
-      .map((p) => `${p.name} (no ${hours.filter((h) => !p.daypartIds.includes(h.id)).map((h) => h.name).join(' or ')} price)`),
+    packagesMissingHours: packagesMissingHours(packages, hours),
     packagesWithoutStation: packages.filter((p) => !p.hasStation).map((p) => p.name),
     // A package with no station is its own blocking item above, so it is not listed again here.
     itemsWithoutStation: offered.filter((o) => o.stationId === null && !packageItemIds.has(o.itemId)).map((o) => o.name),

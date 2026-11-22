@@ -12,7 +12,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { buildPosSnapshot, loadStoreMenu } from '@shareat/domain';
 import { asOrg, closeAll, fixture, RATES, sql, type Fx } from '../../../domain/tests/integration/_fixtures/t525-pos';
 import { superAdminOf } from '../../../domain/tests/integration/_fixtures/t626-super-admin';
-import { checkStoreSetup } from '../../src/pos-v2/check-store-setup';
+import { checkStoreSetup, formatStoreSetupCheck } from '../../src/pos-v2/check-store-setup';
 import { formatStoreSetupReport, loadStoreSetup, type V1MenuSetup, type V1StoreSetupSource } from '../../src/pos-v2/load-store-setup';
 
 afterAll(closeAll);
@@ -222,5 +222,63 @@ describe('the menu POS v2 serves', () => {
     const offer = beef.variants[0]!.channels.store;
     expect(offer.orderable && ['399.00', '449.00'].includes(offer.amount ?? '')).toBe(true);
     expect(snap.body.menu.menu.items.some((i) => i.name === 'Iced Tea' && i.variants.length >= 2)).toBe(true);
+  });
+});
+
+// T-626 audit fixes (BOSS rulings). Not run on the builder's PC (no database): CI runs them.
+describe('audit fixes', () => {
+  it('ruling 3: a grouped item keeps no unlabelled default; its variants are exactly Glass and Pitcher, both priced', async () => {
+    const { f, sa } = await world();
+    await load(f, sa, lipa());
+    const rows = await sql<{ label: string | null; is_default: boolean; amount: string | null }[]>`
+      select v.label, v.is_default, (select min(o.amount)::text from menu_offers o where o.variant_id = v.id and not o.withdrawn) as amount
+        from menu_item_variants v join menu_items i on i.id = v.menu_item_id
+       where i.org_id = ${f.orgId} and i.name = 'Iced Tea' and v.status = 'active' order by v.label`;
+    expect(rows).toEqual([{ label: 'Glass', is_default: true, amount: '50.00' }, { label: 'Pitcher', is_default: false, amount: '150.00' }]);
+  });
+
+  it('ruling 4: a package that already has its own refill list keeps it; the v1 extras are a difference and the check fails on them', async () => {
+    const { f, sa } = await world();
+    const riceOnly = lipa({ packages: lipa().packages.map((p) => (p.id === 'p1' || p.id === 'p2' ? { ...p, refillIds: ['r-rice'] } : p)) });
+    await load(f, sa, riceOnly);
+    const r = await load(f, sa, lipa());
+    expect(r.menu!.differences).toContain("Pork and Beef: v1 also allows Pork Meat Refill; this package already has its own refill list here, so they were not added");
+    expect(r.menu!.created['refill links']).toEqual([]);
+    const c = await check(f, lipa(), manila('12:00'));
+    expect(c.rows.filter((x) => !x.ok).map((x) => `${x.kind}: ${x.name}: ${x.detail}`)).toEqual(['Package: Pork and Beef: refill link to Pork Meat Refill missing']);
+  });
+
+  it('rulings 1 and 5: a package with no usable price and an item whose station is switched off are GAPS in the check', async () => {
+    const { f, sa } = await world();
+    const menu = lipa({
+      packages: [...lipa().packages, pkg('p7', 'Mystery Box', 0)],
+      items: [...lipa().items, { name: 'Bar Snack', groupName: null, variantLabel: null, kind: 'single', subCategory: null, sellingPrice: 70, isActive: true, isArchived: false, isAddon: true, stationId: 'st-old', customerEnabled: false, hasModifiers: false }],
+    });
+    await load(f, sa, menu);
+    const c = await check(f, menu, manila('12:00'));
+    expect(c.ok).toBe(false);
+    expect(c.rows.filter((x) => !x.ok && x.kind === 'Not loadable from v1').map((x) => x.name)).toEqual([
+      'Package Mystery Box (no usable price in v1)',
+      'Item Bar Snack: no kitchen station in v1 (its station Old Bar is switched off), so it has no route',
+    ]);
+  });
+
+  it('ruling 6: a package on hours switched off in v1 is not loaded and is a NOTE; rulings 2 and 7: unused hours are not made, empty refill lists are noted', async () => {
+    const { f, sa } = await world();
+    const menu = lipa({
+      schedules: [...lipa().schedules, { id: 'sc-late', name: 'Late Night', isActive: false, isArchived: false, days: ALL_DAYS, startTime: '22:00', endTime: '02:00' }, { id: 'sc-bfast', name: 'Breakfast', isActive: true, isArchived: false, days: ALL_DAYS, startTime: '06:00', endTime: '08:00' }],
+      packages: [...lipa().packages, pkg('p8', 'Late Promo', 199, { scheduleId: 'sc-late' })],
+    });
+    const r = await load(f, sa, menu);
+    expect(r.menu!.created.packages).toEqual(['Pork and Beef', 'Pork and Chicken', 'Barkada']);
+    expect(r.menu!.created.hours).toEqual(['Lunch 08:00-17:00', 'Dinner 17:00-08:00']);
+    expect(r.menu!.notes).toEqual([
+      'Package Late Promo: not on sale in v1 (its hours are off)',
+      "Package Pork and Chicken: v1 lists no refills for it, so it gets every enabled refill (as v1's cashier screen)",
+      "Package Barkada: v1 lists no refills for it, so it gets every enabled refill (as v1's cashier screen)",
+    ]);
+    const c = await check(f, menu, manila('12:00'));
+    expect(c.rows.filter((x) => !x.ok)).toEqual([]);
+    expect(formatStoreSetupCheck(c).join('\n')).toMatch(/NOTE Package Late Promo: not on sale in v1 \(its hours are off\)/);
   });
 });

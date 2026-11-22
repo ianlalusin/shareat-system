@@ -8,7 +8,7 @@
  */
 import { kitchenRepo, menuRepo, daypartsRepo, posTabletPairingsRepo, posStoreSetupRepo, posV1Repo, posV2Repo, refuse, RefusalError, type Tx } from '@shareat/db';
 import { buildPosSnapshot, daypartContains, loadStoreMenu, normalizePosV1Alias, type PosDeps } from '@shareat/domain';
-import { key, planStoreMenu, type MenuPlan, type PlannedSlot } from './plan-store-menu';
+import { key, planGapRows, planStoreMenu, unpricedOrderable, type MenuPlan, type PlannedSlot } from './plan-store-menu';
 import type { V1StoreSetupSource } from './load-store-setup';
 
 export interface CheckRow { readonly kind: string; readonly name: string; readonly ok: boolean; readonly detail: string }
@@ -31,6 +31,9 @@ export async function checkStoreSetup(
   const rows: CheckRow[] = [];
   const notes: string[] = [];
   const row = (kind: string, name: string, problems: string[], good: string): void => { rows.push({ kind, name, ok: problems.length === 0, detail: problems.length ? problems.join('; ') : good }); };
+  // Ruling 1: what v1 sells that the plan could not carry is a GAP; plain facts are NOTES.
+  rows.push(...planGapRows(plan));
+  notes.push(...plan.notes);
 
   const at = input.now ?? (await menuRepo.dbNow(tx));
   const catalog = await menuRepo.catalogOfOrg(tx, orgId);
@@ -144,6 +147,7 @@ export async function checkStoreSetup(
   // ---- what the TABLET gets -------------------------------------------------------------------------------------------------------
   let menu: Menu | undefined;
   let snapshotTenders: string[] | null = null;
+  let snapNoted = false;
   const timeZone = (await daypartsRepo.storeTimezone(tx, storeId)) ?? 'Asia/Manila';
   const pairing = input.now ? undefined : (await posTabletPairingsRepo.listForStores(tx, orgId, [storeId])).find((x) => x.revokedAt === null);
   const terminal = pairing ? await posV2Repo.getTerminalForPairing(tx, orgId, storeId, pairing.id) : undefined;
@@ -155,12 +159,13 @@ export async function checkStoreSetup(
       row('Tablet snapshot', 'stands', snap.body.stands.length === 0 ? ['no stands'] : [], `${snap.body.stands.length} stands`);
     } catch (e) {
       if (!(e instanceof RefusalError)) throw e;
+      snapNoted = true;
       notes.push(`The tablet snapshot could not be built (${e.userMessage}), so the menu was read with the loader the tablet uses.`);
     }
   }
   if (!menu) {
     menu = (await loadStoreMenu(tx, orgId, storeId, input.now)).menu;
-    if (!notes.length) notes.push(input.now ? 'The menu was read as of the time given.' : 'No paired tablet with a till at this store: the menu was read with the same loader the tablet uses, but no snapshot was built.');
+    if (!snapNoted) notes.push(input.now ? 'The menu was read as of the time given.' : 'No paired tablet with a till at this store: the menu was read with the same loader the tablet uses, but no snapshot was built.');
   }
   const tablet: Menu = menu;
   if (snapshotTenders) for (const t of plan.tenders) row('Tablet snapshot', `payment method ${t.name}`, snapshotTenders.some((n) => key(n) === key(t.name)) ? [] : ['not in the tablet snapshot'], 'in the snapshot');
@@ -184,6 +189,8 @@ export async function checkStoreSetup(
         else if (!v.channels.store.orderable) p.push(`${want.label ?? name} is not on sale now (expected ${peso(now.amount)} for ${now.daypart ?? 'all day'})`);
         else if (type !== 'refill' && v.channels.store.amount !== now.amount) p.push(`${want.label ?? name} shows ${(v.channels.store.amount === null ? 'no price' : peso(v.channels.store.amount))} now, v1 says ${peso(now.amount)} for ${now.daypart ?? 'all day'}`);
       }
+      // Ruling 3: a priced item must not also have a variant on sale with no price (the unlabelled default of a grouped item).
+      if (type === 'a_la_carte') for (const label of unpricedOrderable(it.variants)) p.push(`variant ${label} is on sale with no price`);
     }
     row(kind, name, p, 'in the tablet menu at the right price');
   };

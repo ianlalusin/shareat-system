@@ -4,7 +4,7 @@
  * (the facts being read right) is `tests/integration/t533-s3-preflight.test.ts`.
  */
 import { describe, expect, it } from 'vitest';
-import { evaluatePreflight, hasSeparateApprover, type PreflightFacts } from './preflight';
+import { evaluatePreflight, hasSeparateApprover, packagesMissingHours, type PreflightFacts } from './preflight';
 
 const STORE = '00000000-0000-4000-8000-000000000001';
 const GREEN: PreflightFacts = {
@@ -103,4 +103,20 @@ describe('hasSeparateApprover', () => {
   it('the only approver is the only seller: no', () => expect(hasSeparateApprover(set('a'), ['a'])).toBe(false));
   it('one approver and another seller: yes', () => expect(hasSeparateApprover(set('a'), ['a', 'b'])).toBe(true));
   it('two approvers, nobody else sells: yes', () => expect(hasSeparateApprover(set('a', 'b'), ['a'])).toBe(true));
+});
+
+describe('T-626 audit ruling 2: packagesMissingHours', () => {
+  const HOURS = [{ id: 'b', name: 'Breakfast' }, { id: 'l', name: 'Lunch' }, { id: 'd', name: 'Dinner' }];
+  it('judges a package only against the hours some package is priced in; an unused active window (Breakfast) is not a missing price', () => {
+    const pk = [
+      { name: 'Pork and Beef', allDay: false, daypartIds: ['l', 'd'] },
+      { name: 'Pork Premium', allDay: false, daypartIds: ['l'] },
+      { name: 'Pork and Chicken', allDay: true, daypartIds: [] },
+    ];
+    expect(packagesMissingHours(pk, HOURS)).toEqual(['Pork Premium (no Dinner price)']);
+  });
+  it('MUTANT guard: judging against every active window would also list Breakfast for both', () => {
+    const pk = [{ name: 'Pork and Beef', allDay: false, daypartIds: ['l', 'd'] }];
+    expect(packagesMissingHours(pk, HOURS)).toEqual([]);
+  });
 });
