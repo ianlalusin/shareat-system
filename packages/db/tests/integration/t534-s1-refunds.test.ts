@@ -46,7 +46,8 @@ describe('T-534 S1 pos_refunds', () => {
     const w = await baseWorld('r2');
     const s = await sale(w);
     expectCode(await refusal(() => ins('pos_refunds', refundRow(w, s, { total: '0' }))), '23514', 'pos_refunds_total_check');
-    expectCode(await refusal(() => ins('pos_refunds', refundRow(w, s, { total: '-1' }))), '23514', 'pos_refunds_total_check');
+    expectCode(await refusal(() => ins('pos_refunds', refundRow(w, s, { total: '-1' }))), '23514', 'pos_refunds_charges_amount_check'); // T-627: a negative total also breaks charges_amount <= total, which Postgres reports first
+    expectCode(await refusal(() => ins('pos_refunds', refundRow(w, s, { total: '10.00', charges_amount: '10.01' }))), '23514', 'pos_refunds_charges_amount_check'); // T-627: charges refunded cannot exceed the refund
     expectCode(await refusal(() => ins('pos_refunds', refundRow(w, s, { refund_seq: 0 }))), '23514', 'pos_refunds_refund_seq_check');
     expectCode(await refusal(() => ins('pos_refunds', refundRow(w, s, { reason: ' ' }))), '23514', 'pos_refunds_reason_check');
   });
