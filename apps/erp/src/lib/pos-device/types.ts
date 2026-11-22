@@ -18,6 +18,10 @@ export type PosEventKind =
   | 'discount.applied_to_all'
   | 'charge.added'
   | 'charge.removed'
+  | 'reservation.created'
+  | 'deposit.taken'
+  | 'reservation.seated'
+  | 'reservation.status_set'
   | 'session.voided'
   | 'sale.completed';
 

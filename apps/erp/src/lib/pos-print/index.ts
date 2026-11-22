@@ -9,6 +9,8 @@ export { formatReceipt } from './receipt-text';
 export { formatKitchenTicket, formatRefillSlip } from './kitchen-text';
 export { formatOfflineXSlip, formatXSlip, formatZSlip } from './reading-text';
 export { formatRefundSlip } from './refund-text';
+export { formatDepositSlip } from './deposit-text';
+export type { DepositSlipView } from './deposit-text';
 export { receiptHeaderOf } from './header';
 export type {
   FontMode,

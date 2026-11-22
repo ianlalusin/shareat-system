@@ -746,7 +746,8 @@ async function bridgePayloadFor(tx: Tx, orgId: string, storeId: string, business
     const refundsOfZ = (await posV2Repo.listRefundsOfClose(tx, orgId, storeId, d.close.id)).reduce((a, r) => a + toCentavos(money(r.total)), 0n);
     closes.push({
       receiptCount: d.close.receiptCount,
-      grossTotal: fromCentavos(toCentavos(money(d.close.grossTotal)) - refundsOfZ),
+      // T-628: and v1 has no reservation deposit, so what the bills took from deposits (collected on the day the deposit was taken) is not in v1's methods nor in its total either.
+      grossTotal: fromCentavos(toCentavos(money(d.close.grossTotal)) - refundsOfZ - sumCentavos(receipts.map((r) => r.depositApplied))),
       chargesTotal: fromCentavos(sumCentavos(receipts.map((r) => r.chargeTotal))),
       varianceTotal: fromCentavos((await shortPaid(tx, orgId, receipts)).reduce((a, x) => a + x.gap, 0n)),
       discountTotal: fromCentavos(sumCentavos(receipts.map((r) => r.discountTotal))),

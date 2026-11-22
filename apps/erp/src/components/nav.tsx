@@ -168,6 +168,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/reports/expense-items', label: 'Spending by item' },
       { href: '/reports/sales-rollup', label: 'Sales rollup' },
       { href: '/reports/pos-reconciliation', label: 'POS reconciliation' },
+      // T-628: reservations and the deposits held, read-only (the POS tablet owns them).
+      { href: '/pos-reservations', label: 'POS reservations' },
       // T-569: a copy of every POS v2 table before the 2027 clean-up, as CSV.
       { href: '/reports/pos-data', label: 'POS data download' },
       { href: '/reports/dual-run', label: 'Dual run' },

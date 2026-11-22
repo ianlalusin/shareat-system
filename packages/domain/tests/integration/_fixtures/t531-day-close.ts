@@ -74,6 +74,8 @@ export interface Reading {
   convert: { cashIn: string; cashOut: string; net: string; count: number };
   /** T-534 S4 / T-627: the refunds of the window. */
   refunds?: { total: string; cash?: string; count: number };
+  /** T-628: the reservation-deposit block of the window. */
+  deposits: { taken: string; voided: string; refunded: string; kept: string; applied: string; cashNet: string; count: number };
   toCheckCount: number; heads: number; packageSessions: number; lateCount: number; spansTwoDates: boolean;
 }
 export interface CloseResult { wrote: boolean; dayCloseId: string; zNo: number; reading: Reading; salesDayId: string | null }

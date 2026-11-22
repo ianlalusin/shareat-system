@@ -89,6 +89,8 @@ export interface ReceiptView {
   /** T-627: store charges, printed under the VAT block with `amountDue` (= total + charges). Absent or empty prints exactly as before. */
   charges?: ReceiptCharge[];
   amountDue?: Money;
+  /** T-628: the part of the amount due paid from the reservation's held deposit, printed as `LESS DEPOSIT` above the tenders; absent or zero prints exactly as before. */
+  deposit?: Money;
   tenders: ReceiptTender[];
   /** `"0.00"` when there is none. */
   change: Money;
@@ -187,6 +189,8 @@ export interface ReadingSlipView {
   convert?: { cashIn: Money; cashOut: Money; count: number };
   /** T-534 S4: refunds of the window; the tender rows above are already NET of them. Printed only when there was a refund. */
   refunds?: { total: Money; count: number };
+  /** T-628: reservation deposits of the window (taken, refunded or voided, kept, and applied to bills); each line prints only above zero. `taken` and `refunded` are the money that moved by any method. */
+  deposits?: { taken: Money; refunded: Money; kept: Money; applied: Money };
   /** Offline wallet payments still to check; printed only above zero. */
   toCheckCount: number;
   /** Receipts recorded after their window opened; printed only above zero. */

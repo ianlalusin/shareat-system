@@ -247,9 +247,9 @@ const ALL_CHUNKS = [
 ];
 
 describe('T-614 S3 precache of every /pos tab', () => {
-  it('the tab list is the six tabs, and every tabs.ts href is in it', () => {
+  it('the tab list is the seven tabs, and every tabs.ts href is in it', () => {
     const { api } = boot('t1', online);
-    expect(api.POS_TAB_PATHS).toEqual(['/pos', '/pos/kitchen', '/pos/refills', '/pos/receipts', '/pos/till', '/pos/printer']);
+    expect(api.POS_TAB_PATHS).toEqual(['/pos', '/pos/kitchen', '/pos/refills', '/pos/reservations', '/pos/receipts', '/pos/till', '/pos/printer']);
     const tabsSrc = readFileSync(path.join(__dirname, 'tabs.ts'), 'utf8');
     const hrefs = [...tabsSrc.matchAll(/href: '(\/pos[^']*)'/g)].map((m) => m[1]!);
     expect(hrefs.length).toBeGreaterThanOrEqual(5);

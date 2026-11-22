@@ -21,7 +21,6 @@ export {
   listReservationsForOffice,
   postDepositsForZ,
   depositBlockOf,
-  canSettleDeposits,
   NO_DEPOSITS,
   DEPOSIT_VOID_AFTER_APPLY,
   DEPOSIT_ALREADY_USED,

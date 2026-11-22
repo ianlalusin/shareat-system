@@ -35,6 +35,8 @@ export interface SnapshotOrdersPart {
   /** T-621: the offline safety rails. Each null when the cached snapshot is older than the rule (that rail stays off until the next refresh). */
   offlineUnsentWarnCentavos?: number | null;
   offlineXSlipHours?: number | null;
+  /** T-628: the store's reservations with the deposit held on each; an empty list in a snapshot cached before they existed. */
+  reservations?: unknown[];
 }
 export interface DeviceSync {
   /** The cached snapshot's staff list (empty until one exists). */
@@ -87,6 +89,7 @@ function ordersPartOf(s: CachedSnapshot | null): SnapshotOrdersPart | null {
     payment: paymentPartOf(b),
     offlineUnsentWarnCentavos: typeof unsentWarn === 'number' && Number.isSafeInteger(unsentWarn) && unsentWarn > 0 ? unsentWarn : null,
     offlineXSlipHours: typeof xslipHours === 'number' && Number.isInteger(xslipHours) && xslipHours >= 1 ? xslipHours : null,
+    reservations: Array.isArray(b.reservations) ? b.reservations : [],
   };
 }
 

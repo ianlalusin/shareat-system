@@ -26,7 +26,7 @@ const NETWORK_TIMEOUT_MS = 5000;
 /** T-621 S1: the one message that lets a waiting worker take over. Must equal SW_ACTIVATE_NOW in offline-sw.ts (a test pins both). */
 const ACTIVATE_NOW = 'activate-now';
 /** T-614 S3: every /pos tab. Each one's HTML is fetched once after install and the hashed files it names are saved, so a tab never opened online still opens offline. A test pins this to the tabs in _shell/tabs.ts plus Printer. */
-const POS_TAB_PATHS = ['/pos', '/pos/kitchen', '/pos/refills', '/pos/receipts', '/pos/till', '/pos/printer'];
+const POS_TAB_PATHS = ['/pos', '/pos/kitchen', '/pos/refills', '/pos/reservations', '/pos/receipts', '/pos/till', '/pos/printer'];
 
 /** Which strategy a request gets. Pure; the one place that decides what may be cached. */
 function strategyFor(url, origin, method, mode) {

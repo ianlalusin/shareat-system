@@ -96,8 +96,9 @@ export function formatReceipt(view: ReceiptView, layout: PrintLayout): string[] 
     out.push(...justify('AMOUNT DUE', printAmount(view.amountDue ?? view.total), cols));
   }
 
-  // 6. The tenders, then the change.
+  // 6. The tenders, then the change. T-628: a held reservation deposit comes off first.
   out.push(rule(cols));
+  if (view.deposit !== undefined && !isZeroAmount(view.deposit)) out.push(...justify('LESS DEPOSIT', `-${printAmount(view.deposit)}`, cols));
   for (const tender of view.tenders) {
     const name = tender.toCheck ? `${tender.name} (to check)` : tender.name;
     out.push(...justify(name, printAmount(tender.amount), cols));

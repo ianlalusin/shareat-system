@@ -28,6 +28,7 @@ import { OrdersView } from './OrdersView';
 import { actingPersonId, addLinesEvent, cancelLineEvent, confirmVoidTable, ordersAccess, seatEvent, sendVoidNow, setHeadsEvent, submitPosEvent, takeOutEvent, voidAccess, voidSessionEvent, HEADS_MAX, HEADS_MIN, VOID_OFFLINE_NOTE } from './payloads';
 import { projectOrders, type GhostLine, type ServerStand, type SessionBody } from './project';
 import { droppedEvents, SETTLE_MAX_MS, stillSettling, type Settling } from './settle';
+import { depositForSession, type ReservationRow } from '../_reservations/logic';
 
 /** How many table reads run at once when the list changes. */
 const FETCH_AT_ONCE = 4;
@@ -259,6 +260,7 @@ export function Orders() {
             bill={draftBill}
             presets={payment.discountPresets}
             chargePresets={payment.chargePresets}
+            deposit={depositForSession(snapshot?.reservations as ReservationRow[] | undefined, pos?.pendingEvents, paying)}
             tenders={payment.tenders}
             rules={payment.rules}
             vatRegistered={payment.store.vatRegistered}

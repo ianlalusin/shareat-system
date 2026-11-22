@@ -50,3 +50,24 @@ records deposit payments with a tender, the Pay screen pre-fills them as "From r
 5. Posting patterns: each new pattern balanced and on the right accounts (existing posting-pattern test harness).
 - Migration 0276 hand-authored (ADR-012 §5), classification + RLS registry, full CI suite. `npm run census:write`;
   typecheck apps/erp and package tests via a temp tsconfig.
+
+## As built (T-628)
+
+**Migration 0276** (journal `when` = 0275's + 86400000): `pos_reservations` (purge, guard trigger), `pos_reservation_deposits` (purge, append-only except `day_close_id` once; two guard triggers),
+`pos_sales_receipts.deposit_applied`, `sales_days.deposits_applied` (only on a `pos_receipts` day; the figure-lock function is re-created with it), account **2170 Customer deposits payable** (seed + one INSERT per org).
+Registries: classification (both purge), RLS (both `org_column`), trigger registry (+3 ALWAYS: 73 -> 76), audit catalogue (+7 actions: 297 -> 304), chart pins (104 accounts, 97 leaves).
+Rules in the DATABASE: reservation statuses move forward only; CLOSING needs a zero held balance (refund or keep first); a deposit is taken only on a booked or seated reservation; nothing leaves more than is held;
+a VOID is refused once any deposit was applied and must name the taken deposit (same amount and method); an apply needs a seated reservation; applied once per reservation and once per receipt (partial uniques).
+**Events (inbox, offline):** `reservation.created`, `deposit.taken`, `reservation.seated`, `reservation.status_set` (cancelled / no_show); `sale.completed` gains an optional `deposit { reservationId, amount }`.
+**Online only (no outbox kind), manager PIN or a signed-in `approve_pos_correction` holder (the refund pattern `postSaleApprover`), a reason, `record_sale` through `authorize()` first:** void, refund, keep, and close a reservation
+(`POST /api/pos/deposits`, action void | refund | keep | close; close with money held carries the refund-or-keep choice for the whole balance).
+**Apply:** `completeSale` takes the deposit as a part-payment (never more than held or than the bill, one per reservation), writes the `applied` event in the sale's transaction and closes the reservation when nothing is left held. A
+deposit larger than the bill leaves the rest held; the reservation stays seated for a manager. A payment line may be absent when the deposit covers the bill. A refund of a receipt that used a deposit is capped by what was paid by method (the deposit part is not refundable by method).
+**Books (no new journal flow):** the cash-moving events of a till (taken / voided / refunded / kept) are collected into its Z (`day_close_id`) and post beside the sales day, `postDepositsForZ` (source_type `pos_deposit`, one entry per kind per money place,
+key `pos_deposit:<closeId>:<kind>:<place>`); `applied` rides the sales day: `routeSalesDay` takes `depositsApplied` on the collected side and posts `Dr 2170`. Four patterns in POSTING-PATTERNS: `deposit.taken`, `deposit.refunded` (void too),
+`deposit.kept`, `sale.pos-deposit-applied`. Reading identities: Σ byTender + deposits applied + short payments + refunds = gross. A Z may be closed with only deposit events (no sales day).
+**X / Z / receipt:** DEPOSITS TAKEN / REFUNDED / KEPT / APPLIED rows (each only above zero; refunded includes voided), LESS DEPOSIT above the tenders on the final receipt, a deposit slip (`formatDepositSlip`) printed when a deposit is taken.
+**Screens:** POS Reservations tab (`/pos/reservations`: list from the snapshot with the outbox on top, New reservation, Take deposit, Seat, Cancel / No-show, manager Settle), Pay screen "Use deposit", ERP read-only `/pos-reservations` (capability `approve_pos_correction`).
+**Known limits (shortcuts, recorded):** a deposit event taken offline and synced AFTER its day's Z lands in the next Z (the cash was in the drawer the earlier day; a late receipt behaves the same); a `deposit.taken` still in the outbox can show twice for a moment after a snapshot refresh (display only);
+a table voided while its reservation holds money leaves the reservation seated for the manager to cancel and settle; the v1 bridge document (December) carries the Z's tenders only, and v1 has no deposit: the day it receives is the gross less the part paid from deposits (the money that part was taken the day the deposit was).
+**Open question for Ian / the accountant:** the 1 January opening balance must count any deposit still held (account 2170) by hand, and the reservation entered again (both tables purge at cutover).

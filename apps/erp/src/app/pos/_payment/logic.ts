@@ -163,7 +163,8 @@ export function payBlockerDetail(i: {
     const nameMissing = !h || h.holderName.trim() === '';
     if (nameMissing || (h?.idNumber ?? '').trim() === '') return { message: `Add the name and ID for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}.`, target: { kind: 'holder', dinerNo: d.dinerNo, field: nameMissing ? 'holderName' : 'idNumber' } };
   }
-  if (i.rows.length === 0) return { message: SENTENCES.noPayment, target: { kind: 'tenders' } };
+  // T-628: a deposit can cover the whole bill, so there may be nothing left for a payment row to pay.
+  if (i.rows.length === 0 && toCentavos(money(i.total)) > 0n) return { message: SENTENCES.noPayment, target: { kind: 'tenders' } };
   if (i.rows.length > MAX_TENDERS) return { message: SENTENCES.tooMany, target: { kind: 'tenders' } };
   for (const [index, r] of i.rows.entries()) {
     if (r.tenderId === '') return { message: SENTENCES.pickTender, target: { kind: 'row', index, field: 'tender' } };
@@ -278,6 +279,8 @@ interface SaleInput {
   rows: readonly PayRow[];
   tenders: readonly Tender[];
   seniors: readonly Senior[];
+  /** T-628: a held reservation deposit applied as part of the payment (a payment line "Deposit"); the rows then pay only the rest. */
+  deposit?: { reservationId: string; amount: string };
 }
 
 /** The T-524 completeSale input minus storeId and pairingId (the server takes both from the pairing). */
@@ -304,6 +307,8 @@ export function buildSalePayload(i: SaleInput): Record<string, unknown> {
       return { tenderId: r.tenderId, amount: centsText(amountCents(r.amount)), ...(wallet && ref ? { referenceNo: ref } : {}), toCheck: !i.online && wallet };
     }),
     seniors: i.seniors.map((s) => ({ dinerNo: s.dinerNo, kind: s.kind, idNumber: s.idNumber.trim(), holderName: s.holderName.trim() })),
+    // T-628: only when a deposit is used, so a sale without one is the payload it always was.
+    ...(i.deposit ? { deposit: { reservationId: i.deposit.reservationId, amount: centsText(amountCents(i.deposit.amount)) } } : {}),
   };
 }
 
@@ -395,6 +400,8 @@ export interface PayInput {
   rows: readonly PayRow[];
   tenders: readonly Tender[];
   seniors: readonly Senior[];
+  /** T-628: a held reservation deposit applied as part of the payment (the rows pay the rest). */
+  deposit?: { reservationId: string; amount: string };
   vatRateLabel: string;
   layout: PrintLayout;
   /** Customer copies, from the till's settings (printSettingsOf). */
@@ -404,7 +411,9 @@ export interface PayInput {
 export type PayResult = { ok: true; receiptNo: string; print: PrintOutcome; lines: string[]; notice: string | null; view: ReceiptView } | { ok: false; message: string };
 
 export function receiptViewOf(i: PayInput, receiptNo: string): ReceiptView {
-  const summary = paymentSummary({ total: i.priced.amountDue, rows: i.rows, tenders: i.tenders });
+  // T-628: the deposit comes off what the rows have to pay (the change is worked out against the rest).
+  const toPay = centsText(toCentavos(money(i.priced.amountDue)) - amountCents(i.deposit?.amount));
+  const summary = paymentSummary({ total: toPay, rows: i.rows, tenders: i.tenders });
   const payments = (buildSalePayload({ ...i, receiptId: '', terminalSeq: 0 }).payments as { tenderId: string; amount: string; referenceNo?: string; toCheck: boolean }[]);
   const diners: ReceiptDiner[] = [...i.seniors].sort((a, b) => a.dinerNo - b.dinerNo).map((s) => ({ dinerNo: s.dinerNo, kind: s.kind, holderName: s.holderName.trim(), idNumber: s.idNumber.trim() }));
   return {
@@ -419,6 +428,7 @@ export function receiptViewOf(i: PayInput, receiptNo: string): ReceiptView {
     discountTotal: i.priced.discountTotal,
     total: i.priced.total,
     ...(i.receipt.charges && i.receipt.charges.length > 0 ? { charges: i.receipt.charges, amountDue: i.priced.amountDue } : {}),
+    ...(i.deposit && amountCents(i.deposit.amount) > 0n ? { deposit: centsText(amountCents(i.deposit.amount)) } : {}),
     tenders: payments.map((p) => ({ name: i.tenders.find((t) => t.id === p.tenderId)?.name ?? 'Tender', amount: money(p.amount), reference: p.referenceNo ?? null, toCheck: p.toCheck })),
     change: money(summary.change),
     diners,

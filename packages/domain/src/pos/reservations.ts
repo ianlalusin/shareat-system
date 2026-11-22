@@ -23,7 +23,7 @@
  *    cannot close without a refund or a keep, each with a reason.
  *  - Money moves under the store's Z lock (`lockPosDayClose`) and a row lock on the reservation, so a Z never freezes figures a manager action is about to change.
  */
-import { authorize, can, type Actor } from '@shareat/auth';
+import { authorize, type Actor } from '@shareat/auth';
 import { compare, fromCentavos, money, toCentavos, ZERO, type Money } from '@shareat/core/money';
 import { advisoryLocksRepo, journalRepo, moneyAccountsRepo, posV1Repo, posV2Repo, type Tx } from '@shareat/db';
 import { buildPeriodFacts, periodRefusal } from '../business-rules';
@@ -565,9 +565,4 @@ export async function postDepositsForZ(
     entries.push(posted.entryId);
   }
   return entries;
-}
-
-/** Whether `actor` may settle a reservation's money here (a manager signed in, or one who will type a PIN): used by the screens to decide what to show, never to decide a write. */
-export async function canSettleDeposits(tx: Tx, actor: Actor, storeId: string): Promise<boolean> {
-  return can(tx, actor, 'approve_pos_correction', { storeId });
 }
