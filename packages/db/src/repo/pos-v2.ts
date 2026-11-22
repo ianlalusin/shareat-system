@@ -18,6 +18,8 @@ import {
   posRefundLines,
   posRefundPayments,
   posRefunds,
+  posReservationDeposits,
+  posReservations,
   posSalesReceiptCharges,
   posSalesReceiptLineDiscounts,
   posSalesReceiptLines,
@@ -39,6 +41,8 @@ import {
   type PosRefundLineRow,
   type PosRefundPaymentRow,
   type PosRefundRow,
+  type PosReservationDepositRow,
+  type PosReservationRow,
   type PosSalesReceiptChargeRow,
   type PosSalesReceiptRow,
   type PosStandRow,
@@ -67,6 +71,8 @@ export type {
   PosRefundLineRow,
   PosRefundPaymentRow,
   PosRefundRow,
+  PosReservationDepositRow,
+  PosReservationRow,
   PosSalesReceiptChargeRow,
   PosSalesReceiptRow,
   PosStandRow,
@@ -498,6 +504,8 @@ export interface NewReceipt {
   offline: boolean;
   /** T-627: the store charges on the bill, outside `total` (the amount due is total + chargeTotal). Absent = 0. */
   chargeTotal?: Money;
+  /** T-628: the part of the amount due paid from a held reservation deposit. Absent = 0. */
+  depositApplied?: Money;
 }
 export interface NewReceiptLine {
   id: string;
@@ -555,6 +563,7 @@ export async function insertReceipt(tx: Tx, r: NewReceipt): Promise<void> {
     deviceTotal: r.deviceTotal,
     offline: r.offline,
     ...(r.chargeTotal !== undefined ? { chargeTotal: r.chargeTotal } : {}),
+    ...(r.depositApplied !== undefined ? { depositApplied: r.depositApplied } : {}),
   });
 }
 export async function insertReceiptLines(tx: Tx, rows: NewReceiptLine[]): Promise<void> {
@@ -1833,4 +1842,159 @@ export async function closeRefunds(tx: Tx, orgId: string, storeId: string, dayCl
 export async function getTerminalNoById(tx: Tx, orgId: string, terminalId: string): Promise<number | undefined> {
   const [row] = await tx.select({ n: posTerminals.terminalNo }).from(posTerminals).where(and(eq(posTerminals.orgId, orgId), eq(posTerminals.id, terminalId)));
   return row?.n;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-628 - table reservations and the money held for them (migration 0276). The domain decides every rule; these only write and read.
+// ---------------------------------------------------------------------------------------------------------------------
+export interface NewReservation {
+  id: string;
+  orgId: string;
+  storeId: string;
+  customerName: string;
+  phone: string | null;
+  partySize: number;
+  reservedFor: Date;
+  standId: string | null;
+  note: string | null;
+  createdBy: string;
+  createdAtDevice: Date;
+}
+export async function insertReservation(tx: Tx, r: NewReservation): Promise<void> {
+  await tx.insert(posReservations).values(r);
+}
+/** One reservation of the store; `forUpdate` locks it (the money actions take turns on it). Undefined for another store's or a missing one. */
+export async function getReservation(tx: Tx, orgId: string, storeId: string, id: string, opts: { forUpdate?: boolean } = {}): Promise<PosReservationRow | undefined> {
+  const q = tx.select().from(posReservations).where(and(eq(posReservations.orgId, orgId), eq(posReservations.storeId, storeId), eq(posReservations.id, id)));
+  const [row] = opts.forUpdate ? await q.for('update') : await q;
+  return row;
+}
+export async function getReservationBySession(tx: Tx, orgId: string, storeId: string, sessionId: string): Promise<PosReservationRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posReservations)
+    .where(and(eq(posReservations.orgId, orgId), eq(posReservations.storeId, storeId), eq(posReservations.sessionId, sessionId)));
+  return row;
+}
+/** The columns the guard lets move. Returns how many rows changed (0 = the guard's WHERE did not match). */
+export async function updateReservation(
+  tx: Tx, orgId: string, storeId: string, id: string, set: { status?: PosReservationRow['status']; standId?: string | null; sessionId?: string | null; updatedAt: Date; closedAt?: Date | null },
+): Promise<number> {
+  const rows = await tx
+    .update(posReservations)
+    .set(set)
+    .where(and(eq(posReservations.orgId, orgId), eq(posReservations.storeId, storeId), eq(posReservations.id, id)))
+    .returning({ id: posReservations.id });
+  return rows.length;
+}
+
+export interface ReservationWithHeld {
+  reservation: PosReservationRow;
+  /** taken - voided - applied - refunded - kept, in decimal text. */
+  held: string;
+}
+const HELD = sql<string>`coalesce(sum(case when ${posReservationDeposits.kind} = 'taken' then ${posReservationDeposits.amount} else -${posReservationDeposits.amount} end), 0)::text`;
+/**
+ * The store's reservations that still matter: every booked or seated one, every cancelled / no-show one not yet closed (a manager must settle its money), and any closed one
+ * whose time is on or after `since`. Soonest first. With the money still held on each.
+ */
+export async function listReservationsWithHeld(tx: Tx, orgId: string, storeId: string, since: Date): Promise<ReservationWithHeld[]> {
+  const rows = await tx
+    .select({ reservation: posReservations, held: HELD })
+    .from(posReservations)
+    .leftJoin(posReservationDeposits, and(eq(posReservationDeposits.reservationId, posReservations.id), eq(posReservationDeposits.orgId, orgId)))
+    .where(
+      and(
+        eq(posReservations.orgId, orgId),
+        eq(posReservations.storeId, storeId),
+        sql`(${posReservations.status} <> 'closed' or ${posReservations.reservedFor} >= ${since.toISOString()}::timestamptz)`,
+      ),
+    )
+    .groupBy(posReservations.id)
+    .orderBy(asc(posReservations.reservedFor), asc(posReservations.id));
+  return rows;
+}
+
+export interface NewDeposit {
+  id: string;
+  orgId: string;
+  storeId: string;
+  reservationId: string;
+  kind: PosReservationDepositRow['kind'];
+  amount: Money;
+  tenderId: string | null;
+  referenceNo: string | null;
+  terminalId: string | null;
+  receiptId: string | null;
+  voidsDepositId: string | null;
+  reason: string | null;
+  recordedBy: string;
+  approvedBy: string | null;
+  occurredAtDevice: Date;
+}
+export async function insertDeposit(tx: Tx, r: NewDeposit): Promise<void> {
+  await tx.insert(posReservationDeposits).values(r);
+}
+export async function getDeposit(tx: Tx, orgId: string, storeId: string, id: string): Promise<PosReservationDepositRow | undefined> {
+  const [row] = await tx.select().from(posReservationDeposits).where(and(eq(posReservationDeposits.orgId, orgId), eq(posReservationDeposits.storeId, storeId), eq(posReservationDeposits.id, id)));
+  return row;
+}
+/** Every event of one reservation, oldest first. */
+export async function listDepositsOfReservation(tx: Tx, orgId: string, storeId: string, reservationId: string): Promise<PosReservationDepositRow[]> {
+  return tx
+    .select()
+    .from(posReservationDeposits)
+    .where(and(eq(posReservationDeposits.orgId, orgId), eq(posReservationDeposits.storeId, storeId), eq(posReservationDeposits.reservationId, reservationId)))
+    .orderBy(asc(posReservationDeposits.recordedAt), asc(posReservationDeposits.id));
+}
+/** What is held for one reservation now (decimal text); '0' when it has no events. */
+export async function heldOfReservation(tx: Tx, orgId: string, storeId: string, reservationId: string): Promise<string> {
+  const [row] = await tx
+    .select({ held: HELD })
+    .from(posReservationDeposits)
+    .where(and(eq(posReservationDeposits.orgId, orgId), eq(posReservationDeposits.storeId, storeId), eq(posReservationDeposits.reservationId, reservationId)));
+  return row?.held ?? '0';
+}
+/** The cash-moving events (taken / voided / refunded / kept) of one till not yet in a Z, oldest first. Applied ones belong to their receipt's Z, never here. */
+export async function listOpenDeposits(tx: Tx, orgId: string, storeId: string, terminalId: string, before?: Date): Promise<PosReservationDepositRow[]> {
+  return tx
+    .select()
+    .from(posReservationDeposits)
+    .where(
+      and(
+        eq(posReservationDeposits.orgId, orgId),
+        eq(posReservationDeposits.storeId, storeId),
+        eq(posReservationDeposits.terminalId, terminalId),
+        isNull(posReservationDeposits.dayCloseId),
+        ne(posReservationDeposits.kind, 'applied'),
+        ...(before ? [sql`${posReservationDeposits.recordedAt} < ${before.toISOString()}::timestamptz`] : []),
+      ),
+    )
+    .orderBy(asc(posReservationDeposits.recordedAt), asc(posReservationDeposits.id));
+}
+/** The applied-deposit event of a receipt (at most one), or undefined. */
+export async function getAppliedDepositOfReceipt(tx: Tx, orgId: string, storeId: string, receiptId: string): Promise<PosReservationDepositRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posReservationDeposits)
+    .where(and(eq(posReservationDeposits.orgId, orgId), eq(posReservationDeposits.storeId, storeId), eq(posReservationDeposits.receiptId, receiptId), eq(posReservationDeposits.kind, 'applied')));
+  return row;
+}
+/** The events frozen to one Z, oldest first. */
+export async function listDepositsOfClose(tx: Tx, orgId: string, storeId: string, dayCloseId: string): Promise<PosReservationDepositRow[]> {
+  return tx
+    .select()
+    .from(posReservationDeposits)
+    .where(and(eq(posReservationDeposits.orgId, orgId), eq(posReservationDeposits.storeId, storeId), eq(posReservationDeposits.dayCloseId, dayCloseId)))
+    .orderBy(asc(posReservationDeposits.recordedAt), asc(posReservationDeposits.id));
+}
+/** Freezes deposit events to the Z (NULL -> value once). Returns how many were taken; the caller compares with what it read. */
+export async function closeDeposits(tx: Tx, orgId: string, storeId: string, dayCloseId: string, ids: readonly string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const rows = await tx
+    .update(posReservationDeposits)
+    .set({ dayCloseId })
+    .where(and(eq(posReservationDeposits.orgId, orgId), eq(posReservationDeposits.storeId, storeId), inArray(posReservationDeposits.id, [...ids]), isNull(posReservationDeposits.dayCloseId)))
+    .returning({ id: posReservationDeposits.id });
+  return rows.length;
 }

@@ -237,6 +237,7 @@ export default async function SalesDayDetailPage({
           <Row label="Discounts" value={formatMoney(discountsTotal)} />
           <Row label="Comps" value={formatMoney(money(day.comps))} />
           {isPositive(day.refunds) && <Row label="Refunds (POS)" value={formatMoney(money(day.refunds))} />}
+          {isPositive(day.depositsApplied) && <Row label="Deposits applied (POS)" value={formatMoney(money(day.depositsApplied))} />}
           {isPositive(day.otherCharges) && (
             <Row label="Other charges" value={formatMoney(money(day.otherCharges))} />
           )}

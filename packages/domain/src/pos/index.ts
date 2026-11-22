@@ -8,6 +8,37 @@ export { addLineDiscount, removeLineDiscount, applyPresetToAllLines } from './di
 export type { AddLineDiscountInput } from './discounts';
 export { addCharge, removeCharge } from './charges';
 export type { AddChargeInput } from './charges';
+export {
+  createReservation,
+  takeDeposit,
+  seatReservation,
+  setReservationStatus,
+  voidDeposit,
+  refundDeposit,
+  keepDeposit,
+  closeReservation,
+  listReservationsForTablet,
+  listReservationsForOffice,
+  postDepositsForZ,
+  depositBlockOf,
+  NO_DEPOSITS,
+  DEPOSIT_VOID_AFTER_APPLY,
+  DEPOSIT_ALREADY_USED,
+  DEPOSIT_NOT_SEATED,
+  RESERVATION_CLOSE_WITH_MONEY,
+} from './reservations';
+export type {
+  CreateReservationInput,
+  TakeDepositInput,
+  SeatReservationInput,
+  SetReservationStatusInput,
+  VoidDepositInput,
+  RefundDepositInput,
+  KeepDepositInput,
+  CloseReservationInput,
+  ReservationView,
+  DepositBlock,
+} from './reservations';
 export { voidUnpaidSession, completeSale, currentBusinessDate, getSessionBill, listOpenStands, listRefillableTables, listKitchenQueue, listRefillQueue, listTodaysSalesReceipts, findSalesReceiptByNo } from './sale';
 export type { CompleteSaleInput, VoidInput } from './sale';
 export { grantLineApproval } from './line-approval';

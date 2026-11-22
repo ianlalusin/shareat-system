@@ -67,8 +67,8 @@ const TITLES: Record<UnpaidKindId, string> = {
   other_ledger: 'Other amounts owed in the books',
 };
 
-/** Kind 6 (ruling): 2900 suspense is OUT; 2250 is reserved and empty today; 2300 is payroll-staff-only. */
-const OTHER_CODES = ['2120', '2130', '2140', '2150', '2160', '2210', '2220', '2230', '2240', '2250', '2300'] as const;
+/** Kind 6 (ruling): 2900 suspense is OUT; 2250 is reserved and empty today; 2300 is payroll-staff-only. T-628: 2170 customer deposits payable is IN (money held for customers is owed). */
+const OTHER_CODES = ['2120', '2130', '2140', '2150', '2160', '2170', '2210', '2220', '2230', '2240', '2250', '2300'] as const;
 const WAGES_CODE = '2300';
 const INTERNAL_CODE = '2150';
 const FAR_PAST = '1970-01-01';

@@ -20,8 +20,8 @@ export const STATUS_TONE: Readonly<Record<string, Tone>> = Object.fromEntries([
     'approved', 'posted', 'confirmed', 'accepted', 'seated', 'played', 'released', 'received', 'verified', 'computed', 'finalized',
     'resolved', 'succeeded', 'completed', 'active', 'liquidated', 'fully_amortised', 'paid_off', 'final', 'paid', 'applied', 'served',
   ]),
-  ...group('progress', ['counting', 'reviewing', 'preparing', 'running', 'in_transit', 'dispatched', 'ready', 'called']),
-  ...group('danger', ['void', 'voided', 'overdue', 'rejected', 'declined', 'failed', 'aborted', 'defaulted', 'written_off', 'suspended']),
+  ...group('progress', ['counting', 'reviewing', 'preparing', 'running', 'in_transit', 'dispatched', 'ready', 'called', 'booked']),
+  ...group('danger', ['void', 'voided', 'overdue', 'rejected', 'declined', 'failed', 'aborted', 'defaulted', 'written_off', 'suspended', 'no_show']),
   ...group('closed', [
     'closed', 'cancelled', 'removed', 'expired', 'reversed', 'disposed', 'merged', 'archived', 'inactive', 'locked', 'charged', 'income',
     'resigned', 'terminated', 'retired', 'withdrawn', 'superseded_by_work', 'gone', 'ended',

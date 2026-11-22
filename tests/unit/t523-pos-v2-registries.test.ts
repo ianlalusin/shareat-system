@@ -27,6 +27,9 @@ const PURGE = [
   'pos_sales_receipt_line_discounts',
   'table_session_charges',
   'pos_sales_receipt_charges',
+  // T-628 (migration 0276): reservations and the append-only events of their deposits, purged and guarded the same way.
+  'pos_reservations',
+  'pos_reservation_deposits',
 ];
 /** Every table that carries a history guard (R4-R10, R13 discounts); R1-R3 and the presets have none. */
 const GUARDED = PURGE;

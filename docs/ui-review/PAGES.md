@@ -188,3 +188,5 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /trade/returns | apps/erp/src/app/trade/returns/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c, #287 | good: Clear empty states and one Show action; clean at both widths. |
 | /wastage | apps/erp/src/app/wastage/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c, #289, #287 | good: Clear Record wastage action and empty state; clean at both widths. |
 | /wastage/[id] | apps/erp/src/app/wastage/[id]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c, #287 | not captured: no record in the synthetic data |
+| /pos/reservations | apps/erp/src/app/pos/reservations/page.tsx | - | not reviewed | - | - | new page, not reviewed |
+| /pos-reservations | apps/erp/src/app/pos-reservations/page.tsx | - | not reviewed | - | - | new page, not reviewed |

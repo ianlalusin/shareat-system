@@ -64,6 +64,16 @@ function pushFigures(out: string[], view: ReadingSlipView, cols: number): void {
     out.push(...justify('CONVERT: CASH OUT', printAmount(view.convert.cashOut), cols));
   }
   if (view.refunds && view.refunds.count > 0) out.push(...justify('REFUNDS', `-${printAmount(view.refunds.total)}`, cols));
+  // T-628: reservation deposits. Taken and refunded moved cash or wallet money the day they happened; applied is a tender of the bills above (it is not in the method rows); kept moved nothing.
+  if (view.deposits) {
+    if (!isZeroAmount(view.deposits.taken)) out.push(...justify('DEPOSITS TAKEN', printAmount(view.deposits.taken), cols));
+    if (!isZeroAmount(view.deposits.refunded)) out.push(...justify('DEPOSITS REFUNDED', `-${printAmount(view.deposits.refunded)}`, cols));
+    if (!isZeroAmount(view.deposits.kept)) out.push(...justify('DEPOSITS KEPT', printAmount(view.deposits.kept), cols));
+    if (!isZeroAmount(view.deposits.applied)) out.push(...justify('DEPOSITS APPLIED', printAmount(view.deposits.applied), cols));
+    // the drawer's own part: a deposit that came in (or went back) by GCash is in the lines above but not in the drawer
+    if (view.deposits.cashTaken !== undefined && !isZeroAmount(view.deposits.cashTaken)) out.push(...justify('DEPOSITS CASH IN', printAmount(view.deposits.cashTaken), cols));
+    if (view.deposits.cashReturned !== undefined && !isZeroAmount(view.deposits.cashReturned)) out.push(...justify('DEPOSITS CASH OUT', `-${printAmount(view.deposits.cashReturned)}`, cols));
+  }
   if (view.varianceTotal !== undefined && !isZeroAmount(view.varianceTotal)) out.push(...justify('SHORT PAYMENTS', printAmount(view.varianceTotal), cols));
   if ((view.shortfallCount ?? 0) > 0) out.push(...justify('SHORT PAY FINDINGS', String(view.shortfallCount), cols));
   if (view.toCheckCount > 0) out.push(...justify('TO CHECK (wallet)', String(view.toCheckCount), cols));

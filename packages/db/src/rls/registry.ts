@@ -1346,6 +1346,14 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-627: a charge frozen on an org’s own sales receipt; carries its own org_id.',
   },
+  pos_reservations: {
+    scope: 'org_column',
+    reason: 'T-628: an org’s own table reservation at its own store (a customer name and phone); org isolation is the point, and the repo filters by store.',
+  },
+  pos_reservation_deposits: {
+    scope: 'org_column',
+    reason: 'T-628: the money events of an org’s own reservation; carries its own org_id and store_id, the repo filters by both.',
+  },
   pos_payment_conversions: {
     scope: 'org_column',
     reason: 'T-534 S1: an org’s own Convert (GCash cash-in / cash-out) records at its own store; org isolation is the point.',

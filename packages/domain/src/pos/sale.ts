@@ -20,6 +20,7 @@ import { refundRoutes, refundAmountsOfLine, refundNoOf } from './refund';
 import { priceSession, type PricedSession } from './price';
 import { isUniqueViolation, lockOpenSession } from './order';
 import { earlierUsesOfCard } from './senior-repeat';
+import { DEPOSIT_ALREADY_USED, DEPOSIT_MORE_THAN_BILL, DEPOSIT_MORE_THAN_HELD, DEPOSIT_NOT_SEATED, DEPOSIT_NOT_THIS_TABLE } from './reservations';
 import {
   audit,
   billedHeads,
@@ -33,6 +34,7 @@ import {
   requireStoreScope,
   snapshotOf,
   uuidInput,
+  uuidv5,
   wholeNumber,
   type LoadedCharge,
   type LoadedLine,
@@ -108,6 +110,8 @@ export interface CompleteSaleInput {
   offline: boolean;
   device: { subtotal: string; discountTotal: string; total: string; /** T-627: absent on a sale queued before charges existed (= 0.00). */ chargeTotal?: string; lines: { lineId: string; gross: string; discountTotal: string; net: string }[] };
   payments: { tenderId: string; amount: string; referenceNo?: string; toCheck: boolean }[];
+  /** T-628: the held deposit of the table's reservation applied as part of the payment (a payment line "Deposit"). Consume-once: one per reservation. Absent = none. */
+  deposit?: { reservationId: string; amount: string };
   seniors: { dinerNo: number; kind: 'senior' | 'pwd'; idNumber: string; holderName: string }[];
 }
 
@@ -145,6 +149,10 @@ async function replayMatches(tx: Tx, actor: Actor, input: CompleteSaleInput, pri
   });
   const stored = (await posV2Repo.listReceiptPayments(tx, actor.orgId, prior.id)).map((r) => payKey(r.tenderId, money(r.amount), r.referenceNo ?? '', r.toCheck));
   if (JSON.stringify(sent.sort()) !== JSON.stringify(stored.sort())) return false;
+  if (!sameCentavos(String(input.deposit?.amount ?? '0'), money(prior.depositApplied))) return false;
+  // and the same reservation: the amount alone could match a different one
+  const appliedRow = await posV2Repo.getAppliedDepositOfReceipt(tx, actor.orgId, prior.storeId, prior.id);
+  if ((appliedRow?.reservationId ?? '') !== String(input.deposit?.reservationId ?? '').toLowerCase()) return false;
 
   const holders = (Array.isArray(input.seniors) ? input.seniors : []).map((e) => {
     const h = assertFieldRules(POS_STATUTORY_HOLDER_RULES, { holderName: e.holderName ?? '', idNumber: e.idNumber ?? '' });
@@ -218,9 +226,26 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     }
   })();
 
+  // 2b. T-628: a held reservation deposit paying part of the bill. The reservation row is locked (after the session's, the order every writer of a sale uses); one deposit per reservation, ever.
+  let depositApplied = money('0');
+  let depositReservation: posV2Repo.PosReservationRow | undefined;
+  if (input.deposit !== undefined && input.deposit !== null) {
+    const reservationId = uuidInput(input.deposit.reservationId, 'The reservation');
+    depositApplied = parseMoneyInput(String(input.deposit.amount ?? ''), 'pos: the deposit amount', 'The deposit amount');
+    if (compare(depositApplied, money('0')) <= 0) throw refuse('pos: deposit not positive', 'The deposit applied must be more than zero.');
+    depositReservation = await posV2Repo.getReservation(tx, actor.orgId, storeId, reservationId, { forUpdate: true });
+    if (!depositReservation) throw gone(`pos: reservation ${reservationId} not found`, 'that reservation');
+    if (depositReservation.sessionId !== sessionId) throw refuse('pos: deposit of another table', DEPOSIT_NOT_THIS_TABLE);
+    // cancelled after seating (or closed): its money is a manager's to settle, not the till's to spend (the database refuses an apply on a non-seated reservation too, but in a code, not in words)
+    if (depositReservation.status !== 'seated') throw refuse(`pos: reservation is ${depositReservation.status}, not seated`, DEPOSIT_NOT_SEATED);
+    if ((await posV2Repo.listDepositsOfReservation(tx, actor.orgId, storeId, reservationId)).some((e) => e.kind === 'applied')) throw refuse('pos: deposit already used', DEPOSIT_ALREADY_USED);
+    if (compare(depositApplied, money(await posV2Repo.heldOfReservation(tx, actor.orgId, storeId, reservationId))) > 0) throw refuse('pos: deposit over what is held', DEPOSIT_MORE_THAN_HELD);
+    if (compare(depositApplied, money(priced.amountDue)) > 0) throw refuse('pos: deposit over the bill', DEPOSIT_MORE_THAN_BILL);
+  }
+
   // 3. Payments (row 438).
   const pays = input.payments;
-  if (!Array.isArray(pays) || pays.length < 1 || pays.length > MAX_PAYMENTS) throw refuse('pos: payment count', `Take between 1 and ${MAX_PAYMENTS} payments.`);
+  if (!Array.isArray(pays) || pays.length < (depositReservation ? 0 : 1) || pays.length > MAX_PAYMENTS) throw refuse('pos: payment count', `Take between 1 and ${MAX_PAYMENTS} payments.`);
   const tenders = new Map((await posV2Repo.listTenders(tx, actor.orgId, pays.map((p) => String(p.tenderId)))).map((t) => [t.id, t]));
   const rows = pays.map((p) => {
     const t = tenders.get(String(p.tenderId));
@@ -235,7 +260,7 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     }
     return { tenderId: t.id, kind: t.kind, amount, referenceNo, toCheck: p.toCheck };
   });
-  const paid = rows.reduce((a, r) => add(a, r.amount), money('0'));
+  const paid = add(rows.reduce((a, r) => add(a, r.amount), money('0')), depositApplied);
   // T-627: what the customer owes is the goods plus the store charges (charges sit outside `total`, so the receipt's total identity is untouched).
   const total = money(priced.amountDue);
   // T-558 (row 453): a short payment is RECORDED, never refused (the customer has already left). gap > 0 means no change; it is a routine variance up to the
@@ -300,7 +325,7 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   try {
     await posV2Repo.insertReceipt(tx, {
       id: receiptId, orgId: actor.orgId, storeId, terminalId: terminal.id, terminalSeq, tableSessionId: sessionId, cashierId: actor.personId, issuedAtDevice: issuedAt,
-      subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, deviceTotal, offline, chargeTotal: priced.chargeTotal,
+      subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, deviceTotal, offline, chargeTotal: priced.chargeTotal, depositApplied,
     });
   } catch (err) {
     if (isUniqueViolation(err, 'pos_sales_receipts_terminal_seq_unique')) throw refuse('pos: receipt number reused (race)', 'That receipt number is already used on this till.');
@@ -341,6 +366,23 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     rows.map((r, i) => ({ orgId: actor.orgId, receiptId, tenderId: r.tenderId, amount: r.amount, changeGiven: i === changeRow ? change : money('0'), referenceNo: r.referenceNo, toCheck: r.toCheck })),
   );
   await posV2Repo.markSessionPaid(tx, actor.orgId, storeId, sessionId);
+  // T-628: the deposit event, written in the sale's own transaction (consume-once: the partial uniques refuse a second one, a race included), then the reservation closes when nothing is left held.
+  const linked = depositReservation ?? (await posV2Repo.getReservationBySession(tx, actor.orgId, storeId, sessionId));
+  if (depositReservation) {
+    try {
+      await posV2Repo.insertDeposit(tx, {
+        id: uuidv5('deposit.applied', receiptId), orgId: actor.orgId, storeId, reservationId: depositReservation.id, kind: 'applied', amount: depositApplied, tenderId: null, referenceNo: null,
+        terminalId: null, receiptId, voidsDepositId: null, reason: null, recordedBy: actor.personId, approvedBy: null, occurredAtDevice: issuedAt,
+      });
+    } catch (err) {
+      if (isUniqueViolation(err, 'pos_reservation_deposits_applied_once_key') || isUniqueViolation(err, 'pos_reservation_deposits_receipt_once_key')) throw refuse('pos: deposit already used (race)', DEPOSIT_ALREADY_USED);
+      throw err;
+    }
+    await audit(tx, actor, 'pos.deposit_applied', { storeId, entityId: receiptId, pairingId, at: issuedAt, before: null, after: { reservationId: depositReservation.id, receiptId, amount: String(depositApplied) } });
+  }
+  if (linked && linked.status === 'seated' && compare(money(await posV2Repo.heldOfReservation(tx, actor.orgId, storeId, linked.id)), money('0')) === 0) {
+    await posV2Repo.updateReservation(tx, actor.orgId, storeId, linked.id, { status: 'closed', updatedAt: issuedAt, closedAt: issuedAt });
+  }
 
   if (!matches) {
     await audit(tx, actor, 'pos.sale_recompute_mismatch', {
@@ -370,7 +412,7 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   if (repeatedCard) await audit(tx, actor, 'pos.senior_id_repeat', { storeId, entityId: receiptId, pairingId, at: issuedAt, after: { receiptId, earlierReceiptIds: [...earlierReceipts].slice(0, 50) } });
   await audit(tx, actor, 'pos.sale_completed', {
     storeId, entityId: receiptId, pairingId, at: issuedAt,
-    after: { sessionId, receiptNo: printed, offline, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, chargeTotal: priced.chargeTotal, payments: rows.length, statutoryDiners: holders.length },
+    after: { sessionId, receiptNo: printed, offline, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, chargeTotal: priced.chargeTotal, depositApplied: String(depositApplied), payments: rows.length, statutoryDiners: holders.length },
   });
   await posV2Repo.bumpStateVersion(tx, actor.orgId, storeId);
   return { wrote: true, receiptId };

@@ -6,120 +6,124 @@
 > generated from the headings below and verified by `tests/unit/toc-freshness.test.ts` —
 > if they are wrong, the build fails rather than misdirecting you.
 
-- ` 137–154   ` How to read this
-- ` 155–160   ` Expense payment (expensepayment) — 4,396 legs, 34% of activity, #1
-  - ` 161–177   ` expense.cash.simple — Cash expense, single payment
-  - ` 178–189   ` expense.split.cash-online — Split-payment expense, one entry, several credit lines
-  - ` 190–203   ` expense.credit.ap — Credit expense, books to AP
-  - ` 204–219   ` expense.reimbursable — Reimbursable expense, staff paid out of pocket
-  - ` 220–229  ` reimbursement.payout — Settling the reimbursement above
-  - ` 230–247  ` reimbursement.payout-cross-store — Paid from another store's safe
-- ` 248–256  ` Sale (sale) — 2,945 legs, #2
-  - ` 257–267  ` sale.unli.simple — Dine-in unlimited, cash only
-  - ` 268–283  ` sale.alacarte.simple — À la carte, includes take-out and delivery
-  - ` 284–298  ` sale.discount.senior-pwd — Senior/PWD discount, contra-revenue
-  - ` 299–317  ` sale.comps — Comps, contra-revenue, never marketing expense
-  - ` 318–337  ` sale.mixed — The full pattern: cash, online, unli, à la carte, discount and comps together
-  - ` 338–366  ` sale.pos-correction — POS changed a verified day afterwards (T-375 S6)
-  - ` 367–392  ` sale.platform-correction — the platform file is higher than staff typed (T-511 S6b)
-  - ` 393–407  ` sale.platform-correction-lower — the platform file is lower than staff typed (T-511 S6b, DEF-810)
-  - ` 408–429  ` sale.pos-short-payment — the POS took a few centavos less than the bill (T-558, bible row 459)
-  - ` 430–450  ` sale.pos-refund-excess — a POS method refunded more than it took in the Z (T-614 S1, DEF-940)
-- ` 451–456  ` Salary advance (salaryadvance) — 1,488 legs, #3
-  - ` 457–466  ` salaryadvance.disbursement — Cash out, an asset grows
-  - ` 467–481  ` salaryadvance.repayment — A payroll deduction settles it
-- ` 482–489  ` Transfer (transfer) — 926 legs, #4
-  - ` 490–498  ` transfer.cash.simple — Cashier drawer to the office
-  - ` 499–512  ` transfer.cash.with-fee — With a bank fee, NOT always pure balance sheet
-  - ` 513–530  ` transfer.settle-between-stores — Paying back what one store owes another
-- ` 531–535  ` Depreciation (depreciation) — 362 legs, #5
-  - ` 536–548  ` depreciation.monthly — Monthly depreciation, always posted in the period earned
-- ` 549–554  ` Loan payment and disbursement (loanpayment 221 legs / loandisbursement 4 legs)
-  - ` 555–566  ` loanpayment.principal-only — Zero P&L lines
-  - ` 567–576  ` loanpayment.with-interest — The conditional P&L leg appears
-  - ` 577–587  ` loandisbursement.simple — Cash in, a liability grows, never P&L
-- ` 588–594  ` AR collection with a platform fee (arcollection) — 176 legs
-  - ` 595–611  ` arcollection.with-platform-fee — The double-count this prevents
-  - ` 612–621  ` arcollection.no-fee — The conditional leg genuinely absent
-  - ` 622–640  ` arcollection.cross-store — Paid into another store's safe
-- ` 641–645  ` AP payment (appayment) — 93 legs
-  - ` 646–654  ` appayment.simple — Clears exactly what is owed
-  - ` 655–666  ` appayment.fromfloat — AP payment from a cash-request float, the 1120 leg names the request
-  - ` 667–683  ` appayment.overpayment — Never floats to nowhere
-- ` 684–689  ` Supplier return (supplierreturn) — v2-only, bible row 166
-  - ` 690–699  ` supplier.return-grni — no credit arises, nothing is owed yet
-  - ` 700–715  ` supplier.return-credit — a real, spendable credit
-  - ` 716–733  ` supplier.credit-applied — spending it against a later invoice
-- ` 734–740  ` Customer return (customerreturn) — T-179, bible row 166
-  - ` 741–756  ` customer.return-ar — still owed — reduces the receivable directly
-  - ` 757–774  ` customer.return-credit — already paid — a real, spendable credit
-  - ` 775–791  ` customer.credit-applied — spending it against a later trade order
-  - ` 792–811  ` customer.return-internal — a branch returning to its own commissary, T-173 backwards
-- ` 812–827  ` Franchise dispatch (tradeorderdispatch, inter-entity) — v2-only, T-398 S5, ADR-008 §4
-  - ` 828–847  ` tradedispatch.franchise — seller, at dispatch: a real sale, identical to an outside buyer's
-  - ` 848–863  ` tradereceipt.franchise — buyer, at PG's receipt: the stock arrives
-  - ` 864–878  ` tradereceipt.franchise-bill — buyer, same transaction: the shipment is the bill
-  - ` 879–921  ` tradedispatch.franchisetransitshortage — seller, after reconciliation: the credit note
-- ` 922–934  ` Cash request release and return (cashrequestrelease 82 legs / cashrequestreturn 52 legs)
-  - ` 935–944  ` cashrequest.release — A float handed to a staff custodian
-  - ` 945–955  ` cashrequest.return — The unused float comes back
-- ` 956–967  ` Commissary dispatch (commissarydispatch) — 70 legs, the inter-store elimination case
-  - ` 968–1075 ` commissarydispatch.transfer — HISTORICAL, periodic era only (until 2026-09-02, T-165)
-  - `1076–1093 ` commissary.discrepancy-loss — T-174, the ₱3,000 that never arrived
-  - `1094–1107 ` commissary.discrepancy-charge — the same gap, recovered instead of written off
-  - `1108–1129` commissary.discrepancy-extra-dispatch — an over-receipt the commissary confirms it really sent
-  - `1130–1148` The dispositions that post NOTHING
-  - `1149–1185` commissary.receipt-freight — outbound freight on an internal order, charged to the branch
-- `1186–1201` Channel settlement (channelsettlement) — T-150, the thing that clears 1220
-  - `1202–1223` channelsettlement.plain — fees to real accounts, receivable to exactly zero
-  - `1224–1238` channelsettlement.promocredit — a NEGATIVE deduction, which is a real credit
-  - `1239–1261` channelsettlement.loantwolegs — two loans docked from one payout, one of them another store's
-  - `1262–1279` channelsettlement.shortfallacknowledged — a shortfall past tolerance, accepted by a person with a reason
-  - `1280–1297` channelsettlement.netsperiodcharge — the payout already netted a booked period charge, so it is not expensed again
-  - `1298–1321` channelsettlement.grabdayaftercorrection — approve a Grab day: the platform figure replaces the staff figure first (T-511 S7a)
-  - `1322–1343` channelsettlement.foodpandaweekwithcharge — approve a Foodpanda week: the last day nets the period charge once (T-511 S7a)
-- `1344–1350` Platform period charge (channelcharge) — v2-only, T-511 S6c
-  - `1351–1367` channelcharge.periodfee — a platform charge with no sales day, fee and VAT as one expense
-- `1368–1375` Channel receivable move (channelreceivablereclass) — v2-only, T-606
-  - `1376–1391` channelreceivable.reclass — a platform channel's balance moves from 1210 to 1220
-- `1392–1396` Amortization (amortization) — 38 legs
-  - `1397–1407` amortization.monthly — Monthly amortisation of a prepaid item
-- `1408–1412` Production / conversion (productionconversion) — v2-only, T-176
-  - `1413–1431` production.conversion.slice — a slab becomes three sliced products, plus a yield loss
-  - `1432–1439` The convert kind posts NOTHING to the ledger
-- `1440–1445` Wastage (wastageexpense) — 16 legs
-  - `1446–1462` wastageexpense.spoilage — A real cost of sales, straight against inventory
-- `1463–1468` Order/channel wastage (orderwastage) — v2-only, T-178
-  - `1469–1475` wastage.order-absorbed — the store eats a ₱150 Foodpanda refund
-  - `1476–1490` wastage.order-charged — split 60/40 between two staff
-- `1491–1497` Remittance (remittance) — 10 legs
-  - `1498–1506` remittance.exact — The conditional leg genuinely absent
-  - `1507–1531` remittance.overage — 7350 swings positive
-  - `1532–1553` remittance.shortage — Charged to the responsible cashier, not P&L
-- `1554–1558` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
-  - `1559–1576` balanceadjustment.plug — Included so nobody ports it forward
-- `1577–1581` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
-  - `1582–1591` prepaidpurchase.cash — An asset, not an immediate expense
-  - `1592–1600` assetpurchase.cash — Fixed asset purchase, cash
-  - `1601–1611` assetpurchase.below-threshold — A CAPEX purchase under the threshold is expensed (DEF-891)
-  - `1612–1622` assetpurchase.credit — Fixed asset purchase, on account
-- `1623–1627` Slicer/payroll payout (slicerpayment) — 4 legs
-  - `1628–1638` slicerpayment.park — Settling an already-parked liability
-- `1639–1644` Statutory remittance (liabilitypayment)
-  - `1645–1663` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
-- `1664–1674` Statutory payment (statutorypayment)
-  - `1675–1686` statutorypayment.same-store - One store pays its own SSS from its own safe
-  - `1687–1702` statutorypayment.cross-store - One store's SSS paid from another store's safe
-  - `1703–1719` statutorypayment.with-penalty - Late, with the agency's surcharge
-- `1720–1728` Owner equity movements (capitalcontribution / drawing)
-  - `1729–1737` equity.capitalcontribution — Cash in, equity grows
-  - `1738–1754` equity.drawing — Reduces equity, on the books at last
-- `1755–1761` Year close (yearclose) — v2-only, ADR-006
-  - `1762–1781` yearclose.annual — One entry, into 3300, dated the following January 1st
-- `1782–1789` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
-  - `1790–1812` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
-  - `1813–1832` openingbalance.reconcile — Reconciling 3900 to exactly zero
-- `1833–1854` Reversal — the correction path (T-106)
+- ` 141–158   ` How to read this
+- ` 159–164   ` Expense payment (expensepayment) — 4,396 legs, 34% of activity, #1
+  - ` 165–181   ` expense.cash.simple — Cash expense, single payment
+  - ` 182–193   ` expense.split.cash-online — Split-payment expense, one entry, several credit lines
+  - ` 194–207   ` expense.credit.ap — Credit expense, books to AP
+  - ` 208–223   ` expense.reimbursable — Reimbursable expense, staff paid out of pocket
+  - ` 224–233  ` reimbursement.payout — Settling the reimbursement above
+  - ` 234–251  ` reimbursement.payout-cross-store — Paid from another store's safe
+- ` 252–260  ` Sale (sale) — 2,945 legs, #2
+  - ` 261–271  ` sale.unli.simple — Dine-in unlimited, cash only
+  - ` 272–287  ` sale.alacarte.simple — À la carte, includes take-out and delivery
+  - ` 288–302  ` sale.discount.senior-pwd — Senior/PWD discount, contra-revenue
+  - ` 303–321  ` sale.comps — Comps, contra-revenue, never marketing expense
+  - ` 322–341  ` sale.mixed — The full pattern: cash, online, unli, à la carte, discount and comps together
+  - ` 342–370  ` sale.pos-correction — POS changed a verified day afterwards (T-375 S6)
+  - ` 371–396  ` sale.platform-correction — the platform file is higher than staff typed (T-511 S6b)
+  - ` 397–411  ` sale.platform-correction-lower — the platform file is lower than staff typed (T-511 S6b, DEF-810)
+  - ` 412–433  ` sale.pos-short-payment — the POS took a few centavos less than the bill (T-558, bible row 459)
+  - ` 434–452  ` sale.pos-refund-excess — a POS method refunded more than it took in the Z (T-614 S1, DEF-940)
+  - ` 453–469  ` sale.pos-deposit-applied — a bill paid partly from a held reservation deposit (T-628)
+  - ` 470–483  ` deposit.taken — a table reservation deposit is taken (T-628)
+  - ` 484–495  ` deposit.refunded — a deposit goes back to the customer, refunded or voided (T-628)
+  - ` 496–510  ` deposit.kept — the manager keeps a no-show's deposit (T-628)
+- ` 511–516  ` Salary advance (salaryadvance) — 1,488 legs, #3
+  - ` 517–526  ` salaryadvance.disbursement — Cash out, an asset grows
+  - ` 527–541  ` salaryadvance.repayment — A payroll deduction settles it
+- ` 542–549  ` Transfer (transfer) — 926 legs, #4
+  - ` 550–558  ` transfer.cash.simple — Cashier drawer to the office
+  - ` 559–572  ` transfer.cash.with-fee — With a bank fee, NOT always pure balance sheet
+  - ` 573–590  ` transfer.settle-between-stores — Paying back what one store owes another
+- ` 591–595  ` Depreciation (depreciation) — 362 legs, #5
+  - ` 596–608  ` depreciation.monthly — Monthly depreciation, always posted in the period earned
+- ` 609–614  ` Loan payment and disbursement (loanpayment 221 legs / loandisbursement 4 legs)
+  - ` 615–626  ` loanpayment.principal-only — Zero P&L lines
+  - ` 627–636  ` loanpayment.with-interest — The conditional P&L leg appears
+  - ` 637–647  ` loandisbursement.simple — Cash in, a liability grows, never P&L
+- ` 648–654  ` AR collection with a platform fee (arcollection) — 176 legs
+  - ` 655–671  ` arcollection.with-platform-fee — The double-count this prevents
+  - ` 672–681  ` arcollection.no-fee — The conditional leg genuinely absent
+  - ` 682–700  ` arcollection.cross-store — Paid into another store's safe
+- ` 701–705  ` AP payment (appayment) — 93 legs
+  - ` 706–714  ` appayment.simple — Clears exactly what is owed
+  - ` 715–726  ` appayment.fromfloat — AP payment from a cash-request float, the 1120 leg names the request
+  - ` 727–743  ` appayment.overpayment — Never floats to nowhere
+- ` 744–749  ` Supplier return (supplierreturn) — v2-only, bible row 166
+  - ` 750–759  ` supplier.return-grni — no credit arises, nothing is owed yet
+  - ` 760–775  ` supplier.return-credit — a real, spendable credit
+  - ` 776–793  ` supplier.credit-applied — spending it against a later invoice
+- ` 794–800  ` Customer return (customerreturn) — T-179, bible row 166
+  - ` 801–816  ` customer.return-ar — still owed — reduces the receivable directly
+  - ` 817–834  ` customer.return-credit — already paid — a real, spendable credit
+  - ` 835–851  ` customer.credit-applied — spending it against a later trade order
+  - ` 852–871  ` customer.return-internal — a branch returning to its own commissary, T-173 backwards
+- ` 872–887  ` Franchise dispatch (tradeorderdispatch, inter-entity) — v2-only, T-398 S5, ADR-008 §4
+  - ` 888–907  ` tradedispatch.franchise — seller, at dispatch: a real sale, identical to an outside buyer's
+  - ` 908–923  ` tradereceipt.franchise — buyer, at PG's receipt: the stock arrives
+  - ` 924–938  ` tradereceipt.franchise-bill — buyer, same transaction: the shipment is the bill
+  - ` 939–981  ` tradedispatch.franchisetransitshortage — seller, after reconciliation: the credit note
+- ` 982–994  ` Cash request release and return (cashrequestrelease 82 legs / cashrequestreturn 52 legs)
+  - ` 995–1004 ` cashrequest.release — A float handed to a staff custodian
+  - `1005–1015 ` cashrequest.return — The unused float comes back
+- `1016–1027 ` Commissary dispatch (commissarydispatch) — 70 legs, the inter-store elimination case
+  - `1028–1135` commissarydispatch.transfer — HISTORICAL, periodic era only (until 2026-09-02, T-165)
+  - `1136–1153` commissary.discrepancy-loss — T-174, the ₱3,000 that never arrived
+  - `1154–1167` commissary.discrepancy-charge — the same gap, recovered instead of written off
+  - `1168–1189` commissary.discrepancy-extra-dispatch — an over-receipt the commissary confirms it really sent
+  - `1190–1208` The dispositions that post NOTHING
+  - `1209–1245` commissary.receipt-freight — outbound freight on an internal order, charged to the branch
+- `1246–1261` Channel settlement (channelsettlement) — T-150, the thing that clears 1220
+  - `1262–1283` channelsettlement.plain — fees to real accounts, receivable to exactly zero
+  - `1284–1298` channelsettlement.promocredit — a NEGATIVE deduction, which is a real credit
+  - `1299–1321` channelsettlement.loantwolegs — two loans docked from one payout, one of them another store's
+  - `1322–1339` channelsettlement.shortfallacknowledged — a shortfall past tolerance, accepted by a person with a reason
+  - `1340–1357` channelsettlement.netsperiodcharge — the payout already netted a booked period charge, so it is not expensed again
+  - `1358–1381` channelsettlement.grabdayaftercorrection — approve a Grab day: the platform figure replaces the staff figure first (T-511 S7a)
+  - `1382–1403` channelsettlement.foodpandaweekwithcharge — approve a Foodpanda week: the last day nets the period charge once (T-511 S7a)
+- `1404–1410` Platform period charge (channelcharge) — v2-only, T-511 S6c
+  - `1411–1427` channelcharge.periodfee — a platform charge with no sales day, fee and VAT as one expense
+- `1428–1435` Channel receivable move (channelreceivablereclass) — v2-only, T-606
+  - `1436–1451` channelreceivable.reclass — a platform channel's balance moves from 1210 to 1220
+- `1452–1456` Amortization (amortization) — 38 legs
+  - `1457–1467` amortization.monthly — Monthly amortisation of a prepaid item
+- `1468–1472` Production / conversion (productionconversion) — v2-only, T-176
+  - `1473–1491` production.conversion.slice — a slab becomes three sliced products, plus a yield loss
+  - `1492–1499` The convert kind posts NOTHING to the ledger
+- `1500–1505` Wastage (wastageexpense) — 16 legs
+  - `1506–1522` wastageexpense.spoilage — A real cost of sales, straight against inventory
+- `1523–1528` Order/channel wastage (orderwastage) — v2-only, T-178
+  - `1529–1535` wastage.order-absorbed — the store eats a ₱150 Foodpanda refund
+  - `1536–1550` wastage.order-charged — split 60/40 between two staff
+- `1551–1557` Remittance (remittance) — 10 legs
+  - `1558–1566` remittance.exact — The conditional leg genuinely absent
+  - `1567–1591` remittance.overage — 7350 swings positive
+  - `1592–1613` remittance.shortage — Charged to the responsible cashier, not P&L
+- `1614–1618` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
+  - `1619–1636` balanceadjustment.plug — Included so nobody ports it forward
+- `1637–1641` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
+  - `1642–1651` prepaidpurchase.cash — An asset, not an immediate expense
+  - `1652–1660` assetpurchase.cash — Fixed asset purchase, cash
+  - `1661–1671` assetpurchase.below-threshold — A CAPEX purchase under the threshold is expensed (DEF-891)
+  - `1672–1682` assetpurchase.credit — Fixed asset purchase, on account
+- `1683–1687` Slicer/payroll payout (slicerpayment) — 4 legs
+  - `1688–1698` slicerpayment.park — Settling an already-parked liability
+- `1699–1704` Statutory remittance (liabilitypayment)
+  - `1705–1723` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
+- `1724–1734` Statutory payment (statutorypayment)
+  - `1735–1746` statutorypayment.same-store - One store pays its own SSS from its own safe
+  - `1747–1762` statutorypayment.cross-store - One store's SSS paid from another store's safe
+  - `1763–1779` statutorypayment.with-penalty - Late, with the agency's surcharge
+- `1780–1788` Owner equity movements (capitalcontribution / drawing)
+  - `1789–1797` equity.capitalcontribution — Cash in, equity grows
+  - `1798–1814` equity.drawing — Reduces equity, on the books at last
+- `1815–1821` Year close (yearclose) — v2-only, ADR-006
+  - `1822–1841` yearclose.annual — One entry, into 3300, dated the following January 1st
+- `1842–1849` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
+  - `1850–1872` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
+  - `1873–1892` openingbalance.reconcile — Reconciling 3900 to exactly zero
+- `1893–1914` Reversal — the correction path (T-106)
 
 <!-- TOC:END -->
 
@@ -445,6 +449,62 @@ nothing twice. Live stores only: test mode books nothing. The day's own entry (`
 **Permanent.** A sales day built from a Z can never be voided (T-531), so this entry is not reversed by any day void; like the Converts of a Z, a later refund or correction is how it changes.
 
 **Trap:** never refuse the Z, and never let the day carry the negative; and never post the full refund here as well as on the day, which would count the covered part twice.
+
+### `sale.pos-deposit-applied` — a bill paid partly from a held reservation deposit (T-628)
+
+v2-only, POS Z (`deriveSalesDayFromZ`, `routeSalesDay`). A customer who booked a table left a deposit; at the bill the cashier applies it as a payment line "Deposit". Example: a ₱1,000.00 à la carte bill, ₱500.00 from the deposit and
+₱500.00 in cash. The deposit was booked on the day it was taken (`deposit.taken`), so on the sales day it is a **tender of the sale**: the day's `deposits_applied` figure is on the collected side of the
+reconciliation and posts as a debit to 2170.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 500.00 | | — |
+| 2170 Customer deposits payable | 500.00 | | — |
+| 4150 Food sales — à la carte | | 1,000.00 | — |
+
+**Rule.** Applying is consume-once: one applied event per reservation and per receipt (partial unique indexes), written in the sale's own transaction; a second apply is refused and, arriving later from an offline tablet, the sale is
+quarantined. The deposit never exceeds the bill or what is held. It is a POS-derived day figure only (a typed or feed day has none, CHECK).
+
+**Trap:** never count the deposit as cash collected on the day of the bill: it was already counted on the day it was taken, and counting it again makes the drawer look richer than it is.
+
+### `deposit.taken` — a table reservation deposit is taken (T-628)
+
+v2-only, POS Z (`postDepositsForZ`). A customer pays ₱1,000.00 in cash to hold a table. The money is in the till that day, so the Z of the till that took it posts it beside the sales day, store-scoped:
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 1,000.00 | | — |
+| 2170 Customer deposits payable | | 1,000.00 | — |
+
+**Rule.** One entry per kind per money place per Z (a wallet is 1140 with its money account as party), `source_type 'pos_deposit'`, idempotency key `pos_deposit:<closeId>:<kind>:<place>`. The event can be taken offline (inbox
+`deposit.taken`) and counts in the drawer of the day it was taken. Live stores only: test mode books nothing.
+
+**Trap:** never book a deposit as sales or other income when it is taken: nothing is earned until the table is billed (it is applied) or a manager keeps it.
+
+### `deposit.refunded` — a deposit goes back to the customer, refunded or voided (T-628)
+
+v2-only, POS Z. A cancelled reservation's ₱1,000.00 is refunded in cash by the manager (PIN, online, with a reason). The Z of the day it is given posts the reverse of the take; a VOID of a mistaken deposit posts the same two lines
+(refused once the deposit was applied to a bill).
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 2170 Customer deposits payable | 1,000.00 | | — |
+| 1110 Cash on hand — cashier | | 1,000.00 | — |
+
+**Trap:** never reverse the original entry: the day the deposit was taken is closed and stays as it was; the refund is its own movement of the day it happens.
+
+### `deposit.kept` — the manager keeps a no-show's deposit (T-628)
+
+v2-only, POS Z. A party did not come and the manager keeps the ₱1,000.00 (PIN, online, with a reason). No cash moves; the liability becomes income at the Z of that day.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 2170 Customer deposits payable | 1,000.00 | | — |
+| 4500 Other charges — leftover, packaging and similar | | 1,000.00 | — |
+
+**Rule.** A cancelled or no-show reservation with money held cannot be closed until it is refunded or kept (the database refuses the close). Each refund or keep is its own manager decision.
+
+**Trap:** a kept deposit is income only because a manager decided it, each time, with a reason.
 
 ---
 

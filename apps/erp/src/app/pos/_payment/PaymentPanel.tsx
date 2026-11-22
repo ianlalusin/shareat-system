@@ -54,6 +54,8 @@ export interface PaymentPanelProps {
   presets: readonly PresetLike[];
   /** T-627: the store's charges from the snapshot (empty in an old cached one: a custom charge still works). */
   chargePresets?: readonly ChargePresetLike[];
+  /** T-628: the deposit held for the reservation seated at this table (from the snapshot and the outbox), if any. */
+  deposit?: { reservationId: string; held: string; customerName: string };
   tenders: readonly Tender[];
   rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number };
   vatRegistered: boolean;
@@ -151,6 +153,7 @@ function BillLineView({ line, priced, scLabel, holders, onOpen, onRemove }: { li
 export function PaymentPanel(p: PaymentPanelProps) {
   usePaymentScreenOpen(); // T-621 S1: a deploy's new code never takes over while a payment is on screen
   const [rows, setRows] = useState<PayRow[]>([]);
+  const [useDeposit, setUseDeposit] = useState(false); // T-628
   const [active, setActive] = useState<number | null>(null);
   const [fresh, setFresh] = useState(false); // the next digit replaces the pre-filled amount
   const [holders, setHolders] = useState<Record<number, { holderName: string; idNumber: string }>>({});
@@ -237,7 +240,11 @@ export function PaymentPanel(p: PaymentPanelProps) {
   const diners = useMemo(() => statutoryDiners(p.bill.lines), [p.bill.lines]);
   const scPwdDiscount = useMemo(() => (priced ? scPwdDiscountOf(toPriceLines(p.bill.lines), priced) : null), [priced, p.bill.lines]);
   // T-627: what the customer pays is the goods plus the store charges (charges sit outside the VAT base).
-  const total = priced?.amountDue ?? '0.00';
+  const fullDue = priced?.amountDue ?? '0.00';
+  // T-628: a held deposit the cashier chose to use pays first (never more than is held or than the bill); the payment rows pay the rest.
+  const depositCents = useDeposit && p.deposit ? (amountCents(p.deposit.held) < amountCents(fullDue) ? amountCents(p.deposit.held) : amountCents(fullDue)) : 0n;
+  const deposit = p.deposit && depositCents > 0n ? { reservationId: p.deposit.reservationId, amount: fromCentavos(depositCents) } : undefined;
+  const total = fromCentavos(amountCents(fullDue) - depositCents);
   const summary = paymentSummary({ total, rows, tenders: p.tenders });
   const billProblem = p.bill.problem ?? (priced === null ? 'This bill could not be priced. Check the lines and try again.' : p.bill.lines.length === 0 ? 'There is nothing on this table to pay for.' : null);
   const detail = billProblem ? null : payBlockerDetail({ total, rows, tenders: p.tenders, diners, holders });
@@ -353,6 +360,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
       priced,
       rows,
       tenders: p.tenders,
+      ...(deposit ? { deposit } : {}),
       seniors: diners.map((d) => ({ dinerNo: d.dinerNo, kind: d.kind, holderName: holders[d.dinerNo]!.holderName, idNumber: holders[d.dinerNo]!.idNumber })),
       vatRateLabel: rateLabel(p.rules.vatPercentBasisPoints),
       layout: p.layout,
@@ -526,6 +534,11 @@ export function PaymentPanel(p: PaymentPanelProps) {
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
             <span className="text-base font-semibold">Payments on this bill</span>
             <span className="flex gap-2">
+              {p.deposit && amountCents(p.deposit.held) > 0n ? (
+                <button type="button" data-erp-size="free" aria-pressed={useDeposit} className={SECONDARY} disabled={billProblem !== null} onClick={() => setUseDeposit((v) => !v)}>
+                  {useDeposit ? `Deposit −₱${printAmount(fromCentavos(depositCents))} · remove` : `Use deposit ₱${printAmount(p.deposit.held)}`}
+                </button>
+              ) : null}
               <button type="button" data-erp-size="free" className={SECONDARY} disabled={!canAddPayment(rows) || hasOpenRow || balanceCents === 0n || p.tenders.length === 0 || billProblem !== null} onClick={split}>
                 + Split: add another payment
               </button>

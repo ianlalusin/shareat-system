@@ -247,6 +247,15 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-627: a charge put on / taken off a table at the till (entity = the table_session_charges row). Money: it changes what the table owes. Payloads carry the name, unit amount and quantity.
   def('pos.charge_added', 'money', 'normal', 'store', 'table_session_charges', 'T-627'),
   def('pos.charge_removed', 'money', 'normal', 'store', 'table_session_charges', 'T-627'),
+  // T-628: a table reservation (entity = the pos_reservations row): booked at the till, then its status moved (seated / cancelled / no_show / closed). Payloads carry the status and who.
+  def('pos.reservation_created', 'order', 'normal', 'store', 'pos_reservations', 'T-628'),
+  def('pos.reservation_status_set', 'order', 'normal', 'store', 'pos_reservations', 'T-628'),
+  // T-628: money held for a reservation (entity = the pos_reservation_deposits row). Taken and applied are routine; a void, a refund and a keep each need a manager PIN and a reason, so they are high.
+  def('pos.deposit_taken', 'money', 'normal', 'store', 'pos_reservation_deposits', 'T-628'),
+  def('pos.deposit_applied', 'money', 'normal', 'store', 'pos_reservation_deposits', 'T-628'),
+  def('pos.deposit_voided', 'money', 'high', 'store', 'pos_reservation_deposits', 'T-628'),
+  def('pos.deposit_refunded', 'money', 'high', 'store', 'pos_reservation_deposits', 'T-628'),
+  def('pos.deposit_kept', 'money', 'high', 'store', 'pos_reservation_deposits', 'T-628'),
   // T-533 S1: a store's POS mode set or moved (off, test, live from a date, or the roll-back); entity = the pos_stores row. `high`: it decides whether real sales days come from the new POS.
   def('pos.store_mode_set', 'settings', 'high', 'store', 'pos_stores', 'T-533'),
   // T-531: the day close (the Z; entity = the pos_day_closes row, or the run id for the backlog), the ERP sales day it derives, and the December bridge to v1 (entity = the store).

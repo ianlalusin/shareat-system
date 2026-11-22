@@ -202,6 +202,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/opening-balances': 'run_cutover',
   // The SC/PWD register: `listStatutoryDiscounts` reads by record_statutory_discount at the store, so a cashier (who transcribes the paper logbook) keeps the screen; managers and admins hold it by role.
   '/statutory-discounts': 'record_statutory_discount',
+  // T-628: the office's read-only list of POS reservations and held deposits; a manager reads it (the domain asks approve_pos_correction at the store).
+  '/pos-reservations': 'approve_pos_correction',
   // The same three words `orderDetail` already opens an order by.
   '/trade/orders': ['create_wholesale_order', 'approve_buyer', 'record_ar_collection'],
   // The franchisor's actions; the domain asks view_franchise_sales on every press. /franchise/access-log keeps its own longer key.

@@ -248,6 +248,8 @@ export const salesDays = pgTable(
     posV1DayFeedId: uuid('pos_v1_day_feed_id').references(() => posV1DayFeeds.id, { onDelete: 'restrict' }),
     /** T-375 (W11): POS refunds of the day, contra-revenue 4950 - never comps. Feed days only. */
     refunds: numeric('refunds', { precision: 14, scale: 2 }).notNull().default('0'),
+    /** T-628 (migration 0276): the reservation deposits the Z applied to bills (posts as Dr 2170, a tender of the sale). A day derived from POS receipts only. */
+    depositsApplied: numeric('deposits_applied', { precision: 14, scale: 2 }).notNull().default('0'),
 
     // ── Revenue: the POSTING split (which account), not the channel split ──────────────
     totalSales: numeric('total_sales', { precision: 14, scale: 2 }).notNull(),
@@ -362,6 +364,10 @@ export const salesDays = pgTable(
     check('sales_days_refunds_only_on_feed_days_check', sql`${t.source} in ('pos_v1_day_feed', 'pos_receipts') or ${t.refunds} = 0`),
     check('sales_days_refunds_non_negative_check', sql`${t.refunds} >= 0`),
     check('sales_days_refunds_finite_check', sql`${t.refunds} > '-Infinity'::numeric and ${t.refunds} < 'Infinity'::numeric`),
+    // T-628 (0276): the deposits a POS-derived day applied; a typed or feed day has none.
+    check('sales_days_deposits_applied_check', sql`${t.depositsApplied} >= 0`),
+    check('sales_days_deposits_applied_finite_check', sql`${t.depositsApplied} > '-Infinity'::numeric and ${t.depositsApplied} < 'Infinity'::numeric`),
+    check('sales_days_deposits_only_on_pos_receipts_check', sql`${t.source} = 'pos_receipts' or ${t.depositsApplied} = 0`),
     index('sales_days_pos_v1_day_feed_id_idx').on(t.posV1DayFeedId),
     check('sales_days_total_sales_finite_check', sql`${t.totalSales} > '-Infinity'::numeric and ${t.totalSales} < 'Infinity'::numeric`),
     check('sales_days_unli_sales_finite_check', sql`${t.unliSales} > '-Infinity'::numeric and ${t.unliSales} < 'Infinity'::numeric`),

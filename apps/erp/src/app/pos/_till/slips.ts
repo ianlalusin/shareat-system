@@ -3,7 +3,7 @@
  * Nothing is computed here: figures go through as given; only the Manila-time text of a window or a business date is made.
  */
 import { formatBusinessDateTime } from '@shareat/core/datetime';
-import { money, type Money } from '@shareat/core/money';
+import { add, money, type Money } from '@shareat/core/money';
 import { receiptHeaderOf, type ReadingSlipView, type ZSlipView } from '@/lib/pos-print';
 
 /** A reading as it travels over JSON (`Reading` of the domain with its Dates as ISO text). Optional fields are absent from older callers. */
@@ -31,6 +31,8 @@ export interface ReadingJson {
   convert?: { cashIn: string; cashOut: string; net: string; count: number };
   /** T-534 S4: refunds of the window (the tender rows are already net of them); absent from older callers. */
   refunds?: { total: string; cash: string; count: number };
+  /** T-628: reservation deposits of the window (taken / voided / refunded / kept, and applied to bills); absent from older callers. */
+  deposits?: { taken: string; voided: string; refunded: string; kept: string; applied: string; cashNet: string; cashTaken?: string; cashReturned?: string; count: number };
   windowStart?: string;
   windowEnd?: string;
 }
@@ -76,6 +78,8 @@ export function readingSlipView(reading: ReadingJson, ctx: SlipContext): Reading
     tenders: reading.byTender.map((t) => ({ name: t.name, amount: amountOf(t.amount) })),
     ...(reading.convert ? { convert: { cashIn: amountOf(reading.convert.cashIn), cashOut: amountOf(reading.convert.cashOut), count: reading.convert.count } } : {}),
     ...(reading.refunds ? { refunds: { total: amountOf(reading.refunds.total), count: reading.refunds.count } } : {}),
+    // refunded on the paper = refunded + voided: both gave money back by a method
+    ...(reading.deposits ? { deposits: { taken: amountOf(reading.deposits.taken), refunded: add(amountOf(reading.deposits.refunded), amountOf(reading.deposits.voided)), kept: amountOf(reading.deposits.kept), applied: amountOf(reading.deposits.applied), ...(reading.deposits.cashTaken !== undefined ? { cashTaken: amountOf(reading.deposits.cashTaken) } : {}), ...(reading.deposits.cashReturned !== undefined ? { cashReturned: amountOf(reading.deposits.cashReturned) } : {}) } } : {}),
     varianceTotal: amountOf(reading.varianceTotal),
     shortfallCount: reading.shortfallCount ?? 0,
     toCheckCount: reading.toCheckCount,

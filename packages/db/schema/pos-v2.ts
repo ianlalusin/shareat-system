@@ -77,6 +77,9 @@ export const DISCOUNT_VALUE_TYPES = ['percent', 'fixed'] as const;
 export const POS_PRESET_STATUSES = ['active', 'retired'] as const;
 export const LINE_DISCOUNT_STATUSES = ['active', 'removed'] as const;
 export const SESSION_CHARGE_STATUSES = ['active', 'removed'] as const;
+/** T-628 (0276): a reservation's life, and the five kinds of event on the money held for it. */
+export const POS_RESERVATION_STATUSES = ['booked', 'seated', 'cancelled', 'no_show', 'closed'] as const;
+export const POS_DEPOSIT_KINDS = ['taken', 'voided', 'applied', 'refunded', 'kept'] as const;
 
 /** Same-org twin: `(org_id, col)` -> `parent (org_id, id)`. Defined once so the 40-odd twins below cannot drift in shape. */
 const twin = (name: string, orgId: AnyPgColumn, col: AnyPgColumn, parentOrgId: AnyPgColumn, parentId: AnyPgColumn) =>
@@ -564,6 +567,8 @@ export const posSalesReceipts = pgTable(
     dayCloseId: uuid('day_close_id'),
     /** T-627 (migration 0275): the store charges on the bill (leftover, extra griller...). Added AFTER discounts and VAT, outside the VAT base; the amount due is total + charge_total, and `total` keeps total = subtotal - discount_total. */
     chargeTotal: numeric('charge_total', { precision: 14, scale: 2 }).notNull().default('0'),
+    /** T-628 (migration 0276): the part of the amount due paid from a held reservation deposit (the applied deposit event names this receipt). */
+    depositApplied: numeric('deposit_applied', { precision: 14, scale: 2 }).notNull().default('0'),
   },
   (t) => [
     check('pos_sales_receipts_subtotal_finite_check', sql`${t.subtotal} > '-Infinity'::numeric and ${t.subtotal} < 'Infinity'::numeric`),
@@ -594,6 +599,9 @@ export const posSalesReceipts = pgTable(
     // NOTE: pos_sales_receipts_charge_total_check / _finite_check - hand-added in migration 0275 (T-627).
     check('pos_sales_receipts_charge_total_check', sql`${t.chargeTotal} >= 0`),
     check('pos_sales_receipts_charge_total_finite_check', sql`${t.chargeTotal} > '-Infinity'::numeric and ${t.chargeTotal} < 'Infinity'::numeric`),
+    // NOTE: pos_sales_receipts_deposit_applied_check / _finite_check - hand-added in migration 0276 (T-628).
+    check('pos_sales_receipts_deposit_applied_check', sql`${t.depositApplied} >= 0`),
+    check('pos_sales_receipts_deposit_applied_finite_check', sql`${t.depositApplied} > '-Infinity'::numeric and ${t.depositApplied} < 'Infinity'::numeric`),
     foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_sales_receipts_store_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.terminalId], foreignColumns: [posTerminals.storeId, posTerminals.id], name: 'pos_sales_receipts_terminal_same_store_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.tableSessionId], foreignColumns: [tableSessions.storeId, tableSessions.id], name: 'pos_sales_receipts_table_session_same_store_fk' }).onDelete('restrict'),
@@ -1066,6 +1074,127 @@ export const posRefundPayments = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------------------------------------------------
+// T-628 (migration 0276) pos_reservations / pos_reservation_deposits - a held table and the money held for it. purge.
+// docs/tasks/628-pos-reservations-deposits.md. The balance of a reservation is derived from its deposit events (taken - voided - applied - refunded - kept), never stored.
+// ---------------------------------------------------------------------------------------------------------------------
+export const posReservations = pgTable(
+  'pos_reservations',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: orgIdCol(),
+    storeId: storeIdCol(),
+    customerName: text('customer_name').notNull(),
+    phone: text('phone'),
+    partySize: integer('party_size').notNull(),
+    reservedFor: timestamp('reserved_for', { withTimezone: true }).notNull(),
+    /** Composite FK (store_id, stand_id) -> pos_stands, hand-added in migration 0276. */
+    standId: uuid('stand_id'),
+    note: text('note'),
+    status: text('status', { enum: POS_RESERVATION_STATUSES }).notNull().default('booked'),
+    /** Composite FK (store_id, session_id) -> table_sessions, hand-added in migration 0276. Set once, when the party is seated. */
+    sessionId: uuid('session_id'),
+    createdBy: personCol('created_by').notNull(),
+    createdAtDevice: timestamp('created_at_device', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+  },
+  (t) => [
+    unique('pos_reservations_org_id_id_unique').on(t.orgId, t.id),
+    unique('pos_reservations_store_id_id_unique').on(t.storeId, t.id),
+    // NOTE: the trigger pos_reservations_guard (written as booked; only status / stand / table move, the table once; forward-only statuses; CLOSING needs a zero held balance; no DELETE; 23001 / 23514) is hand-added in migration 0276, ENABLE ALWAYS.
+    // NOTE: pos_reservations_store_time_idx (store_id, reserved_for) WHERE status IN ('booked','seated') and pos_reservations_session_key UNIQUE (session_id) WHERE session_id IS NOT NULL - hand-added in migration 0276.
+    index('pos_reservations_store_time_idx')
+      .on(t.storeId, t.reservedFor)
+      .where(sql`${t.status} in ('booked','seated')`),
+    uniqueIndex('pos_reservations_session_key')
+      .on(t.sessionId)
+      .where(sql`${t.sessionId} is not null`),
+    check('pos_reservations_name_check', sql`length(btrim(${t.customerName})) between 1 and 60`),
+    check('pos_reservations_phone_check', sql`${t.phone} is null or length(btrim(${t.phone})) between 3 and 30`),
+    check('pos_reservations_party_size_check', sql`${t.partySize} between 1 and 500`),
+    check('pos_reservations_note_check', sql`${t.note} is null or length(btrim(${t.note})) between 1 and 200`),
+    check('pos_reservations_status_check', sql`${t.status} in ('booked','seated','cancelled','no_show','closed')`),
+    check('pos_reservations_closed_shape_check', sql`(${t.status} = 'closed') = (${t.closedAt} is not null)`),
+    check('pos_reservations_seated_session_check', sql`${t.status} <> 'seated' or ${t.sessionId} is not null`),
+    foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_reservations_store_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.standId], foreignColumns: [posStands.storeId, posStands.id], name: 'pos_reservations_stand_same_store_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.sessionId], foreignColumns: [tableSessions.storeId, tableSessions.id], name: 'pos_reservations_session_same_store_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.createdBy], foreignColumns: [persons.orgId, persons.id], name: 'pos_reservations_created_by_same_org_fk' }).onDelete('restrict'),
+  ],
+);
+
+export const posReservationDeposits = pgTable(
+  'pos_reservation_deposits',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: orgIdCol(),
+    storeId: storeIdCol(),
+    /** Composite FK (store_id, reservation_id) -> pos_reservations, hand-added in migration 0276. */
+    reservationId: uuid('reservation_id').notNull(),
+    kind: text('kind', { enum: POS_DEPOSIT_KINDS }).notNull(),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    /** The method the money moved by (taken / voided / refunded). NULL on applied and kept (no cash moves). */
+    tenderId: uuid('tender_id').references(() => tenders.id, { onDelete: 'restrict' }),
+    referenceNo: text('reference_no'),
+    /** Composite FK (store_id, terminal_id) -> pos_terminals: the till whose Z collects the event. NULL on applied. */
+    terminalId: uuid('terminal_id'),
+    /** Composite FK (store_id, receipt_id) -> pos_sales_receipts: the bill an applied deposit paid. */
+    receiptId: uuid('receipt_id'),
+    /** A void names the taken deposit it voids (FK (reservation_id, voids_deposit_id) -> this table). */
+    voidsDepositId: uuid('voids_deposit_id'),
+    reason: text('reason'),
+    recordedBy: personCol('recorded_by').notNull(),
+    approvedBy: personCol('approved_by'),
+    occurredAtDevice: timestamp('occurred_at_device', { withTimezone: true }).notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Composite FK (store_id, day_close_id) -> pos_day_closes. Set once, by the Z, on the cash-moving kinds (never on applied). */
+    dayCloseId: uuid('day_close_id'),
+  },
+  (t) => [
+    unique('pos_reservation_deposits_org_id_id_unique').on(t.orgId, t.id),
+    unique('pos_reservation_deposits_reservation_id_id_unique').on(t.reservationId, t.id),
+    // NOTE: the triggers pos_reservation_deposits_frozen (frozen except day_close_id, once) and pos_reservation_deposits_guard (BEFORE INSERT under a row lock on the reservation: balance, void-after-apply, apply needs seated) are hand-added in migration 0276, ENABLE ALWAYS.
+    // NOTE: pos_reservation_deposits_applied_once_key (reservation_id) / _receipt_once_key (receipt_id) WHERE kind = 'applied', _void_once_key (voids_deposit_id) WHERE kind = 'voided', and _open_idx - hand-added in migration 0276.
+    index('pos_reservation_deposits_reservation_idx').on(t.reservationId),
+    index('pos_reservation_deposits_open_idx')
+      .on(t.storeId)
+      .where(sql`${t.dayCloseId} is null and ${t.kind} <> 'applied'`),
+    uniqueIndex('pos_reservation_deposits_applied_once_key')
+      .on(t.reservationId)
+      .where(sql`${t.kind} = 'applied'`),
+    uniqueIndex('pos_reservation_deposits_receipt_once_key')
+      .on(t.receiptId)
+      .where(sql`${t.kind} = 'applied'`),
+    uniqueIndex('pos_reservation_deposits_void_once_key')
+      .on(t.voidsDepositId)
+      .where(sql`${t.kind} = 'voided'`),
+    check('pos_reservation_deposits_kind_check', sql`${t.kind} in ('taken','voided','applied','refunded','kept')`),
+    check('pos_reservation_deposits_amount_check', sql`${t.amount} > 0`),
+    check('pos_reservation_deposits_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    check('pos_reservation_deposits_reference_no_check', sql`${t.referenceNo} is null or length(${t.referenceNo}) between 4 and 40`),
+    check('pos_reservation_deposits_reason_check', sql`${t.reason} is null or length(btrim(${t.reason})) between 1 and 200`),
+    check(
+      'pos_reservation_deposits_kind_shape_check',
+      sql`(${t.kind} = 'taken' and ${t.tenderId} is not null and ${t.terminalId} is not null and ${t.receiptId} is null and ${t.voidsDepositId} is null and ${t.reason} is null and ${t.approvedBy} is null)
+        or (${t.kind} = 'voided' and ${t.tenderId} is not null and ${t.terminalId} is not null and ${t.receiptId} is null and ${t.voidsDepositId} is not null and ${t.reason} is not null and ${t.approvedBy} is not null)
+        or (${t.kind} = 'applied' and ${t.tenderId} is null and ${t.terminalId} is null and ${t.receiptId} is not null and ${t.voidsDepositId} is null and ${t.reason} is null and ${t.approvedBy} is null and ${t.referenceNo} is null and ${t.dayCloseId} is null)
+        or (${t.kind} = 'refunded' and ${t.tenderId} is not null and ${t.terminalId} is not null and ${t.receiptId} is null and ${t.voidsDepositId} is null and ${t.reason} is not null and ${t.approvedBy} is not null)
+        or (${t.kind} = 'kept' and ${t.tenderId} is null and ${t.terminalId} is not null and ${t.receiptId} is null and ${t.voidsDepositId} is null and ${t.reason} is not null and ${t.approvedBy} is not null and ${t.referenceNo} is null)`,
+    ),
+    foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_reservation_deposits_store_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.reservationId], foreignColumns: [posReservations.storeId, posReservations.id], name: 'pos_reservation_deposits_reservation_same_store_fk' }).onDelete('restrict'),
+    twin('pos_reservation_deposits_tender_id_same_org_fk', t.orgId, t.tenderId, tenders.orgId, tenders.id),
+    foreignKey({ columns: [t.storeId, t.terminalId], foreignColumns: [posTerminals.storeId, posTerminals.id], name: 'pos_reservation_deposits_terminal_same_store_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.receiptId], foreignColumns: [posSalesReceipts.storeId, posSalesReceipts.id], name: 'pos_reservation_deposits_receipt_same_store_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.reservationId, t.voidsDepositId], foreignColumns: [t.reservationId, t.id], name: 'pos_reservation_deposits_voids_same_reservation_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.dayCloseId], foreignColumns: [posDayCloses.storeId, posDayCloses.id], name: 'pos_reservation_deposits_day_close_same_store_fk' }).onDelete('restrict'),
+    twin('pos_reservation_deposits_recorded_by_same_org_fk', t.orgId, t.recordedBy, persons.orgId, persons.id),
+    twin('pos_reservation_deposits_approved_by_same_org_fk', t.orgId, t.approvedBy, persons.orgId, persons.id),
+  ],
+);
+
 export type PosPaymentConversionRow = typeof posPaymentConversions.$inferSelect;
 export type PosTenderCorrectionRow = typeof posTenderCorrections.$inferSelect;
 export type PosRefundRow = typeof posRefunds.$inferSelect;
@@ -1076,6 +1205,8 @@ export type PosStandRow = typeof posStands.$inferSelect;
 export type PosTerminalRow = typeof posTerminals.$inferSelect;
 export type TableSessionRow = typeof tableSessions.$inferSelect;
 export type PosDiscountPresetRow = typeof posDiscountPresets.$inferSelect;
+export type PosReservationRow = typeof posReservations.$inferSelect;
+export type PosReservationDepositRow = typeof posReservationDeposits.$inferSelect;
 export type PosChargePresetRow = typeof posChargePresets.$inferSelect;
 export type TableSessionChargeRow = typeof tableSessionCharges.$inferSelect;
 export type PosSalesReceiptChargeRow = typeof posSalesReceiptCharges.$inferSelect;

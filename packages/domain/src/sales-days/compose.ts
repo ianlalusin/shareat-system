@@ -51,6 +51,8 @@ export function routeInputForDay(day: DayRow, channels: ChannelRow[], tenders: T
     creditSales: money(day.creditSales),
     // T-375 (W11): a feed day's refunds post to 4950 beside its cash net of them; a typed day has none.
     refunds: money(day.refunds),
+    // T-628: reservation deposits the Z applied to bills (a POS-derived day only; every other day has none).
+    depositsApplied: money(day.depositsApplied),
     allowShortPayment: day.source === 'pos_receipts',
     tenders: tenders.map((t) => ({ moneyAccountId: t.moneyAccountId, amount: money(t.amount) })),
     channels: [

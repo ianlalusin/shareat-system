@@ -2,7 +2,7 @@
 import { navHrefAllowed } from '@/lib/route-capability';
 import type { PosStateBody } from './pos-state';
 
-export type PosTabKey = 'orders' | 'kitchen' | 'refills' | 'receipts' | 'till';
+export type PosTabKey = 'orders' | 'kitchen' | 'refills' | 'reservations' | 'receipts' | 'till';
 export interface PosTab {
   key: PosTabKey;
   label: string;
@@ -13,6 +13,7 @@ const TABS: readonly PosTab[] = [
   { key: 'orders', label: 'Orders', href: '/pos' },
   { key: 'kitchen', label: 'Kitchen', href: '/pos/kitchen' },
   { key: 'refills', label: 'Refills', href: '/pos/refills' },
+  { key: 'reservations', label: 'Reservations', href: '/pos/reservations' },
   { key: 'receipts', label: 'Receipts', href: '/pos/receipts' },
   { key: 'till', label: 'Till', href: '/pos/till' },
 ];

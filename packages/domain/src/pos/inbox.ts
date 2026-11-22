@@ -15,6 +15,7 @@ import { gone, refuse } from '../shared/refusal';
 import { addCharge, removeCharge } from './charges';
 import { addLineDiscount, applyPresetToAllLines, removeLineDiscount } from './discounts';
 import { addLines, cancelLine, isUniqueViolation, openStand, requestRefill, setHeadsCashier } from './order';
+import { createReservation, seatReservation, setReservationStatus, takeDeposit } from './reservations';
 import { completeSale, voidUnpaidSession } from './sale';
 import type { PosDeps } from './shared';
 
@@ -159,6 +160,34 @@ const HANDLERS: ReadonlyMap<string, Handler> = new Map<string, Handler>([
     { spec: { req: { chargeId: uuid, removedAtDevice: time } }, run: (tx, a, b, p) => removeCharge(tx, a, { ...p, ...b } as unknown as Parameters<typeof removeCharge>[2]) },
   ],
   [
+    'reservation.created',
+    {
+      spec: { req: { reservationId: uuid, customerName: str, partySize: int, reservedFor: time, createdAtDevice: time }, opt: { phone: str, standId: uuid, note: str } },
+      run: (tx, a, b, p) => createReservation(tx, a, { ...p, ...b } as unknown as Parameters<typeof createReservation>[2]),
+    },
+  ],
+  [
+    'deposit.taken',
+    {
+      spec: { req: { depositId: uuid, reservationId: uuid, tenderId: uuid, amount: str, occurredAtDevice: time }, opt: { referenceNo: str } },
+      run: (tx, a, b, p) => takeDeposit(tx, a, { ...p, ...b } as unknown as Parameters<typeof takeDeposit>[2]),
+    },
+  ],
+  [
+    'reservation.seated',
+    {
+      spec: { req: { reservationId: uuid, sessionId: uuid, seatedAtDevice: time } },
+      run: (tx, a, b, p) => seatReservation(tx, a, { ...p, ...b } as unknown as Parameters<typeof seatReservation>[2]),
+    },
+  ],
+  [
+    'reservation.status_set',
+    {
+      spec: { req: { reservationId: uuid, status: oneOf('cancelled', 'no_show'), atDevice: time } },
+      run: (tx, a, b, p) => setReservationStatus(tx, a, { ...p, ...b } as unknown as Parameters<typeof setReservationStatus>[2]),
+    },
+  ],
+  [
     'session.voided',
     {
       spec: { req: { sessionId: uuid, reason: str, voidedAtDevice: time, offline: bool }, opt: { approval: obj({ req: { pin: str } }) } },
@@ -180,6 +209,7 @@ const HANDLERS: ReadonlyMap<string, Handler> = new Map<string, Handler>([
           payments: list(obj({ req: { tenderId: uuid, amount: str, toCheck: bool }, opt: { referenceNo: str } }), MAX_ITEMS),
           seniors: list(obj({ req: { dinerNo: int, kind: oneOf('senior', 'pwd'), idNumber: str, holderName: str } }), MAX_ITEMS),
         },
+        opt: { deposit: obj({ req: { reservationId: uuid, amount: str } }) }, // T-628: absent = no deposit applied (a sale queued before reservations existed)
       },
       run: (tx, a, b, p, d) => completeSale(tx, a, { ...p, ...b } as unknown as Parameters<typeof completeSale>[2], d),
     },

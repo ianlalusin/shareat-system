@@ -229,6 +229,8 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // A float left standing past that interval is not a balance, it is a breach; whatever surfaces
   // it (the OIL feed, T-135) should treat an ageing balance here as a finding, not a total.
   leaf('2160', 'Service charge float — held for staff', 'liability', 'credit', '2000'),
+  // T-628 (0276): money a customer paid ahead to hold a table. Not income until the manager keeps it (4500); credited when taken, debited when applied to the bill, refunded or kept. Store-level, no party.
+  leaf('2170', 'Customer deposits payable', 'liability', 'credit', '2000'),
   leaf('2150', 'Due to related store', 'liability', 'credit', '2000', { requiresParty: true }), // liability__due_to_{storeKey}, ap__{commissaryMirror} — T-118 party_type=store
   leaf('2210', 'SSS payable', 'liability', 'credit', '2000'), // 🆕
   leaf('2220', 'PhilHealth payable', 'liability', 'credit', '2000'), // 🆕
