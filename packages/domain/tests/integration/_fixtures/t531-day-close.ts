@@ -75,10 +75,10 @@ export interface Reading {
   /** T-534 S4 / T-627: the refunds of the window. */
   refunds?: { total: string; cash?: string; count: number };
   /** T-628: the reservation-deposit block of the window. */
-  deposits: { taken: string; voided: string; refunded: string; kept: string; applied: string; cashNet: string; count: number };
+  deposits: { taken: string; voided: string; refunded: string; kept: string; applied: string; cashNet: string; cashTaken: string; cashReturned: string; count: number };
   toCheckCount: number; heads: number; packageSessions: number; lateCount: number; spansTwoDates: boolean;
 }
-export interface CloseResult { wrote: boolean; dayCloseId: string; zNo: number; reading: Reading; salesDayId: string | null }
+export interface CloseResult { wrote: boolean; dayCloseId: string; zNo: number; businessDate: string; reading: Reading; salesDayId: string | null }
 interface DayCloseApi {
   readingFor: W<Reading>;
   xReading: W<Reading>;

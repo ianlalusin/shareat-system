@@ -43,7 +43,7 @@ import { audit, NOT_ON, readRules, requireContext, startHourDate, uuidInput, uui
 import { convertBlockOf, kindsOf, postConversionsForZ, type ConvertBlock } from './convert';
 import { tenderNetsAfterCorrections } from './tender-correction';
 import { refundBlockOf, refundCentsByTender, type RefundBlock } from './refund';
-import { depositBlockOf, postDepositsForZ, type DepositBlock } from './reservations';
+import { allocateDepositToTenders, depositBlockOf, postDepositsForZ, type DepositBlock } from './reservations';
 import { buildV1BridgePayload, v1BridgeDateAllowed, V1_BRIDGE_LAST_DATE, type V1BridgeClose } from './v1-bridge-payload';
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -166,7 +166,7 @@ async function openRefunds(tx: Tx, orgId: string, storeId: string, terminalId: s
   return (await posV2Repo.listOpenRefunds(tx, orgId, storeId)).filter((r) => r.terminalId === terminalId && (before === undefined || r.recordedAt.getTime() < before.getTime()));
 }
 
-/** T-628: the terminal's reservation-deposit events not yet in a Z (taken, voided, refunded, kept), oldest first; `before` (a backlog day's end) leaves out later ones (judged by the device time of the event). */
+/** T-628: the terminal's reservation-deposit events not yet in a Z (taken, voided, refunded, kept), oldest first; `before` (a backlog day's end) leaves out later ones (judged by the time the server recorded the event, `recorded_at`). */
 async function openDeposits(tx: Tx, orgId: string, storeId: string, terminalId: string, before?: Date): Promise<DepositEvent[]> {
   return posV2Repo.listOpenDeposits(tx, orgId, storeId, terminalId, before);
 }
@@ -730,6 +730,19 @@ export interface V1BridgeWriter {
 export type V1BridgeStatus = 'sent' | 'failed' | 'skipped';
 
 /** The document for a store and date, rebuilt from the DATABASE (the Z rows and the receipts frozen to them), or null when the store has no v1 link or the date has no Z. */
+/** T-628: for the receipts of a Z that used a deposit, the original method(s) of what they used (`allocateDepositToTenders`), one row per method. */
+async function depositPaymentsOf(tx: Tx, orgId: string, storeId: string, receipts: readonly Receipt[]): Promise<{ tenderId: string; amount: Money }[]> {
+  const byTender = new Map<string, bigint>();
+  for (const r of receipts) {
+    if (toCentavos(money(r.depositApplied)) <= 0n) continue;
+    const applied = await posV2Repo.getAppliedDepositOfReceipt(tx, orgId, storeId, r.id);
+    if (!applied) continue;
+    const events = await posV2Repo.listDepositsOfReservation(tx, orgId, storeId, applied.reservationId);
+    for (const a of allocateDepositToTenders(events, money(r.depositApplied))) byTender.set(a.tenderId, (byTender.get(a.tenderId) ?? 0n) + toCentavos(a.amount));
+  }
+  return [...byTender.entries()].map(([tenderId, cents]) => ({ tenderId, amount: fromCentavos(cents) }));
+}
+
 async function bridgePayloadFor(tx: Tx, orgId: string, storeId: string, businessDate: string) {
   const link = await posV1Repo.getLinkByStore(tx, orgId, storeId);
   if (!link) return null;
@@ -746,18 +759,24 @@ async function bridgePayloadFor(tx: Tx, orgId: string, storeId: string, business
     const refundsOfZ = (await posV2Repo.listRefundsOfClose(tx, orgId, storeId, d.close.id)).reduce((a, r) => a + toCentavos(money(r.total)), 0n);
     closes.push({
       receiptCount: d.close.receiptCount,
-      // T-628: and v1 has no reservation deposit, so what the bills took from deposits (collected on the day the deposit was taken) is not in v1's methods nor in its total either.
-      grossTotal: fromCentavos(toCentavos(money(d.close.grossTotal)) - refundsOfZ - sumCentavos(receipts.map((r) => r.depositApplied))),
+      grossTotal: fromCentavos(toCentavos(money(d.close.grossTotal)) - refundsOfZ),
       chargesTotal: fromCentavos(sumCentavos(receipts.map((r) => r.chargeTotal))),
       varianceTotal: fromCentavos((await shortPaid(tx, orgId, receipts)).reduce((a, x) => a + x.gap, 0n)),
       discountTotal: fromCentavos(sumCentavos(receipts.map((r) => r.discountTotal))),
       unliSales: fromCentavos(sumCentavos([f.packageGross])),
       heads: f.heads,
       packageSessions: f.packageSessions,
-      tenders: d.tenders.map((t) => {
-        const row = tenders.get(t.tenderId);
-        return { name: row?.name ?? 'Unknown tender', kind: row?.kind ?? 'wallet', v1Alias: row?.posV1Alias ?? null, amount: t.amount };
-      }),
+      tenders: [
+        ...d.tenders.map((t) => {
+          const row = tenders.get(t.tenderId);
+          return { name: row?.name ?? 'Unknown tender', kind: row?.kind ?? 'wallet', v1Alias: row?.posV1Alias ?? null, amount: t.amount };
+        }),
+        // T-628 (BOSS ruling, as v1's prepaidLines): the full gross stays, and a deposit a bill used is a payment under the deposit's ORIGINAL method on the bill's day.
+        ...(await depositPaymentsOf(tx, orgId, storeId, receipts)).map((p) => {
+          const row = tenders.get(p.tenderId);
+          return { name: row?.name ?? 'Unknown tender', kind: row?.kind ?? 'wallet', v1Alias: row?.posV1Alias ?? null, amount: p.amount };
+        }),
+      ],
     });
   }
   return buildV1BridgePayload({ posStoreId: link.posStoreId, businessDate, closes });

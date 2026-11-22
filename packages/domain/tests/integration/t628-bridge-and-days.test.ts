@@ -23,10 +23,10 @@ afterAll(closeAll);
 const AT = manila(D1, '22:30');
 const nowIso = () => new Date().toISOString();
 
-async function reservationWithDeposit(w: World, amount: string): Promise<string> {
+async function reservationWithDeposit(w: World, amount: string, tender: string = w.cash): Promise<string> {
   const id = uuid();
   await asOrg(w.orgId, (tx) => createReservation(tx, w.counter, { storeId: w.storeId, pairingId: w.pairingId, reservationId: id, customerName: 'Santos', partySize: 4, reservedFor: manila(D1, '19:00'), createdAtDevice: nowIso() }));
-  await asOrg(w.orgId, (tx) => takeDeposit(tx, w.counter, { storeId: w.storeId, pairingId: w.pairingId, depositId: uuid(), reservationId: id, tenderId: w.cash, amount, occurredAtDevice: nowIso() }));
+  await asOrg(w.orgId, (tx) => takeDeposit(tx, w.counter, { storeId: w.storeId, pairingId: w.pairingId, depositId: uuid(), reservationId: id, tenderId: tender, amount, ...(tender === w.cash ? {} : { referenceNo: 'GC-DEP-0001' }), occurredAtDevice: nowIso() }));
   return id;
 }
 const payWithDeposit = (w: World, reservationId: string, amount: string, cash: string) =>
@@ -42,7 +42,7 @@ const payWithDeposit = (w: World, reservationId: string, amount: string, cash: s
   });
 
 describe('T-628 the day close around a deposit-paid bill', () => {
-  it('the v1 bridge document carries the gross less the part paid from deposits, so its methods check holds [kills: the bridge total keeps the deposit part]', async () => {
+  it('the v1 bridge document keeps the full gross and counts the used deposit as a payment under its ORIGINAL method, as v1 does [kills: the deposit left out of byMethod; the gross reduced instead]', async () => {
     const w = await world();
     const id = await reservationWithDeposit(w, '500.00');
     await payWithDeposit(w, id, '500.00', '500.00');
@@ -51,7 +51,20 @@ describe('T-628 the day close around a deposit-paid bill', () => {
     const out = await asOrg(w.orgId, (tx) => sendV1Bridge(tx, w.counter, { storeId: w.storeId, businessDates: [D1] }, { writer: f.writer }));
     expect(out.results[0]).toMatchObject({ status: 'sent' });
     const payments = (f.calls[0]!.data as { payments: { totalGross: number; byMethod: Record<string, number> } }).payments;
-    expect(payments).toMatchObject({ totalGross: 500, byMethod: { cash: 500 } });
+    expect(payments).toMatchObject({ totalGross: 1000, byMethod: { cash: 1000 } }); // 500 handed over today + the 500 deposit taken in cash
+  });
+
+  it('a deposit taken by GCash is a GCash payment on the bill day, beside the cash that was handed over', async () => {
+    const w = await world();
+    const id = await reservationWithDeposit(w, '500.00', w.gcash);
+    await payWithDeposit(w, id, '500.00', '500.00');
+    const z = await close(w, AT, await pinOf(w, w.managerId));
+    expect(z.reading.deposits).toMatchObject({ taken: '500.00', cashTaken: '0.00', cashNet: '0.00', applied: '500.00' }); // the drawer has none of the deposit
+    const f = fakeWriter();
+    const out = await asOrg(w.orgId, (tx) => sendV1Bridge(tx, w.counter, { storeId: w.storeId, businessDates: [D1] }, { writer: f.writer }));
+    expect(out.results[0]).toMatchObject({ status: 'sent' });
+    const payments = (f.calls[0]!.data as { payments: { totalGross: number; byMethod: Record<string, number> } }).payments;
+    expect(payments).toMatchObject({ totalGross: 1000, byMethod: { cash: 500, GCash: 500 } });
   });
 
   it('a test-mode store books nothing for a deposit (the Z still collects the event, no journal entry)', async () => {

@@ -24,6 +24,7 @@ export {
   NO_DEPOSITS,
   DEPOSIT_VOID_AFTER_APPLY,
   DEPOSIT_ALREADY_USED,
+  DEPOSIT_NOT_SEATED,
   RESERVATION_CLOSE_WITH_MONEY,
 } from './reservations';
 export type {

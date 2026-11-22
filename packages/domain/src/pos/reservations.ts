@@ -46,6 +46,7 @@ export const DEPOSIT_NOT_TAKEN_NOW = 'Only a booked or seated reservation can ta
 export const DEPOSIT_VOID_AFTER_APPLY = 'This deposit was already used on a bill, so it cannot be voided.';
 export const DEPOSIT_ALREADY_USED = 'This reservation’s deposit was already used on a bill.';
 export const DEPOSIT_NOT_THIS_TABLE = 'This deposit belongs to another table.';
+export const DEPOSIT_NOT_SEATED = 'This reservation is no longer seated, so its deposit can\u2019t be used.';
 export const DEPOSIT_MORE_THAN_HELD = 'That is more than the reservation holds.';
 export const DEPOSIT_MORE_THAN_BILL = 'The deposit cannot be more than the bill.';
 export const RESERVATION_CLOSE_WITH_MONEY = 'This reservation still holds a deposit. A manager must refund it or keep it, with a reason, before it can be closed.';
@@ -69,20 +70,27 @@ export interface DepositBlock {
   kept: Money;
   applied: Money;
   cashNet: Money;
+  /** The cash part, on its own, so the drawer can be reconciled when a deposit came in (or went back) by a wallet: cash taken, and cash given back (voided + refunded). `cashNet` = taken - returned. */
+  cashTaken: Money;
+  cashReturned: Money;
   /** Cash-moving events in the window (taken, voided, refunded, kept). */
   count: number;
 }
-export const NO_DEPOSITS: DepositBlock = { taken: ZERO, voided: ZERO, refunded: ZERO, kept: ZERO, applied: ZERO, cashNet: ZERO, count: 0 };
+export const NO_DEPOSITS: DepositBlock = { taken: ZERO, voided: ZERO, refunded: ZERO, kept: ZERO, applied: ZERO, cashNet: ZERO, cashTaken: ZERO, cashReturned: ZERO, count: 0 };
 
 /** The block of a window's cash-moving events and the sum its bills took from deposits. */
 export function depositBlockOf(events: readonly Pick<Deposit, 'kind' | 'amount' | 'tenderId'>[], applied: Money, tenderKind: ReadonlyMap<string, 'cash' | 'wallet'>): DepositBlock {
   const sum = { taken: 0n, voided: 0n, refunded: 0n, kept: 0n };
-  let cash = 0n;
+  let cashIn = 0n;
+  let cashOut = 0n;
   for (const e of events) {
     if (e.kind === 'applied') continue; // belongs to its receipt's Z, never counted here
     const cents = toCentavos(money(e.amount));
     sum[e.kind as 'taken' | 'voided' | 'refunded' | 'kept'] += cents;
-    if (e.tenderId !== null && tenderKind.get(e.tenderId) === 'cash') cash += e.kind === 'taken' ? cents : e.kind === 'kept' ? 0n : -cents;
+    if (e.tenderId !== null && tenderKind.get(e.tenderId) === 'cash') {
+      if (e.kind === 'taken') cashIn += cents;
+      else if (e.kind !== 'kept') cashOut += cents; // voided and refunded give cash back; a keep moves none
+    }
   }
   return {
     taken: fromCentavos(sum.taken),
@@ -90,9 +98,41 @@ export function depositBlockOf(events: readonly Pick<Deposit, 'kind' | 'amount' 
     refunded: fromCentavos(sum.refunded),
     kept: fromCentavos(sum.kept),
     applied,
-    cashNet: fromCentavos(cash),
+    cashNet: fromCentavos(cashIn - cashOut),
+    cashTaken: fromCentavos(cashIn),
+    cashReturned: fromCentavos(cashOut),
     count: events.filter((e) => e.kind !== 'applied').length,
   };
+}
+
+/**
+ * Which method(s) an applied deposit was originally taken by, for the v1 bridge (v1 counts a used deposit as a payment under the deposit's own method, `prepaidLines`). The taken deposits
+ * (not voided) are used oldest first; what went back by a refund comes off the newest first. Pure. A remainder that no taking covers (it cannot happen: the database never lets more
+ * leave than is held) goes to the last method rather than being lost.
+ */
+export function allocateDepositToTenders(
+  events: readonly Pick<Deposit, 'id' | 'kind' | 'amount' | 'tenderId' | 'voidsDepositId'>[],
+  applied: Money,
+): { tenderId: string; amount: Money }[] {
+  const voided = new Set(events.filter((e) => e.kind === 'voided').map((e) => e.voidsDepositId));
+  const takens = events.filter((e) => e.kind === 'taken' && e.tenderId !== null && !voided.has(e.id)).map((e) => ({ tenderId: e.tenderId!, cents: toCentavos(money(e.amount)) }));
+  let back = events.filter((e) => e.kind === 'refunded').reduce((a, e) => a + toCentavos(money(e.amount)), 0n);
+  for (let i = takens.length - 1; i >= 0 && back > 0n; i--) {
+    const cut = back < takens[i]!.cents ? back : takens[i]!.cents;
+    takens[i]!.cents -= cut;
+    back -= cut;
+  }
+  const out = new Map<string, bigint>();
+  let need = toCentavos(applied);
+  for (const t of takens) {
+    if (need <= 0n) break;
+    const use = need < t.cents ? need : t.cents;
+    if (use > 0n) out.set(t.tenderId, (out.get(t.tenderId) ?? 0n) + use);
+    need -= use;
+  }
+  const last = takens[takens.length - 1];
+  if (need > 0n && last) out.set(last.tenderId, (out.get(last.tenderId) ?? 0n) + need);
+  return [...out.entries()].map(([tenderId, cents]) => ({ tenderId, amount: fromCentavos(cents) }));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -430,6 +470,8 @@ export async function closeReservation(tx: Tx, actor: Actor, input: CloseReserva
   if (!peek) throw gone(`pos: reservation ${reservationId} not found`, 'that reservation');
   if (peek.status === 'closed') return { wrote: false };
   if (peek.status === 'booked') throw refuse('pos: a booked reservation cannot be closed', 'Cancel or seat this reservation first.');
+  // the Z lock and the reservation row first, THEN what is held: nothing can move the balance between the read and the close
+  await lockedReservation(tx, actor, storeId, reservationId);
   const held0 = money(await posV2Repo.heldOfReservation(tx, orgId, storeId, reservationId));
   if (compare(held0, ZERO) > 0) {
     const r = input.resolution;

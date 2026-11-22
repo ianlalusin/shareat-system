@@ -70,6 +70,9 @@ function pushFigures(out: string[], view: ReadingSlipView, cols: number): void {
     if (!isZeroAmount(view.deposits.refunded)) out.push(...justify('DEPOSITS REFUNDED', `-${printAmount(view.deposits.refunded)}`, cols));
     if (!isZeroAmount(view.deposits.kept)) out.push(...justify('DEPOSITS KEPT', printAmount(view.deposits.kept), cols));
     if (!isZeroAmount(view.deposits.applied)) out.push(...justify('DEPOSITS APPLIED', printAmount(view.deposits.applied), cols));
+    // the drawer's own part: a deposit that came in (or went back) by GCash is in the lines above but not in the drawer
+    if (view.deposits.cashTaken !== undefined && !isZeroAmount(view.deposits.cashTaken)) out.push(...justify('DEPOSITS CASH IN', printAmount(view.deposits.cashTaken), cols));
+    if (view.deposits.cashReturned !== undefined && !isZeroAmount(view.deposits.cashReturned)) out.push(...justify('DEPOSITS CASH OUT', `-${printAmount(view.deposits.cashReturned)}`, cols));
   }
   if (view.varianceTotal !== undefined && !isZeroAmount(view.varianceTotal)) out.push(...justify('SHORT PAYMENTS', printAmount(view.varianceTotal), cols));
   if ((view.shortfallCount ?? 0) > 0) out.push(...justify('SHORT PAY FINDINGS', String(view.shortfallCount), cols));

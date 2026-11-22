@@ -22,16 +22,16 @@ if (!isTestDatabaseUrl(url)) {
 }
 
 import { RefusalError } from '@shareat/db';
-import { verifySalesDay } from '@shareat/domain';
+import { getUnpaidLiabilities, verifySalesDay } from '@shareat/domain';
 import { routeSalesDay } from '../../src/sales-days/routing';
 import { money } from '@shareat/core/money';
 import { applyPosEvents } from '../../src/pos/inbox';
 import {
-  closeReservation, completeSale, createReservation, DEPOSIT_ALREADY_USED, DEPOSIT_VOID_AFTER_APPLY, keepDeposit, refundDeposit, RESERVATION_CLOSE_WITH_MONEY, seatReservation,
+  closeReservation, completeSale, createReservation, DEPOSIT_ALREADY_USED, DEPOSIT_NOT_SEATED, DEPOSIT_VOID_AFTER_APPLY, keepDeposit, refundDeposit, RESERVATION_CLOSE_WITH_MONEY, seatReservation,
   setReservationStatus, takeDeposit, voidDeposit,
 } from '../../src/pos';
 import { ev, RATES } from './_fixtures/t525-pos';
-import { D1, asOrg, close, closeAll, journalLines, manila, pinOf, reading, salesDaysOf, sell, sql, uuid, world, type World } from './_fixtures/t531-day-close';
+import { D1, D2, asOrg, close, closeAll, journalLines, manila, pinOf, reading, salesDaysOf, sell, sql, uuid, world, type World } from './_fixtures/t531-day-close';
 
 afterAll(closeAll);
 
@@ -113,7 +113,7 @@ describe('T-628 test 1 - a deposit taken offline syncs, counts on that day\'s Z 
     expect(await held(resId)).toBe('1000.00');
 
     const x = await reading(w, AT);
-    expect(x.deposits).toMatchObject({ taken: '1000.00', voided: '0.00', refunded: '0.00', kept: '0.00', applied: '0.00', cashNet: '1000.00', count: 1 });
+    expect(x.deposits).toMatchObject({ taken: '1000.00', voided: '0.00', refunded: '0.00', kept: '0.00', applied: '0.00', cashNet: '1000.00', cashTaken: '1000.00', cashReturned: '0.00', count: 1 });
     expect(x.receiptCount).toBe(0);
 
     const z = await close(w, AT, await pinOf(w, w.managerId));
@@ -139,7 +139,7 @@ describe('T-628 test 1 - a deposit taken offline syncs, counts on that day\'s Z 
     const resId = await book(w);
     await take(w, resId, '300.00', w.gcash);
     const x = await reading(w, AT);
-    expect(x.deposits).toMatchObject({ taken: '300.00', cashNet: '0.00', count: 1 });
+    expect(x.deposits).toMatchObject({ taken: '300.00', cashNet: '0.00', cashTaken: '0.00', cashReturned: '0.00', count: 1 }); // a GCash deposit is in `taken`, not in the drawer
     await close(w, AT, await pinOf(w, w.managerId));
     const [e] = await depositEntries(w);
     const lines = await sql<{ code: string; debit: string; credit: string; party_type: string | null }[]>`
@@ -227,7 +227,7 @@ describe('T-628 test 2 - applying a deposit is consume-once', () => {
     expect(first.receiptId).not.toBe(other.receiptId);
   });
 
-  it('a sale arriving later that applies a deposit already used is QUARANTINED by the inbox, with the sentence, and nothing is written [kills: the domain check that refuses the second apply]', async () => {
+  it('a sale arriving later that applies a deposit already used is QUARANTINED by the inbox, with the sentence, and nothing is written [the sentence comes from the domain check; with that check removed the database unique still refuses it, with the same sentence, so this test alone does not kill that mutant: the unique-drop mutant in the test above does]', async () => {
     const w = await world();
     // a plain sale whose receipt the first apply is (wrongly) pinned on, by hand: the state a stale tablet's sale meets
     const earlier = await sell(w, { at: manila(D1, '18:00'), items: [{ item: w.menu.pork, qty: 1 }], expectTotal: '250.00', pay: [{ tenderId: w.cash, amount: '250.00' }] });
@@ -254,6 +254,73 @@ describe('T-628 test 2 - applying a deposit is consume-once', () => {
     expect(r.results[0]!.error).toContain('already used');
     expect((await sql<{ n: number }[]>`select count(*)::int n from pos_sales_receipts where table_session_id = ${sessionId}`)[0]!.n).toBe(0);
     expect((await sql<{ n: number }[]>`select count(*)::int n from pos_reservation_deposits where reservation_id = ${resId} and kind = 'applied'`)[0]!.n).toBe(1);
+  });
+});
+
+describe('T-628 audit fixes - apply needs a seated reservation, two days, the keep cap', () => {
+  it('a deposit of a reservation cancelled after seating is refused in words, not by a database code; its money stays held [kills: the not-seated refusal in completeSale]', async () => {
+    const w = await world();
+    const resId = await book(w);
+    await take(w, resId, '500.00');
+    const attempt = sell(w, {
+      at: manila(D1, '19:30'), items: [{ item: w.menu.pork, qty: 4 }], expectTotal: '1000.00', pay: [{ tenderId: w.cash, amount: '500.00' }],
+      beforeComplete: async () => {
+        const [s] = await sql<{ id: string }[]>`select id from table_sessions where store_id = ${w.storeId} and status = 'open' order by opened_at_device desc, id desc limit 1`;
+        await asOrg(w.orgId, (tx) => seatReservation(tx, w.counter, { storeId: w.storeId, pairingId: w.pairingId, reservationId: resId, sessionId: s!.id, seatedAtDevice: manila(D1, '19:30') }));
+        await asOrg(w.orgId, (tx) => setReservationStatus(tx, w.counter, { storeId: w.storeId, pairingId: w.pairingId, reservationId: resId, status: 'cancelled', atDevice: nowIso() }));
+      },
+      mutate: (i) => {
+        i.deposit = { reservationId: resId, amount: '500.00' };
+      },
+    });
+    expect(await refusal(attempt)).toBe(DEPOSIT_NOT_SEATED);
+    expect(await held(resId)).toBe('500.00');
+    expect(await statusOf(resId)).toBe('cancelled');
+  });
+
+  it('taken on day 1, applied on day 2: each day\'s books are right and 2170 nets to zero across the two Zs; the unpaid view shows it while held and not after [kills: depositsApplied dropped from the day; 2170 missing from the unpaid view]', async () => {
+    const w = await world();
+    const resId = await book(w);
+    await take(w, resId, '500.00');
+    const pin = await pinOf(w, w.managerId);
+    const unpaid2170 = async () => {
+      const r = await asOrg(w.orgId, (tx) => getUnpaidLiabilities(tx, w.manager, { storeId: w.storeId }));
+      return r.kinds.find((k) => k.id === 'other_ledger')!.lines.filter((l) => l.accountCode === '2170').map((l) => l.amount);
+    };
+    // day 1: the Z holds the deposit alone (nothing was sold): Dr 1110 / Cr 2170, no sales day
+    const z1 = await close(w, AT, pin);
+    expect(z1.salesDayId).toBeNull();
+    expect(z1.reading.deposits).toMatchObject({ taken: '500.00', applied: '0.00', cashTaken: '500.00', cashNet: '500.00' });
+    const day1 = await depositEntries(w);
+    expect(day1).toHaveLength(1);
+    expect(day1[0]).toMatchObject({ entry_date: D1 });
+    expect(await unpaid2170()).toEqual(['500.00']); // held money is owed: it shows in what we owe
+    // day 2: the bill takes the deposit; its Z applies it, takes nothing
+    await applyingSale(w, resId, '500.00', '500.00', manila(D2, '19:30'));
+    const z2 = await close(w, manila(D2, '22:30'), pin);
+    expect(z2.businessDate).toBe(D2);
+    expect(z2.reading.deposits).toMatchObject({ taken: '0.00', applied: '500.00', cashTaken: '0.00', cashNet: '0.00', count: 0 });
+    expect(await depositEntries(w)).toHaveLength(1); // day 2 posts no deposit entry of its own
+    const [d2] = await salesDaysOf(w);
+    const v = await asOrg(w.orgId, (tx) => verifySalesDay(tx, w.manager, d2!.id));
+    expect((await journalLines(v.journalEntryId)).map((l) => [l.code, l.debit, l.credit])).toEqual([['1110', '500.00', '0.00'], ['2170', '500.00', '0.00'], ['4150', '0.00', '1000.00']]);
+    const net = await sql<{ n: string }[]>`
+      select coalesce(sum(jl.credit - jl.debit), 0)::text n from journal_lines jl join accounts a on a.id = jl.account_id join journal_entries je on je.id = jl.entry_id where je.org_id = ${w.orgId} and a.code = '2170'`;
+    expect(net[0]!.n).toBe('0.00');
+    expect(await unpaid2170()).toEqual([]);
+  });
+
+  it('a keep cannot take more than is held, in words; the exact amount works [kills: the held cap in keepDeposit]', async () => {
+    const w = await world();
+    const resId = await book(w);
+    await take(w, resId, '300.00');
+    const pin = await pinOf(w, w.managerId);
+    const keep = (amount: string) =>
+      asOrg(w.orgId, (tx) => keepDeposit(tx, w.counter, { storeId: w.storeId, pairingId: w.pairingId, depositId: uuid(), reservationId: resId, amount, reason: 'No-show, no call', approval: { pin } }));
+    expect(await refusal(keep('300.01'))).toContain('more than the reservation holds');
+    expect(await held(resId)).toBe('300.00');
+    await keep('300.00');
+    expect(await held(resId)).toBe('0.00');
   });
 });
 

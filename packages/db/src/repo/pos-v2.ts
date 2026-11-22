@@ -1972,6 +1972,14 @@ export async function listOpenDeposits(tx: Tx, orgId: string, storeId: string, t
     )
     .orderBy(asc(posReservationDeposits.recordedAt), asc(posReservationDeposits.id));
 }
+/** The applied-deposit event of a receipt (at most one), or undefined. */
+export async function getAppliedDepositOfReceipt(tx: Tx, orgId: string, storeId: string, receiptId: string): Promise<PosReservationDepositRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posReservationDeposits)
+    .where(and(eq(posReservationDeposits.orgId, orgId), eq(posReservationDeposits.storeId, storeId), eq(posReservationDeposits.receiptId, receiptId), eq(posReservationDeposits.kind, 'applied')));
+  return row;
+}
 /** The events frozen to one Z, oldest first. */
 export async function listDepositsOfClose(tx: Tx, orgId: string, storeId: string, dayCloseId: string): Promise<PosReservationDepositRow[]> {
   return tx

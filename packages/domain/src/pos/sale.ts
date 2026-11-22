@@ -20,7 +20,7 @@ import { refundRoutes, refundAmountsOfLine, refundNoOf } from './refund';
 import { priceSession, type PricedSession } from './price';
 import { isUniqueViolation, lockOpenSession } from './order';
 import { earlierUsesOfCard } from './senior-repeat';
-import { DEPOSIT_ALREADY_USED, DEPOSIT_MORE_THAN_BILL, DEPOSIT_MORE_THAN_HELD, DEPOSIT_NOT_THIS_TABLE } from './reservations';
+import { DEPOSIT_ALREADY_USED, DEPOSIT_MORE_THAN_BILL, DEPOSIT_MORE_THAN_HELD, DEPOSIT_NOT_SEATED, DEPOSIT_NOT_THIS_TABLE } from './reservations';
 import {
   audit,
   billedHeads,
@@ -150,6 +150,9 @@ async function replayMatches(tx: Tx, actor: Actor, input: CompleteSaleInput, pri
   const stored = (await posV2Repo.listReceiptPayments(tx, actor.orgId, prior.id)).map((r) => payKey(r.tenderId, money(r.amount), r.referenceNo ?? '', r.toCheck));
   if (JSON.stringify(sent.sort()) !== JSON.stringify(stored.sort())) return false;
   if (!sameCentavos(String(input.deposit?.amount ?? '0'), money(prior.depositApplied))) return false;
+  // and the same reservation: the amount alone could match a different one
+  const appliedRow = await posV2Repo.getAppliedDepositOfReceipt(tx, actor.orgId, prior.storeId, prior.id);
+  if ((appliedRow?.reservationId ?? '') !== String(input.deposit?.reservationId ?? '').toLowerCase()) return false;
 
   const holders = (Array.isArray(input.seniors) ? input.seniors : []).map((e) => {
     const h = assertFieldRules(POS_STATUTORY_HOLDER_RULES, { holderName: e.holderName ?? '', idNumber: e.idNumber ?? '' });
@@ -233,6 +236,8 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     depositReservation = await posV2Repo.getReservation(tx, actor.orgId, storeId, reservationId, { forUpdate: true });
     if (!depositReservation) throw gone(`pos: reservation ${reservationId} not found`, 'that reservation');
     if (depositReservation.sessionId !== sessionId) throw refuse('pos: deposit of another table', DEPOSIT_NOT_THIS_TABLE);
+    // cancelled after seating (or closed): its money is a manager's to settle, not the till's to spend (the database refuses an apply on a non-seated reservation too, but in a code, not in words)
+    if (depositReservation.status !== 'seated') throw refuse(`pos: reservation is ${depositReservation.status}, not seated`, DEPOSIT_NOT_SEATED);
     if ((await posV2Repo.listDepositsOfReservation(tx, actor.orgId, storeId, reservationId)).some((e) => e.kind === 'applied')) throw refuse('pos: deposit already used', DEPOSIT_ALREADY_USED);
     if (compare(depositApplied, money(await posV2Repo.heldOfReservation(tx, actor.orgId, storeId, reservationId))) > 0) throw refuse('pos: deposit over what is held', DEPOSIT_MORE_THAN_HELD);
     if (compare(depositApplied, money(priced.amountDue)) > 0) throw refuse('pos: deposit over the bill', DEPOSIT_MORE_THAN_BILL);

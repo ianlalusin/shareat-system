@@ -53,6 +53,15 @@ describe('T-628 X and Z paper', () => {
       expect(row('DEPOSITS APPLIED')).toMatch(/500\.00$/);
     }
   });
+  it('print the drawer\'s own cash lines apart from the method-blind rows, so a GCash deposit does not hide the cash figure [kills: the cash lines dropped]', () => {
+    const view = slip({ deposits: { taken: money('1000.00'), refunded: money('200.00'), kept: money('0.00'), applied: money('0.00'), cashTaken: money('400.00'), cashReturned: money('150.00') } });
+    const lines = formatXSlip(view, L32);
+    expect(lines.find((l) => l.startsWith('DEPOSITS CASH IN'))).toMatch(/400\.00$/);
+    expect(lines.find((l) => l.startsWith('DEPOSITS CASH OUT'))).toMatch(/-150\.00$/);
+    const noCash = formatXSlip(slip({ deposits: { taken: money('300.00'), refunded: money('0.00'), kept: money('0.00'), applied: money('0.00'), cashTaken: money('0.00'), cashReturned: money('0.00') } }), L32);
+    expect(noCash.some((l) => l.startsWith('DEPOSITS CASH'))).toBe(false);
+    expect(noCash.some((l) => l.startsWith('DEPOSITS TAKEN'))).toBe(true);
+  });
   it('a window with no deposits prints none', () => {
     const zero = { taken: money('0.00'), refunded: money('0.00'), kept: money('0.00'), applied: money('0.00') };
     for (const view of [slip(), slip({ deposits: zero })]) expect(formatXSlip(view, L32).some((l) => l.startsWith('DEPOSITS'))).toBe(false);

@@ -32,7 +32,7 @@ export interface ReadingJson {
   /** T-534 S4: refunds of the window (the tender rows are already net of them); absent from older callers. */
   refunds?: { total: string; cash: string; count: number };
   /** T-628: reservation deposits of the window (taken / voided / refunded / kept, and applied to bills); absent from older callers. */
-  deposits?: { taken: string; voided: string; refunded: string; kept: string; applied: string; cashNet: string; count: number };
+  deposits?: { taken: string; voided: string; refunded: string; kept: string; applied: string; cashNet: string; cashTaken?: string; cashReturned?: string; count: number };
   windowStart?: string;
   windowEnd?: string;
 }
@@ -79,7 +79,7 @@ export function readingSlipView(reading: ReadingJson, ctx: SlipContext): Reading
     ...(reading.convert ? { convert: { cashIn: amountOf(reading.convert.cashIn), cashOut: amountOf(reading.convert.cashOut), count: reading.convert.count } } : {}),
     ...(reading.refunds ? { refunds: { total: amountOf(reading.refunds.total), count: reading.refunds.count } } : {}),
     // refunded on the paper = refunded + voided: both gave money back by a method
-    ...(reading.deposits ? { deposits: { taken: amountOf(reading.deposits.taken), refunded: add(amountOf(reading.deposits.refunded), amountOf(reading.deposits.voided)), kept: amountOf(reading.deposits.kept), applied: amountOf(reading.deposits.applied) } } : {}),
+    ...(reading.deposits ? { deposits: { taken: amountOf(reading.deposits.taken), refunded: add(amountOf(reading.deposits.refunded), amountOf(reading.deposits.voided)), kept: amountOf(reading.deposits.kept), applied: amountOf(reading.deposits.applied), ...(reading.deposits.cashTaken !== undefined ? { cashTaken: amountOf(reading.deposits.cashTaken) } : {}), ...(reading.deposits.cashReturned !== undefined ? { cashReturned: amountOf(reading.deposits.cashReturned) } : {}) } } : {}),
     varianceTotal: amountOf(reading.varianceTotal),
     shortfallCount: reading.shortfallCount ?? 0,
     toCheckCount: reading.toCheckCount,

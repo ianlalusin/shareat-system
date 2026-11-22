@@ -190,7 +190,7 @@ export interface ReadingSlipView {
   /** T-534 S4: refunds of the window; the tender rows above are already NET of them. Printed only when there was a refund. */
   refunds?: { total: Money; count: number };
   /** T-628: reservation deposits of the window (taken, refunded or voided, kept, and applied to bills); each line prints only above zero. `taken` and `refunded` are the money that moved by any method. */
-  deposits?: { taken: Money; refunded: Money; kept: Money; applied: Money };
+  deposits?: { taken: Money; refunded: Money; kept: Money; applied: Money; /** The cash part alone (cash taken, cash given back), printed when above zero so a GCash deposit does not hide the drawer's figure. */ cashTaken?: Money; cashReturned?: Money };
   /** Offline wallet payments still to check; printed only above zero. */
   toCheckCount: number;
   /** Receipts recorded after their window opened; printed only above zero. */
