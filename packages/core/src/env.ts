@@ -278,7 +278,7 @@ export function env(): ServerEnv {
  * list; Firebase Auth never reads the other two.
  *
  * ⛔ So the other two must not be able to hide the sign-in form, and one of them **belongs to a
- * different project**: identity is v1's Firebase project and storage is `shareat-hub-v2`
+ * different project** until T-625: identity was v1's Firebase project and storage `shareat-hub-v2`; both are now `shareat-system`
  * (T-232 decision 1, `.env.example`). A blank storage bucket describing another project's default
  * bucket is not a reason to refuse a person their own books — it is a reason for whatever wants a
  * bucket to fail, and nothing on this path wants one. `NEXT_PUBLIC_FIREBASE_APP_ID` is optional for

@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// T-625: the private accounting bucket (the default bucket of project `shareat-system`):
+// receipts, payment proofs, staff photos, exports.
+// Reached ONLY by the Shareat System Admin SDK, which bypasses rules entirely.
+// Nothing else has business here, so nothing else is allowed.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

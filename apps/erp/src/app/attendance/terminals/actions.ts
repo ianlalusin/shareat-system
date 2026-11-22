@@ -6,7 +6,7 @@
  * ⭐ Every mutation runs under `withOrgPrincipal`, wired to the REAL Firestore driver
  * (`createFirestoreTerminalDriver()`, `packages/sync-firestore`) — this file is that driver's
  * first caller anywhere in `apps/`. A local dev run therefore mints a real Firebase custom token
- * and touches the real `shareat-hub-v2` Auth user store (spec §4), not an emulator.
+ * and touches the real `shareat-system` Auth user store (`shareat-hub-v2` before T-625) (spec §4), not an emulator.
  *
  * ⚠️ **`provisionTerminalAction` and `mintTerminalTokenAction` are called DIRECTLY by a client
  * component — not through a `<form action>` + redirect.** Their return value carries a one-time

@@ -117,12 +117,26 @@ export function checkValuesMatch(
   return { envVar: primary.envVar, ok: matches, actual: primary.value, message };
 }
 
-/** DEF-311. The one populated expectation this task wires up. */
+/**
+ * T-625: v2's own Firebase project is `shareat-system`; its private bucket is that project's default
+ * bucket, closed by a deny-all `firebase/storage.rules` (there is no world-readable bucket left in
+ * the project). The v1 POS/hub bucket `shareat-hub-v2` is the OLD value, kept only for the rollback
+ * check (`--allow-old-bucket`) — see `oldBucketAllowed()`.
+ */
+export const NEW_STORAGE_BUCKET = 'shareat-system.firebasestorage.app';
+export const OLD_STORAGE_BUCKET = 'shareat-hub-v2';
+
+/** DEF-311. The one populated expectation this task wires up. T-625 moved it to the new bucket. */
 export const STORAGE_BUCKET_EXPECTATION: ConfigExpectation = {
   envVar: 'FIREBASE_STORAGE_BUCKET',
-  allowedValues: ['shareat-hub-v2'],
+  allowedValues: [NEW_STORAGE_BUCKET],
   citations: ['.env.example:55-60', 'docs/reference/private-bucket-storage-rules.md:62-63'],
   consequence:
     'DEF-311: every receipt, payment proof and export would be written to a bucket this ' +
     'project does not control — reachable and private, so every existing check would still pass.',
 };
+
+/** T-625 rollback only: the same expectation that also accepts the old v1 bucket. Never the default. */
+export function oldBucketAllowed(expectation: ConfigExpectation = STORAGE_BUCKET_EXPECTATION): ConfigExpectation {
+  return { ...expectation, allowedValues: [...expectation.allowedValues, OLD_STORAGE_BUCKET] };
+}
