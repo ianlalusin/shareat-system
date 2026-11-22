@@ -6,7 +6,7 @@
  * this replaces and is read as requirements only; these names and shapes are the v2 contract.
  */
 
-/** The ten things a till action can be. Anything else is refused before it is stored. */
+/** The twelve things a till action can be. Anything else is refused before it is stored. */
 export type PosEventKind =
   | 'stand.opened'
   | 'lines.added'
@@ -16,6 +16,8 @@ export type PosEventKind =
   | 'discount.added'
   | 'discount.removed'
   | 'discount.applied_to_all'
+  | 'charge.added'
+  | 'charge.removed'
   | 'session.voided'
   | 'sale.completed';
 

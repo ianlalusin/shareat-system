@@ -37,6 +37,7 @@ export const REFUND_NO_LINES = 'Pick at least one item to refund.';
 export const REFUND_LINE_ONCE = 'Each item can only be picked once.';
 export const REFUND_PAYMENT_ONCE = 'Each payment can only be used once.';
 export const REFUND_NOTHING_ON_LINE = 'That item has no money left to refund.';
+export const REFUND_NO_CHARGES = 'The charges on this receipt were already refunded, or there were none.';
 const pad = (n: number, w: number) => String(n).padStart(w, '0');
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -134,6 +135,8 @@ export interface RecordRefundInput {
   /** The original paid rows the money goes back to. `referenceNo` is required for a wallet. */
   payments: { paymentId: string; amount: string; referenceNo?: string | null; /** Omitted: the paid row's own method. T-613 D1: the method a correction moved money to. */ tenderId?: string }[];
   reason: string;
+  /** T-627: also give back the receipt's store charges (leftover, an extra griller) that were not refunded yet. Default: no. Needs at least one item picked. */
+  refundCharges?: boolean;
   /** The manager's PIN. Not needed when the signed-in person already holds `approve_pos_correction` at the store. */
   approval?: { pin: string };
 }
@@ -145,6 +148,8 @@ export interface RefundSlipData {
   recordedAt: Date;
   reason: string;
   total: string;
+  /** T-627: the part of `total` that gives store charges back ('0.00' when none). */
+  charges: string;
   lines: { name: string; qty: number; amount: string }[];
   payments: { tenderName: string; amount: string; referenceNo: string | null }[];
   approvedByName: string;
@@ -174,6 +179,7 @@ async function slipOf(tx: Tx, orgId: string, refund: Refund, storeCode: string):
     recordedAt: refund.recordedAt,
     reason: refund.reason,
     total: refund.total,
+    charges: refund.chargesAmount,
     lines: lines.map((l) => ({ name: receiptLines.get(l.receiptLineId)?.name ?? 'Item', qty: l.qty, amount: l.amount })),
     payments: pays.map((p) => ({ tenderName: tenders.get(p.tenderId) ?? 'Unknown tender', amount: p.amount, referenceNo: p.referenceNo })),
     approvedByName: names.get(refund.approvedBy) ?? '',
@@ -202,6 +208,7 @@ export async function recordRefund(tx: Tx, actor: Actor, input: RecordRefundInpu
   });
   if (new Set(wantPays.map((p) => `${p.paymentId}:${p.tenderId ?? ''}`)).size !== wantPays.length) throw refuse('pos: refund names a payment twice', REFUND_PAYMENT_ONCE);
   const { reason } = assertFieldRules(POS_REASON_RULES, { reason: input.reason });
+  const wantCharges = input.refundCharges === true;
 
   const storeCode = (await posV2Repo.getStoreCode(tx, orgId, storeId)) ?? '';
   // A retry of the same request is answered before anything else is judged (and must be the same refund).
@@ -209,6 +216,7 @@ export async function recordRefund(tx: Tx, actor: Actor, input: RecordRefundInpu
     if (r.storeId !== storeId || r.parentReceiptId !== receiptId) return false;
     const ls = await posV2Repo.listRefundLines(tx, orgId, r.id);
     const ps = await posV2Repo.listRefundPayments(tx, orgId, r.id);
+    if (wantCharges !== (toCentavos(money(r.chargesAmount)) > 0n)) return false;
     return ls.length === wantLines.length && ls.every((l) => wantLines.some((w) => w.lineId === l.receiptLineId && w.qty === l.qty))
       && ps.length === wantPays.length && ps.every((p) => wantPays.some((w) => w.paymentId === p.paymentId && w.tenderId === p.tenderId && w.cents === toCentavos(money(p.amount))));
   };
@@ -249,6 +257,14 @@ export async function recordRefund(tx: Tx, actor: Actor, input: RecordRefundInpu
     refundLines.push({ orgId, refundId: '', receiptId, receiptLineId: line.id, qty: w.qty, amount: fromCentavos(cents) });
     total += cents;
   }
+  // T-627: the receipt's store charges come back only when the cashier ticked them, once, and with at least one item (the lines above are always at least one).
+  let chargesCents = 0n;
+  if (wantCharges) {
+    const given = (await posV2Repo.listRefundsOfReceipts(tx, orgId, [receiptId])).reduce((a, r) => a + toCentavos(money(r.chargesAmount)), 0n);
+    chargesCents = toCentavos(money(receipt.chargeTotal)) - given;
+    if (chargesCents <= 0n) throw refuse(`pos: receipt ${receiptId} has no charges left to refund`, REFUND_NO_CHARGES);
+    total += chargesCents;
+  }
   const payments = await posV2Repo.listPaymentRowsOfReceipts(tx, orgId, [receiptId]);
   const routes = refundRoutes(payments, await posV2Repo.listTenderCorrectionsOfReceipts(tx, orgId, [receiptId]), await posV2Repo.listRefundPaymentsOfReceipts(tx, orgId, [receiptId]));
   const tenders = new Map((await posV1Repo.listTendersByStore(tx, orgId, storeId)).map((t) => [t.id, t]));
@@ -273,14 +289,14 @@ export async function recordRefund(tx: Tx, actor: Actor, input: RecordRefundInpu
   // Written in the TOP-LEVEL transaction, parent first: the append guard refuses a child under another transaction's refund (and under a savepoint).
   const seq = await posV2Repo.nextRefundSeq(tx, orgId, storeId);
   const row = await posV2Repo.insertRefund(tx, {
-    orgId, storeId, terminalId: terminal.id, parentReceiptId: receiptId, refundSeq: seq, total: fromCentavos(total), reason: reason!, approvedBy: approverId, recordedBy: actor.personId, requestId,
+    orgId, storeId, terminalId: terminal.id, parentReceiptId: receiptId, refundSeq: seq, total: fromCentavos(total), chargesAmount: fromCentavos(chargesCents), reason: reason!, approvedBy: approverId, recordedBy: actor.personId, requestId,
   });
   await posV2Repo.insertRefundLines(tx, refundLines.map((l) => ({ ...l, refundId: row.id })));
   await posV2Repo.insertRefundPayments(tx, refundPayments.map((p) => ({ ...p, refundId: row.id })));
   await audit(tx, actor, 'pos.refund_recorded', {
     storeId, entityId: row.id, pairingId, at: row.recordedAt, before: null,
     after: {
-      receiptId, refundNo: refundNoOf(storeCode, seq), total: String(fromCentavos(total)), reason, approvedBy: approverId, afterZ: receipt.dayCloseId !== null,
+      receiptId, refundNo: refundNoOf(storeCode, seq), total: String(fromCentavos(total)), charges: String(fromCentavos(chargesCents)), reason, approvedBy: approverId, afterZ: receipt.dayCloseId !== null,
       lines: refundLines.map((l) => ({ lineId: l.receiptLineId, qty: l.qty, amount: String(l.amount) })),
       payments: refundPayments.map((p) => ({ paymentId: p.paymentId, tenderId: p.tenderId, amount: String(p.amount), hasReference: p.referenceNo !== null })),
     },

@@ -18,13 +18,14 @@ import { printAmount } from '@/lib/pos-print/layout';
 import type { PrintLayout, ReceiptView } from '@/lib/pos-print/types';
 import { AmountPad } from './AmountPad';
 import { lookupSeniorRepeat, repeatWarning } from './senior-repeat';
-import { receiptLinesOf, statutoryDiners, toPriceLines, type BillLineRow, type PresetLike, type ProjectedBill } from './bill';
+import { receiptLinesOf, statutoryDiners, toPriceCharges, toPriceLines, type BillLineRow, type ChargePresetLike, type PresetLike, type ProjectedBill } from './bill';
+import { ChargeSheet, type ChargeAdd } from './ChargeSheet';
 import { DiscountSheet, type SheetTarget } from './DiscountSheet';
 import { ManagerPinDialog } from '../_shell/LineApprovalField';
 import { usePaymentScreenOpen } from '../_shell/use-update-gate';
 import { REVIEW_NOTE, resolveApproval, type ApprovalFields, type LineActionKind, type LineApprovalMode } from '../_shell/line-approval';
 import {
-  addSplitRow, amountCents, appendAmountKey, applyToAllEvent, canAddPayment, chooseTender, discountAddedEvent, discountRemovedEvent, finishLabel, paySale, payBlockerDetail, paymentSummary, priceBill, rateLabel, scPwdDiscountOf,
+  CHARGE_MAX_PER_TABLE, CHARGE_SENTENCES, addSplitRow, amountCents, appendAmountKey, applyToAllEvent, canAddPayment, chargeAddedEvent, chargeRemovedEvent, chooseTender, discountAddedEvent, discountRemovedEvent, finishLabel, paySale, payBlockerDetail, paymentSummary, priceBill, rateLabel, scPwdDiscountOf,
   type BlockerTarget, type DiscountAdd, type PayDeps, type PayRow, type PrintOutcome, type Tender,
 } from './logic';
 
@@ -51,6 +52,8 @@ export interface PaymentPanelProps {
   isTakeOut: boolean;
   bill: ProjectedBill;
   presets: readonly PresetLike[];
+  /** T-627: the store's charges from the snapshot (empty in an old cached one: a custom charge still works). */
+  chargePresets?: readonly ChargePresetLike[];
   tenders: readonly Tender[];
   rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number };
   vatRegistered: boolean;
@@ -154,6 +157,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
   // T-575: the repeat-card warning under a diner's ID box, filled when the box loses focus. `id` is the number it was asked about, so a warning never outlives an edit of the box.
   const [repeats, setRepeats] = useState<Record<number, { id: string; text: string }>>({});
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
+  const [chargeSheet, setChargeSheet] = useState(false); // T-627
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -221,17 +225,19 @@ export function PaymentPanel(p: PaymentPanelProps) {
     setRepeats((r) => ({ ...r, [dinerNo]: { id, text: text ?? '' } }));
   };
 
+  const billCharges = useMemo(() => p.bill.charges ?? [], [p.bill.charges]); // T-627: a bill built without charges has none
   const priced = useMemo<PricedSession | null>(() => {
     try {
-      return priceBill({ lines: toPriceLines(p.bill.lines), rules: p.rules, vatRegistered: p.vatRegistered });
+      return priceBill({ lines: toPriceLines(p.bill.lines), charges: toPriceCharges(billCharges), rules: p.rules, vatRegistered: p.vatRegistered });
     } catch {
       return null;
     }
-  }, [p.bill.lines, p.rules, p.vatRegistered]);
+  }, [p.bill.lines, billCharges, p.rules, p.vatRegistered]);
 
   const diners = useMemo(() => statutoryDiners(p.bill.lines), [p.bill.lines]);
   const scPwdDiscount = useMemo(() => (priced ? scPwdDiscountOf(toPriceLines(p.bill.lines), priced) : null), [priced, p.bill.lines]);
-  const total = priced?.total ?? '0.00';
+  // T-627: what the customer pays is the goods plus the store charges (charges sit outside the VAT base).
+  const total = priced?.amountDue ?? '0.00';
   const summary = paymentSummary({ total, rows, tenders: p.tenders });
   const billProblem = p.bill.problem ?? (priced === null ? 'This bill could not be priced. Check the lines and try again.' : p.bill.lines.length === 0 ? 'There is nothing on this table to pay for.' : null);
   const detail = billProblem ? null : payBlockerDetail({ total, rows, tenders: p.tenders, diners, holders });
@@ -324,6 +330,9 @@ export function PaymentPanel(p: PaymentPanelProps) {
       ),
     );
   };
+  // T-627: any cashier adds or removes a charge, no PIN; the server audits it.
+  const addCharge = (add: ChargeAdd) => sendDiscount(chargeAddedEvent({ personId: p.personId, now: new Date(), chargeId: p.newId(), sessionId: p.sessionId, ...add }));
+  const removeCharge = (chargeId: string) => void sendDiscount(chargeRemovedEvent({ personId: p.personId, now: new Date(), chargeId })).then((m) => setNote(m));
   const removeDiscount = (id: string, pin: string) => approved(approvalMode, pin, 'discount.removed', id, {}, (approval) => sendDiscount(discountRemovedEvent({ personId: p.personId, now: new Date(), discountId: id, approval })));
   const applyAll = (presetId: string, pin: string) =>
     approved(approvalMode, pin, 'discount.applied_to_all', p.sessionId, { presetId }, (approval) => sendDiscount(applyToAllEvent({ personId: p.personId, now: new Date(), sessionId: p.sessionId, presetId, applyId: p.newId(), approval })));
@@ -357,6 +366,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
         footerLines: [],
         lines: receiptLinesOf(p.bill.lines, priced),
         scPwdDiscount,
+        charges: billCharges.map((c, n) => ({ name: c.name, qty: c.qty, amount: priced.charges[n]!.amount })),
       },
     });
     setBusy(false);
@@ -417,6 +427,33 @@ export function PaymentPanel(p: PaymentPanelProps) {
               ))}
             </ul>
           ) : null}
+          <div className="mt-3 border-t border-dashed border-surface-border pt-2" role="group" aria-label="Charges">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-base font-semibold">Charges</h3>
+              <button type="button" data-erp-size="free" className={SECONDARY} disabled={p.bill.lines.length === 0 || billCharges.length >= CHARGE_MAX_PER_TABLE} title={billCharges.length >= CHARGE_MAX_PER_TABLE ? CHARGE_SENTENCES.tooMany : undefined} onClick={() => setChargeSheet(true)}>
+                + Add charge
+              </button>
+            </div>
+            <ul aria-label="Charges on this bill">
+              {billCharges.map((c, n) => (
+                <li key={c.id} className="flex items-center justify-between gap-2 px-2 text-base">
+                  <span className="min-w-0 truncate" title={c.name}>
+                    {c.qty > 1 ? `${c.qty} × ` : ''}
+                    {c.name}
+                    {c.pending ? <span className="ml-2 text-sm text-muted">sending</span> : null}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <span className="font-semibold tabular-nums">+{printAmount(priced?.charges[n]?.amount ?? '0.00')}</span>
+                    <button type="button" data-erp-size="free" className={ICON_BUTTON} aria-label={`Remove ${c.name}`} onClick={() => removeCharge(c.id)}>
+                      <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" aria-hidden="true" focusable="false">
+                        <path d="M6 6l12 12M18 6 6 18" />
+                      </svg>
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
           {diners.length > 0 ? (
             <div className="mt-4 space-y-3" role="group" aria-label="Senior and PWD card details">
               {diners.map((d) => (
@@ -442,9 +479,15 @@ export function PaymentPanel(p: PaymentPanelProps) {
               <span>Subtotal {printAmount(priced.subtotal)} · discounts</span>
               <span className="tabular-nums">−{printAmount(priced.discountTotal)}</span>
             </p>
+            {priced.charges.length > 0 ? (
+              <p className="flex justify-between gap-3 text-base font-semibold">
+                <span>Charges (after VAT)</span>
+                <span className="tabular-nums">+{printAmount(priced.chargeTotal)}</span>
+              </p>
+            ) : null}
             <p className="flex items-baseline justify-between gap-3">
               <span className="font-display text-3xl font-bold">Due</span>
-              <span className="font-display text-3xl font-bold tabular-nums">{peso(priced.total)}</span>
+              <span className="font-display text-3xl font-bold tabular-nums">{peso(priced.amountDue)}</span>
             </p>
             <details className="text-sm">
               <summary className="flex min-h-12 cursor-pointer items-center font-semibold text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink">VAT details</summary>
@@ -574,6 +617,8 @@ export function PaymentPanel(p: PaymentPanelProps) {
           onApplyAll={applyAll}
         />
       ) : null}
+
+      {chargeSheet ? <ChargeSheet presets={p.chargePresets ?? []} onClose={() => setChargeSheet(false)} onAdd={addCharge} /> : null}
 
       {removing ? <ManagerPinDialog title="Remove this discount?" description="A manager PIN is needed to remove a discount." confirmLabel="Remove discount" onClose={() => setRemoving(null)} onConfirm={(pin) => removeDiscount(removing, pin)} /> : null}
 

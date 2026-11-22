@@ -22,7 +22,7 @@ import {
   asOrg, closeAll, fixture, newStand, pinOf, sql, uuid, uid, RATES, HOLDER, IDNO, actorOf, signedIn,
   type Fx, type Item,
 } from './t525-pos';
-import { openStand, addLines, addLineDiscount, completeSale, requestRefill } from '../../../src/pos';
+import { openStand, addLines, addLineDiscount, addCharge, completeSale, requestRefill } from '../../../src/pos';
 
 export { asOrg, closeAll, fixture, pinOf, sql, uuid, uid, RATES, actorOf, signedIn };
 export type { Fx, Item, Tx, Actor };
@@ -65,13 +65,15 @@ export type Deps = { readRules?: typeof RATES.readRules; now?: () => Date };
 type W<R = any> = (tx: Tx, actor: Actor, input: any, deps?: any) => Promise<R>;
 export interface TenderLine { tenderId: string; amount: string }
 export interface Reading {
-  storeId?: string; terminalId?: string; windowStart: Date; windowEnd: Date; receiptCount: number; grossTotal: string; subtotal: string; discountTotal: string;
+  storeId?: string; terminalId?: string; windowStart: Date; windowEnd: Date; receiptCount: number; grossTotal: string; chargeTotal?: string; subtotal: string; discountTotal: string;
   discounts: { senior: string; pwd: string; other: string }; seniorPwdDiners: number; unliSales: string; alaCarteSales: string;
   byTender: TenderLine[] | Record<string, string>;
   /** T-558 (R3): Sum of the receipts' short payments (gaps > 0), and how many of them are above the tolerance (findings). */
   varianceTotal?: string; shortfallCount?: number;
   /** T-534 S2: the Convert block (cash in / out of the drawer by GCash conversions). */
   convert: { cashIn: string; cashOut: string; net: string; count: number };
+  /** T-534 S4 / T-627: the refunds of the window. */
+  refunds?: { total: string; cash?: string; count: number };
   toCheckCount: number; heads: number; packageSessions: number; lateCount: number; spansTwoDates: boolean;
 }
 export interface CloseResult { wrote: boolean; dayCloseId: string; zNo: number; reading: Reading; salesDayId: string | null }
@@ -136,12 +138,16 @@ export interface DiscountSpec {
   value?: string;
   dinerNo?: number;
 }
+/** T-627: a store charge put on the table before it is paid: a preset (by id; qty only when it is per unit) or a custom one (name + unitAmount, qty 1). */
+export interface ChargeSpec { presetId?: string; name?: string; unitAmount?: string; qty?: number }
 export interface PaySpec { tenderId: string; amount: string; ref?: string; toCheck?: boolean }
 export interface SaleSpec {
   at: Date;
   items: { item: Item; qty: number }[];
   heads?: number;
   discounts?: DiscountSpec[];
+  /** T-627 */
+  charges?: ChargeSpec[];
   pay: PaySpec[];
   offline?: boolean;
   /** a rice refill on the table, requested after the items */
@@ -162,7 +168,7 @@ export interface SaleSpec {
   /** T-575 follow-up: awaited inside the completeSale transaction, after it returns and before commit (hold it open; throw to roll it back). */
   afterComplete?: () => Promise<void>;
 }
-export interface MadeSale { receiptId: string; sessionId: string; subtotal: string; discountTotal: string; total: string; terminalSeq: number }
+export interface MadeSale { receiptId: string; sessionId: string; subtotal: string; discountTotal: string; total: string; chargeTotal: string; terminalSeq: number }
 
 export async function sell(f: World, o: SaleSpec): Promise<MadeSale> {
   if (o.terminal) {
@@ -199,13 +205,24 @@ export async function sell(f: World, o: SaleSpec): Promise<MadeSale> {
     if (d.kind === 'senior' || d.kind === 'pwd') seniors.push({ dinerNo: d.dinerNo ?? 1, kind: d.kind, idNumber: IDNO, holderName: HOLDER });
   }
 
-  // The device's own figures: priceSession over what the database now holds (live lines, active discounts).
+  for (const [n, c] of (o.charges ?? []).entries()) {
+    await asOrg(f.orgId, (tx) =>
+      addCharge(tx, who, {
+        storeId: f.storeId, pairingId: pairing, chargeId: uuid(), sessionId, qty: c.qty ?? 1,
+        ...(c.presetId ? { presetId: c.presetId } : { name: c.name ?? 'Custom', unitAmount: c.unitAmount ?? '1.00' }), addedAtDevice: iso(new Date(o.at.getTime() + n)), // a ms apart: creation order
+      }));
+  }
+
+  // The device's own figures: priceSession over what the database now holds (live lines, active discounts, active charges).
   const lines = await sql<{ id: string; qty: number; unit_price: string; bundle_heads: number | null }[]>`
     select id, qty, unit_price::text, bundle_heads from table_session_lines where session_id = ${sessionId} and kitchen_status <> 'cancelled' order by added_at, id`;
   const discounts = await sql<{ id: string; session_line_id: string; kind: string; value_type: string; value: string; qty: number }[]>`
     select id, session_line_id, kind, value_type, value::text, qty from table_session_line_discounts
      where session_line_id = any(${lines.map((l) => l.id)}) and status = 'active' order by applied_at_device, id`;
+  const chargeRows = await sql<{ id: string; unit_amount: string; qty: number }[]>`
+    select id, unit_amount::text, qty from table_session_charges where session_id = ${sessionId} and status = 'active' order by added_at_device, id`;
   const snap: PriceSnapshot = {
+    charges: chargeRows.map((c) => ({ chargeId: c.id, unitAmount: c.unit_amount, qty: c.qty })),
     vatRegistered: true, vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n,
     lines: lines.map((l) => ({
       lineId: l.id, qty: l.qty, unitPrice: l.unit_price, bundleHeads: l.bundle_heads,
@@ -221,7 +238,7 @@ export async function sell(f: World, o: SaleSpec): Promise<MadeSale> {
   const input = {
     storeId: f.storeId, pairingId: pairing, sessionId, receiptId, terminalNo: o.terminalNo ?? 1, terminalSeq, issuedAtDevice: iso(o.at), offline: o.offline === true,
     device: {
-      subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total,
+      subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, chargeTotal: priced.chargeTotal,
       lines: priced.lines.map((l) => ({ lineId: l.lineId, gross: l.gross, discountTotal: l.discountTotal, net: l.net })),
     },
     payments: o.pay.map((p) => ({
@@ -236,7 +253,7 @@ export async function sell(f: World, o: SaleSpec): Promise<MadeSale> {
     await completeSale(tx, who, input, deps);
     await o.afterComplete?.();
   });
-  return { receiptId, sessionId, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, terminalSeq };
+  return { receiptId, sessionId, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, chargeTotal: priced.chargeTotal, terminalSeq };
 }
 
 /**

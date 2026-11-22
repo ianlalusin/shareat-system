@@ -69,6 +69,11 @@ export async function businessDateAndRules(tx: Tx, orgId: string, storeId: strin
 // ---------------------------------------------------------------------------------------------------------------------
 // Context (R1)
 // ---------------------------------------------------------------------------------------------------------------------
+/** T-627: the most one unit of a store charge can be (pesos, preset and custom; migration 0275 has the same CHECK), and the most ACTIVE charges one table can hold. */
+export const CHARGE_UNIT_AMOUNT_MAX = '100000.00';
+export const CHARGE_UNIT_AMOUNT_MAX_SENTENCE = 'A charge can be at most 100,000 pesos.';
+export const CHARGE_MAX_PER_TABLE = 50;
+export const CHARGE_MAX_PER_TABLE_SENTENCE = 'A table can have at most 50 charges. Remove one first.';
 export const NOT_ON = 'The new POS is not switched on for this store yet.';
 export const RECORDED_DIFFERENTLY = 'This change was already recorded differently on the till.';
 export const recordedDifferently = () => refuse('RECORDED_DIFFERENTLY: pos: same device id, different content', RECORDED_DIFFERENTLY);
@@ -164,14 +169,21 @@ export async function loadLiveLines(tx: Tx, orgId: string, storeId: string, sess
   return lines.map((l) => ({ ...l, discounts: discounts.filter((d) => d.sessionLineId === l.id) }));
 }
 
+/** T-627: the table's ACTIVE store charges, in creation order. */
+export type LoadedCharge = posV2Repo.TableSessionChargeRow;
+export async function loadLiveCharges(tx: Tx, orgId: string, storeId: string, sessionId: string): Promise<LoadedCharge[]> {
+  return (await posV2Repo.listSessionCharges(tx, orgId, storeId, sessionId)).filter((c) => c.status === 'active');
+}
+
 /** How many units a line can be discounted on: its qty, or the heads of a bundle line. */
 export const capacityOf = (qty: number, bundleHeads: number | null): number => (bundleHeads !== null && bundleHeads > 1 ? bundleHeads : qty);
 export const coveredOf = (qtys: readonly number[]): number => qtys.reduce((a, q) => a + q, 0);
 
 export const billedHeads = (headsCashier: number, headsServer: number | null): number => Math.max(headsCashier, headsServer ?? 0);
 
-export function snapshotOf(lines: readonly LoadedLine[], vatRegistered: boolean, rules: Pick<PosRules, 'vatPercentBasisPoints' | 'scPwdPercentBasisPoints'>): PriceSnapshot {
+export function snapshotOf(lines: readonly LoadedLine[], vatRegistered: boolean, rules: Pick<PosRules, 'vatPercentBasisPoints' | 'scPwdPercentBasisPoints'>, charges: readonly LoadedCharge[] = []): PriceSnapshot {
   return {
+    charges: charges.map((c) => ({ chargeId: c.id, unitAmount: c.unitAmount, qty: c.qty })),
     vatRegistered,
     vatPercentBasisPoints: rules.vatPercentBasisPoints,
     scPwdPercentBasisPoints: rules.scPwdPercentBasisPoints,

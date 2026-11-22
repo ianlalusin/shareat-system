@@ -193,6 +193,7 @@ export function TillPanel({ reading, history, online, isManager, layout, store, 
         {reading.spansTwoDates ? <Banner tone="warning">Spans two dates</Banner> : null}
         <dl className="divide-y divide-surface-border">
           <Row label="Receipts" value={String(reading.receiptCount)} />
+          {reading.chargeTotal && reading.chargeTotal !== '0.00' ? <Row label="Charges" value={amount(reading.chargeTotal)} /> : null}
           <Row label="Gross total" value={amount(reading.grossTotal)} strong />
           <Row label="Senior discount" value={amount(reading.discounts.senior)} />
           <Row label="PWD discount" value={amount(reading.discounts.pwd)} />

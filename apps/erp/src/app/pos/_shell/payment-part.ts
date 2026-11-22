@@ -7,6 +7,8 @@ export interface SnapshotPaymentPart {
   store: { storeId: string; /** T-601 S5: the store code of the receipt number; absent in a snapshot cached before it existed. */ code?: string; name: string; terminalNo: number; vatRegistered: boolean; receiptPaperMm: 58 | 80; receiptCopies: number; /** T-585: the issuer identity; absent in a snapshot cached before it existed (the receipt then prints the store name only). */ identity?: unknown; /** T-601 S4: the POS mode of the store at the last fetch; `test` puts TEST - NOT A SALE on the receipt. */ mode?: string };
   tenders: { id: string; name: string; kind: string }[];
   discountPresets: { id: string; name: string; valueType: string; value: string }[];
+  /** T-627: the store's charges; empty in a snapshot cached before they existed (the till then offers a custom charge only). */
+  chargePresets: { id: string; name: string; amount: string; perUnit: boolean }[];
   rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number };
   staff: { personId: string; displayName: string }[];
 }
@@ -34,6 +36,7 @@ export function paymentPartOf(b: Record<string, unknown>): SnapshotPaymentPart |
     },
     tenders: b.tenders as SnapshotPaymentPart['tenders'],
     discountPresets: b.discountPresets as SnapshotPaymentPart['discountPresets'],
+    chargePresets: Array.isArray(b.chargePresets) ? (b.chargePresets as SnapshotPaymentPart['chargePresets']) : [],
     rules: { vatPercentBasisPoints: rules.vatPercentBasisPoints, scPwdPercentBasisPoints: rules.scPwdPercentBasisPoints },
     staff: Array.isArray(b.staff) ? (b.staff as SnapshotPaymentPart['staff']) : [],
   };

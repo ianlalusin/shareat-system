@@ -47,6 +47,13 @@ export interface ReceiptLine {
   net: Money;
 }
 
+/** T-627: one store charge on the bill (leftover, an extra griller). `amount` is qty x the unit amount. */
+export interface ReceiptCharge {
+  name: string;
+  qty: number;
+  amount: Money;
+}
+
 /** One tender on the bill (bible row 438 allows several). `reference` is the GCash/card ref, if any. */
 export interface ReceiptTender {
   name: string;
@@ -77,7 +84,11 @@ export interface ReceiptView {
   lines: ReceiptLine[];
   subtotal: Money;
   discountTotal: Money;
+  /** The goods, after discounts (the VAT block under it adds up to this). Store charges are NOT in it. */
   total: Money;
+  /** T-627: store charges, printed under the VAT block with `amountDue` (= total + charges). Absent or empty prints exactly as before. */
+  charges?: ReceiptCharge[];
+  amountDue?: Money;
   tenders: ReceiptTender[];
   /** `"0.00"` when there is none. */
   change: Money;
@@ -113,6 +124,8 @@ export interface RefundSlipView {
   receiptNo: string;
   refundedAtLocal: string;
   lines: { name: string; qty: number; amount: Money }[];
+  /** T-627: the part of `total` that gives store charges back; printed only above zero. */
+  charges?: Money;
   total: Money;
   /** The money back, one row per original paid row, by that row's method. `reference` is a wallet's reference of the money sent back. */
   payments: { name: string; amount: Money; reference: string | null }[];
@@ -156,6 +169,8 @@ export interface ReadingSlipView {
   subtotal: Money;
   discounts: { senior: Money; pwd: Money; other: Money };
   discountTotal: Money;
+  /** T-627: Σ of the store charges; printed only above zero. `grossTotal` includes it. */
+  chargeTotal?: Money;
   grossTotal: Money;
   unliSales: Money;
   alaCarteSales: Money;

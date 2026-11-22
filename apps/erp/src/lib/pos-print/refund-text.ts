@@ -36,6 +36,7 @@ export function formatRefundSlip(view: RefundSlipView, layout: PrintLayout): str
   out.push(...justify('DATE:', view.refundedAtLocal, cols));
   out.push(rule(cols));
   for (const line of view.lines) out.push(...justify(`${line.qty} x ${line.name}`, printAmount(line.amount), cols));
+  if (view.charges !== undefined && !/^-?0(\.0+)?$/.test(view.charges.trim())) out.push(...justify('CHARGES', printAmount(view.charges), cols));
   out.push(rule(cols));
   out.push(...justify('TOTAL REFUNDED', printAmount(view.total), cols));
   out.push(rule(cols));

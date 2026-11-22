@@ -241,6 +241,12 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('pos.discount_preset_set', 'settings', 'normal', 'store', 'pos_discount_presets', 'T-533'),
   // T-622: a named discount retired from the ERP screen (entity = the pos_discount_presets row; before = name, type, value). The row is kept: past sales name it.
   def('pos.discount_preset_retired', 'settings', 'normal', 'store', 'pos_discount_presets', 'T-622'),
+  // T-627: a store charge (leftover, an extra griller) set from the ERP screen (entity = the pos_charge_presets row; created, or its amount / per-unit changed) or retired (the row is kept: past sales name it).
+  def('pos.charge_preset_set', 'settings', 'normal', 'store', 'pos_charge_presets', 'T-627'),
+  def('pos.charge_preset_retired', 'settings', 'normal', 'store', 'pos_charge_presets', 'T-627'),
+  // T-627: a charge put on / taken off a table at the till (entity = the table_session_charges row). Money: it changes what the table owes. Payloads carry the name, unit amount and quantity.
+  def('pos.charge_added', 'money', 'normal', 'store', 'table_session_charges', 'T-627'),
+  def('pos.charge_removed', 'money', 'normal', 'store', 'table_session_charges', 'T-627'),
   // T-533 S1: a store's POS mode set or moved (off, test, live from a date, or the roll-back); entity = the pos_stores row. `high`: it decides whether real sales days come from the new POS.
   def('pos.store_mode_set', 'settings', 'high', 'store', 'pos_stores', 'T-533'),
   // T-531: the day close (the Z; entity = the pos_day_closes row, or the run id for the backlog), the ERP sales day it derives, and the December bridge to v1 (entity = the store).

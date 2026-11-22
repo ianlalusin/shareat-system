@@ -76,6 +76,30 @@ export async function loadDiscounts(actor: Actor, storeId: string): Promise<{ pr
   });
 }
 
+export interface ChargePresetView {
+  readonly id: string;
+  readonly name: string;
+  /** Two decimals, as stored. */
+  readonly amount: string;
+  readonly perUnit: boolean;
+}
+
+/** T-627: the store's active named charges for the Charges section; `canManage` as in `loadDiscounts`. */
+export async function loadCharges(actor: Actor, storeId: string): Promise<{ presets: ChargePresetView[]; canManage: boolean }> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const rows = await posV2Repo.listActiveChargePresets(tx, actor.orgId, storeId);
+    return {
+      canManage: await can(tx, actor, 'manage_store_settings', { storeId }),
+      presets: rows.map((p) => ({ id: p.id, name: p.name, amount: p.amount, perUnit: p.perUnit })),
+    };
+  });
+}
+
+/** "150.00 each" or "150.00 once per bill" (display only; `peso` is the caller's money formatter). */
+export function chargeText(p: Pick<ChargePresetView, 'amount' | 'perUnit'>, peso: (v: string) => string): string {
+  return p.perUnit ? `${peso(p.amount)} each` : `${peso(p.amount)} once per bill`;
+}
+
 /** "20%" or "50.00 off each" (display only; `peso` is the caller's money formatter). A percent drops trailing zeros: 12.50 reads "12.5%". */
 export function presetText(p: Pick<DiscountPresetView, 'valueType' | 'value'>, peso: (v: string) => string): string {
   return p.valueType === 'fixed' ? `${peso(p.value)} off each` : `${Number(p.value)}%`;

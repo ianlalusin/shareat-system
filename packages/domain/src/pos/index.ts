@@ -6,6 +6,8 @@ export { openStand, addLines, confirmHeads, setHeadsCashier, requestRefill, serv
 export type { LineInput, OpenStandInput } from './order';
 export { addLineDiscount, removeLineDiscount, applyPresetToAllLines } from './discounts';
 export type { AddLineDiscountInput } from './discounts';
+export { addCharge, removeCharge } from './charges';
+export type { AddChargeInput } from './charges';
 export { voidUnpaidSession, completeSale, currentBusinessDate, getSessionBill, listOpenStands, listRefillableTables, listKitchenQueue, listRefillQueue, listTodaysSalesReceipts, findSalesReceiptByNo } from './sale';
 export type { CompleteSaleInput, VoidInput } from './sale';
 export { grantLineApproval } from './line-approval';
@@ -63,5 +65,5 @@ export { buildV1BridgePayload, V1_BRIDGE_LAST_DATE, v1BridgeDateAllowed } from '
 export type { V1BridgeClose, V1BridgeTender, V1BridgePayload } from './v1-bridge-payload';
 export { exportPosData, POS_EXPORT_MAX_DAYS } from './data-export';
 export type { PosDataExport } from './data-export';
-export { upsertPosStand, upsertPosDiscountPreset, retirePosDiscountPreset, checkPreset } from './store-setup';
+export { upsertPosStand, upsertPosDiscountPreset, retirePosDiscountPreset, checkPreset, upsertPosChargePreset, retirePosChargePreset, checkChargePreset } from './store-setup';
 export type { StandOutcome, PresetOutcome, PresetInput, CheckedPreset } from './store-setup';

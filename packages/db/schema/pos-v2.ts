@@ -76,6 +76,7 @@ export const LINE_DISCOUNT_KINDS = ['senior', 'pwd', 'preset', 'custom'] as cons
 export const DISCOUNT_VALUE_TYPES = ['percent', 'fixed'] as const;
 export const POS_PRESET_STATUSES = ['active', 'retired'] as const;
 export const LINE_DISCOUNT_STATUSES = ['active', 'removed'] as const;
+export const SESSION_CHARGE_STATUSES = ['active', 'removed'] as const;
 
 /** Same-org twin: `(org_id, col)` -> `parent (org_id, id)`. Defined once so the 40-odd twins below cannot drift in shape. */
 const twin = (name: string, orgId: AnyPgColumn, col: AnyPgColumn, parentOrgId: AnyPgColumn, parentId: AnyPgColumn) =>
@@ -394,6 +395,83 @@ export const tableSessionLineDiscounts = pgTable(
 );
 
 // ---------------------------------------------------------------------------------------------------------------------
+// T-627 (migration 0275) pos_charge_presets - a store's named charges (leftover, an extra griller...). keep.
+// ---------------------------------------------------------------------------------------------------------------------
+export const posChargePresets = pgTable(
+  'pos_charge_presets',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: orgIdCol(),
+    storeId: storeIdCol(),
+    name: text('name').notNull(),
+    /** Pesos, for one unit (or once per bill when per_unit is false). */
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    /** True: the cashier enters a quantity (leftover per 100 g, per tray). False: once per bill. */
+    perUnit: boolean('per_unit').notNull().default(false),
+    status: text('status', { enum: POS_PRESET_STATUSES }).notNull().default('active'),
+    createdBy: personCol('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    unique('pos_charge_presets_org_id_id_unique').on(t.orgId, t.id),
+    unique('pos_charge_presets_store_id_id_unique').on(t.storeId, t.id),
+    // NOTE: pos_charge_presets_store_active_name_key, UNIQUE (store_id, lower(name)) WHERE status = 'active' - hand-added in migration 0275.
+    uniqueIndex('pos_charge_presets_store_active_name_key')
+      .on(t.storeId, sql`lower(${t.name})`)
+      .where(sql`${t.status} = 'active'`),
+    check('pos_charge_presets_name_check', sql`length(trim(${t.name})) between 1 and 40`),
+    check('pos_charge_presets_amount_check', sql`${t.amount} > 0 and ${t.amount} <= 100000`),
+    check('pos_charge_presets_status_check', sql`${t.status} in ('active','retired')`),
+    check('pos_charge_presets_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_charge_presets_store_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.createdBy], foreignColumns: [persons.orgId, persons.id], name: 'pos_charge_presets_created_by_same_org_fk' }).onDelete('restrict'),
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-627 table_session_charges - a charge on an open table session (added / removed by the till). purge.
+// ---------------------------------------------------------------------------------------------------------------------
+export const tableSessionCharges = pgTable(
+  'table_session_charges',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: orgIdCol(),
+    storeId: storeIdCol(),
+    /** Composite FK (store_id, session_id) -> table_sessions, hand-added in migration 0275 (no single-column FK). */
+    sessionId: uuid('session_id').notNull(),
+    /** Composite FK (store_id, preset_id) -> pos_charge_presets, hand-added in migration 0275. NULL = a custom charge typed at the till. */
+    presetId: uuid('preset_id'),
+    /** The name as it was when added (a preset may be retired or renamed later). */
+    name: text('name').notNull(),
+    unitAmount: numeric('unit_amount', { precision: 14, scale: 2 }).notNull(),
+    qty: integer('qty').notNull(),
+    addedBy: personCol('added_by').notNull(),
+    addedAtDevice: timestamp('added_at_device', { withTimezone: true }).notNull(),
+    status: text('status', { enum: SESSION_CHARGE_STATUSES }).notNull().default('active'),
+    removedBy: personCol('removed_by'),
+    removedAtDevice: timestamp('removed_at_device', { withTimezone: true }),
+  },
+  (t) => [
+    unique('table_session_charges_org_id_id_unique').on(t.orgId, t.id),
+    // NOTE: table_session_charges_session_idx (store_id, session_id) - hand-added in migration 0275.
+    index('table_session_charges_session_idx').on(t.storeId, t.sessionId),
+    // NOTE: the trigger table_session_charges_guard (INSERT on a paid / voided session refused, 23001; active -> removed only, 23514, and refused once the session is closed, 23001; other columns frozen, 23001) is hand-added in migration 0275, ENABLE ALWAYS.
+    check('table_session_charges_name_check', sql`length(trim(${t.name})) between 1 and 40`),
+    check('table_session_charges_unit_amount_check', sql`${t.unitAmount} > 0 and ${t.unitAmount} <= 100000`),
+    check('table_session_charges_qty_check', sql`${t.qty} between 1 and 1000`),
+    check('table_session_charges_status_check', sql`${t.status} in ('active','removed')`),
+    check('table_session_charges_removed_shape_check', sql`(${t.status} = 'removed') = (${t.removedBy} is not null)`),
+    check('table_session_charges_unit_amount_finite_check', sql`${t.unitAmount} > '-Infinity'::numeric and ${t.unitAmount} < 'Infinity'::numeric`),
+    foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'table_session_charges_store_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.sessionId], foreignColumns: [tableSessions.storeId, tableSessions.id], name: 'table_session_charges_session_same_store_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.presetId], foreignColumns: [posChargePresets.storeId, posChargePresets.id], name: 'table_session_charges_preset_same_store_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.addedBy], foreignColumns: [persons.orgId, persons.id], name: 'table_session_charges_added_by_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.removedBy], foreignColumns: [persons.orgId, persons.id], name: 'table_session_charges_removed_by_same_org_fk' }).onDelete('restrict'),
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------------------------------
 // R9 pos_day_closes + pos_day_close_tenders - the Z (row 390). Append-only. purge. (Declared before the sales receipt, which points at it.)
 // ---------------------------------------------------------------------------------------------------------------------
 export const posDayCloses = pgTable(
@@ -479,11 +557,13 @@ export const posSalesReceipts = pgTable(
     /** In release 1 only senior/PWD (R12). That it equals the sum of the discount rows is a T-524 rule and test: a CHECK cannot sum child rows. */
     discountTotal: numeric('discount_total', { precision: 14, scale: 2 }).notNull().default('0'),
     total: numeric('total', { precision: 14, scale: 2 }).notNull(),
-    /** As the tablet computed it. A mismatch with `total` is not a constraint: T-524 records the server's figure and raises a finding (row 276). */
+    /** As the tablet computed it: the GOODS total, beside `total` (store charges are outside both; T-627). A mismatch with `total` is not a constraint: T-524 records the server's figure and raises a finding (row 276). */
     deviceTotal: numeric('device_total', { precision: 14, scale: 2 }).notNull(),
     offline: boolean('offline').notNull(),
     /** Composite FK (store_id, day_close_id) -> pos_day_closes, hand-added in migration 0238 (no single-column FK). */
     dayCloseId: uuid('day_close_id'),
+    /** T-627 (migration 0275): the store charges on the bill (leftover, extra griller...). Added AFTER discounts and VAT, outside the VAT base; the amount due is total + charge_total, and `total` keeps total = subtotal - discount_total. */
+    chargeTotal: numeric('charge_total', { precision: 14, scale: 2 }).notNull().default('0'),
   },
   (t) => [
     check('pos_sales_receipts_subtotal_finite_check', sql`${t.subtotal} > '-Infinity'::numeric and ${t.subtotal} < 'Infinity'::numeric`),
@@ -511,6 +591,9 @@ export const posSalesReceipts = pgTable(
     check('pos_sales_receipts_discount_total_check', sql`${t.discountTotal} >= 0`),
     check('pos_sales_receipts_total_check', sql`${t.total} >= 0`),
     check('pos_sales_receipts_total_identity_check', sql`${t.total} = ${t.subtotal} - ${t.discountTotal}`),
+    // NOTE: pos_sales_receipts_charge_total_check / _finite_check - hand-added in migration 0275 (T-627).
+    check('pos_sales_receipts_charge_total_check', sql`${t.chargeTotal} >= 0`),
+    check('pos_sales_receipts_charge_total_finite_check', sql`${t.chargeTotal} > '-Infinity'::numeric and ${t.chargeTotal} < 'Infinity'::numeric`),
     foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_sales_receipts_store_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.terminalId], foreignColumns: [posTerminals.storeId, posTerminals.id], name: 'pos_sales_receipts_terminal_same_store_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.tableSessionId], foreignColumns: [tableSessions.storeId, tableSessions.id], name: 'pos_sales_receipts_table_session_same_store_fk' }).onDelete('restrict'),
@@ -564,6 +647,44 @@ export const posSalesReceiptLines = pgTable(
     check('pos_sales_receipt_lines_net_check', sql`${t.net} = ${t.gross} - ${t.discountTotal}`),
     twin('pos_sales_receipt_lines_receipt_id_same_org_fk', t.orgId, t.receiptId, posSalesReceipts.orgId, posSalesReceipts.id),
     twin('pos_sales_receipt_lines_session_line_id_same_org_fk', t.orgId, t.sessionLineId, tableSessionLines.orgId, tableSessionLines.id),
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-627 pos_sales_receipt_charges - the frozen copy of the charges on a receipt. Append-only. purge.
+// ---------------------------------------------------------------------------------------------------------------------
+export const posSalesReceiptCharges = pgTable(
+  'pos_sales_receipt_charges',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: orgIdCol(),
+    receiptId: uuid('receipt_id')
+      .notNull()
+      .references(() => posSalesReceipts.id, { onDelete: 'restrict' }),
+    chargeNo: smallint('charge_no').notNull(),
+    sessionChargeId: uuid('session_charge_id').references(() => tableSessionCharges.id, { onDelete: 'restrict' }),
+    presetId: uuid('preset_id').references(() => posChargePresets.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    unitAmount: numeric('unit_amount', { precision: 14, scale: 2 }).notNull(),
+    qty: integer('qty').notNull(),
+    /** qty * unit_amount (CHECK). */
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+  },
+  (t) => [
+    unique('pos_sales_receipt_charges_org_id_id_unique').on(t.orgId, t.id),
+    unique('pos_sales_receipt_charges_receipt_charge_no_unique').on(t.receiptId, t.chargeNo),
+    // NOTE: pos_sales_receipt_charges_receipt_idx (receipt_id) - hand-added in migration 0275.
+    index('pos_sales_receipt_charges_receipt_idx').on(t.receiptId),
+    // NOTE: the triggers pos_sales_receipt_charges_append_only (UPDATE / DELETE refused, 23001) and pos_sales_receipt_charges_append_guard (INSERT under an earlier transaction's receipt refused, 23001) are hand-added in migration 0275, ENABLE ALWAYS.
+    check('pos_sales_receipt_charges_name_check', sql`length(trim(${t.name})) between 1 and 40`),
+    check('pos_sales_receipt_charges_unit_amount_check', sql`${t.unitAmount} > 0 and ${t.unitAmount} <= 100000`),
+    check('pos_sales_receipt_charges_qty_check', sql`${t.qty} > 0`),
+    check('pos_sales_receipt_charges_amount_check', sql`${t.amount} = ${t.qty} * ${t.unitAmount}`),
+    check('pos_sales_receipt_charges_unit_amount_finite_check', sql`${t.unitAmount} > '-Infinity'::numeric and ${t.unitAmount} < 'Infinity'::numeric`),
+    check('pos_sales_receipt_charges_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    twin('pos_sales_receipt_charges_receipt_id_same_org_fk', t.orgId, t.receiptId, posSalesReceipts.orgId, posSalesReceipts.id),
+    twin('pos_sales_receipt_charges_session_charge_id_same_org_fk', t.orgId, t.sessionChargeId, tableSessionCharges.orgId, tableSessionCharges.id),
+    twin('pos_sales_receipt_charges_preset_id_same_org_fk', t.orgId, t.presetId, posChargePresets.orgId, posChargePresets.id),
   ],
 );
 
@@ -850,6 +971,8 @@ export const posRefunds = pgTable(
     requestId: uuid('request_id').notNull(),
     /** Composite FK (store_id, day_close_id) -> pos_day_closes, hand-added in migration 0265 (no single-column FK). Set once, by the Z. */
     dayCloseId: uuid('day_close_id'),
+    /** T-627 (migration 0275): the part of `total` that gives the receipt's store charges back (the cashier ticks it; default none). 0 <= charges_amount <= total. */
+    chargesAmount: numeric('charges_amount', { precision: 14, scale: 2 }).notNull().default('0'),
   },
   (t) => [
     check('pos_refunds_total_finite_check', sql`${t.total} > '-Infinity'::numeric and ${t.total} < 'Infinity'::numeric`),
@@ -866,6 +989,9 @@ export const posRefunds = pgTable(
     // NOTE: the trigger pos_refunds_frozen (frozen except day_close_id, once; DELETE refused; 23001) is hand-added in migration 0265, ENABLE ALWAYS.
     check('pos_refunds_refund_seq_check', sql`${t.refundSeq} > 0`),
     check('pos_refunds_total_check', sql`${t.total} > 0`),
+    // NOTE: pos_refunds_charges_amount_check / _finite_check - hand-added in migration 0275 (T-627).
+    check('pos_refunds_charges_amount_check', sql`${t.chargesAmount} >= 0 and ${t.chargesAmount} <= ${t.total}`),
+    check('pos_refunds_charges_amount_finite_check', sql`${t.chargesAmount} > '-Infinity'::numeric and ${t.chargesAmount} < 'Infinity'::numeric`),
     check('pos_refunds_reason_check', sql`length(btrim(${t.reason})) > 0`),
     foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_refunds_store_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.terminalId], foreignColumns: [posTerminals.storeId, posTerminals.id], name: 'pos_refunds_terminal_same_store_fk' }).onDelete('restrict'),
@@ -950,6 +1076,9 @@ export type PosStandRow = typeof posStands.$inferSelect;
 export type PosTerminalRow = typeof posTerminals.$inferSelect;
 export type TableSessionRow = typeof tableSessions.$inferSelect;
 export type PosDiscountPresetRow = typeof posDiscountPresets.$inferSelect;
+export type PosChargePresetRow = typeof posChargePresets.$inferSelect;
+export type TableSessionChargeRow = typeof tableSessionCharges.$inferSelect;
+export type PosSalesReceiptChargeRow = typeof posSalesReceiptCharges.$inferSelect;
 export type TableSessionLineDiscountRow = typeof tableSessionLineDiscounts.$inferSelect;
 export type TableSessionLineRow = typeof tableSessionLines.$inferSelect;
 export type PosSalesReceiptRow = typeof posSalesReceipts.$inferSelect;

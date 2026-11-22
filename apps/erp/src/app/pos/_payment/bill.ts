@@ -4,7 +4,7 @@
  * pricing function (`priceBill`) and as the receipt's lines. Pure: no React, no clock. Prices are never guessed: a line with no price stops the bill.
  */
 import { fromCentavos, money, toCentavos } from '@shareat/core/money';
-import type { PriceLineInput, PricedSession } from '@shareat/domain/pos/price';
+import type { PriceChargeInput, PriceLineInput, PricedSession } from '@shareat/domain/pos/price';
 import type { PosEvent } from '@/lib/pos-device';
 import type { ReceiptLine } from '@/lib/pos-print/types';
 import { asStoreMenu, storeAnswer, whenOf, type MenuLike } from '../_orders/menu-filter';
@@ -16,6 +16,24 @@ export interface PresetLike {
   name: string;
   valueType: string;
   value: string;
+}
+/** T-627: a store charge as the snapshot lists it. */
+export interface ChargePresetLike {
+  id: string;
+  name: string;
+  amount: string;
+  perUnit: boolean;
+}
+/** T-627: a store charge on the bill (the server's, plus the outbox's `charge.added`, minus its `charge.removed`). */
+export interface BillChargeRow {
+  id: string;
+  presetId: string | null;
+  name: string;
+  /** Pesos for one unit (the whole amount for a custom charge). */
+  unitAmount: string;
+  qty: number;
+  /** The charge is in the outbox, not on the server yet. */
+  pending: boolean;
 }
 export interface BillDiscountRow extends BillDiscount {
   id: string;
@@ -36,6 +54,8 @@ export interface BillLineRow extends BillLine {
 }
 export interface ProjectedBill {
   lines: BillLineRow[];
+  /** T-627: the table's active store charges; absent = none. */
+  charges?: BillChargeRow[];
   /** A sentence when the bill cannot be priced yet (a price or a preset this tablet does not hold). Pay stays off. */
   problem: string | null;
   /** Sentences the panel shows beside the bill (a pending head-count change that removed discounts). */
@@ -63,7 +83,7 @@ const sameLines = (e: PosEvent, ids: Set<string>): string | null => {
   return id && ids.has(id) ? id : null;
 };
 
-export function projectBill(i: { extraIds?: Readonly<Record<string, string>>; sessionId: string; view: ProjectedSession | undefined; body: SessionBody | undefined; pending: readonly PosEvent[]; menu: MenuLike | null; presets: readonly PresetLike[] }): ProjectedBill {
+export function projectBill(i: { extraIds?: Readonly<Record<string, string>>; sessionId: string; view: ProjectedSession | undefined; body: SessionBody | undefined; pending: readonly PosEvent[]; menu: MenuLike | null; presets: readonly PresetLike[]; chargePresets?: readonly ChargePresetLike[] }): ProjectedBill {
   const storeMenu = i.menu ? asStoreMenu(i.menu) : null;
   const items = storeMenu ? storeMenu.items : [];
   const live = (i.view?.lines ?? []).filter((l) => !l.cancelled);
@@ -213,7 +233,32 @@ export function projectBill(i: { extraIds?: Readonly<Record<string, string>>; se
       }
     }
   }
-  return { lines, problem, needsExtraFor, notices };
+  // T-627: the store charges: the server's, plus the outbox's adds for this table, minus its removes.
+  const charges: BillChargeRow[] = (i.body?.charges ?? []).map((c) => ({ id: c.id, presetId: c.presetId, name: c.name, unitAmount: c.unitAmount, qty: c.qty, pending: false }));
+  for (const e of i.pending) {
+    const p = e.payload as Payload;
+    if (e.kind === 'charge.added' && str(p.sessionId) === i.sessionId) {
+      const id = str(p.chargeId);
+      const qty = num(p.qty);
+      if (!id || qty === null || charges.some((c) => c.id === id)) continue; // the server already holds it: shown once
+      const preset = str(p.presetId) ? (i.chargePresets ?? []).find((x) => x.id === str(p.presetId)) : undefined;
+      if (str(p.presetId) && !preset) {
+        if (problem === null) problem = 'A charge on this table is not on this tablet yet. Connect once to refresh it.';
+        continue;
+      }
+      charges.push({ id, presetId: preset?.id ?? null, name: preset?.name ?? (str(p.name) ?? 'Charge'), unitAmount: preset?.amount ?? (str(p.unitAmount) ?? '0'), qty, pending: true });
+    } else if (e.kind === 'charge.removed') {
+      const id = str(p.chargeId);
+      const at = charges.findIndex((c) => c.id === id);
+      if (at >= 0) charges.splice(at, 1);
+    }
+  }
+  return { lines, charges, problem, needsExtraFor, notices };
+}
+
+/** T-627: the bill's charges as the one pricing function takes them. */
+export function toPriceCharges(charges: readonly BillChargeRow[]): PriceChargeInput[] {
+  return charges.map((c) => ({ chargeId: c.id, unitAmount: c.unitAmount, qty: c.qty }));
 }
 
 export function toPriceLines(bill: readonly BillLineRow[]): PriceLineInput[] {

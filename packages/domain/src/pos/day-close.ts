@@ -75,8 +75,10 @@ export interface Reading {
   windowStart: Date;
   windowEnd: Date;
   receiptCount: number;
-  /** Σ of the receipt totals, which are AFTER discounts. This is what `pos_day_closes.gross_total` takes. */
+  /** Σ of what the receipts billed: their totals (AFTER discounts) plus their store charges (T-627). This is what `pos_day_closes.gross_total` takes, and what the tenders, short payments and refunds add up to. */
   grossTotal: Money;
+  /** T-627: Σ of the receipts' store charges (leftover, an extra griller). Inside `grossTotal`, outside the VAT base; it becomes the sales day's `other_charges` (posts to 4500). */
+  chargeTotal: Money;
   /** Σ before discounts: the sales day's total_sales. */
   subtotal: Money;
   discountTotal: Money;
@@ -157,11 +159,11 @@ async function openRefunds(tx: Tx, orgId: string, storeId: string, terminalId: s
   return (await posV2Repo.listOpenRefunds(tx, orgId, storeId)).filter((r) => r.terminalId === terminalId && (before === undefined || r.recordedAt.getTime() < before.getTime()));
 }
 
-/** T-558: the receipts paid short (total above the sum tendered), with the gap in centavos. A receipt paid in full or over (change) is never listed: change never offsets a gap. */
+/** T-558: the receipts paid short (amount due, total + store charges, above the sum tendered), with the gap in centavos. A receipt paid in full or over (change) is never listed: change never offsets a gap. */
 async function shortPaid(tx: Tx, orgId: string, receipts: readonly Receipt[]): Promise<{ receipt: Receipt; gap: bigint }[]> {
   const paid = await posV2Repo.receiptPaidSums(tx, orgId, receipts.map((r) => r.id));
   return receipts
-    .map((receipt) => ({ receipt, gap: toCentavos(money(receipt.total)) - toCentavos(money(paid.get(receipt.id) ?? '0')) }))
+    .map((receipt) => ({ receipt, gap: toCentavos(money(receipt.total)) + toCentavos(money(receipt.chargeTotal)) - toCentavos(money(paid.get(receipt.id) ?? '0')) }))
     .filter((x) => x.gap > 0n);
 }
 
@@ -181,7 +183,8 @@ async function figuresOf(
   const f = await posV2Repo.receiptFigures(tx, orgId, receipts.map((r) => r.id));
   const subtotal = sumCentavos(receipts.map((r) => r.subtotal));
   const discountTotal = sumCentavos(receipts.map((r) => r.discountTotal));
-  const gross = sumCentavos(receipts.map((r) => r.total));
+  const chargeTotal = sumCentavos(receipts.map((r) => r.chargeTotal));
+  const gross = sumCentavos(receipts.map((r) => r.total)) + chargeTotal;
   const unli = sumCentavos([f.packageGross]);
   const ala = sumCentavos([f.otherGross]);
   if (unli + ala !== subtotal) throw internalFault(`day close: unli ${unli} + a la carte ${ala} centavos != subtotal ${subtotal}`);
@@ -230,6 +233,7 @@ async function figuresOf(
     windowEnd: window.end,
     receiptCount: receipts.length,
     grossTotal: fromCentavos(gross),
+    chargeTotal: fromCentavos(chargeTotal),
     subtotal: fromCentavos(subtotal),
     discountTotal: fromCentavos(discountTotal),
     discounts: { senior: fromCentavos(senior), pwd: fromCentavos(pwd), other: fromCentavos(other) },
@@ -377,7 +381,7 @@ async function writeZ(
     after: {
       zNo: z.zNo, businessDate: z.businessDate, windowStart: z.windowStart.toISOString(), windowEnd: z.windowEnd.toISOString(), receiptCount: z.reading.receiptCount,
       grossTotal: z.reading.grossTotal, byTender: z.reading.byTender.map((t) => ({ tenderId: t.tenderId, amount: t.amount })), approvedBy: c.approverId, salesDayId,
-      convert: { cashIn: z.reading.convert.cashIn, cashOut: z.reading.convert.cashOut, count: z.reading.convert.count, entries: convertEntries },
+      chargeTotal: z.reading.chargeTotal, convert: { cashIn: z.reading.convert.cashIn, cashOut: z.reading.convert.cashOut, count: z.reading.convert.count, entries: convertEntries },
       refunds: { total: z.reading.refunds.total, cash: z.reading.refunds.cash, count: z.reading.refunds.count, excessEntries },
     },
   });
@@ -665,7 +669,7 @@ export async function deriveSalesDayFromZ(
   const routed = routeSalesDay({
     totalSales: reading.subtotal, unliSales: reading.unliSales, alaCarteSales: reading.alaCarteSales,
     seniorDiscount: reading.discounts.senior, pwdDiscount: reading.discounts.pwd, otherDiscount: reading.discounts.other,
-    comps: ZERO, serviceCharge: ZERO, otherCharges: ZERO, cashCollected: cash, onlineCollected: online, creditSales: ZERO, refunds: dayRefunds,
+    comps: ZERO, serviceCharge: ZERO, otherCharges: reading.chargeTotal, cashCollected: cash, onlineCollected: online, creditSales: ZERO, refunds: dayRefunds,
     allowShortPayment: true, channels: [], tenders: [...wallets.entries()].map(([moneyAccountId, amount]) => ({ moneyAccountId, amount })),
   });
   if (!routed.ok) throw refuse(`pos: the day ${date} cannot post: ${routed.reason}`, `The day ${date} cannot be booked as it stands: ${routed.reason}. Nothing was closed.`);
@@ -675,7 +679,7 @@ export async function deriveSalesDayFromZ(
       orgId, storeId, businessDate: close.businessDate, posDayCloseId: close.id, createdBy: actor.personId, posSourcedAt: input.at,
       totalSales: reading.subtotal, unliSales: reading.unliSales, alaCarteSales: reading.alaCarteSales,
       seniorDiscount: reading.discounts.senior, pwdDiscount: reading.discounts.pwd, otherDiscount: reading.discounts.other,
-      cashCollected: cash, onlineCollected: online, refunds: dayRefunds,
+      cashCollected: cash, onlineCollected: online, refunds: dayRefunds, otherCharges: reading.chargeTotal,
     });
     await salesDaysRepo.replaceTenders(tx, id, [...wallets.entries()].map(([moneyAccountId, amount]) => ({ moneyAccountId, amount })));
     return id;
@@ -684,7 +688,7 @@ export async function deriveSalesDayFromZ(
   await salesDaysRepo.markSubmitted(tx, orgId, salesDayId, actor.personId);
   await audit(tx, actor, 'sales_day.derived_from_z', {
     storeId, entityId: salesDayId, pairingId: input.pairingId, at: input.at, before: null,
-    after: { businessDate: close.businessDate, posDayCloseId: close.id, totalSales: reading.subtotal, cashCollected: cash, onlineCollected: online, refunds: dayRefunds },
+    after: { businessDate: close.businessDate, posDayCloseId: close.id, totalSales: reading.subtotal, otherCharges: reading.chargeTotal, cashCollected: cash, onlineCollected: online, refunds: dayRefunds },
   });
   await audit(tx, actor, 'sales_day.submitted', { storeId, entityId: salesDayId, pairingId: input.pairingId, at: input.at, before: { status: 'open' }, after: { status: 'submitted' } });
   return salesDayId;
@@ -717,6 +721,7 @@ async function bridgePayloadFor(tx: Tx, orgId: string, storeId: string, business
     closes.push({
       receiptCount: d.close.receiptCount,
       grossTotal: fromCentavos(toCentavos(money(d.close.grossTotal)) - refundsOfZ),
+      chargesTotal: fromCentavos(sumCentavos(receipts.map((r) => r.chargeTotal))),
       varianceTotal: fromCentavos((await shortPaid(tx, orgId, receipts)).reduce((a, x) => a + x.gap, 0n)),
       discountTotal: fromCentavos(sumCentavos(receipts.map((r) => r.discountTotal))),
       unliSales: fromCentavos(sumCentavos([f.packageGross])),

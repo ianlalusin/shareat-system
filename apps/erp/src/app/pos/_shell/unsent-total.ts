@@ -8,12 +8,13 @@
 import { money, toCentavos } from '@shareat/core/money';
 import type { PosEvent } from '@/lib/pos-device';
 
-/** One sale's bill total in centavos, or null when the payload has no readable total (an old or malformed row is skipped, never guessed). */
+/** One sale's amount due in centavos (the goods total plus T-627's store charges), or null when the payload has no readable total (an old or malformed row is skipped, never guessed). */
 function saleTotalCentavos(e: PosEvent): bigint | null {
-  const total = (e.payload.device as { total?: unknown } | undefined)?.total;
+  const device = e.payload.device as { total?: unknown; chargeTotal?: unknown } | undefined;
+  const total = device?.total;
   if (typeof total !== 'string' && typeof total !== 'number') return null;
   try {
-    return toCentavos(money(String(total)));
+    return toCentavos(money(String(total))) + (device?.chargeTotal === undefined ? 0n : toCentavos(money(String(device.chargeTotal))));
   } catch {
     return null;
   }

@@ -19,7 +19,7 @@ export async function POST(req: Request): Promise<Response> {
     const pairing = await tabletPairing();
     if (!pairing || pairing.orgId !== session.actor.orgId) return fail(401, POS_UNPAIRED);
     if (!/^application\/json\s*(;|$)/i.test(req.headers.get('content-type') ?? '')) return fail(415, 'Send the refund as application/json.');
-    let body: { requestId?: unknown; receiptId?: unknown; lines?: unknown; payments?: unknown; reason?: unknown; pin?: unknown };
+    let body: { requestId?: unknown; receiptId?: unknown; lines?: unknown; payments?: unknown; reason?: unknown; pin?: unknown; refundCharges?: unknown };
     try {
       body = JSON.parse(await readCappedText(req));
     } catch (err) {
@@ -39,6 +39,7 @@ export async function POST(req: Request): Promise<Response> {
     const out = await withOrgPrincipal(actor.orgId, (tx) =>
       recordRefund(tx, actor, {
         storeId: pairing.storeId, pairingId: pairing.pairingId, requestId: body.requestId as string, receiptId: body.receiptId as string, lines, payments, reason: body.reason as string,
+        ...(body.refundCharges === true ? { refundCharges: true } : {}),
         ...(typeof body.pin === 'string' && body.pin !== '' ? { approval: { pin: body.pin } } : {}),
       }),
     );

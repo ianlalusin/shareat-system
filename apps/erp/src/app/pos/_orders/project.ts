@@ -42,9 +42,18 @@ export interface ServerDiscount {
   dinerNo: number | null;
   presetId: string | null;
 }
+export interface ServerCharge {
+  id: string;
+  presetId: string | null;
+  name: string;
+  unitAmount: string;
+  qty: number;
+}
 export interface SessionBody {
   session: { id: string; mode: string; standId: string | null; status: string; headsCashier: number; headsServer: number | null };
   lines: ServerLine[];
+  /** T-627: the table's ACTIVE store charges. An older body has none. */
+  charges?: ServerCharge[];
 }
 export interface OrdersServer {
   openStands: ServerStand[] | null;
