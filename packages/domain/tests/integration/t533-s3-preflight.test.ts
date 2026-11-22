@@ -17,6 +17,8 @@ import { RefusalError } from '@shareat/db';
 import { asOrg, closeAll, fixture, pinOf, sql, stateVersionOf, uuid, type Fx } from './_fixtures/t525-pos';
 import { posPreflight } from '../../src/pos/preflight';
 import { employManager } from './_fixtures/t533-store-ready';
+import { superAdminOf } from './_fixtures/t626-super-admin';
+import { addMenuVariant, createDaypart, setDepletionRule, setMenuOffer, withdrawMenuOffer } from '../../src/menu';
 
 afterAll(closeAll);
 
@@ -237,5 +239,47 @@ describe('R3 posPreflight - who may ask, and which store', () => {
     expect(blocking).toContain('no_linked_till');
     expect(blocking).not.toContain('no_stands');
     expect(blocking).not.toContain('no_cash_tender');
+  });
+});
+
+describe('T-626 posPreflight - the menu must be sellable before the switch', () => {
+  it('no package on sale blocks: the only package withdrawn (sold out) leaves the tablet nothing to start a table with', async () => {
+    const f = await ready();
+    await sql`insert into menu_offers (org_id, store_id, variant_id, channel, amount, withdrawn, created_by) values (${f.orgId}, ${f.storeId}, ${f.menu.unli.variantId}, 'store', null, true, ${f.personId})`;
+    expect(await codes(f)).toEqual({ ...NONE, blocking: ['no_packages_on_sale'] });
+  });
+
+  it('a package with no kitchen station blocks, named once (it is not also a warning)', async () => {
+    const f = await ready();
+    await sql`delete from kitchen_routes where menu_item_id = ${f.menu.unli.itemId}`;
+    const r = await run(f);
+    expect(r.blocking.map((i) => i.code)).toEqual(['package_without_station']);
+    expect(r.blocking[0]!.sentence).toContain('Unli Grill');
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('a package priced for lunch but not dinner blocks and names the missing hours, once some package sells at dinner (T-626 audit ruling 2); the prices clear it', async () => {
+    const f = await ready();
+    const sa = await superAdminOf(f);
+    const { storeId } = f;
+    const days = [0, 1, 2, 3, 4, 5, 6];
+    const lunch = await asOrg(f.orgId, (tx) => createDaypart(sa, { storeId, name: 'Lunch', days, start: '08:00', end: '17:00' }, tx));
+    const dinner = await asOrg(f.orgId, (tx) => createDaypart(sa, { storeId, name: 'Dinner', days, start: '17:00', end: '08:00' }, tx));
+    // all-day 449.00 is replaced by a lunch price only
+    await asOrg(f.orgId, (tx) => withdrawMenuOffer(sa, { storeId, variantId: f.menu.unli.variantId, channel: 'store' }, tx));
+    await asOrg(f.orgId, (tx) => setMenuOffer(sa, { storeId, variantId: f.menu.unli.variantId, channel: 'store', amount: '449.00', daypartId: lunch.id }, tx));
+    // No package is priced for Dinner, so Dinner is not a window anything sells in: not a missing price.
+    expect((await run(f)).blocking).toEqual([]);
+    // A second package variant priced only for Dinner makes Dinner a selling window: now each misses the other's hours.
+    const kids = await asOrg(f.orgId, (tx) => addMenuVariant(sa, { menuItemId: f.menu.unli.itemId, label: 'Kids' }, tx));
+    await asOrg(f.orgId, (tx) => setDepletionRule(sa, { variantId: kids.id, mode: 'no_stock' }, tx));
+    await asOrg(f.orgId, (tx) => setMenuOffer(sa, { storeId, variantId: kids.id, channel: 'store', amount: '299.00', daypartId: dinner.id }, tx));
+    const r = await run(f);
+    expect(r.blocking.map((i) => i.code)).toEqual(['package_missing_price']);
+    expect(r.blocking[0]!.sentence).toContain('Unli Grill (no Dinner price)');
+    expect(r.blocking[0]!.sentence).toContain('Unli Grill (Kids) (no Lunch price)');
+    await asOrg(f.orgId, (tx) => setMenuOffer(sa, { storeId, variantId: f.menu.unli.variantId, channel: 'store', amount: '499.00', daypartId: dinner.id }, tx));
+    await asOrg(f.orgId, (tx) => setMenuOffer(sa, { storeId, variantId: kids.id, channel: 'store', amount: '249.00', daypartId: lunch.id }, tx));
+    expect((await run(f)).blocking).toEqual([]);
   });
 });

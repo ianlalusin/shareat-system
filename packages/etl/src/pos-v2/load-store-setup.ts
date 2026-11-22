@@ -1,19 +1,38 @@
 /**
- * T-533 S2 - the one-time store setup load from POS v1. docs/tasks/533-pos-lipa-switch.md R2.
+ * T-533 S2 + T-626 - the one-time store setup load from POS v1. docs/tasks/533-pos-lipa-switch.md R2, docs/tasks/626-lipa-pos-setup-from-v1.md.
  *
- * Reads the store's stands (v1 `tables`) and discount presets (v1 `storeDiscounts`) through `V1StoreSetupSource`, which is READ-ONLY by shape
- * (two list calls, no write member; the real one is `packages/etl-firestore/src/pos-store-setup-source.ts`), and writes them ONLY through the
- * audited domain upserts, as the load's own actor. Idempotent: a second run writes nothing. `dryRun` runs the same path inside a savepoint it
- * rolls back, so the counts are exactly what a real run would do and nothing is kept.
+ * Reads the store's stands (v1 `tables`), discount presets (v1 `storeDiscounts`) and, since T-626, its menu and kitchen through `V1StoreSetupSource`, which is READ-ONLY by
+ * shape (list calls, no write member; the real one is `packages/etl-firestore/src/pos-store-setup-source.ts`), and writes them ONLY through the audited domain functions,
+ * as the load's own actor. Idempotent: a second run writes nothing. `dryRun` runs the same path inside a savepoint it rolls back, so the counts are exactly what a real run
+ * would do and nothing is kept. A value someone already set in the ERP is never overwritten: it is listed as a difference.
  *
- * It REPORTS and never fixes: tenders without `pos_v1_alias`, menu items without a kitchen station, packages without refill items, staff
- * without a PIN. Nothing here prints a Firestore document id: the report carries counts and names (a stand number, a discount name) only.
+ * It REPORTS and never fixes: tenders without `pos_v1_alias`, menu items without a kitchen station, packages without refill items, staff without a PIN. Nothing here prints
+ * a Firestore document id: the report carries counts and names (a stand number, a discount name, a dish) only.
  *
- * The actor is operator-supplied and trusted only as far as database access (the domain upserts authorize it; the link and gap READS do not).
+ * v1 -> v2 mapping (v1 is read as requirements; planned in `plan-store-menu.ts`, written in `load-store-menu.ts`; all paths under `stores/{id}/` unless noted):
+ *   kitchenLocations (name, slaMinutes, printOnOutage, sortOrder) -> kitchen station, same fields
+ *   menuSchedules (days, startTime, endTime)                       -> store hours (daypart) of the same name, only if a package is priced in them; no times = a GAP, its
+ *                                                                     packages go all-day (as v1); hours switched off = their packages are not on sale (a NOTE)
+ *   storePackages (pricePerHead | bundlePrice+bundleMaxCap+bundleExtraHeadPrice, kitchenLocationId, refillsAllowed, menuScheduleId)
+ *                                                                  -> ONE package item "base name" (LT-/DT- prefix dropped), per-head or bundle price per hours; two
+ *                                                                     copies at one price = one all-day price; empty refillsAllowed = every enabled refill (a NOTE);
+ *                                                                     disabled = not loaded; refill links only added to a package that has none
+ *   storeRefills + root refills (isEnabled, requiresFlavor, allowedFlavorIds, kitchenLocationId) -> refill item (free offer) routed to its station
+ *   storeFlavors + root flavors (isEnabled)                        -> option values of the refill's single-choice group "Flavour" (a store switch = an option offer, +0.00)
+ *   inventory where isAddon (name, groupName+variantLabel, subCategory, sellingPrice, kitchenLocationId, customerEnabled)
+ *                                                                  -> a-la-carte item sold alone and in a package session, category = subCategory ("Add-ons" if none)
+ *   storeModesOfPayment (name, type)                               -> tender: cash = made; wallet = matched by v1 name and its alias filled, else listed (needs a money account)
+ *   Not copied, reported: charges, reservation deposits, staff and PINs, printers, receipt text, online prices, modifier groups, packages' own flavour lists (v1 never enforced them).
+ *
+ * The actor is operator-supplied and trusted only as far as database access: the domain functions authorize it (it must be a super admin to add items and pair hours).
  */
-import { posStoreSetupRepo, RefusalError, refuse, type Tx } from '@shareat/db';
+import { menuRepo, posStoreSetupRepo, RefusalError, refuse, type Tx } from '@shareat/db';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { upsertPosDiscountPreset, upsertPosStand } from '@shareat/domain';
+import { applyMenuPlan, formatMenuSetupReport, type MenuSetupReport } from './load-store-menu';
+import { planStoreMenu, type V1MenuSetup } from './plan-store-menu';
+
+export type { V1MenuSetup } from './plan-store-menu';
 
 type Actor = Parameters<typeof upsertPosStand>[1];
 
@@ -40,12 +59,16 @@ export interface V1StoreSetupSource {
   listDiscounts(posStoreId: string): Promise<readonly V1Discount[]>;
   /** Universal discounts that apply to this store (`globalDiscounts`, applicableStoreIds contains it, not archived): v1's screen merges them with the store's. */
   listGlobalDiscounts(posStoreId: string): Promise<readonly V1Discount[]>;
+  /** T-626: the store's menu, kitchen, hours and payment methods. Optional so a source that only knows stands and discounts still works; the real one has it. */
+  readMenu?(posStoreId: string): Promise<V1MenuSetup>;
 }
 
 export interface StoreSetupReport {
   readonly dryRun: boolean;
   readonly stands: { created: number[]; unchanged: number[]; keptRetired: number[]; skipped: string[] };
   readonly presets: { created: string[]; updated: string[]; unchanged: string[]; skipped: string[]; refused: { name: string; reason: string }[] };
+  /** T-626: null when the source did not read a menu. */
+  readonly menu: MenuSetupReport | null;
   readonly gaps: {
     tendersWithoutAlias: string[];
     itemsWithoutStation: string[];
@@ -67,6 +90,7 @@ export async function loadStoreSetup(
   const tables = await source.listTables(posStoreId);
   const storeDiscounts = await source.listDiscounts(posStoreId);
   const globalDiscounts = await source.listGlobalDiscounts(posStoreId);
+  const menuPlan = source.readMenu ? planStoreMenu(await source.readMenu(posStoreId)) : null;
   // One preset per name (the table's key is the lower-cased name): a store discount wins over a global of the same name, and a global outside its date window is left out.
   const key = (n: string) => n.trim().toLowerCase();
   const today = toBusinessDate(input.now ?? new Date());
@@ -93,6 +117,7 @@ export async function loadStoreSetup(
   const stands: StoreSetupReport['stands'] = { created: [], unchanged: [], keptRetired: [], skipped: [] };
   const presets: StoreSetupReport['presets'] = { created: [], updated: [], unchanged: [], skipped: [], refused: [] };
 
+  let menu: MenuSetupReport | null = null;
   const writes = async (sp: Tx): Promise<void> => {
     for (const t of tables) {
       const number = /^\d{1,3}$/.test(t.tableNumber.trim()) ? Number(t.tableNumber.trim()) : NaN;
@@ -113,6 +138,7 @@ export async function loadStoreSetup(
         presets.refused.push({ name: d.name, reason: e.userMessage });
       }
     }
+    if (menuPlan) menu = await applyMenuPlan(sp, actor, input.storeId, menuPlan, await menuRepo.dbNow(sp));
   };
   if (input.dryRun) {
     try {
@@ -131,6 +157,7 @@ export async function loadStoreSetup(
     dryRun: input.dryRun,
     stands,
     presets,
+    menu,
     gaps: {
       tendersWithoutAlias: await posStoreSetupRepo.listTendersWithoutAlias(tx, actor.orgId, input.storeId),
       itemsWithoutStation: await posStoreSetupRepo.listItemsWithoutStation(tx, actor.orgId, input.storeId),
@@ -151,6 +178,7 @@ export function formatStoreSetupReport(r: StoreSetupReport): string[] {
     `Discounts ${verb} created: ${r.presets.created.length} (${list(r.presets.created)}); changed: ${r.presets.updated.length} (${list(r.presets.updated)}); already there: ${r.presets.unchanged.length}`,
     `Discounts skipped: ${r.presets.skipped.length} (${list(r.presets.skipped)})`,
     `Discounts refused: ${r.presets.refused.length}${r.presets.refused.map((x) => `\n  ${x.name}: ${x.reason}`).join('')}`,
+    ...(r.menu ? formatMenuSetupReport(r.menu, r.dryRun) : []),
     'GAPS (reported, not fixed):',
     `  tenders without a v1 alias: ${r.gaps.tendersWithoutAlias.length} (${list(r.gaps.tendersWithoutAlias)})`,
     `  menu items without a kitchen station: ${r.gaps.itemsWithoutStation.length} (${list(r.gaps.itemsWithoutStation)})`,

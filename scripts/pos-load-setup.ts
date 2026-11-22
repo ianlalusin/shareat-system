@@ -3,9 +3,10 @@
  *
  *   npm run pos:load-setup -- --store <erpStoreId> --org <orgId> --actor <person uuid> [--dry-run]
  *
- * Reads POS v1's tables and discounts READ-ONLY (POS_BRIDGE_SA_KEY_FILE, Datastore-Viewer only) and writes stands and discount presets through the
- * audited domain upserts as --actor (a person who may manage that store's settings). --dry-run does the same work inside a rolled-back savepoint and
- * keeps nothing. Prints counts and names only, never a Firestore id or a key. Reports setup gaps and never fixes them.
+ * Reads POS v1's tables, discounts and (T-626) menu, kitchen, hours and payment methods READ-ONLY (POS_BRIDGE_SA_KEY_FILE, Datastore-Viewer only) and writes
+ * them through the audited domain functions as --actor, who must be a SUPER ADMIN (adding menu items and pairing prices to hours are super-admin only). --dry-run
+ * does the same work inside a rolled-back savepoint and keeps nothing. A value already set in the ERP is never overwritten: it is listed as a difference.
+ * Prints counts and names only, never a Firestore id or a key. Reports setup gaps and never fixes them. Check the result with `npm run pos:setup-check`.
  */
 import { config } from 'dotenv';
 

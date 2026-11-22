@@ -12,7 +12,7 @@
  * counts the missing PIN, the only half that can be missing.
  */
 import { authorize, can, type Actor } from '@shareat/auth';
-import { accessRepo, businessRulesRepo, kitchenRepo, manilaToday, posPreflightRepo, posV1Repo, posV2Repo, storesRepo, type Tx } from '@shareat/db';
+import { accessRepo, businessRulesRepo, daypartsRepo, kitchenRepo, manilaToday, posPreflightRepo, posV1Repo, posV2Repo, storesRepo, type Tx } from '@shareat/db';
 import { RULE_REGISTRY, type BusinessRuleKey } from '../business-rules/registry';
 import { gone } from '../shared/refusal';
 import { v1BridgeDateAllowed } from './v1-bridge-payload';
@@ -50,6 +50,12 @@ export interface PreflightFacts {
   /** Someone with a live PIN may approve a correction, and that someone is not the only seller (`hasSeparateApprover`). */
   readonly separateApprover: boolean;
   readonly keyFileConfigured: boolean;
+  /** T-626: packages on sale now at the store (any hours). */
+  readonly packagesOnSale: number;
+  /** T-626: packages priced for some of the store's hours but not all, as "Name (no Dinner price)" (`packagesMissingHours`: only hours some package is priced in count). */
+  readonly packagesMissingHours: readonly string[];
+  /** T-626: packages on sale with no kitchen station. */
+  readonly packagesWithoutStation: readonly string[];
   readonly itemsWithoutStation: readonly string[];
   readonly packagesWithoutRefills: readonly string[];
   readonly staffWithoutPin: number;
@@ -66,6 +72,21 @@ const nameList = (names: readonly string[]): string => (names.length <= 5 ? name
 /** One approver who is also the only seller cannot approve their own close. Shared with the soak checklist's `approver` check. */
 export function hasSeparateApprover(approvers: ReadonlySet<string>, sellers: readonly string[]): boolean {
   return approvers.size >= 1 && (approvers.size >= 2 || sellers.some((p) => !approvers.has(p)));
+}
+
+/**
+ * T-626 audit ruling 2: packages priced for some hours but not all, as "Name (no Dinner price)". A package is judged only against the hours in which at least one package
+ * of the store is priced (an active daypart nothing is sold in, e.g. a breakfast window, is not a missing price). An all-day price misses nothing. Pure.
+ */
+export function packagesMissingHours(
+  packages: readonly { name: string; allDay: boolean; daypartIds: readonly string[] }[],
+  hours: readonly { id: string; name: string }[],
+): string[] {
+  const priced = new Set(packages.flatMap((p) => p.daypartIds));
+  const sold = hours.filter((h) => priced.has(h.id));
+  return packages
+    .filter((p) => !p.allDay && sold.some((h) => !p.daypartIds.includes(h.id)))
+    .map((p) => `${p.name} (no ${sold.filter((h) => !p.daypartIds.includes(h.id)).map((h) => h.name).join(' or ')} price)`);
 }
 
 export function evaluatePreflight(f: PreflightFacts): PreflightResult {
@@ -90,6 +111,13 @@ export function evaluatePreflight(f: PreflightFacts): PreflightResult {
   if (!f.terminalLinked) block('no_terminal_link', 'The tablet is not registered for manager approvals, so the end-of-day close will fail.', '/admin/pos-tablets');
   if (!f.separateApprover) block('no_approver', "Nobody but the cashier can approve the close. Give a manager 'approve a POS refund or correction' and a PIN.", '/admin/users');
   if (bridge && !f.keyFileConfigured) block('no_bridge_key_file', 'The setting POS_FIREBASE_SA_KEY_FILE is not set on the server, so the daily report to the old POS cannot be sent.', null);
+  if (f.packagesOnSale === 0) block('no_packages_on_sale', 'This store has no packages on sale, so the tablet would have nothing to start a table with. Load the store menu from the old POS, or add and price the packages.', '/menu/prices');
+  if (f.packagesMissingHours.length > 0) {
+    block('package_missing_price', `${plural(f.packagesMissingHours.length, 'package has', 'packages have')} no price for some of the store's hours, so the tablet could not sell ${f.packagesMissingHours.length === 1 ? 'it' : 'them'} then: ${nameList(f.packagesMissingHours)}.`, '/menu/prices');
+  }
+  if (f.packagesWithoutStation.length > 0) {
+    block('package_without_station', `${plural(f.packagesWithoutStation.length, 'package has', 'packages have')} no kitchen station, so ${f.packagesWithoutStation.length === 1 ? 'its' : 'their'} orders would never reach the kitchen: ${nameList(f.packagesWithoutStation)}.`, `/kitchen?store=${f.storeId}`);
+  }
 
   if (f.itemsWithoutStation.length > 0) {
     warn('items_without_station', `${plural(f.itemsWithoutStation.length, 'menu item', 'menu items')} on sale here ${f.itemsWithoutStation.length === 1 ? 'has' : 'have'} no kitchen station, so ${f.itemsWithoutStation.length === 1 ? 'it' : 'they'} will not reach the kitchen: ${nameList(f.itemsWithoutStation)}.`, `/kitchen?store=${f.storeId}`);
@@ -140,6 +168,9 @@ export async function posPreflight(tx: Tx, actor: Actor, input: { storeId: strin
   }
 
   const offered = await kitchenRepo.offeredItemsWithRoute(tx, orgId, storeId);
+  const packages = await posPreflightRepo.listOfferedPackages(tx, orgId, storeId);
+  const hours = (await daypartsRepo.listDaypartsOfStore(tx, orgId, storeId)).filter((d) => d.status === 'active');
+  const packageItemIds = new Set(packages.map((p) => p.itemId));
   return evaluatePreflight({
     storeId,
     hasPosStoreRow: (await posV2Repo.getPosStore(tx, orgId, storeId)) !== undefined,
@@ -154,7 +185,11 @@ export async function posPreflight(tx: Tx, actor: Actor, input: { storeId: strin
     terminalLinked: (await posV2Repo.getActiveTerminalPersonId(tx, orgId, storeId)) !== undefined,
     separateApprover: hasSeparateApprover(approvers, sellers),
     keyFileConfigured: deps.keyFilePresent(),
-    itemsWithoutStation: offered.filter((o) => o.stationId === null).map((o) => o.name),
+    packagesOnSale: packages.length,
+    packagesMissingHours: packagesMissingHours(packages, hours),
+    packagesWithoutStation: packages.filter((p) => !p.hasStation).map((p) => p.name),
+    // A package with no station is its own blocking item above, so it is not listed again here.
+    itemsWithoutStation: offered.filter((o) => o.stationId === null && !packageItemIds.has(o.itemId)).map((o) => o.name),
     packagesWithoutRefills: await posPreflightRepo.listOfferedPackagesWithoutRefills(tx, orgId, storeId),
     staffWithoutPin: signIn.filter((id) => !withPin.has(id)).length,
     activePresets: (await posV2Repo.listActivePresets(tx, orgId, storeId)).length,

@@ -79,6 +79,7 @@ export const READERS: Readonly<Record<string, 'STOCK' | 'LABEL' | 'ACCOUNT'>> = 
   'packages/domain/src/stock/receipt-posting.ts': 'ACCOUNT',
   'packages/domain/src/trade/index.ts': 'ACCOUNT',
   'packages/etl/src/master-data/items-plan.ts': 'LABEL',
+  'packages/etl/src/pos-v2/plan-store-menu.ts': 'LABEL', // T-626: reads the v1 inventory item's kind ('variant') to group menu variants; never the v2 items.kind, no stock or ledger
   'apps/erp/src/app/inventory/production/lib.ts': 'STOCK',
   'apps/erp/src/app/inventory/production/page.tsx': 'STOCK',
   'apps/erp/src/app/inventory/returns/page.tsx': 'STOCK',
