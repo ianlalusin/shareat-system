@@ -652,6 +652,17 @@ export async function optionOffersInForce(tx: Tx, storeId: string, at: Date): Pr
   }));
 }
 
+/** T-626: the option values whose STORE-channel row in force at `at` is a withdrawal (someone switched the option off here), so a load never switches it back on. */
+export async function withdrawnOptionValueIds(tx: Tx, storeId: string, at: Date): Promise<Set<string>> {
+  const rows = (await tx.execute(sql`
+    select f.option_value_id
+      from (select distinct option_value_id from menu_option_offers where store_id = ${storeId} and channel = 'store' and effective_from <= ${at.toISOString()}::timestamptz) k
+     cross join lateral menu_option_offer_in_force(${storeId}, k.option_value_id, 'store', ${at.toISOString()}::timestamptz) f
+     where f.withdrawn
+  `)) as unknown as { option_value_id: string }[];
+  return new Set(rows.map((r) => r.option_value_id));
+}
+
 /** effective_from of every offer and option-offer row of a store later than `at`, both channels (the projection's `upcoming`). */
 export async function upcomingOfferDates(tx: Tx, storeId: string, at: Date): Promise<Date[]> {
   const when = at.toISOString();
