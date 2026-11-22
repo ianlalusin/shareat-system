@@ -213,7 +213,7 @@ describe('K1 - account 6810 exists for an org created BEFORE 0222 and for a fres
         from accounts a join accounts p on p.id = a.parent_id where a.org_id = ${o!.id} and a.code = '6810'`;
     expect(rows, 'RED today: 6810 is not seeded').toHaveLength(1);
     expect(rows[0]).toMatchObject({ name: 'Penalties and surcharges', type: 'expense', normal_balance: 'debit', is_postable: true, requires_party: false, parent: '6000' });
-    expect(await count('accounts', `org_id = '${o!.id}'`)).toBe(103); // 102 + 6810; the seed and the migration must agree
+    expect(await count('accounts', `org_id = '${o!.id}'`)).toBe(104); // 102 + 6810 + 2170 (T-628); the seed and the migrations must agree
   });
 
   it('the migration statement that seeds 6810 adds it to an old org (a 6000 header, no 6810), once, and leaves an org without a 6000 header alone', async () => {
