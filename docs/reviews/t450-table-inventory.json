@@ -408,6 +408,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/pos-reservations/page.tsx",
+    "tables": 0,
+    "sharedTables": 1,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/pos/receipts/page.tsx",
     "tables": 0,
     "sharedTables": 1,

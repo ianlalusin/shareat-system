@@ -340,6 +340,16 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction (an offline void needs approve_pos_correction on the actor, an online one a manager PIN); the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
   completeSale:
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction (the server recomputes the bill); the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  createReservation:
+    'INTERNAL — T-628: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table (`reservation.created`), one event per transaction, so a booking works offline; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  takeDeposit:
+    'INTERNAL — T-628: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table (`deposit.taken`), one event per transaction, so a deposit works offline; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  seatReservation:
+    'INTERNAL — T-628: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table (`reservation.seated`), one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  setReservationStatus:
+    'INTERNAL — T-628: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table (`reservation.status_set`: cancelled / no_show), one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  postDepositsForZ:
+    'INTERNAL — T-628: `writeZ` (packages/domain/src/pos/day-close.ts) calls it inside the close transaction, beside the sales day, as `postConversionsForZ` is called; the routes /api/pos/day-close call `closeDay` / `closeBacklog`, so this is not a screen action of its own.',
   listOpenStands:
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
   listKitchenQueue:

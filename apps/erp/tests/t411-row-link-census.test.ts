@@ -123,6 +123,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/sales-days/[id]/page.tsx',
   'app/settings/pos-link/page.tsx',
   'app/till/page.tsx',
+  'app/pos-reservations/page.tsx', // T-628: a read-only list of reservations and held deposits; the POS tablet owns them, there is no detail page
   'app/pos/receipts/page.tsx', // T-601 S2: a read-only list of the day's receipts; there is no receipt detail page to open yet (reprint comes after the soak)
   'app/pos/receipts/WalletChecks.tsx', // T-623: each row's only action is its Checked button; there is no payment page to open
 ];

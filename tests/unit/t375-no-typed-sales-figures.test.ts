@@ -100,9 +100,10 @@ describe('G1 (b) - the figure inputs exist only in SalesDayForm.tsx', () => {
 });
 
 describe('G1 (c) - the derivation flag is written in one place', () => {
+  // T-628: 0276 re-creates the figure-lock function with the deposits_applied column in its frozen list (its body names the flag, as 0247's does).
   // T-531: 0247 amends the same two functions, so it names the flag too (its own CREATE OR REPLACE of the 0185 bodies).
-  it('app.sales_day_derivation appears only in the repo file, the 0185, 0187 and 0247 migrations and test files', () => {
-    const allowed = (f: string) => f === REPO_FILE || /^packages\/db\/migrations\/(018[57]|0247)_[^/]*\.sql$/.test(f) || isTest(f);
+  it('app.sales_day_derivation appears only in the repo file, the 0185, 0187, 0247 and 0276 migrations and test files', () => {
+    const allowed = (f: string) => f === REPO_FILE || /^packages\/db\/migrations\/(018[57]|0247|0276)_[^/]*\.sql$/.test(f) || isTest(f);
     const offenders = ALL.filter((f) => !allowed(f) && setsDerivationFlag(read(f))).sort();
     expect(offenders).toEqual([]);
   });

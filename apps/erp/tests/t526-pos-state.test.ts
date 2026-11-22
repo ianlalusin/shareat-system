@@ -129,13 +129,13 @@ describe('T-526 R1/R3 - which tabs a person sees', () => {
   const labels = (held: string[]) => visibleTabs(new Set(held)).map((t) => t.label);
   const hrefs = (held: string[]) => visibleTabs(new Set(held)).map((t) => t.href);
 
-  it('all three capabilities: Orders, Kitchen, Refills, Receipts, Till in that order, with their routes', () => {
+  it('all three capabilities: Orders, Kitchen, Refills, Reservations, Receipts, Till in that order, with their routes', () => {
     const all = ['record_sale', 'serve_pos_ticket', 'request_pos_refill'];
-    expect(labels(all)).toEqual(['Orders', 'Kitchen', 'Refills', 'Receipts', 'Till']);
-    expect(hrefs(all)).toEqual(['/pos', '/pos/kitchen', '/pos/refills', '/pos/receipts', '/pos/till']);
+    expect(labels(all)).toEqual(['Orders', 'Kitchen', 'Refills', 'Reservations', 'Receipts', 'Till']); // T-628 added Reservations (record_sale, by prefix)
+    expect(hrefs(all)).toEqual(['/pos', '/pos/kitchen', '/pos/refills', '/pos/reservations', '/pos/receipts', '/pos/till']);
   });
-  it('record_sale alone: Orders, Receipts, Till (never Kitchen or Refills)', () => {
-    expect(labels(['record_sale'])).toEqual(['Orders', 'Receipts', 'Till']);
+  it('record_sale alone: Orders, Reservations, Receipts, Till (never Kitchen or Refills)', () => {
+    expect(labels(['record_sale'])).toEqual(['Orders', 'Reservations', 'Receipts', 'Till']);
   });
   it('serve_pos_ticket alone: Kitchen only', () => {
     expect(labels(['serve_pos_ticket'])).toEqual(['Kitchen']);

@@ -303,7 +303,7 @@ describe('POST /api/pos/events - the envelope (R2)', () => {
 // ==============================================================================================================================
 describe('GET /api/pos/snapshot (R7)', () => {
   const get = (f: Fx, o: Call = {}) => call('snapshot', 'GET', { cookies: tablet(f), ...o });
-  const NINE = ['businessDate', 'chargePresets', 'device', 'discountPresets', 'menu', 'rules', 'staff', 'stands', 'store', 'tenders'];
+  const NINE = ['businessDate', 'chargePresets', 'device', 'discountPresets', 'menu', 'reservations', 'rules', 'staff', 'stands', 'store', 'tenders'];
   const keysDeep = (v: unknown, out: string[] = []): string[] => {
     if (Array.isArray(v)) v.forEach((x) => keysDeep(x, out));
     else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { out.push(k); keysDeep(x, out); }

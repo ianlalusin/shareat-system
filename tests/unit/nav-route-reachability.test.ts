@@ -161,6 +161,7 @@ const UNLINKED_BY_DESIGN: Record<string, string> = {
   '/pos/printer': 'full-screen POS, reached from the POS header Printer item; never a sidebar link',
   '/pos/refills': 'full-screen POS, reached from tablet sign-in or the ERP button; never a sidebar link',
   '/pos/receipts': 'full-screen POS, reached from tablet sign-in or the ERP button; never a sidebar link',
+  '/pos/reservations': 'full-screen POS, reached from tablet sign-in or the ERP button; never a sidebar link',
   '/pos/till': 'full-screen POS, reached from tablet sign-in or the ERP button; never a sidebar link',
   '/sign-in':
     'Reached by redirect when there is no session. `nav.tsx` renders nothing without one, so a ' +
