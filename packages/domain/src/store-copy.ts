@@ -15,12 +15,12 @@ import { accessRepo, daypartsRepo, kitchenRepo, menuRepo, posV2Repo, storesRepo,
 import type { MenuChannel } from '@shareat/db/schema';
 import { gone, refuse } from './shared/refusal';
 import { createKitchenStation, setKitchenRoute } from './kitchen';
-import { upsertPosDiscountPreset } from './pos/store-setup';
+import { upsertPosChargePreset, upsertPosDiscountPreset } from './pos/store-setup';
 import { createDaypart, updateDaypart } from './menu/dayparts';
 import { setMenuOffer, setOptionOffer } from './menu/pricing';
 import { audit } from './menu/shared';
 
-export type CopyKind = 'hours' | 'prices' | 'kitchen' | 'presets';
+export type CopyKind = 'hours' | 'prices' | 'kitchen' | 'presets' | 'charges';
 export interface CopyInput {
   kind: CopyKind;
   sourceStoreId: string;
@@ -60,13 +60,15 @@ type Op =
   | { op: 'option'; optionValueId: string; channel: MenuChannel; priceDelta: string }
   | { op: 'station_create'; name: string; slaMinutes: number; printOnOutage: boolean; sortOrder: number }
   | { op: 'route'; menuItemId: string; stationName: string }
-  | { op: 'preset'; name: string; valueType: 'percent' | 'fixed'; value: string };
+  | { op: 'preset'; name: string; valueType: 'percent' | 'fixed'; value: string }
+  | { op: 'charge'; name: string; amount: string; perUnit: boolean };
 
 const CAPABILITY: Record<CopyKind, Capability> = {
   hours: 'manage_store_settings',
   prices: 'set_menu_price',
   kitchen: 'manage_store_settings',
   presets: 'manage_store_settings',
+  charges: 'manage_store_settings',
 };
 const hhmm = (t: string): string => t.slice(0, 5);
 const key = (name: string): string => name.trim().toLowerCase();
@@ -246,6 +248,29 @@ async function planKitchen(trx: Tx, orgId: string, source: string, target: strin
   return { ops, lines };
 }
 
+const chargeText = (amount: string, perUnit: boolean): string => `${amount} pesos${perUnit ? ' each' : ''}`;
+
+/** T-627: store charges (leftover, an extra griller) by name; the same plan as the discount presets. */
+async function planCharges(trx: Tx, orgId: string, source: string, target: string, replace: boolean): Promise<{ ops: Op[]; lines: CopyLine[] }> {
+  const theirs = new Map((await posV2Repo.listActiveChargePresets(trx, orgId, target)).map((p) => [key(p.name), p]));
+  const ops: Op[] = [];
+  const lines: CopyLine[] = [];
+  for (const s of await posV2Repo.listActiveChargePresets(trx, orgId, source)) {
+    const what = `${s.name}: ${chargeText(s.amount, s.perUnit)}`;
+    const t = theirs.get(key(s.name));
+    const op: Op = { op: 'charge', name: s.name, amount: s.amount, perUnit: s.perUnit };
+    if (!t) {
+      ops.push(op);
+      lines.push({ status: 'add', what });
+    } else if (t.amount === s.amount && t.perUnit === s.perUnit) lines.push({ status: 'same', what });
+    else {
+      if (replace) ops.push(op);
+      lines.push({ status: 'different', what, note: `The store has ${chargeText(t.amount, t.perUnit)}.` });
+    }
+  }
+  return { ops, lines };
+}
+
 const presetText = (type: string, value: string): string => (type === 'percent' ? `${value}%` : `${value} pesos`);
 
 /** Discount presets by name. The senior and PWD discounts are statutory rules held for the whole organisation, not presets, so they are never here. */
@@ -291,7 +316,9 @@ async function planCopy(trx: Tx, actor: Actor, input: CopyInput) {
         ? await planKitchen(trx, actor.orgId, from, to, replace)
         : input.kind === 'presets'
           ? await planPresets(trx, actor.orgId, from, to, replace)
-          : await planPrices(trx, actor, from, to, targetName, replace);
+          : input.kind === 'charges'
+            ? await planCharges(trx, actor.orgId, from, to, replace)
+            : await planPrices(trx, actor, from, to, targetName, replace);
   return { targetName, ops, lines, counts: countsOf(lines, input.replace) };
 }
 
@@ -320,7 +347,8 @@ export async function copySettingsToStore(actor: Actor, input: CopyInput & { app
       const stationId = stationIds.get(key(o.stationName));
       if (!stationId) throw refuse(`copyFromStore: station ${o.stationName} missing after create`, `The kitchen station ${o.stationName} could not be found at ${p.targetName}.`);
       await setKitchenRoute(tx, actor, { storeId: to, menuItemId: o.menuItemId, stationId });
-    } else if (o.op === 'preset') await upsertPosDiscountPreset(tx, actor, { storeId: to, name: o.name, valueType: o.valueType, value: o.value }, 'web');
+    } else if (o.op === 'charge') await upsertPosChargePreset(tx, actor, { storeId: to, name: o.name, amount: o.amount, perUnit: o.perUnit }, 'web');
+    else if (o.op === 'preset') await upsertPosDiscountPreset(tx, actor, { storeId: to, name: o.name, valueType: o.valueType, value: o.value }, 'web');
     else if (o.op === 'daypart_create') await createDaypart(actor, { storeId: to, name: o.name, days: o.days, start: o.start, end: o.end }, tx);
     else if (o.op === 'daypart_update') await updateDaypart(actor, { id: o.id, days: o.days, start: o.start, end: o.end }, tx);
     else if (o.op === 'option') await setOptionOffer(actor, { storeId: to, optionValueId: o.optionValueId, channel: o.channel, priceDelta: o.priceDelta }, tx);

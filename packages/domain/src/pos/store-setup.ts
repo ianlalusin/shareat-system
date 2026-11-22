@@ -133,3 +133,92 @@ export async function retirePosDiscountPreset(tx: Tx, actor: Actor, input: { sto
   await bump(tx, actor.orgId, storeId);
   return { outcome: 'retired' };
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-627 (docs/tasks/627-pos-charges.md): the store's named charges (leftover, an extra griller). The same shape as the discount presets above: authorize FIRST
+// (`manage_store_settings` at the store), the name is the key (a rename is retire + add), a repeat writes nothing, every change is audited and bumps the snapshot.
+// ---------------------------------------------------------------------------------------------------------------------
+export interface ChargePresetInput {
+  readonly storeId: string;
+  readonly name: unknown;
+  /** A number or a decimal string, never more than two decimals. */
+  readonly amount: unknown;
+  /** true: the cashier enters a quantity; false (or absent): once per bill. */
+  readonly perUnit?: unknown;
+}
+export interface CheckedChargePreset {
+  readonly name: string;
+  /** Two decimals, as the column stores it. */
+  readonly amount: Money;
+  readonly perUnit: boolean;
+}
+
+/** The rules of a charge, in words (pure). The database CHECKs say the same; this says it first. */
+export function checkChargePreset(raw: { name: unknown; amount: unknown; perUnit?: unknown }): CheckedChargePreset {
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  if (name.length < 1 || name.length > 40) throw refuse('checkChargePreset: name length', 'A charge name must be 1 to 40 characters.');
+  const text = typeof raw.amount === 'number' ? String(raw.amount) : typeof raw.amount === 'string' ? raw.amount.trim() : '';
+  if (!/^\d{1,12}(\.\d{1,2})?$/.test(text)) {
+    throw refuse(`checkChargePreset: amount of "${name}"`, `The charge "${name}" needs an amount above 0 with at most two decimals.`);
+  }
+  const [whole, frac = ''] = text.split('.');
+  const amount = money(`${BigInt(whole!)}.${frac.padEnd(2, '0')}`);
+  if (amount === '0.00') throw refuse(`checkChargePreset: zero "${name}"`, `The charge "${name}" has an amount of 0. A charge must be more than 0.`);
+  return { name, amount, perUnit: raw.perUnit === true || raw.perUnit === 'true' || raw.perUnit === 'on' };
+}
+
+/** Add a named charge, or change the amount / per-unit of the active one with that name. `source` is the caller's own, written on the audit rows ('web' from the screen, 'web' from the store copy). */
+export async function upsertPosChargePreset(tx: Tx, actor: Actor, input: ChargePresetInput, source: 'web' | 'etl' = 'web'): Promise<{ presetId: string; outcome: PresetOutcome }> {
+  const storeId = uuidInput(input.storeId, 'That store');
+  await authorize(tx, actor, CAPABILITY, { storeId });
+  const p = checkChargePreset(input);
+  const existing = await posStoreSetupRepo.getActiveChargeByName(tx, actor.orgId, storeId, p.name);
+  if (!existing) {
+    const row = await posStoreSetupRepo.insertChargePreset(tx, { orgId: actor.orgId, storeId, name: p.name, amount: p.amount, perUnit: p.perUnit, createdBy: actor.personId });
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'pos.charge_preset_set',
+      storeId,
+      entityId: row.id,
+      before: null,
+      after: { name: p.name, amount: p.amount, perUnit: p.perUnit },
+      source,
+    });
+    await bump(tx, actor.orgId, storeId);
+    return { presetId: row.id, outcome: 'created' };
+  }
+  if (existing.amount === p.amount && existing.perUnit === p.perUnit) return { presetId: existing.id, outcome: 'unchanged' };
+  await posStoreSetupRepo.updateChargePreset(tx, actor.orgId, storeId, existing.id, { amount: p.amount, perUnit: p.perUnit });
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'pos.charge_preset_set',
+    storeId,
+    entityId: existing.id,
+    before: { name: existing.name, amount: existing.amount, perUnit: existing.perUnit },
+    after: { name: p.name, amount: p.amount, perUnit: p.perUnit },
+    source,
+  });
+  await bump(tx, actor.orgId, storeId);
+  return { presetId: existing.id, outcome: 'updated' };
+}
+
+/** Retire a named charge. The row is kept (past sales name it) and the snapshot stops carrying it. Retiring one that is already retired writes nothing. */
+export async function retirePosChargePreset(tx: Tx, actor: Actor, input: { storeId: string; presetId: string }): Promise<{ outcome: 'retired' | 'unchanged' }> {
+  const storeId = uuidInput(input.storeId, 'That store');
+  await authorize(tx, actor, CAPABILITY, { storeId });
+  const presetId = uuidInput(input.presetId, 'That charge');
+  const existing = await posV2Repo.getChargePreset(tx, actor.orgId, storeId, presetId);
+  if (!existing) throw refuse(`retirePosChargePreset: preset ${presetId} not at store ${storeId}`, 'That charge does not exist any more.');
+  if (!(await posStoreSetupRepo.retireChargePreset(tx, actor.orgId, storeId, presetId))) return { outcome: 'unchanged' };
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'pos.charge_preset_retired',
+    storeId,
+    entityId: presetId,
+    before: { name: existing.name, amount: existing.amount, perUnit: existing.perUnit },
+    after: null,
+    source: 'web',
+  });
+  await bump(tx, actor.orgId, storeId);
+  return { outcome: 'retired' };
+}

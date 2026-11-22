@@ -32,3 +32,12 @@ export const POS_DISCOUNT_RULES = defineFieldRules('posTablets.discount', {
   name: { label: 'The discount name', kind: 'text', min: 1, max: 40, requires: 'A discount name must be 1 to 40 characters.' },
   value: { label: 'The discount value', kind: 'money', min: 0.01, requires: 'The discount value must be more than 0.', rangeSays: 'The discount value must be more than 0.' },
 });
+
+/**
+ * T-627: adding or changing a named charge on the till (`upsertPosChargePreset` checks the same limits again and owns the sentences). The amount is pesos; whether the cashier
+ * enters a quantity ("per unit") is a checkbox, not a text rule.
+ */
+export const POS_CHARGE_RULES = defineFieldRules('posTablets.charge', {
+  name: { label: 'The charge name', kind: 'text', min: 1, max: 40, requires: 'A charge name must be 1 to 40 characters.' },
+  amount: { label: 'The charge amount', kind: 'money', min: 0.01, requires: 'The charge amount must be more than 0.', rangeSays: 'The charge amount must be more than 0.' },
+});

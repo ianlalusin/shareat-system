@@ -29,7 +29,10 @@ export interface V1BridgeTender {
 }
 export interface V1BridgeClose {
   receiptCount: number;
+  /** What the Z billed: its receipts' totals plus their store charges (T-627). */
   grossTotal: string;
+  /** T-627: Σ of the Z's store charges, 0.00 when none (v1 reads it as `payments.chargesTotal`; it is inside `grossTotal`, as in v1). */
+  chargesTotal?: string;
   /** T-558: the Z's short payments (Σ of its receipts' gaps), 0.00 when none. Tenders + this = grossTotal. */
   varianceTotal?: string;
   discountTotal: string;
@@ -44,7 +47,7 @@ export interface V1BridgePayload {
   /** Always false: a full overwrite. */
   merge: false;
   data: {
-    payments: { totalGross: number; txCount: number; byMethod: Record<string, number>; discountsTotal: number; chargesTotal: 0 } & Record<typeof V1_WIRE_KEYS.voidRetainedCash, 0>;
+    payments: { totalGross: number; txCount: number; byMethod: Record<string, number>; discountsTotal: number; chargesTotal: number } & Record<typeof V1_WIRE_KEYS.voidRetainedCash, 0>;
     sales: Record<typeof V1_WIRE_KEYS.unliGross, number>;
     guests: { guestCountFinalTotal: number; packageSessionsCount: number };
   };
@@ -95,7 +98,7 @@ export function buildV1BridgePayload(input: { posStoreId: string; businessDate: 
     txCount: closes.reduce((a, c) => a + c.receiptCount, 0),
     byMethod: Object.fromEntries([...byMethod.entries()].map(([k, v]) => [k, num(v)])),
     discountsTotal: num(sum(closes.map((c) => money(c.discountTotal)))),
-    chargesTotal: 0 as const,
+    chargesTotal: num(sum(closes.map((c) => money(c.chargesTotal ?? '0')))),
     [V1_WIRE_KEYS.voidRetainedCash]: 0 as const,
   };
   return {

@@ -164,14 +164,21 @@ export async function loadLiveLines(tx: Tx, orgId: string, storeId: string, sess
   return lines.map((l) => ({ ...l, discounts: discounts.filter((d) => d.sessionLineId === l.id) }));
 }
 
+/** T-627: the table's ACTIVE store charges, in creation order. */
+export type LoadedCharge = posV2Repo.TableSessionChargeRow;
+export async function loadLiveCharges(tx: Tx, orgId: string, storeId: string, sessionId: string): Promise<LoadedCharge[]> {
+  return (await posV2Repo.listSessionCharges(tx, orgId, storeId, sessionId)).filter((c) => c.status === 'active');
+}
+
 /** How many units a line can be discounted on: its qty, or the heads of a bundle line. */
 export const capacityOf = (qty: number, bundleHeads: number | null): number => (bundleHeads !== null && bundleHeads > 1 ? bundleHeads : qty);
 export const coveredOf = (qtys: readonly number[]): number => qtys.reduce((a, q) => a + q, 0);
 
 export const billedHeads = (headsCashier: number, headsServer: number | null): number => Math.max(headsCashier, headsServer ?? 0);
 
-export function snapshotOf(lines: readonly LoadedLine[], vatRegistered: boolean, rules: Pick<PosRules, 'vatPercentBasisPoints' | 'scPwdPercentBasisPoints'>): PriceSnapshot {
+export function snapshotOf(lines: readonly LoadedLine[], vatRegistered: boolean, rules: Pick<PosRules, 'vatPercentBasisPoints' | 'scPwdPercentBasisPoints'>, charges: readonly LoadedCharge[] = []): PriceSnapshot {
   return {
+    charges: charges.map((c) => ({ chargeId: c.id, unitAmount: c.unitAmount, qty: c.qty })),
     vatRegistered,
     vatPercentBasisPoints: rules.vatPercentBasisPoints,
     scPwdPercentBasisPoints: rules.scPwdPercentBasisPoints,

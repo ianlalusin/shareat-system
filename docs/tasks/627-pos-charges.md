@@ -48,3 +48,18 @@ charges (none in use; every live charge is a peso amount), the analytics sign bu
 5. Receipt/X/Z text includes charge names and totals.
 - Migration 0275 is hand-authored (ADR-012 §5): classification + RLS registry + journal (`when` = previous + 86400000);
   the full CI suite runs on it. `npm run census:write`; typecheck apps/erp and package tests via a temp tsconfig.
+
+## Open question for the accountant (recorded by the builder, not a blocker)
+
+Does VAT apply to the store charges (leftover, an extra griller)? v1 treats them as outside VAT, and v2 copies that: a charge is added after discounts and VAT, is not part of
+the VATable / VAT / VAT-exempt block, and is never in the senior/PWD base. The sales day books it as `other_charges` (account 4500, no VAT split). If the accountant says
+VAT applies, the change is one place (`priceSession`: take VAT from the charge total too) plus the receipt's VAT block; the data (charge rows and `charge_total`) already holds
+what is needed. Ian asks the accountant.
+
+## As built (T-627)
+
+Migration 0275: `pos_charge_presets` (keep), `table_session_charges` (purge, guard trigger), `pos_sales_receipt_charges` (purge, append-only), `pos_sales_receipts.charge_total`,
+`pos_refunds.charges_amount`. `total` keeps `total = subtotal - discount_total`; the amount due is `total + charge_total` (`priceSession().amountDue`). `pos_day_closes.gross_total` and the
+Z's `grossTotal` are what the receipts BILLED (total + charges), so tenders + short payments + refunds = gross still holds; `sales_days.other_charges` = the Z's charge total.
+Events: `charge.added` / `charge.removed`; `sale.completed.device.chargeTotal` is optional (absent = 0.00) so a sale queued before this change still replays.
+Refund: the cashier may tick "Also refund the charges" (default not), once per receipt, with at least one item.
