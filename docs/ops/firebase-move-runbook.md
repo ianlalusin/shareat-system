@@ -72,7 +72,7 @@ cd C:\Users\ianla\webapps\shareat-system
 ```
 
 ```powershell
-bash docs/ops/install-firebase-key.sh /c/Users/ianla/webapps/PK/shareat-system/<the key file name>.json
+& "C:\Program Files\Git\bin\bash.exe" docs/ops/install-firebase-key.sh /c/Users/ianla/webapps/PK/shareat-system/<the key file name>.json
 ```
 
 ### 0.5 Practice runs (read-only, **DROPLET**)
@@ -202,6 +202,8 @@ It should say it imported N users with no errors. N must equal the count from st
 **If the import fails or logins fail later:** the fallback is to create the accounts fresh and send password-reset emails, and you set new terminal passwords by hand. Ask BOSS before doing this.
 
 ### 1.7 Copy the files (**DROPLET**)
+`<old key path>` below is the same old key path you found in step 0.5 (the text after the `=`). Type that path in its place; do not leave the `<` `>` in.
+
 Practice (no bytes move):
 
 ```bash

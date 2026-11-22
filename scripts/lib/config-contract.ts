@@ -63,7 +63,7 @@ export function checkValueAgainstDocs(
 }
 
 /**
- * .env.example:56,71-73 — `FIREBASE_STORAGE_BUCKET` and `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+ * .env.example:66-73 — `FIREBASE_STORAGE_BUCKET` and `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
  * "must never hold the same value": one is the private accounting bucket, the other names the
  * project's world-readable default. `mustDiffer` may be undefined/blank — that side is optional
  * and a blank value can never collide with anything.

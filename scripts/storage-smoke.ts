@@ -84,7 +84,7 @@ async function main() {
       envVar: 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
       value: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() || undefined,
     },
-    '.env.example:56,71-73',
+    '.env.example:66-73',
   );
   if (!differCheck.ok) bad(differCheck.message);
   ok('FIREBASE_STORAGE_BUCKET is not the public default bucket');

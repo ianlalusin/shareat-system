@@ -80,8 +80,8 @@ describe('checkValueAgainstDocs — DEF-311, FIREBASE_STORAGE_BUCKET', () => {
   });
 });
 
-describe('checkValuesDiffer — .env.example:56,71-73, FIREBASE_STORAGE_BUCKET vs NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET', () => {
-  const CITATION = '.env.example:56,71-73';
+describe('checkValuesDiffer — .env.example:66-73, FIREBASE_STORAGE_BUCKET vs NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET', () => {
+  const CITATION = '.env.example:66-73';
 
   it('State 4a — fails when both variables hold the same string', () => {
     const result = checkValuesDiffer(
