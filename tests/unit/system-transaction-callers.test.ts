@@ -65,6 +65,10 @@ const REQUIRED_CALLERS = [
   // persons before any organisation-scoped session can exist. Run by a person on this machine only;
   // refuses unless DATABASE_URL names a local `_test` database (scripts/lib/practice-env.mjs).
   'scripts/practice-erp-seed.ts',
+  // T-625 - the Firebase move: two READ-ONLY reads (live firebase credential uids, stored file paths) across every
+  // organisation, run once by a person. Both tables are FORCE RLS; same shape and reason as scripts/backfill-file-links.ts.
+  // db.ts has no insert/update/delete (tests/unit/t625-firebase-move.test.ts scans the folder for that).
+  'scripts/firebase-move/db.ts',
 ] as const;
 
 /**
