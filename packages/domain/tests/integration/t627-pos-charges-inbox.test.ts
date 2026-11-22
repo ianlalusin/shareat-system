@@ -66,9 +66,9 @@ describe('T-627 store charges through the inbox', () => {
     const r = await send(f, [
       ...t.open,
       // distinct device times: receipt charge order is (device time, id), so equal times made the order random
-      ev(3, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId: keep, presetId: leftover, qty: 3, addedAtDevice: new Date(t0 + 1000).toISOString() })),
-      ev(4, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId: drop, name: 'Oops', unitAmount: '25.00', addedAtDevice: new Date(t0 + 2000).toISOString() })),
-      ev(5, 'charge.added', f.counterId, chargeAdded(t.sessionId, { name: 'Corkage', unitAmount: '50.00', addedAtDevice: new Date(t0 + 3000).toISOString() })),
+      ev(3, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId: keep, presetId: leftover, qty: 3, addedAtDevice: new Date(t0 - 3000).toISOString() })),
+      ev(4, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId: drop, name: 'Oops', unitAmount: '25.00', addedAtDevice: new Date(t0 - 2000).toISOString() })),
+      ev(5, 'charge.added', f.counterId, chargeAdded(t.sessionId, { name: 'Corkage', unitAmount: '50.00', addedAtDevice: new Date(t0 - 1000).toISOString() })),
       ev(6, 'charge.removed', f.counterId, { chargeId: drop, removedAtDevice: nowIso() }),
       ev(7, 'sale.completed', f.counterId, s.event),
     ]);
