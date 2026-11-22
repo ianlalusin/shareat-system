@@ -21,6 +21,9 @@ const GREEN: PreflightFacts = {
   terminalLinked: true,
   separateApprover: true,
   keyFileConfigured: true,
+  packagesOnSale: 3,
+  packagesMissingHours: [],
+  packagesWithoutStation: [],
   itemsWithoutStation: [],
   packagesWithoutRefills: [],
   staffWithoutPin: 0,
@@ -46,6 +49,9 @@ describe('evaluatePreflight', () => {
     ['no_terminal_link', { terminalLinked: false }],
     ['no_approver', { separateApprover: false }],
     ['no_bridge_key_file', { keyFileConfigured: false }],
+    ['no_packages_on_sale', { packagesOnSale: 0 }],
+    ['package_missing_price', { packagesMissingHours: ['Pork and Beef (no Dinner price)'] }],
+    ['package_without_station', { packagesWithoutStation: ['Triple Feast'] }],
   ];
   it.each(blocking)('blocking: %s fires on its own, with a plain sentence', (code, patch) => {
     const r = run(patch);

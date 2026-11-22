@@ -46,3 +46,34 @@ export async function listOfferedPackagesWithoutRefills(tx: Tx, orgId: string, s
   `)) as unknown as { name: string }[];
   return rows.map((r) => r.name);
 }
+
+export interface OfferedPackageRow {
+  readonly itemId: string;
+  /** Item name plus its variant label, as the other pre-flight reads name a package. */
+  readonly name: string;
+  readonly hasStation: boolean;
+  /** A live ALL-DAY store price exists, so no hours can be missing. */
+  readonly allDay: boolean;
+  /** The dayparts the variant has a live store price for. */
+  readonly daypartIds: string[];
+}
+
+/**
+ * T-626: every package variant on sale NOW at the store (a live, not withdrawn, store-channel price; active item and variant) with the facts the switch gate needs:
+ * does the item have a kitchen route at this store, and which hours is it priced for. One row per variant, in name order. Reads only.
+ */
+export async function listOfferedPackages(tx: Tx, orgId: string, storeId: string): Promise<OfferedPackageRow[]> {
+  const rows = (await tx.execute(sql`
+    select i.id::text as item_id, i.name || coalesce(' (' || v.label || ')', '') as name,
+           exists (select 1 from kitchen_routes r where r.store_id = ${storeId} and r.menu_item_id = i.id) as has_station,
+           coalesce(bool_or(f.daypart_id is null), false) as all_day,
+           coalesce(array_agg(distinct f.daypart_id::text) filter (where f.daypart_id is not null), '{}') as daypart_ids
+      from menu_items i
+      join menu_item_variants v on v.menu_item_id = i.id and v.org_id = i.org_id
+      cross join lateral menu_offer_in_force(${storeId}, v.id, 'store', now()) f
+     where i.org_id = ${orgId} and i.item_type = 'package' and i.status = 'active' and v.status = 'active' and not f.withdrawn
+     group by i.id, i.name, v.id, v.label
+     order by lower(i.name), v.id
+  `)) as unknown as { item_id: string; name: string; has_station: boolean; all_day: boolean; daypart_ids: string[] }[];
+  return rows.map((r) => ({ itemId: r.item_id, name: r.name, hasStation: r.has_station, allDay: r.all_day, daypartIds: r.daypart_ids }));
+}
