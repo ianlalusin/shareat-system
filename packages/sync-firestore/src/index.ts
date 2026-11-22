@@ -188,7 +188,7 @@ export function createFirestoreTerminalDriver(): TerminalIdentityDriver {
  * ⚠️ **Deliberately no `orderBy` and no composite index.** `where('processedAt','==',null)` alone
  * needs no `firestore.indexes.json` entry — Firestore auto-indexes single-field equality. Adding
  * an `orderBy(occurredAt)` would need a composite index, which needs a real deploy
- * (`firebase deploy --only firestore:indexes`) against the shared `shareat-hub-v2` project, and
+ * (`firebase deploy --only firestore:indexes`) against the project (`shareat-system` since T-625; was the shared `shareat-hub-v2`), and
  * this project has already recorded a live incident of a blind index deploy deleting ~44
  * unrelated indexes (`reference_pos_firestore_indexes_drift`). Not worth it for a job that
  * reprocesses whatever's left every run regardless of order.
