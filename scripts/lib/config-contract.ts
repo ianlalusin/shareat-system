@@ -6,7 +6,7 @@
  *
  * Production ran `FIREBASE_STORAGE_BUCKET=shareat-hub-v2.firebasestorage.app` — v1's bucket, not
  * v2's — for the deployment's entire life. The correct value was written down in TWO places
- * (`.env.example:55-60`, `docs/reference/private-bucket-storage-rules.md:62-63`), one of them
+ * (`.env.example:66-73`, `docs/ops/firebase-move-runbook.md` step 2.3), one of them
  * warning by name against the exact value that was deployed. `npm run storage-smoke`'s five
  * checks all went green anyway, because every one of them asks "is this bucket reachable and
  * private?" and v1's bucket is reachable and private too. Nothing compared the deployed value
@@ -130,7 +130,7 @@ export const OLD_STORAGE_BUCKET = 'shareat-hub-v2';
 export const STORAGE_BUCKET_EXPECTATION: ConfigExpectation = {
   envVar: 'FIREBASE_STORAGE_BUCKET',
   allowedValues: [NEW_STORAGE_BUCKET],
-  citations: ['.env.example:55-60', 'docs/reference/private-bucket-storage-rules.md:62-63'],
+  citations: ['.env.example:66-73', 'docs/ops/firebase-move-runbook.md step 2.3'],
   consequence:
     'DEF-311: every receipt, payment proof and export would be written to a bucket this ' +
     'project does not control — reachable and private, so every existing check would still pass.',

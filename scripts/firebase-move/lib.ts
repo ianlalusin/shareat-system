@@ -19,6 +19,18 @@ export class MoveArgError extends Error {
   }
 }
 
+/** A Google call failed; the message is fixed text plus a status number, never anything Google sent (it can carry credential fragments). */
+export class GoogleCallError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GoogleCallError';
+  }
+}
+
+/** The only error text a script may print: our own fixed messages. Anything else (a driver or Google error) is hidden. */
+export const safeMessage = (e: unknown): string =>
+  e instanceof MoveArgError || e instanceof GoogleCallError ? e.message : 'unexpected error (details not shown).';
+
 /** `--dry-run` is the default; `--confirm` is the only way to act. Both together is a typo worth refusing. */
 export function parseMode(argv: readonly string[]): { confirm: boolean } {
   const confirm = argv.includes('--confirm');
@@ -178,4 +190,14 @@ export interface VerifyReport {
 export function summariseVerify(v: Omit<VerifyReport, 'ok'>): VerifyReport {
   const ok = v.uidsChecked > 0 && v.uidsMissing === 0 && v.filesMissing === 0 && v.filesWrongSize === 0;
   return { ...v, ok };
+}
+
+// ---------------------------------------------------------------- mirror re-seed
+
+/** The relay drains this many outbox rows per org per run (packages/domain/src/scheduler/index.ts, `limit ?? 500`). */
+export const RELAY_ROWS_PER_RUN = 500;
+
+/** How many relay runs empty the queue: the busiest org decides, since each org is drained separately. */
+export function relayRunsNeeded(pendingPerOrg: readonly number[], perRun: number = RELAY_ROWS_PER_RUN): number {
+  return Math.ceil(Math.max(0, ...pendingPerOrg) / perRun);
 }

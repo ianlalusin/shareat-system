@@ -10,7 +10,7 @@
  * The export holds password hashes: treat both files as secrets, keep them off git, delete them after the move. Prints counts only.
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { filterAuthExport, MoveArgError, parseAuthExport, parseMode, parseUidList, requiredArg } from './lib';
+import { filterAuthExport, MoveArgError, parseAuthExport, parseMode, parseUidList, requiredArg, safeMessage } from './lib';
 
 function main(): number {
   const argv = process.argv.slice(2);
@@ -41,6 +41,6 @@ function main(): number {
 try {
   process.exit(main());
 } catch (e) {
-  console.error('filter-export FAILED:', e instanceof Error ? e.message : 'unknown error');
+  console.error('filter-export FAILED:', safeMessage(e));
   process.exit(1);
 }

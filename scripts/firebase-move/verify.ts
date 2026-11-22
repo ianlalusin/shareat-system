@@ -12,7 +12,7 @@ config({ path: '.env.local' });
 
 import { checkValueAgainstDocs, NEW_STORAGE_BUCKET, STORAGE_BUCKET_EXPECTATION } from '../lib/config-contract';
 import { bucketOf, closeApp, countMissingUids, openApp, readKeyFile } from './admin';
-import { chunk, fileGap, MoveArgError, NEW_PROJECT_ID, parseMode, requiredArg, summariseVerify } from './lib';
+import { chunk, fileGap, MoveArgError, NEW_PROJECT_ID, parseMode, requiredArg, safeMessage, summariseVerify } from './lib';
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
@@ -53,6 +53,6 @@ async function main(): Promise<number> {
 main()
   .then((code) => process.exit(code))
   .catch((e) => {
-    console.error('verify FAILED:', e instanceof Error ? e.message : 'unknown error');
+    console.error('verify FAILED:', safeMessage(e));
     process.exit(1);
   });

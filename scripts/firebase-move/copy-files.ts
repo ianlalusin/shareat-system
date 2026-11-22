@@ -16,7 +16,7 @@ config({ path: '.env.local' });
 
 import { checkValueAgainstDocs, NEW_STORAGE_BUCKET, STORAGE_BUCKET_EXPECTATION } from '../lib/config-contract';
 import { bucketOf, closeApp, openApp, readKeyFile, streamCopy } from './admin';
-import { MoveArgError, NEW_PROJECT_ID, parseMode, requiredArg, runCopy } from './lib';
+import { MoveArgError, NEW_PROJECT_ID, parseMode, requiredArg, runCopy, safeMessage } from './lib';
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
@@ -71,6 +71,6 @@ async function main(): Promise<number> {
 main()
   .then((code) => process.exit(code))
   .catch((e) => {
-    console.error('copy-files FAILED:', e instanceof Error ? e.message : 'unknown error');
+    console.error('copy-files FAILED:', safeMessage(e));
     process.exit(1);
   });

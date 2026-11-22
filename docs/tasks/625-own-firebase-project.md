@@ -29,7 +29,12 @@ v2 borrows **two** v1 projects:
 3. **Files are copied, not moved:** every `stored_files.storage_path` object is copied old bucket → new bucket and
    verified (size and MD5). The old bucket keeps its copies until Ian deletes them (rollback path).
 4. **Clock terminals:** drain `inbox` (relay run, inbox empty), then re-mint each terminal's token in the new project.
-   Unsynced punches on a tablet would be orphaned by the project change, so drain first.
+   Unsynced punches on a tablet would be orphaned by the project change, so drain first. A clock terminal's uid lives in
+   `clock_terminals.firebase_uid`; clock terminals are NOT imported (they are not in `person_credentials`), and the
+   custom-token sign-in at re-pair recreates them in the new project. Each tablet must reload the clock page (new build)
+   before re-pairing. The empty new Firestore mirror is refilled by `reseed-mirror.ts` (BOSS ruling): one fresh outbox row
+   per LIVE roster employment, live credential and current store config (no history, no tombstones), `--check` coverage
+   mode, counts only; the runbook states the relay drains 500 rows per org per run.
 5. **Rules are ours now:** v2 deploys its own `firebase/firestore.rules` and a deny-all `storage.rules` to
    `shareat-system` (row 155's "never deploy rules" applied to the shared project only).
 6. **Rollback** = put the old env values back and restart (and rebuild for `NEXT_PUBLIC_*`). Nothing in Postgres changes,

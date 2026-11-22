@@ -11,7 +11,7 @@ import { config } from 'dotenv';
 config({ path: '.env.local' });
 
 import { existsSync, writeFileSync } from 'node:fs';
-import { MoveArgError, parseMode, requiredArg } from './lib';
+import { MoveArgError, parseMode, requiredArg, safeMessage } from './lib';
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
@@ -37,6 +37,6 @@ async function main(): Promise<number> {
 main()
   .then((code) => process.exit(code))
   .catch((e) => {
-    console.error('select-uids FAILED:', e instanceof Error ? e.message : 'unknown error');
+    console.error('select-uids FAILED:', safeMessage(e));
     process.exit(1);
   });

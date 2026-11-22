@@ -11,7 +11,7 @@ import { pipeline } from 'node:stream/promises';
 import { cert, deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
-import { MoveArgError, type ObjMeta } from './lib';
+import { GoogleCallError, MoveArgError, type ObjMeta } from './lib';
 
 export interface Key {
   projectId: string;
@@ -56,7 +56,7 @@ export function bucketOf(app: App, bucket: string) {
         return { md5: typeof m.md5Hash === 'string' ? m.md5Hash : '', size: Number(m.size ?? -1) };
       } catch (e) {
         if (statusOf(e) === 404) return null;
-        throw new Error(`Google answered with status ${statusOf(e) || 'unknown'} while reading object details.`);
+        throw new GoogleCallError(`Google answered with status ${statusOf(e) || 'unknown'} while reading object details.`);
       }
     },
     file: (path: string) => b.file(path),
@@ -74,6 +74,12 @@ export async function streamCopy(src: ReturnType<typeof bucketOf>, dst: ReturnTy
 
 /** How many of these uids does the project NOT have? (getUsers takes at most 100 per call; the caller chunks.) */
 export async function countMissingUids(app: App, uids: readonly string[]): Promise<number> {
-  const r = await getAuth(app).getUsers(uids.map((uid) => ({ uid })));
-  return r.notFound.length;
+  try {
+    const r = await getAuth(app).getUsers(uids.map((uid) => ({ uid })));
+    return r.notFound.length;
+  } catch (e) {
+    const s = e as { code?: unknown; errorInfo?: { code?: unknown } } | null;
+    const code = typeof s?.code === 'string' ? s.code : typeof s?.errorInfo?.code === 'string' ? s.errorInfo.code : 'unknown';
+    throw new GoogleCallError(`Google answered with error ${code.replace(/[^a-z0-9/_-]/gi, '').slice(0, 60)} while checking accounts.`);
+  }
 }

@@ -69,6 +69,8 @@ const REQUIRED_CALLERS = [
   // organisation, run once by a person. Both tables are FORCE RLS; same shape and reason as scripts/backfill-file-links.ts.
   // db.ts has no insert/update/delete (tests/unit/t625-firebase-move.test.ts scans the folder for that).
   'scripts/firebase-move/db.ts',
+  // T-625 - reseed-mirror: queues one outbox row per live mirrored entity (the only write of the move), via mirrorOutboxRepo. Same reason.
+  'scripts/firebase-move/reseed-db.ts',
 ] as const;
 
 /**

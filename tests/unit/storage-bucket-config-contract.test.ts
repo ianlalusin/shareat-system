@@ -68,8 +68,8 @@ describe('checkValueAgainstDocs — DEF-311, FIREBASE_STORAGE_BUCKET', () => {
       'shareat-hub-v2.firebasestorage.app',
       STORAGE_BUCKET_EXPECTATION,
     );
-    expect(result.message).toContain('.env.example:55-60');
-    expect(result.message).toContain('docs/reference/private-bucket-storage-rules.md:62-63');
+    expect(result.message).toContain('.env.example:66-73');
+    expect(result.message).toContain('docs/ops/firebase-move-runbook.md step 2.3');
     expect(result.message).toContain('FIREBASE_STORAGE_BUCKET');
   });
 

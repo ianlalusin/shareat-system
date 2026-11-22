@@ -10,11 +10,11 @@
  */
 import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { schema, systemTransaction } from '@shareat/db';
-import type { FileItem } from './lib';
+import { MoveArgError, type FileItem } from './lib';
 
 export function requireSystemUrl(): void {
   if (!process.env.SYSTEM_DATABASE_URL?.trim()) {
-    throw new Error('SYSTEM_DATABASE_URL is not set. Set it in .env.local to the same value as DATABASE_URL, then run again. Nothing was read.');
+    throw new MoveArgError('SYSTEM_DATABASE_URL is not set. Set it in .env.local to the same value as DATABASE_URL, then run again. Nothing was read.');
   }
 }
 

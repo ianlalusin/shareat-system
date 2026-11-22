@@ -9,7 +9,11 @@ import {
   parseAuthExport,
   parseMode,
   parseUidList,
+  relayRunsNeeded,
   runCopy,
+  safeMessage,
+  GoogleCallError,
+  MoveArgError,
   summariseVerify,
   type CopyPorts,
   type FileItem,
@@ -170,6 +174,7 @@ describe('script safety', () => {
     const names = readdirSync(dir).filter((f) => f.endsWith('.ts'));
     expect(names.length).toBeGreaterThanOrEqual(6); // positive control: the scan saw the scripts
     for (const n of names) {
+      if (n === 'reseed-db.ts') continue; // the one writer: scanned separately below
       const code = readFileSync(path.join(dir, n), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .split('\n')
@@ -177,5 +182,30 @@ describe('script safety', () => {
         .join('\n');
       expect(code, `${n} must not delete anything`).not.toMatch(/\.delete\(|\.deleteFiles\(|\.deleteUser|deleteUsers\(|\.remove\(|\bunlink|\brmSync|\bDELETE\b|\.insert\(|\.update\(/);
     }
+  });
+});
+
+describe('mirror re-seed (T-625 step 4.1)', () => {
+  it('relayRunsNeeded: the busiest org decides, 500 rows per run, rounded up', () => {
+    expect(relayRunsNeeded([])).toBe(0);
+    expect(relayRunsNeeded([0])).toBe(0);
+    expect(relayRunsNeeded([1])).toBe(1);
+    expect(relayRunsNeeded([500])).toBe(1);
+    expect(relayRunsNeeded([501, 10])).toBe(2);
+    expect(relayRunsNeeded([40, 1250])).toBe(3);
+  });
+
+  it('safeMessage shows our own fixed messages and hides every other error text', () => {
+    expect(safeMessage(new MoveArgError('use --confirm'))).toBe('use --confirm');
+    expect(safeMessage(new GoogleCallError('Google answered with status 403'))).toBe('Google answered with status 403');
+    const leak = safeMessage(new Error('private_key -----BEGIN postgres://u:p@h'));
+    expect(leak).not.toMatch(/private_key|postgres/);
+  });
+
+  it('reseed-db.ts only adds queue rows through the repo: no raw SQL, no delete or update', () => {
+    const dir = path.resolve(__dirname, '..', '..', 'scripts', 'firebase-move');
+    const code = readFileSync(path.join(dir, 'reseed-db.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(code).toMatch(/mirrorOutboxRepo\.enqueueLiveEntities/);
+    expect(code).not.toMatch(/\.delete\(|\.update\(|\.insert\(|\bsql\b|execute\(/);
   });
 });

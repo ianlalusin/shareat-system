@@ -28,29 +28,48 @@ Nothing changes for staff: the env values are not touched yet. Check the scripts
 ls /srv/shareat/scripts/firebase-move
 ```
 
-You should see `select-uids.ts`, `filter-export.ts`, `copy-files.ts`, `verify.ts` (plus `lib.ts`, `db.ts`, `admin.ts`).
+You should see `select-uids.ts`, `filter-export.ts`, `copy-files.ts`, `verify.ts`, `reseed-mirror.ts` (plus `lib.ts`, `db.ts`, `reseed-db.ts`, `admin.ts`).
 
 ### 0.2 Check the new project is ready (Firebase console, `shareat-system`)
 - Authentication: Email/Password is on.
 - Firestore: a database called `(default)` exists. If not, create it (same region as the stores' tablets, Asia is fine).
 - Storage: the bucket `shareat-system.firebasestorage.app` exists.
-- Project settings, "Your apps": a **Web app** exists. If not, click "Add app", choose Web, name it `ERP`. You need its config values in step 3.1.
+- Project settings, "Your apps": a **Web app** exists. If not, click "Add app", choose Web, name it `ERP`. You need its config values in step 3.1b.
 
-### 0.3 Deploy the rules to the new project (**LAPTOP**)
-This only touches `shareat-system`. The file `firebase/storage.rules` closes the bucket to every browser (the server still reaches it).
+### 0.3 Install the Firebase tool and sign in (**LAPTOP**, once)
+Skip the first command if `firebase --version` already prints a number.
 
 ```powershell
-cd C:\Users\ianla\webapps\shareat-system\firebase
+npm install -g firebase-tools
 ```
 
 ```powershell
-firebase deploy --only firestore,storage --project shareat-system
+firebase login
 ```
 
-It should end with `Deploy complete!`.
+A browser opens. Sign in with a Google account that can open BOTH `shareat-system` and the old project `studio-7300228488-a394e` (step 1.4 exports from the old one). It ends with `Success! Logged in as ...`.
+
+### 0.3b Deploy the rules to the new project (**LAPTOP**)
+This only touches `shareat-system`. The file `firebase/storage.rules` closes the bucket to every browser (the server still reaches it). One command: it goes into the `firebase` folder, deploys, and comes straight back, so every later step starts from `C:\Users\ianla\webapps\shareat-system`.
+
+```powershell
+cd C:\Users\ianla\webapps\shareat-system\firebase; firebase deploy --only firestore,storage --project shareat-system; cd ..
+```
+
+It should end with `Deploy complete!`. Check you are back in the main folder:
+
+```powershell
+(Get-Location).Path
+```
+
+It must print `C:\Users\ianla\webapps\shareat-system`.
 
 ### 0.4 Put the new key on the server (**LAPTOP**, needs Git for Windows' `bash`)
-Use the real file name from `C:\Users\ianla\webapps\PK\shareat-system\`. It checks the key belongs to `shareat-system`, copies it, and prints a short code from each side. The two codes must be the same.
+Use the real file name from `C:\Users\ianla\webapps\PK\shareat-system\`. It checks the key belongs to `shareat-system`, copies it, and prints a short code from each side. The two codes must be the same. The key goes to a temporary name first and replaces the final file only when the codes match, so a failed run never damages a key that is already installed.
+
+```powershell
+cd C:\Users\ianla\webapps\shareat-system
+```
 
 ```powershell
 bash docs/ops/install-firebase-key.sh /c/Users/ianla/webapps/PK/shareat-system/<the key file name>.json
@@ -79,7 +98,7 @@ cd /srv/shareat && sudo -u shareat env NODE_ENV=production npx tsx scripts/fireb
 
 Expect `would copy` equal to the file count and `MISSING in old bucket 0`. A MISSING number above 0 means a database row points at a file that is not in the old bucket. Stop and tell BOSS which row ids it printed.
 
-> **Tip:** you can run the real copy (step 4.4) days ahead. It only adds files and skips ones already there, so on the night it only copies what is new.
+> **Tip:** you can run the real copy (step 1.7) days ahead. It only adds files and skips ones already there, so on the night it only copies what is new.
 
 ---
 
@@ -100,7 +119,7 @@ cd /srv/shareat && sudo -u shareat env NODE_ENV=production npm run firestore-rel
 cd /srv/shareat && sudo -u shareat env NODE_ENV=production npm run firestore-relay -- --manual
 ```
 
-Now stop the 2-minute timer. It stays off until step 7.
+Now stop the 2-minute timer. It stays off until step 4.2.
 
 ```bash
 systemctl stop shareat-firestore-relay.timer
@@ -133,6 +152,12 @@ firebase auth:export C:\Users\ianla\old-users.json --format=json --project studi
 ```
 
 ### 1.5 Cut it down to the live accounts (**LAPTOP**)
+Start from the main folder:
+
+```powershell
+cd C:\Users\ianla\webapps\shareat-system
+```
+
 Practice first (prints counts only):
 
 ```powershell
@@ -150,13 +175,27 @@ npx tsx scripts/firebase-move/filter-export.ts --in=C:\Users\ianla\old-users.jso
 ### 1.6 Import the accounts, keeping their passwords (**LAPTOP**)
 Firebase needs the OLD project's password settings. Get them in the Firebase console of the OLD project (`studio-7300228488-a394e`): Authentication, Users tab, the three-dots menu at the top right, "Password hash parameters". It shows `base64_signer_key`, `base64_salt_separator`, `rounds` and `mem_cost`.
 
-Type them straight into the command below. Do not paste them in chat or save them anywhere.
+The command below contains secrets. First stop PowerShell from saving what you type to its history file:
+
+```powershell
+Set-PSReadLineOption -HistorySaveStyle SaveNothing
+```
+
+Type the values straight into the command below. Do not paste them in chat or save them anywhere.
 
 ```powershell
 firebase auth:import C:\Users\ianla\new-users.json --project shareat-system --hash-algo=SCRYPT --hash-key="<base64_signer_key>" --salt-separator="<base64_salt_separator>" --rounds=8 --mem-cost=14
 ```
 
 (Use the `rounds` and `mem_cost` numbers the console shows if they differ from 8 and 14.)
+
+When the import is done, turn history saving back on and clear what this window remembers:
+
+```powershell
+Set-PSReadLineOption -HistorySaveStyle SaveIncrementally; Clear-History
+```
+
+Then close this PowerShell window and open a fresh one.
 
 It should say it imported N users with no errors. N must equal the count from step 1.3.
 
@@ -206,6 +245,13 @@ grep -E '^(FIREBASE_|NEXT_PUBLIC_FIREBASE_)' /srv/shareat-shared/.env.local | cu
 `FIREBASE_SERVICE_ACCOUNT_KEY` (the one-line form) must NOT be in the list, because setting both forms is refused. If it is, ask BOSS before going on.
 
 ### 2.3 Change the three values in `.env.local`
+⛔ **Do not restart `shareat-erp` between now and step 3.3.** The app checks that the server's project (`FIREBASE_PROJECT_ID`, which you change here) is the same as the browser's project (`NEXT_PUBLIC_FIREBASE_PROJECT_ID`, baked into the build). Until step 3.3 deploys the new build they differ, and a restart would be refused. The running app is not affected until it restarts.
+
+Also make sure `.env.local` has NO line starting with `NEXT_PUBLIC_FIREBASE_PROJECT_ID`. If it does, remove it (the server would compare it with the new server project and refuse to start):
+
+```bash
+sed -i '/^NEXT_PUBLIC_FIREBASE_PROJECT_ID=/d' /srv/shareat-shared/.env.local
+```
 
 ```bash
 sed -i -e 's|^FIREBASE_PROJECT_ID=.*|FIREBASE_PROJECT_ID=shareat-system|' -e 's|^FIREBASE_SERVICE_ACCOUNT_KEY_FILE=.*|FIREBASE_SERVICE_ACCOUNT_KEY_FILE=/srv/shareat-shared/secrets/shareat-system-admin.json|' -e 's|^FIREBASE_STORAGE_BUCKET=.*|FIREBASE_STORAGE_BUCKET=shareat-system.firebasestorage.app|' /srv/shareat-shared/.env.local
@@ -243,11 +289,20 @@ Each shows `-rw-------` and owner `shareat`.
 
 The browser values are baked in when the app is built, so changing them needs a rebuild, not just a restart.
 
-### 3.1 Read the five values (Firebase console, `shareat-system`)
+### 3.1 Save the OLD five browser values first (rollback needs them)
+GitHub never shows a secret again once it is saved, so write the old values down BEFORE you overwrite them. Firebase console of the OLD project (`studio-7300228488-a394e`): Project settings, "Your apps", the Web app, "SDK setup and configuration", "Config". Copy `apiKey`, `authDomain`, `projectId`, `appId` and (if shown) `storageBucket` into a text file on your laptop:
+
+```powershell
+notepad C:\Users\ianla\old-firebase-web-config.txt
+```
+
+These are public browser values (not secrets), but keep the file: rollback step R2 reads it. Do not delete it until the two-week safety period is over.
+
+### 3.1b Read the five NEW values (Firebase console, `shareat-system`)
 Project settings, "Your apps", the Web app, "SDK setup and configuration", "Config". You need `apiKey`, `authDomain`, `projectId`, `appId`.
 
 ### 3.2 Set the GitHub secrets
-GitHub, the shareat-system repo, Settings, Secrets and variables, Actions. Edit these five (paste each value with no spaces before or after, and no new line):
+Only after 3.1 is saved. GitHub, the shareat-system repo, Settings, Secrets and variables, Actions. Edit these five (paste each value with no spaces before or after, and no new line):
 
 | Secret | Value |
 |---|---|
@@ -272,7 +327,7 @@ systemctl restart shareat-customer
 
 ## 4. Turn the clock sync back on
 
-### 4.0 The database helper (only needed for step 4.1)
+### 4.0 The database helper (optional: only for ad-hoc read-only checks with SQL)
 Paste this once as one block on the **DROPLET** (a new login forgets it). It runs one SQL statement as the admin login and prints the result:
 
 ```bash
@@ -284,18 +339,28 @@ asql() {
 ```
 
 ### 4.1 Fill the new Firestore (ASK BOSS BEFORE THIS STEP)
-The new Firestore is empty. The relay only publishes changes it has queued, so the clock terminals' roster and credentials need the queue refilled. BOSS confirms this step first; the idea is to mark the queue rows as not yet sent so the next relay run publishes the current truth for each row (the relay re-reads the live data, it does not replay old snapshots, and writing the same document twice is safe).
+The new Firestore is empty. The relay only publishes what is queued, so the queue needs ONE fresh entry for each thing the clock terminals show today: current staff on the roster, current fingerprint/card badges, and each store's current clock settings. Old history is not copied (the tablets do not need it). The script below does exactly that. It is safe to run twice.
 
-Count first (read-only):
+The relay timer is still stopped (from step 1.2). On the **DROPLET**, practice first (prints counts only, changes nothing):
 
 ```bash
-asql "select count(*) filter (where published_at is null) as waiting, count(*) as total from mirror_outbox"
+cd /srv/shareat && sudo -u shareat env NODE_ENV=production npx tsx scripts/firebase-move/reseed-mirror.ts
 ```
+
+It prints, per kind (`roster`, `credential`, `attendance_config`), how many are live. Write the numbers down. If it says zero live, stop: wrong database.
 
 If BOSS says go:
 
 ```bash
-asql "update mirror_outbox set published_at = null where published_at is not null"
+cd /srv/shareat && sudo -u shareat env NODE_ENV=production npx tsx scripts/firebase-move/reseed-mirror.ts --confirm
+```
+
+The last line says how many relay runs it takes to send everything. **The relay sends 500 entries per organisation per run.** Write the number down: it is how many runs you do in step 4.2.
+
+Check the coverage (read-only). It must end with `OK - every live entity has been queued at least once`:
+
+```bash
+cd /srv/shareat && sudo -u shareat env NODE_ENV=production npx tsx scripts/firebase-move/reseed-mirror.ts --check
 ```
 
 ### 4.2 Start the timer and run it once by hand
@@ -308,10 +373,17 @@ systemctl start shareat-firestore-relay.timer
 cd /srv/shareat && sudo -u shareat env NODE_ENV=production npm run firestore-relay -- --manual
 ```
 
-No `FAILED OUTRIGHT` line. Run it again until the mirror line shows `posted 0` (everything is published).
+No `FAILED OUTRIGHT` line. Run it as many times as step 4.1 told you, then once more: the mirror line must show `posted 0`. Prove the queue is empty (the line `waiting in the queue` must say `0`):
+
+```bash
+cd /srv/shareat && sudo -u shareat env NODE_ENV=production npx tsx scripts/firebase-move/reseed-mirror.ts --check
+```
 
 ### 4.3 Give each clock terminal a new token (the ERP, in a browser)
-Tablets hold a sign-in for the OLD project and will not sync until re-paired. In the ERP go to Attendance, Terminals. For each terminal press **Re-pair (new token)**, then put the token into that tablet's pairing screen. The token is shown once.
+Tablets hold a sign-in for the OLD project and will not sync until re-paired. Clock terminals are NOT among the imported accounts: each terminal's sign-in id lives in the ERP (`clock_terminals.firebase_uid`), and re-pairing creates the account again in the new project.
+
+1. **On each tablet, first reload the clock page** (pull down to refresh, or close and reopen the browser tab) so it loads the NEW build from step 3.3. A tablet still running the old build keeps trying the old project and the new token will not work.
+2. In the ERP go to Attendance, Terminals. For each terminal press **Re-pair (new token)**, then put the token into that tablet's pairing screen. The token is shown once.
 
 ---
 
@@ -355,6 +427,10 @@ rm -f /srv/shareat-shared/secrets/uids.txt
 
 Nothing in Postgres changed, so going back is just the old settings again.
 
+⚠️ **Rollback is clean only BEFORE real use of the new project.** Anything done after the switch (files uploaded, accounts or passwords changed, clock punches made while tablets pointed at `shareat-system`) exists only in the new project and is NOT in the old one. Once staff have worked for a while on the new project, do not roll back without asking BOSS first.
+
+⛔ **Do R1, then R2, then R3, in this order.** R1 and R2 together put the server and the browser back on the same project. Restarting the app with only one of them done makes it refuse to start.
+
 ### R1. Put the old env files back (**DROPLET**)
 Use the stamp from step 2.1:
 
@@ -367,7 +443,7 @@ cp -p /root/customer.env.bak.<STAMP> /srv/shareat-shared/customer.env
 ```
 
 ### R2. Put the old browser values back and rebuild
-In GitHub, set the five `NEXT_PUBLIC_FIREBASE_*` secrets back to their old values (from your password manager, or ask BOSS for the notes). Ask BOSS for a deploy (rebuild).
+In GitHub, set the five `NEXT_PUBLIC_FIREBASE_*` secrets back to the old values you saved in step 3.1 (`C:\Users\ianla\old-firebase-web-config.txt`; the bucket one goes back to the old `storageBucket` if the file has one, otherwise leave it empty as before). Ask BOSS for a deploy (rebuild) and wait for it to go green. The deploy restarts `shareat-erp`, so R1 must already be done.
 
 ### R3. Restart and re-pair
 
