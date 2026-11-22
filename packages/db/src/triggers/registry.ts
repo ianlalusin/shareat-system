@@ -1642,6 +1642,25 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'No charge is added to a sales receipt written by an earlier transaction (reads the PARENT receipt xmin, as the other receipt children do) (0275, T-627).',
   },
+  // T-628 (0276) - reservations and their deposits: three history guards, ENABLE ALWAYS. Raise 23001 restrict_violation (a bad move or a balance breach: 23514).
+  pos_reservations_guard: {
+    table: 'pos_reservations',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A reservation is written as booked; only status, stand and table move (the table once), statuses only forward, and CLOSING is refused while a deposit is still held (0276, T-628). No DELETE.',
+  },
+  pos_reservation_deposits_frozen: {
+    table: 'pos_reservation_deposits',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A deposit event is frozen once written except day_close_id, set once by the Z; DELETE refused (0276, T-628; the shared pos_v2_frozen_except_once).',
+  },
+  pos_reservation_deposits_guard: {
+    table: 'pos_reservation_deposits',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'Under a row lock on the reservation (reads its status and its held balance from the events): a deposit is taken only on a booked or seated reservation, nothing leaves more than is held, a void is refused once a deposit was applied, an apply needs a seated reservation (0276, T-628).',
+  },
   // T-534 S1 (0265) - the post-sale documents: eight history guards, all ENABLE ALWAYS (ALWAYS 62 -> 70). Raise 23001 restrict_violation.
   pos_payment_conversions_frozen: {
     table: 'pos_payment_conversions',

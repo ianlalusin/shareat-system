@@ -45,6 +45,8 @@ export interface SalesDayRow {
   posV1DayFeedId: string | null;
   /** POS refunds of a feed day (posts to 4950); always 0.00 on a typed day. */
   refunds: string;
+  /** T-628: reservation deposits the Z applied to bills (posts as Dr 2170); 0.00 on every day not derived from POS receipts. */
+  depositsApplied: string;
   totalSales: string;
   unliSales: string;
   alaCarteSales: string;
@@ -80,6 +82,7 @@ const COLUMNS = {
   source: salesDays.source,
   posV1DayFeedId: salesDays.posV1DayFeedId,
   refunds: salesDays.refunds,
+  depositsApplied: salesDays.depositsApplied,
   totalSales: salesDays.totalSales,
   unliSales: salesDays.unliSales,
   alaCarteSales: salesDays.alaCarteSales,
@@ -466,6 +469,8 @@ export interface InsertPosReceiptsDayInput {
   refunds?: Money;
   /** T-627: the Z's store charges (leftover, an extra griller), posted to 4500 by the router. Absent = 0. */
   otherCharges?: Money;
+  /** T-628: the reservation deposits the Z applied to bills (posts as Dr 2170, a tender of the sale). Absent = 0. */
+  depositsApplied?: Money;
 }
 
 export async function insertPosReceiptsDay(tx: Tx, input: InsertPosReceiptsDayInput): Promise<{ id: string }> {

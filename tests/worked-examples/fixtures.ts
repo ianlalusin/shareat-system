@@ -455,6 +455,68 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'Never let the sales day hold a negative cash or wallet figure, and never post the whole refund twice: the day keeps only the refunds the takings of the same method covered; ' +
       'the excess is the other entry.',
   },
+  {
+    id: 'deposit.taken',
+    sourceType: 'pos_deposit',
+    title: 'A table reservation deposit is taken (T-628)',
+    narrative:
+      'v2-only, POS Z. A customer pays ₱1,000.00 in cash to hold a table. The money is in the drawer on the day it is taken, so the till\'s Z posts it that day beside the sales day: ' +
+      'Dr the money place (cash 1110; a wallet is 1140 with its money account as party) / Cr 2170 Customer deposits payable. It is the customer\'s money, not income: a liability until it is applied to the bill, refunded or kept.',
+    input: { businessDate: '2026-01-14', reservation: 'Santos, 8 pax', method: 'cash', amount: '1000.00' },
+    expect: [
+      D('1110', '1000.00', null, { lineMemo: 'cashier drawer' }),
+      C('2170', '1000.00', null, { lineMemo: 'customer deposits payable' }),
+    ],
+    entryDate: '2026-01-14',
+    trap:
+      'Never book a deposit as sales or as other income when it is taken: nothing is earned until the table is billed (it is applied) or a manager keeps it. And never leave it out of the day it is taken: the drawer holds the cash that day.',
+  },
+  {
+    id: 'deposit.refunded',
+    sourceType: 'pos_deposit',
+    title: 'A deposit goes back to the customer, refunded or voided (T-628)',
+    narrative:
+      'v2-only, POS Z. A cancelled reservation\'s ₱1,000.00 is refunded in cash by the manager (their PIN, online, with a reason). The Z of the day it is given posts the reverse of the take: ' +
+      'Dr 2170 / Cr the money place it goes back by. A VOID of a mistaken deposit posts the same two lines (it is refused once the deposit was applied to a bill).',
+    input: { businessDate: '2026-01-15', reservation: 'Santos, 8 pax', method: 'cash', amount: '1000.00', reason: 'Cancelled 3 days ahead' },
+    expect: [
+      D('2170', '1000.00', null, { lineMemo: 'customer deposits payable' }),
+      C('1110', '1000.00', null, { lineMemo: 'cashier drawer' }),
+    ],
+    entryDate: '2026-01-15',
+    trap: 'Never reverse the original entry: the day the deposit was taken is closed and stays as it was. The refund is its own movement of the day it happens.',
+  },
+  {
+    id: 'deposit.kept',
+    sourceType: 'pos_deposit',
+    title: 'The manager keeps a no-show\'s deposit (T-628)',
+    narrative:
+      'v2-only, POS Z. A party did not come, and the manager (PIN, online, with a reason) keeps the ₱1,000.00. No cash moves; the liability becomes income at the Z of that day: ' +
+      'Dr 2170 / Cr 4500 other income.',
+    input: { businessDate: '2026-01-15', reservation: 'Reyes, 6 pax', amount: '1000.00', reason: 'No-show, no call' },
+    expect: [
+      D('2170', '1000.00', null, { lineMemo: 'customer deposits payable' }),
+      C('4500', '1000.00', null, { lineMemo: 'kept deposit' }),
+    ],
+    entryDate: '2026-01-15',
+    trap: 'A kept deposit is income only because a manager decided it, each time, with a reason. A cancelled or no-show reservation with money held cannot be closed until it is refunded or kept.',
+  },
+  {
+    id: 'sale.pos-deposit-applied',
+    sourceType: 'sale',
+    title: 'A bill paid partly from a held deposit (T-628)',
+    narrative:
+      'v2-only, POS-derived days. A ₱1,000.00 à la carte bill is paid ₱500.00 from the reservation\'s deposit and ₱500.00 in cash. The deposit was already booked (Dr cash / Cr 2170) on the day it was taken, ' +
+      'so on the sales day it is a TENDER of the sale: the cash line shows only what was handed over today, and the deposit clears 2170.',
+    input: { businessDate: '2026-01-16', gross: '1000.00', cashTendered: '500.00', depositApplied: '500.00' },
+    expect: [
+      D('1110', '500.00', null, { lineMemo: 'cash tender' }),
+      D('2170', '500.00', null, { lineMemo: 'reservation deposits applied (POS)' }),
+      C('4150', '1000.00', null, { lineMemo: 'à la carte (incl. take-out)' }),
+    ],
+    entryDate: '2026-01-16',
+    trap: 'Never count the deposit as cash collected on the day of the bill: it was already counted on the day it was taken, and counting it again makes the drawer look ₱500.00 richer than it is.',
+  },
 
   // =========================================================================================
   // salary_advance — 1,488 legs. leg-mapping.ts FINDING: disbursement and repayment (the

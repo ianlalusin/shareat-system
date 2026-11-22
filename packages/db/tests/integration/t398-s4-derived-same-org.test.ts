@@ -93,7 +93,8 @@ const REGISTRY_BEFORE_S4 = 100;
 // T-613 0269 pos_refund_payment_tender_guard (validator/origin): 89 -> 90; registry size 244 -> 245.
 // T-600 0270 journal_entry_date_in_period validator (validator/origin): 90 -> 91; registry size 245 -> 246 (measured by this test).
 // T-627 0275 (the store charges): +3 (table_session_charges_guard, pos_sales_receipt_charges_append_only, pos_sales_receipt_charges_append_guard history guards): 91 -> 94; registry size 246 -> 249.
-const REGISTRY_ADDED_AFTER_S4 = 94;
+// T-628 0276 (reservations and deposits): +3 (pos_reservations_guard, pos_reservation_deposits_frozen, pos_reservation_deposits_guard history guards): 94 -> 97; registry size 249 -> 252.
+const REGISTRY_ADDED_AFTER_S4 = 97;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;

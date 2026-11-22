@@ -23,3 +23,10 @@ export const POS_STATUTORY_HOLDER_RULES = defineFieldRules('pos.statutoryHolder'
   holderName: { label: 'The card holder name', kind: 'text', max: 120, refuses: [POS_REDACTED], requires: 'Enter the name on the senior or PWD card.' },
   idNumber: { label: 'The card number', kind: 'text', max: 60, refuses: [POS_REDACTED], requires: 'Enter the senior or PWD card number.' },
 });
+
+/** T-628: a table reservation as typed at the till (the columns' CHECKs: name 1-60, phone 3-30 when given, note 1-200 when given). */
+export const POS_RESERVATION_RULES = defineFieldRules('pos.reservation', {
+  customerName: { label: 'The customer name', kind: 'text', max: 60, requires: 'Enter the customer name (up to 60 characters).' },
+  phone: { label: 'The phone number', optional: true, kind: 'text', min: 3, max: 30, requires: 'The phone number must be 3 to 30 characters.' },
+  note: { label: 'The note', optional: true, kind: 'text', max: 200, requires: 'The note can be up to 200 characters.' },
+});

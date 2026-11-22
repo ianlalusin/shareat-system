@@ -1665,6 +1665,16 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason:
       'Charges frozen on pilot sales receipts (T-627): row 436: v1 receives Lipa’s December day totals, charges included, through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Append-only.',
   },
+  pos_reservations: {
+    class: 'purge',
+    reason:
+      'Table reservations of the pilot (T-628): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). A deposit still held on 1 January is counted in the opening balance (2170) by hand, and its reservation entered again.',
+  },
+  pos_reservation_deposits: {
+    class: 'purge',
+    reason:
+      'The money events of the pilot’s reservations (T-628): the cash they moved is in the ledger through the Z that collected them and the applied ones through the sales day, so no booked figure lives only here (row 436, pre-2027 POS data is test data, row 379). A deposit still held on 1 January is counted in the opening balance (2170) by hand. Append-only.',
+  },
   pos_payment_conversions: {
     class: 'purge',
     reason:

@@ -112,6 +112,8 @@ export const SALES_DAY_ACCOUNTS = {
   /** Leftover, packaging and similar. The business KEEPS these, so unlike service charge they
    *  really are income (Ian: "all in one account, separated from service charge"). */
   OTHER_CHARGES: '4500',
+  /** T-628: money a customer paid ahead to hold a table. A store-level liability: credited when a deposit is taken, debited when it is applied to a bill (here), refunded, or kept (then 4500). */
+  CUSTOMER_DEPOSITS: '2170',
 } as const;
 
 /**
@@ -149,6 +151,11 @@ export interface RouteSalesDayInput {
    * collected is already net of them) and posted as a `Dr 4950` line. Absent = 0: a legacy typed day never has any.
    */
   refunds?: Money;
+  /**
+   * T-628: reservation deposits the Z applied to the day's bills: a TENDER of the sale (the money was taken earlier, on the day the deposit was taken, and posted then as
+   * Dr cash / Cr 2170). On the collected side of check 3 and posted as a `Dr 2170` line. Absent = 0: a typed or feed day never has any.
+   */
+  depositsApplied?: Money;
   /**
    * T-558: true only for a day derived from POS receipts (`source = 'pos_receipts'`). A receipt can be paid a few centavos short of the server's total and is
    * recorded anyway, so such a day's tenders may come up short of what was sold; the shortfall (revenue - discounts - tenders, from the day's own figures) posts as
@@ -253,6 +260,7 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
   // service charge on behalf of the staff, the other charges on the business's own account.
   const discountsTotal = add(input.seniorDiscount, input.pwdDiscount, input.otherDiscount);
   const refunds = input.refunds ?? money('0');
+  const depositsApplied = input.depositsApplied ?? money('0');
   let collectedSide = add(
     input.cashCollected,
     input.onlineCollected,
@@ -261,6 +269,7 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
     discountsTotal,
     input.comps,
     refunds,
+    depositsApplied,
   );
   const earnedSide = add(input.totalSales, input.serviceCharge, input.otherCharges);
   let shortPayment = money('0');
@@ -274,7 +283,7 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
       reason:
         `the day does not reconcile: collected ${input.cashCollected} cash + ` +
         `${input.onlineCollected} online + ${input.creditSales} credit + ${nonRemittedTotal} ` +
-        `non-remitted, plus ${discountsTotal} discounts + ${input.comps} comps + ${refunds} refunds = ${collectedSide}; ` +
+        `non-remitted, plus ${discountsTotal} discounts + ${input.comps} comps + ${refunds} refunds + ${depositsApplied} deposits applied = ${collectedSide}; ` +
         `but gross sales ${input.totalSales} + service charge ${input.serviceCharge} + other ` +
         `charges ${input.otherCharges} = ${earnedSide}`,
     };
@@ -341,6 +350,9 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
   }
   if (!isZero(refunds)) {
     lines.push({ accountCode: SALES_DAY_ACCOUNTS.REFUNDS, side: 'debit', amount: refunds, lineMemo: 'refunds (POS)' });
+  }
+  if (!isZero(depositsApplied)) {
+    lines.push({ accountCode: SALES_DAY_ACCOUNTS.CUSTOMER_DEPOSITS, side: 'debit', amount: depositsApplied, lineMemo: 'reservation deposits applied (POS)' });
   }
 
   if (!isZero(input.unliSales)) {

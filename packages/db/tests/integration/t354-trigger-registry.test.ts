@@ -134,7 +134,8 @@ describe('T1 — registry floor', () => {
     // T-565 (0253): menu_daypart_versions_append_guard, 57 -> 58; re-measured as the count of mode:'always' entries in TRIGGER_REGISTRY on a tree with 0253 applied.
     // T-534 S1 (0265): eight history guards (pos_payment_conversions x2, pos_tender_corrections, pos_refunds, pos_refund_lines x2, pos_refund_payments x2), 62 -> 70.
     // T-627 (0275): three history guards (table_session_charges_guard, pos_sales_receipt_charges_append_only, pos_sales_receipt_charges_append_guard), 70 -> 73.
-    expect(always.length, 'expected exactly 73 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0220 + 0221 + 0222 + 0238 + 0239 + 0240 + 0242 + 0243 + 0244 + 0253 + 0259 + 0265 + 0275; 0269 adds one origin validator, no ALWAYS)').toBe(73);
+    // T-628 (0276): three history guards (pos_reservations_guard, pos_reservation_deposits_frozen, pos_reservation_deposits_guard), 73 -> 76.
+    expect(always.length, 'expected exactly 76 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0220 + 0221 + 0222 + 0238 + 0239 + 0240 + 0242 + 0243 + 0244 + 0253 + 0259 + 0265 + 0275 + 0276; 0269 adds one origin validator, no ALWAYS)').toBe(76);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {
