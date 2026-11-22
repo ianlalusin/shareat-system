@@ -19,7 +19,8 @@ if (!isTestDatabaseUrl(url)) {
 }
 
 import { verifySalesDay } from '@shareat/domain';
-import { D1, asOrg, close, closeAll, journalLines, manila, pinOf, reading, salesDaysOf, sell, sql, world, type World } from './_fixtures/t531-day-close';
+import { sendV1Bridge } from '../../src/pos';
+import { D1, asOrg, close, closeAll, fakeWriter, journalLines, manila, pinOf, reading, salesDaysOf, sell, sql, world, type World } from './_fixtures/t531-day-close';
 
 afterAll(closeAll);
 
@@ -101,6 +102,32 @@ describe('T-627 day close with store charges', () => {
     ]);
     const cents = (s: string) => Math.round(Number(s) * 100);
     expect(lines.reduce((a, l) => a + cents(l.debit), 0)).toBe(lines.reduce((a, l) => a + cents(l.credit), 0));
+  });
+
+  it('the December bridge document carries the Z charges as chargesTotal, inside totalGross', async () => {
+    const w = await world();
+    await chargedDay(w);
+    await close(w, AT, await pinOf(w, w.managerId));
+    const f = fakeWriter();
+    const out = await asOrg(w.orgId, (tx) => sendV1Bridge(tx, w.counter, { storeId: w.storeId, businessDates: [D1] }, { writer: f.writer }));
+    expect(out.results[0]).toMatchObject({ status: 'sent' });
+    const payments = (f.calls[0]!.data as { payments: { chargesTotal: number; totalGross: number } }).payments;
+    expect(payments).toMatchObject({ chargesTotal: 500, totalGross: 1250 });
+  });
+
+  it('a charged receipt where only the goods were paid is a short payment of exactly the charges: the Z reads it, the tenders add up, and the day closes', async () => {
+    const w = await world();
+    const p = await presets(w);
+    // 2 pork 500.00 + Extra griller 150.00 = 650.00 due, 500.00 paid in cash
+    await sell(w, { at: manila(D1, '19:00'), items: [{ item: w.menu.pork, qty: 2 }], expectTotal: '500.00', charges: [{ presetId: p.griller }], pay: [{ tenderId: w.cash, amount: '500.00' }] });
+    const x = await reading(w, AT);
+    expect(x).toMatchObject({ receiptCount: 1, chargeTotal: '150.00', grossTotal: '650.00', varianceTotal: '150.00', shortfallCount: 1 });
+    const res = await close(w, AT, await pinOf(w, w.managerId));
+    const [day] = await sql<{ other_charges: string; cash_collected: string }[]>`select other_charges::text, cash_collected::text from sales_days where id = ${res.salesDayId!}`;
+    expect(day).toEqual({ other_charges: '150.00', cash_collected: '500.00' });
+    const [shortAudit] = await sql<{ after: { gap: string; serverTotal: string; deviceTotal: string } }[]>`select after from audit_log where org_id = ${w.orgId} and action in ('pos.sale_payment_variance', 'pos.sale_payment_shortfall')`;
+    // like with like: the device's amount due (goods + charges) against the server's
+    expect(shortAudit!.after).toMatchObject({ gap: '150.00', serverTotal: '650.00', deviceTotal: '650.00' });
   });
 
   it('a day without charges is unchanged: other_charges 0.00 and no 4500 line', async () => {

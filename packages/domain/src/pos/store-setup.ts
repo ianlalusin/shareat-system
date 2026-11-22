@@ -8,9 +8,9 @@
  */
 import { auditLogRepo, posStoreSetupRepo, posV2Repo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
-import { money, type Money } from '@shareat/core/money';
+import { compare, money, type Money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
-import { uuidInput, wholeNumber } from './shared';
+import { CHARGE_UNIT_AMOUNT_MAX, CHARGE_UNIT_AMOUNT_MAX_SENTENCE, uuidInput, wholeNumber } from './shared';
 
 const CAPABILITY = 'manage_store_settings' as const;
 
@@ -164,6 +164,7 @@ export function checkChargePreset(raw: { name: unknown; amount: unknown; perUnit
   const [whole, frac = ''] = text.split('.');
   const amount = money(`${BigInt(whole!)}.${frac.padEnd(2, '0')}`);
   if (amount === '0.00') throw refuse(`checkChargePreset: zero "${name}"`, `The charge "${name}" has an amount of 0. A charge must be more than 0.`);
+  if (compare(amount, money(CHARGE_UNIT_AMOUNT_MAX)) > 0) throw refuse(`checkChargePreset: over the cap "${name}"`, CHARGE_UNIT_AMOUNT_MAX_SENTENCE);
   return { name, amount, perUnit: raw.perUnit === true || raw.perUnit === 'true' || raw.perUnit === 'on' };
 }
 

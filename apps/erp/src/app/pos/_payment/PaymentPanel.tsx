@@ -25,7 +25,7 @@ import { ManagerPinDialog } from '../_shell/LineApprovalField';
 import { usePaymentScreenOpen } from '../_shell/use-update-gate';
 import { REVIEW_NOTE, resolveApproval, type ApprovalFields, type LineActionKind, type LineApprovalMode } from '../_shell/line-approval';
 import {
-  addSplitRow, amountCents, appendAmountKey, applyToAllEvent, canAddPayment, chargeAddedEvent, chargeRemovedEvent, chooseTender, discountAddedEvent, discountRemovedEvent, finishLabel, paySale, payBlockerDetail, paymentSummary, priceBill, rateLabel, scPwdDiscountOf,
+  CHARGE_MAX_PER_TABLE, CHARGE_SENTENCES, addSplitRow, amountCents, appendAmountKey, applyToAllEvent, canAddPayment, chargeAddedEvent, chargeRemovedEvent, chooseTender, discountAddedEvent, discountRemovedEvent, finishLabel, paySale, payBlockerDetail, paymentSummary, priceBill, rateLabel, scPwdDiscountOf,
   type BlockerTarget, type DiscountAdd, type PayDeps, type PayRow, type PrintOutcome, type Tender,
 } from './logic';
 
@@ -430,7 +430,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
           <div className="mt-3 border-t border-dashed border-surface-border pt-2" role="group" aria-label="Charges">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-base font-semibold">Charges</h3>
-              <button type="button" data-erp-size="free" className={SECONDARY} disabled={p.bill.lines.length === 0} onClick={() => setChargeSheet(true)}>
+              <button type="button" data-erp-size="free" className={SECONDARY} disabled={p.bill.lines.length === 0 || billCharges.length >= CHARGE_MAX_PER_TABLE} title={billCharges.length >= CHARGE_MAX_PER_TABLE ? CHARGE_SENTENCES.tooMany : undefined} onClick={() => setChargeSheet(true)}>
                 + Add charge
               </button>
             </div>

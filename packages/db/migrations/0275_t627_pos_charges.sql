@@ -23,6 +23,8 @@
 -- removed_at_device) on table_session_charges; never DELETE. RLS: ENABLE + FORCE, one <t>_org_isolation policy through app_current_org() (DEF-077) with WITH CHECK (DEF-183).
 -- CUTOVER: pos_charge_presets keep; the two session / receipt tables purge (row 436, like the discount tables).
 --
+-- CAPS: one unit of a charge is at most 100,000 pesos (CHECK on all three tables; the domain says it in words first). The most ACTIVE charges per table (50) is a domain rule under the session lock.
+--
 -- LOCK BUDGET. First statement SET LOCAL lock_timeout = '5s'. Three new empty tables (their FKs scan nothing); two ADD COLUMN with a constant default (no rewrite) on
 -- pos_sales_receipts and pos_refunds plus their CHECKs (each validates the table once; both are small). Every statement is its own breakpoint; the last closes the file.
 
@@ -43,7 +45,7 @@ CREATE TABLE "pos_charge_presets" (
 	CONSTRAINT "pos_charge_presets_org_id_id_unique" UNIQUE ("org_id","id"),
 	CONSTRAINT "pos_charge_presets_store_id_id_unique" UNIQUE ("store_id","id"),
 	CONSTRAINT "pos_charge_presets_name_check" CHECK (length(trim("name")) BETWEEN 1 AND 40),
-	CONSTRAINT "pos_charge_presets_amount_check" CHECK ("amount" > 0),
+	CONSTRAINT "pos_charge_presets_amount_check" CHECK ("amount" > 0 AND "amount" <= 100000),
 	CONSTRAINT "pos_charge_presets_status_check" CHECK ("status" IN ('active','retired')),
 	CONSTRAINT "pos_charge_presets_amount_finite_check" CHECK ("amount" > '-Infinity'::numeric AND "amount" < 'Infinity'::numeric)
 );
@@ -64,7 +66,7 @@ CREATE TABLE "table_session_charges" (
 	"removed_at_device" timestamp with time zone,
 	CONSTRAINT "table_session_charges_org_id_id_unique" UNIQUE ("org_id","id"),
 	CONSTRAINT "table_session_charges_name_check" CHECK (length(trim("name")) BETWEEN 1 AND 40),
-	CONSTRAINT "table_session_charges_unit_amount_check" CHECK ("unit_amount" > 0),
+	CONSTRAINT "table_session_charges_unit_amount_check" CHECK ("unit_amount" > 0 AND "unit_amount" <= 100000),
 	CONSTRAINT "table_session_charges_qty_check" CHECK ("qty" BETWEEN 1 AND 1000),
 	CONSTRAINT "table_session_charges_status_check" CHECK ("status" IN ('active','removed')),
 	CONSTRAINT "table_session_charges_removed_shape_check" CHECK (("status" = 'removed') = ("removed_by" IS NOT NULL)),
@@ -85,7 +87,7 @@ CREATE TABLE "pos_sales_receipt_charges" (
 	CONSTRAINT "pos_sales_receipt_charges_org_id_id_unique" UNIQUE ("org_id","id"),
 	CONSTRAINT "pos_sales_receipt_charges_receipt_charge_no_unique" UNIQUE ("receipt_id","charge_no"),
 	CONSTRAINT "pos_sales_receipt_charges_name_check" CHECK (length(trim("name")) BETWEEN 1 AND 40),
-	CONSTRAINT "pos_sales_receipt_charges_unit_amount_check" CHECK ("unit_amount" > 0),
+	CONSTRAINT "pos_sales_receipt_charges_unit_amount_check" CHECK ("unit_amount" > 0 AND "unit_amount" <= 100000),
 	CONSTRAINT "pos_sales_receipt_charges_qty_check" CHECK ("qty" > 0),
 	CONSTRAINT "pos_sales_receipt_charges_amount_check" CHECK ("amount" = "qty" * "unit_amount"),
 	CONSTRAINT "pos_sales_receipt_charges_unit_amount_finite_check" CHECK ("unit_amount" > '-Infinity'::numeric AND "unit_amount" < 'Infinity'::numeric),

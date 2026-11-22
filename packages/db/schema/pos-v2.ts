@@ -421,7 +421,7 @@ export const posChargePresets = pgTable(
       .on(t.storeId, sql`lower(${t.name})`)
       .where(sql`${t.status} = 'active'`),
     check('pos_charge_presets_name_check', sql`length(trim(${t.name})) between 1 and 40`),
-    check('pos_charge_presets_amount_check', sql`${t.amount} > 0`),
+    check('pos_charge_presets_amount_check', sql`${t.amount} > 0 and ${t.amount} <= 100000`),
     check('pos_charge_presets_status_check', sql`${t.status} in ('active','retired')`),
     check('pos_charge_presets_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
     foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_charge_presets_store_id_same_org_fk' }).onDelete('restrict'),
@@ -458,7 +458,7 @@ export const tableSessionCharges = pgTable(
     index('table_session_charges_session_idx').on(t.storeId, t.sessionId),
     // NOTE: the trigger table_session_charges_guard (INSERT on a paid / voided session refused, 23001; active -> removed only, 23514, and refused once the session is closed, 23001; other columns frozen, 23001) is hand-added in migration 0275, ENABLE ALWAYS.
     check('table_session_charges_name_check', sql`length(trim(${t.name})) between 1 and 40`),
-    check('table_session_charges_unit_amount_check', sql`${t.unitAmount} > 0`),
+    check('table_session_charges_unit_amount_check', sql`${t.unitAmount} > 0 and ${t.unitAmount} <= 100000`),
     check('table_session_charges_qty_check', sql`${t.qty} between 1 and 1000`),
     check('table_session_charges_status_check', sql`${t.status} in ('active','removed')`),
     check('table_session_charges_removed_shape_check', sql`(${t.status} = 'removed') = (${t.removedBy} is not null)`),
@@ -557,7 +557,7 @@ export const posSalesReceipts = pgTable(
     /** In release 1 only senior/PWD (R12). That it equals the sum of the discount rows is a T-524 rule and test: a CHECK cannot sum child rows. */
     discountTotal: numeric('discount_total', { precision: 14, scale: 2 }).notNull().default('0'),
     total: numeric('total', { precision: 14, scale: 2 }).notNull(),
-    /** As the tablet computed it. A mismatch with `total` is not a constraint: T-524 records the server's figure and raises a finding (row 276). */
+    /** As the tablet computed it: the GOODS total, beside `total` (store charges are outside both; T-627). A mismatch with `total` is not a constraint: T-524 records the server's figure and raises a finding (row 276). */
     deviceTotal: numeric('device_total', { precision: 14, scale: 2 }).notNull(),
     offline: boolean('offline').notNull(),
     /** Composite FK (store_id, day_close_id) -> pos_day_closes, hand-added in migration 0238 (no single-column FK). */
@@ -677,7 +677,7 @@ export const posSalesReceiptCharges = pgTable(
     index('pos_sales_receipt_charges_receipt_idx').on(t.receiptId),
     // NOTE: the triggers pos_sales_receipt_charges_append_only (UPDATE / DELETE refused, 23001) and pos_sales_receipt_charges_append_guard (INSERT under an earlier transaction's receipt refused, 23001) are hand-added in migration 0275, ENABLE ALWAYS.
     check('pos_sales_receipt_charges_name_check', sql`length(trim(${t.name})) between 1 and 40`),
-    check('pos_sales_receipt_charges_unit_amount_check', sql`${t.unitAmount} > 0`),
+    check('pos_sales_receipt_charges_unit_amount_check', sql`${t.unitAmount} > 0 and ${t.unitAmount} <= 100000`),
     check('pos_sales_receipt_charges_qty_check', sql`${t.qty} > 0`),
     check('pos_sales_receipt_charges_amount_check', sql`${t.amount} = ${t.qty} * ${t.unitAmount}`),
     check('pos_sales_receipt_charges_unit_amount_finite_check', sql`${t.unitAmount} > '-Infinity'::numeric and ${t.unitAmount} < 'Infinity'::numeric`),

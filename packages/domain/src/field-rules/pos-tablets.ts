@@ -39,5 +39,5 @@ export const POS_DISCOUNT_RULES = defineFieldRules('posTablets.discount', {
  */
 export const POS_CHARGE_RULES = defineFieldRules('posTablets.charge', {
   name: { label: 'The charge name', kind: 'text', min: 1, max: 40, requires: 'A charge name must be 1 to 40 characters.' },
-  amount: { label: 'The charge amount', kind: 'money', min: 0.01, requires: 'The charge amount must be more than 0.', rangeSays: 'The charge amount must be more than 0.' },
+  amount: { label: 'The charge amount', kind: 'money', min: 0.01, max: 100000, requires: 'The charge amount must be more than 0.', rangeSays: 'The charge amount must be more than 0 and at most 100,000.' },
 });

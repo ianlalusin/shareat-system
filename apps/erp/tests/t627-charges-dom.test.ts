@@ -82,6 +82,8 @@ describe('T-627 bill math on the device (the same function as the server)', () =
     expect(checkCharge({ kind: 'custom', name: 'Corkage', amount: '0' })).toBe(CHARGE_SENTENCES.amount);
     expect(checkCharge({ kind: 'custom', name: 'Corkage', amount: '10.555' })).toBe(CHARGE_SENTENCES.amount);
     expect(checkCharge({ kind: 'custom', name: 'Corkage', amount: '50' })).toBeNull();
+    expect(checkCharge({ kind: 'custom', name: 'Corkage', amount: '100000.01' })).toBe(CHARGE_SENTENCES.max);
+    expect(checkCharge({ kind: 'custom', name: 'Corkage', amount: '100000' })).toBeNull();
     expect(checkCharge({ kind: 'preset', qty: 0 })).toBe(CHARGE_SENTENCES.qty);
     expect(checkCharge({ kind: 'preset', qty: 3 })).toBeNull();
   });
@@ -145,6 +147,13 @@ describe('T-627 the Payment screen', () => {
     await click(button(/^Cash/, host.querySelector('[aria-label="Pay with"]')!));
     await click(button(/^Finish/));
     expect((print.mock.calls[0]![0] as string[]).join('\n')).not.toContain('AMOUNT DUE');
+  });
+
+  it('50 charges on the table is the most: Add charge is off and says why', async () => {
+    await render(bill(Array.from({ length: 50 }, (_, i) => charge(100 + i, `Fee ${i}`, '1.00'))));
+    const add = button('+ Add charge')!;
+    expect(add.disabled).toBe(true);
+    expect(add.getAttribute('title')).toBe(CHARGE_SENTENCES.tooMany);
   });
 
   it('Remove on a charge sends charge.removed for that charge, with no PIN', async () => {

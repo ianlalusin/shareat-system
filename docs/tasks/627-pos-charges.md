@@ -63,3 +63,6 @@ Migration 0275: `pos_charge_presets` (keep), `table_session_charges` (purge, gua
 Z's `grossTotal` are what the receipts BILLED (total + charges), so tenders + short payments + refunds = gross still holds; `sales_days.other_charges` = the Z's charge total.
 Events: `charge.added` / `charge.removed`; `sale.completed.device.chargeTotal` is optional (absent = 0.00) so a sale queued before this change still replays.
 Refund: the cashier may tick "Also refund the charges" (default not), once per receipt, with at least one item.
+The v1 bridge `chargesTotal` is GROSS charges of the Z (before any refund of them), the same convention as `discountsTotal`; it is inside `totalGross`, as in v1.
+`pos_sales_receipts.device_total` keeps meaning the tablet's GOODS total (beside `total`); the short-payment audit compares amount due with amount due (device goods + device `chargeTotal` against the server's `amountDue`).
+Caps: one unit of a charge is at most 100,000 pesos (domain sentence plus a CHECK on all three charge tables in 0275) and a table holds at most 50 active charges (domain rule); quantity 1 to 1000.

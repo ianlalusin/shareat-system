@@ -473,7 +473,12 @@ export const CHARGE_SENTENCES = {
   name: 'A charge name must be 1 to 40 characters.',
   amount: 'A charge must be more than 0.',
   qty: `The quantity must be a whole number from 1 to ${CHARGE_QTY_MAX}.`,
+  max: 'A charge can be at most 100,000 pesos.',
+  tooMany: 'A table can have at most 50 charges. Remove one first.',
 } as const;
+/** The same limits as the server (`addCharge`): one unit at most 100,000 pesos, 50 active charges on a table. */
+export const CHARGE_UNIT_MAX_CENTAVOS = 10_000_000n;
+export const CHARGE_MAX_PER_TABLE = 50;
 
 /** null = the sheet may add it; otherwise the server's own sentence. A custom charge is added once, with its full peso amount typed. */
 export function checkCharge(add: { kind: 'preset'; qty: number } | { kind: 'custom'; name: string; amount: string }): string | null {
@@ -482,5 +487,6 @@ export function checkCharge(add: { kind: 'preset'; qty: number } | { kind: 'cust
   if (name.length < 1 || name.length > 40) return CHARGE_SENTENCES.name;
   const typed = add.amount.trim();
   if (!/^\d{1,12}(\.\d{1,2})?$/.test(typed) || amountCents(typed) <= 0n) return CHARGE_SENTENCES.amount;
+  if (amountCents(typed) > CHARGE_UNIT_MAX_CENTAVOS) return CHARGE_SENTENCES.max;
   return null;
 }

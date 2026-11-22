@@ -11,7 +11,7 @@ import { posV2Repo, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { parseDecimalInput } from '../shared/money-input';
 import { lockOpenSession } from './order';
-import { audit, deviceTime, recordedDifferently, requireContext, uuidInput, wholeNumber } from './shared';
+import { audit, CHARGE_MAX_PER_TABLE, CHARGE_MAX_PER_TABLE_SENTENCE, CHARGE_UNIT_AMOUNT_MAX, CHARGE_UNIT_AMOUNT_MAX_SENTENCE, deviceTime, loadLiveCharges, recordedDifferently, requireContext, uuidInput, wholeNumber } from './shared';
 
 export interface AddChargeInput {
   storeId: string;
@@ -43,6 +43,7 @@ async function resolveCharge(tx: Tx, actor: Actor, input: AddChargeInput): Promi
   if (qty !== 1) throw refuse('pos: custom charge quantity', 'A custom charge is added once. Type the full amount.');
   const unitAmount = parseDecimalInput(String(input.unitAmount ?? ''), '14,2', 'pos: the charge amount', 'The charge amount');
   if (compare(money(unitAmount), ZERO) <= 0) throw refuse('pos: custom charge not positive', 'A charge must be more than 0.');
+  if (compare(money(unitAmount), money(CHARGE_UNIT_AMOUNT_MAX)) > 0) throw refuse('pos: custom charge over the cap', CHARGE_UNIT_AMOUNT_MAX_SENTENCE);
   return { presetId: null, name, unitAmount, qty };
 }
 
@@ -64,6 +65,7 @@ export async function addCharge(tx: Tx, actor: Actor, input: AddChargeInput): Pr
     throw recordedDifferently();
   }
   const session = await lockOpenSession(tx, actor.orgId, input.storeId, sessionId);
+  if ((await loadLiveCharges(tx, actor.orgId, input.storeId, session.id)).length >= CHARGE_MAX_PER_TABLE) throw refuse('pos: too many charges on a table', CHARGE_MAX_PER_TABLE_SENTENCE);
   const c = await resolveCharge(tx, actor, input);
   await posV2Repo.insertSessionCharge(tx, {
     id: chargeId, orgId: actor.orgId, storeId: input.storeId, sessionId: session.id, presetId: c.presetId, name: c.name, unitAmount: money(c.unitAmount), qty: c.qty, addedBy: actor.personId, addedAtDevice: at,

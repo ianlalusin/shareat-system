@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest';
  */
 import { applyPosEvents } from '../../src/pos/inbox';
 import { buildPosSnapshot } from '../../src/pos/snapshot';
-import { getSessionBill, retirePosChargePreset, upsertPosChargePreset } from '../../src/pos';
+import { getSessionBill, removeCharge, retirePosChargePreset, upsertPosChargePreset } from '../../src/pos';
 import { AuthorizationError } from '@shareat/auth';
 import type { Tx } from '@shareat/db';
 import {
@@ -85,7 +85,7 @@ describe('T-627 store charges through the inbox', () => {
     expect(removed[0]!.actor_person_id).toBe(f.counterId); // who took it off
   });
 
-  it('a replay of the whole batch changes nothing (duplicates), and a re-sent charge.added with the same id is a no-op', async () => {
+  it('a replay of the whole batch (same seqs) changes nothing: every event is a duplicate', async () => {
     const f = await world();
     const t = table(f);
     const s = sale(f, t, { chargeTotal: '50.00', cash: '550.00' });
@@ -94,6 +94,29 @@ describe('T-627 store charges through the inbox', () => {
     expect(statuses(await send(f, events))).toEqual(Array(4).fill('duplicate'));
     expect(await sql`select 1 from pos_sales_receipt_charges where org_id = ${f.orgId}`).toHaveLength(1);
     expect(await sql`select 1 from table_session_charges where org_id = ${f.orgId}`).toHaveLength(1);
+  });
+
+  it('the same chargeId under a NEW seq: the same content is a no-op (nothing written, nothing audited twice), different content is refused as recorded differently', async () => {
+    const f = await world();
+    const leftover = await preset(f, 'Leftover', '100.00', true);
+    const t = table(f);
+    const id = uuid();
+    const original = chargeAdded(t.sessionId, { chargeId: id, name: 'Corkage', unitAmount: '50.00' });
+    expect(statuses(await send(f, [...t.open, ev(3, 'charge.added', f.counterId, original)]))).toEqual(['applied', 'applied', 'applied']);
+    // same id, same content, a new seq: applied (handled) as a no-op
+    expect(statuses(await send(f, [ev(4, 'charge.added', f.counterId, { ...original, addedAtDevice: nowIso() })]))).toEqual(['applied']);
+    expect(await sql`select 1 from table_session_charges where org_id = ${f.orgId}`).toHaveLength(1);
+    expect(await auditRows(f, 'pos.charge_added')).toHaveLength(1);
+    // same id, other amount / other name / now a preset: recorded differently, nothing changes
+    const differing = [
+      { ...original, unitAmount: '60.00' },
+      { ...original, name: 'Other' },
+      { chargeId: id, sessionId: t.sessionId, qty: 3, addedAtDevice: nowIso(), presetId: leftover },
+    ];
+    const r = await send(f, differing.map((p, i) => ev(5 + i, 'charge.added', f.counterId, p)));
+    expect(statuses(r)).toHaveLength(3);
+    for (const line of statuses(r)) expect(line).toMatch(/^quarantined: RECORDED_DIFFERENTLY: This change was already recorded differently/);
+    expect((await sql<{ name: string; unit_amount: string; qty: number }[]>`select name, unit_amount::text, qty from table_session_charges where id = ${id}`)[0]).toEqual({ name: 'Corkage', unit_amount: '50.00', qty: 1 });
   });
 
   it('the server recomputes: a tablet that left the charges out of its total is recorded with the server charge_total and a mismatch row (never refused)', async () => {
@@ -226,5 +249,68 @@ describe('T-627 store charges through the inbox', () => {
     expect((await asOrg(f.orgId, (tx) => upsertPosChargePreset(tx, f.admin, { storeId: f.storeId, name: 'Leftover', amount: '90', perUnit: true }))).outcome).toBe('created');
     const snap = await asOrg(f.orgId, (tx) => buildPosSnapshot(tx, { pairing: { pairingId: f.pairingId, orgId: f.orgId, storeId: f.storeId } }, RATES));
     expect(snap.body.chargePresets).toMatchObject([{ name: 'Leftover', amount: '90.00', perUnit: true }]);
+  });
+
+  it('the caps: a unit above 100,000 is refused (custom, and in the store list), exactly 100,000 is fine, the database says it too, 1001 units is refused', async () => {
+    const f = await world();
+    const per = await preset(f, 'Leftover', '100.00', true);
+    const t = table(f);
+    const r = await send(f, [
+      ...t.open,
+      ev(3, 'charge.added', f.counterId, chargeAdded(t.sessionId, { name: 'Huge', unitAmount: '100000.01' })),
+      ev(4, 'charge.added', f.counterId, chargeAdded(t.sessionId, { name: 'Limit', unitAmount: '100000.00' })),
+      ev(5, 'charge.added', f.counterId, chargeAdded(t.sessionId, { presetId: per, qty: 1001 })),
+    ]);
+    expect(statuses(r)).toEqual([
+      'applied',
+      'applied',
+      'quarantined: POS_EVENT_REFUSED: A charge can be at most 100,000 pesos.',
+      'applied',
+      'quarantined: POS_EVENT_REFUSED: The quantity must be a whole number from 1 to 1000.',
+    ]);
+    // the store list: the same limit, in the domain's words ...
+    const err = await asOrg(f.orgId, (tx) => upsertPosChargePreset(tx, f.admin, { storeId: f.storeId, name: 'Big', amount: '100000.01', perUnit: false })).then(() => null, (e: unknown) => e);
+    expect((err as { userMessage?: string }).userMessage).toBe('A charge can be at most 100,000 pesos.');
+    expect((await asOrg(f.orgId, (tx) => upsertPosChargePreset(tx, f.admin, { storeId: f.storeId, name: 'Edge', amount: '100000', perUnit: false }))).outcome).toBe('created');
+    // ... and the database CHECK, even for a writer that skips the domain
+    await expect(sql`insert into pos_charge_presets (org_id, store_id, name, amount, created_by) values (${f.orgId}, ${f.storeId}, 'Sneaky', 100000.01, ${f.adminId})`).rejects.toMatchObject({ code: '23514' });
+    await expect(
+      sql`insert into table_session_charges (org_id, store_id, session_id, name, unit_amount, qty, added_by, added_at_device) values (${f.orgId}, ${f.storeId}, ${t.sessionId}, 'Sneaky', 100000.01, 1, ${f.counterId}, now())`,
+    ).rejects.toMatchObject({ code: '23514' });
+  });
+
+  it('the table cap: 50 active charges is the most; the 51st is refused with a sentence, and taking one off makes room', async () => {
+    const f = await world();
+    const t = table(f);
+    const ids = Array.from({ length: 50 }, () => uuid());
+    const r = await send(f, [...t.open, ...ids.map((chargeId, i) => ev(3 + i, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId, name: `Fee ${i}`, unitAmount: '10.00' })))]);
+    expect(statuses(r).every((x) => x === 'applied')).toBe(true);
+    const over = await send(f, [ev(60, 'charge.added', f.counterId, chargeAdded(t.sessionId, { name: 'One too many', unitAmount: '10.00' }))]);
+    expect(statuses(over)).toEqual(['quarantined: POS_EVENT_REFUSED: A table can have at most 50 charges. Remove one first.']);
+    expect(await sql`select 1 from table_session_charges where session_id = ${t.sessionId} and status = 'active'`).toHaveLength(50);
+    expect(statuses(await send(f, [ev(61, 'charge.removed', f.counterId, { chargeId: ids[0], removedAtDevice: nowIso() }), ev(62, 'charge.added', f.counterId, chargeAdded(t.sessionId, { name: 'Fits now', unitAmount: '10.00' }))]))).toEqual(['applied', 'applied']);
+  });
+
+  it('charge.removed twice is a no-op the second time (wrote: false, one audit row); on a paid table it is refused and the charge stays', async () => {
+    const f = await world();
+    const t = table(f);
+    const keep = uuid();
+    const gone = uuid();
+    const s = sale(f, t, { chargeTotal: '50.00', cash: '550.00' });
+    await send(f, [
+      ...t.open,
+      ev(3, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId: gone, name: 'Oops', unitAmount: '25.00' })),
+      ev(4, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId: keep, name: 'Corkage', unitAmount: '50.00' })),
+      ev(5, 'charge.removed', f.counterId, { chargeId: gone, removedAtDevice: nowIso() }),
+    ]);
+    const again = await asOrg(f.orgId, (tx) => removeCharge(tx, f.counter, { storeId: f.storeId, pairingId: f.pairingId, chargeId: gone, removedAtDevice: nowIso() }));
+    expect(again).toEqual({ wrote: false });
+    expect(statuses(await send(f, [ev(6, 'charge.removed', f.counterId, { chargeId: gone, removedAtDevice: nowIso() })]))).toEqual(['applied']);
+    expect(await auditRows(f, 'pos.charge_removed')).toHaveLength(1);
+    // pay the table, then try to take the other charge off
+    expect(statuses(await send(f, [ev(7, 'sale.completed', f.counterId, s.event)]))).toEqual(['applied']);
+    const late = await send(f, [ev(8, 'charge.removed', f.counterId, { chargeId: keep, removedAtDevice: nowIso() })]);
+    expect(statuses(late)).toEqual(['quarantined: POS_EVENT_REFUSED: This table is already paid.']);
+    expect((await sql<{ status: string }[]>`select status from table_session_charges where id = ${keep}`)[0]!.status).toBe('active');
   });
 });

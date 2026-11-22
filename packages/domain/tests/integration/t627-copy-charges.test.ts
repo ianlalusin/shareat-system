@@ -33,7 +33,7 @@ describe('T-627: copy store charges', () => {
 
     const p = await preview(c, c.storeA, c.storeB);
     expect(p.counts).toEqual({ added: 1, replaced: 0, skipped: 2, same: 1, kept: 1 });
-    expect(p.lines.find((l) => l.status === 'different')!.note).toBe('The store has 250.00 pesos once.');
+    expect(p.lines.find((l) => l.status === 'different')!.note).toBe('The store has 250.00 pesos.');
     expect((await copy(c, c.storeA, c.storeB)).counts).toEqual(p.counts);
     expect(await shown(c.storeB)).toEqual(['Corkage 250.00 once', 'Extra griller 150.00 once', 'LEFTOVER 100.00 each']);
 

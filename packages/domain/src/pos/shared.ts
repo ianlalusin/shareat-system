@@ -69,6 +69,11 @@ export async function businessDateAndRules(tx: Tx, orgId: string, storeId: strin
 // ---------------------------------------------------------------------------------------------------------------------
 // Context (R1)
 // ---------------------------------------------------------------------------------------------------------------------
+/** T-627: the most one unit of a store charge can be (pesos, preset and custom; migration 0275 has the same CHECK), and the most ACTIVE charges one table can hold. */
+export const CHARGE_UNIT_AMOUNT_MAX = '100000.00';
+export const CHARGE_UNIT_AMOUNT_MAX_SENTENCE = 'A charge can be at most 100,000 pesos.';
+export const CHARGE_MAX_PER_TABLE = 50;
+export const CHARGE_MAX_PER_TABLE_SENTENCE = 'A table can have at most 50 charges. Remove one first.';
 export const NOT_ON = 'The new POS is not switched on for this store yet.';
 export const RECORDED_DIFFERENTLY = 'This change was already recorded differently on the till.';
 export const recordedDifferently = () => refuse('RECORDED_DIFFERENTLY: pos: same device id, different content', RECORDED_DIFFERENTLY);

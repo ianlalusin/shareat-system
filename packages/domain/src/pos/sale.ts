@@ -208,7 +208,15 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
       const d = devLines.get(l.lineId);
       return d !== undefined && sameCentavos(d.gross, l.gross) && sameCentavos(d.discountTotal, l.discountTotal) && sameCentavos(d.net, l.net);
     });
+  // `device_total` on the receipt stays the tablet's GOODS total (as before 0275, beside `total`). The shortfall audit compares the amount due with the amount due: device goods + device charges.
   const deviceTotal = parseMoneyInput(String(dev?.total ?? ''), 'pos: the tablet total', 'The tablet total');
+  const deviceCharges = ((): Money => {
+    try {
+      return parseMoneyInput(String(dev?.chargeTotal ?? '0.00'), 'pos: the tablet charge total', 'The tablet charge total');
+    } catch {
+      return money('0');
+    }
+  })();
 
   // 3. Payments (row 438).
   const pays = input.payments;
@@ -350,7 +358,7 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     const o = {
       storeId, entityId: receiptId, pairingId, at: issuedAt,
       after: {
-        gap: gap.toString(), tolerance: fromCentavos(tolerance).toString(), deviceTotal: deviceTotal.toString(), serverTotal: priced.amountDue,
+        gap: gap.toString(), tolerance: fromCentavos(tolerance).toString(), deviceTotal: add(deviceTotal, deviceCharges).toString(), serverTotal: priced.amountDue,
         payments: rows.map((r) => ({ tenderId: r.tenderId, amount: r.amount.toString() })),
       },
     };
