@@ -20,6 +20,7 @@ const WORDS = {
     note: ' Prices already in use are never edited: a changed price is a new price from now.',
   },
   kitchen: { title: 'Copy kitchen stations', noun: 'kitchen routes', what: 'the kitchen stations and which station cooks each item', note: ' A station that is missing is created.' },
+  charges: { title: 'Copy charges', noun: 'charges', what: 'the named charges the cashier can add to a bill (leftover, an extra griller)', note: '' },
   presets: { title: 'Copy discounts', noun: 'discounts', what: 'the named discounts the cashier can pick (not the senior and PWD discounts, which are the same everywhere)', note: '' },
 } as const;
 const MARK = { add: 'Add', same: 'Same', different: 'Different', skip: 'Skipped' } as const;

@@ -30,6 +30,8 @@ export type PostRefund = (body: {
   lines: { receiptLineId: string; qty: number }[];
   payments: { paymentId: string; tenderId: string; amount: string; referenceNo: string }[];
   reason: string;
+  /** T-627: also give back the receipt's store charges. */
+  refundCharges?: boolean;
   pin: string;
 }) => Promise<{ ok: boolean; error?: string; slip?: RefundSlipJson }>;
 
@@ -47,6 +49,8 @@ export interface RefundReceiptProps {
   receiptId: string;
   receiptNo: string;
   lines: readonly RefundLineChoice[];
+  /** T-627: the store charges still refundable on this receipt (decimal text, from the server; absent or 0.00 = none). */
+  chargesLeft?: string;
   payments: readonly RefundPaymentChoice[];
   canApprove: boolean;
   slipContext: RefundSlipContext;
@@ -56,7 +60,7 @@ export interface RefundReceiptProps {
   onDone?: () => void;
 }
 
-export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprove, slipContext, layout, post, print, onDone }: RefundReceiptProps) {
+export function RefundReceipt({ receiptId, receiptNo, lines, chargesLeft, payments, canApprove, slipContext, layout, post, print, onDone }: RefundReceiptProps) {
   const router = useRouter();
   const pos = usePos();
   const online = pos?.online ?? true;
@@ -64,6 +68,8 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
   const order = refundOrder(payments);
   const [dialog, setDialog] = useState(false);
   const [qtys, setQtys] = useState<Record<string, number>>({});
+  const [withCharges, setWithCharges] = useState(false); // T-627: default: charges are NOT refunded
+  const chargesCents = amountCents(chargesLeft);
   const [split, setSplit] = useState<Record<string, string>>({});
   const [edited, setEdited] = useState(false);
   const [activeId, setActiveId] = useState('');
@@ -82,14 +88,16 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
     setEdited(true);
     setSplit((cur) => ({ ...cur, [active]: next(cur[active] ?? '') }));
   };
-  const totalCents = refundTotalCents(lines, qtys);
+  const itemsCents = refundTotalCents(lines, qtys);
+  const totalCents = itemsCents + (withCharges && itemsCents > 0n ? chargesCents : 0n);
   const reasonText = reason.trim();
   const splitText = splitProblem(payments, split, references, totalCents);
   const ready = totalCents > 0n && splitText === null && reasonText.length >= REASON_MIN && (canApprove || pin !== '');
 
-  const spread = (next: Record<string, number>) => {
+  const spread = (next: Record<string, number>, charged = withCharges) => {
     if (edited) return;
-    const parts = autoSplit(payments, refundTotalCents(lines, next));
+    const items = refundTotalCents(lines, next);
+    const parts = autoSplit(payments, items + (charged && items > 0n ? chargesCents : 0n));
     setSplit(Object.fromEntries(Object.entries(parts).map(([id, c]) => [id, centsToText(c)])));
   };
   const setQty = (l: RefundLineChoice, q: number) => {
@@ -105,6 +113,7 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
   const reset = () => {
     setDialog(false);
     setQtys({});
+    setWithCharges(false);
     setSplit({});
     setEdited(false);
     setActiveId('');
@@ -142,6 +151,7 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
         lines: open.filter((l) => (qtys[l.lineId] ?? 0) > 0).map((l) => ({ receiptLineId: l.lineId, qty: qtys[l.lineId]! })),
         payments: order.filter((p) => amountCents(split[p.slotId]) > 0n).map((p) => ({ paymentId: p.paymentId, tenderId: p.tenderId, amount: split[p.slotId]!.replace(/\.$/, ''), referenceNo: (references[p.slotId] ?? '').trim() })),
         reason: reasonText,
+        ...(withCharges && itemsCents > 0n ? { refundCharges: true } : {}),
         pin,
       });
       if (answer.ok && answer.slip) {
@@ -203,6 +213,22 @@ export function RefundReceipt({ receiptId, receiptNo, lines, payments, canApprov
                 );
               })}
             </div>
+            {chargesCents > 0n ? (
+              <button
+                type="button"
+                data-erp-size="free"
+                aria-pressed={withCharges}
+                disabled={busy}
+                className={`${withCharges ? ROW_ACTIVE : ROW}`}
+                onClick={() => {
+                  setWithCharges(!withCharges);
+                  spread(qtys, !withCharges);
+                }}
+              >
+                <span className="text-base">Also refund the charges</span>
+                <span className="text-base font-semibold tabular-nums">{withCharges ? 'Yes' : 'No'} · {peso(chargesLeft ?? '0')}</span>
+              </button>
+            ) : null}
             <p className="text-lg font-semibold tabular-nums text-ink">Refund total {peso(centsToText(totalCents))}</p>
             <div className="space-y-2" role="group" aria-label="Money back">
               <p className="text-base font-semibold text-ink">Money back</p>

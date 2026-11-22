@@ -162,7 +162,7 @@ export function Orders() {
   // The bill of the table being paid. A pending bundle with extra heads needs the server's derived line id first (async), so the bill is built here, in
   // front of the early return, and an effect fills the ids in.
   const draftBill = useMemo(
-    () => (paying && snapshot?.payment ? projectBill({ sessionId: paying, view: view.sessions[paying], body: bodies[paying], pending: applied, menu, presets: snapshot.payment.discountPresets, extraIds }) : null),
+    () => (paying && snapshot?.payment ? projectBill({ sessionId: paying, view: view.sessions[paying], body: bodies[paying], pending: applied, menu, presets: snapshot.payment.discountPresets, chargePresets: snapshot.payment.chargePresets, extraIds }) : null),
     [paying, snapshot, view, bodies, applied, menu, extraIds],
   );
   const missingExtra = draftBill?.needsExtraFor.join(',') ?? '';
@@ -258,6 +258,7 @@ export function Orders() {
             isTakeOut={payingTile.mode === 'take_out'}
             bill={draftBill}
             presets={payment.discountPresets}
+            chargePresets={payment.chargePresets}
             tenders={payment.tenders}
             rules={payment.rules}
             vatRegistered={payment.store.vatRegistered}

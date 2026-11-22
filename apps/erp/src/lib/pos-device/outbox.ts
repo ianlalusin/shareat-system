@@ -42,6 +42,8 @@ const EVENT_KINDS: readonly PosEventKind[] = [
   'discount.added',
   'discount.removed',
   'discount.applied_to_all',
+  'charge.added',
+  'charge.removed',
   'session.voided',
   'sale.completed',
 ];
