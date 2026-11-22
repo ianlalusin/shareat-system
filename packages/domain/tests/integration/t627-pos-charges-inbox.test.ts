@@ -30,8 +30,8 @@ async function preset(f: Fx, name: string, amount: string, perUnit: boolean, sta
   return (await sql<{ id: string }[]>`
     insert into pos_charge_presets (org_id, store_id, name, amount, per_unit, status, created_by) values (${f.orgId}, ${f.storeId}, ${name}, ${amount}, ${perUnit}, ${status}, ${f.adminId}) returning id`)[0]!.id;
 }
-const chargeAdded = (sessionId: string, o: { chargeId?: string; presetId?: string; name?: string; unitAmount?: string; qty?: number }) => ({
-  chargeId: o.chargeId ?? uuid(), sessionId, qty: o.qty ?? 1, addedAtDevice: nowIso(),
+const chargeAdded = (sessionId: string, o: { chargeId?: string; presetId?: string; name?: string; unitAmount?: string; qty?: number; addedAtDevice?: string }) => ({
+  chargeId: o.chargeId ?? uuid(), sessionId, qty: o.qty ?? 1, addedAtDevice: o.addedAtDevice ?? nowIso(),
   ...(o.presetId ? { presetId: o.presetId } : { name: o.name ?? 'Corkage', unitAmount: o.unitAmount ?? '50.00' }),
 });
 
@@ -62,11 +62,13 @@ describe('T-627 store charges through the inbox', () => {
     const keep = uuid();
     const drop = uuid();
     const s = sale(f, t, { chargeTotal: '350.00', cash: '1000.00' }); // 500.00 + Leftover 3 x 100 + Corkage 50 = 850.00; the removed 25.00 is not in it
+    const t0 = Date.now();
     const r = await send(f, [
       ...t.open,
-      ev(3, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId: keep, presetId: leftover, qty: 3 })),
-      ev(4, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId: drop, name: 'Oops', unitAmount: '25.00' })),
-      ev(5, 'charge.added', f.counterId, chargeAdded(t.sessionId, { name: 'Corkage', unitAmount: '50.00' })),
+      // distinct device times: receipt charge order is (device time, id), so equal times made the order random
+      ev(3, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId: keep, presetId: leftover, qty: 3, addedAtDevice: new Date(t0 + 1000).toISOString() })),
+      ev(4, 'charge.added', f.counterId, chargeAdded(t.sessionId, { chargeId: drop, name: 'Oops', unitAmount: '25.00', addedAtDevice: new Date(t0 + 2000).toISOString() })),
+      ev(5, 'charge.added', f.counterId, chargeAdded(t.sessionId, { name: 'Corkage', unitAmount: '50.00', addedAtDevice: new Date(t0 + 3000).toISOString() })),
       ev(6, 'charge.removed', f.counterId, { chargeId: drop, removedAtDevice: nowIso() }),
       ev(7, 'sale.completed', f.counterId, s.event),
     ]);
