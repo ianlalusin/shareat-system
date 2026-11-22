@@ -327,17 +327,6 @@ systemctl restart shareat-customer
 
 ## 4. Turn the clock sync back on
 
-### 4.0 The database helper (optional: only for ad-hoc read-only checks with SQL)
-Paste this once as one block on the **DROPLET** (a new login forgets it). It runs one SQL statement as the admin login and prints the result:
-
-```bash
-asql() {
-  U="$(grep -m1 '^SYSTEM_DATABASE_URL=' /srv/shareat-shared/.env.local | cut -d= -f2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
-  (cd "$(readlink -f /srv/shareat)" && DATABASE_URL="$U" node -e "require('postgres')(process.env.DATABASE_URL,{max:1}).unsafe(process.argv[1]).then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})" "$1")
-  unset U
-}
-```
-
 ### 4.1 Fill the new Firestore (ASK BOSS BEFORE THIS STEP)
 The new Firestore is empty. The relay only publishes what is queued, so the queue needs ONE fresh entry for each thing the clock terminals show today: current staff on the roster, current fingerprint/card badges, and each store's current clock settings. Old history is not copied (the tablets do not need it). The script below does exactly that. It is safe to run twice.
 
