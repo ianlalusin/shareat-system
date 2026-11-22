@@ -49,6 +49,7 @@ function pushFigures(out: string[], view: ReadingSlipView, cols: number): void {
   if (!isZeroAmount(view.discounts.pwd)) out.push(...justify('PWD DISCOUNT', `-${printAmount(view.discounts.pwd)}`, cols));
   if (!isZeroAmount(view.discounts.other)) out.push(...justify('OTHER DISCOUNT', `-${printAmount(view.discounts.other)}`, cols));
   if (!isZeroAmount(view.discountTotal)) out.push(...justify('TOTAL DISCOUNTS', `-${printAmount(view.discountTotal)}`, cols));
+  if (view.chargeTotal !== undefined && !isZeroAmount(view.chargeTotal)) out.push(...justify('CHARGES', `+${printAmount(view.chargeTotal)}`, cols));
   out.push(...justify('GROSS TOTAL', printAmount(view.grossTotal), cols));
   out.push(rule(cols));
   out.push(...justify('UNLI SALES', printAmount(view.unliSales), cols));

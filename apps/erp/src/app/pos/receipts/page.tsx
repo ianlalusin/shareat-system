@@ -68,7 +68,8 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
 
   const { receipts, tenders, canApprove, paired, slip, found, lookupDays, storeId, walletChecks } = data;
   const gaps = missingSeqs(receipts);
-  const total = receipts.reduce((sum, r) => add(sum, money(r.total)), ZERO);
+  // T-627: what was taken is the goods plus the store charges.
+  const total = receipts.reduce((sum, r) => add(sum, money(r.total), money(r.chargeTotal ?? '0.00')), ZERO);
   return (
     <Page density="table">
       <div>
@@ -128,7 +129,7 @@ function ReceiptTable({ label, rows, paired, tenders, canApprove, slip, showDate
             <Td className="font-mono">{r.receiptNo}</Td>
             <Td>{formatBusinessDateTime(r.issuedAtDevice, showDate ? { dateStyle: 'medium', timeStyle: 'short' } : { timeStyle: 'short' })}</Td>
             <Td>{r.table}</Td>
-            <NumTd>{peso(r.total)}</NumTd>
+            <NumTd>{peso(add(money(r.total), money(r.chargeTotal ?? '0.00')))}</NumTd>
             <Td>
               {r.tenders === '' ? '—' : r.tenders}
               {r.corrected ? <span className="ml-2 text-xs text-muted">corrected</span> : null}
@@ -141,7 +142,7 @@ function ReceiptTable({ label, rows, paired, tenders, canApprove, slip, showDate
               <Td>
                 <div className="flex flex-wrap items-center gap-2">
                   {r.canCorrect ? <CorrectPayment receiptId={r.receiptId} receiptNo={r.receiptNo} payments={r.payments} tenders={tenders} canApprove={canApprove} /> : null}
-                  {slip ? <RefundReceipt receiptId={r.receiptId} receiptNo={r.receiptNo} lines={r.lines} payments={r.refundPayments} canApprove={canApprove} slipContext={slip.context} layout={slip.layout} /> : null}
+                  {slip ? <RefundReceipt receiptId={r.receiptId} receiptNo={r.receiptNo} lines={r.lines} chargesLeft={r.chargesLeft} payments={r.refundPayments} canApprove={canApprove} slipContext={slip.context} layout={slip.layout} /> : null}
                 </div>
               </Td>
             ) : null}

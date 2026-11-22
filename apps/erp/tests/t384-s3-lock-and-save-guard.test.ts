@@ -39,6 +39,8 @@ const EXEMPT: Record<string, string> = {
   'admin/pos-tablets/TillsSection.tsx': 'T-546: per-cash-register settings blocks saved one at a time, not an edit-in-place record',
   // T-622 (BOSS approved 21 Nov 2026, same precedent as TillsSection): the Add / Change discount window. Change is already behind its own button and modal (T-448), the name is locked, and the only hidden id is the store; the prefilled value is the one preset being changed. The edit-in-place Change / Apply shape would add a tap to a one-value edit.
   'admin/pos-tablets/DiscountsSection.tsx': 'T-622: the Change window is opened by its own button and saves one preset; not an edit-in-place record',
+  // T-627 (NEEDS BOSS APPROVAL, same precedent as DiscountsSection): the Add / Change charge window. Change is behind its own button and modal, the name is locked, the only hidden id is the store; the prefilled amount is the one charge being changed.
+  'admin/pos-tablets/ChargesSection.tsx': 'T-627: the Change window is opened by its own button and saves one charge; not an edit-in-place record',
   // T-193 S5: an add form (hidden request id and hidden month/agency inputs), not a record-bound edit-in-place form.
   'payroll/statutory-payments/new/page.tsx': 'T-193 S5: an add form with hidden id inputs, not record-bound',
   // DEF-778: an add form whose only hidden *Id is the per-render request id; its date default is a prop, not a record.

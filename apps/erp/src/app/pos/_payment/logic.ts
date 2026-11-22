@@ -6,12 +6,12 @@
  */
 import { fromCentavos, money, toCentavos, type Money } from '@shareat/core/money';
 import { checkAll, POS_PAYMENT_REFERENCE_RULES } from '@shareat/domain/field-rules';
-import { priceSession, type PriceLineInput, type PricedSession } from '@shareat/domain/pos/price';
+import { priceSession, type PriceChargeInput, type PriceLineInput, type PricedSession } from '@shareat/domain/pos/price';
 import type { NewPosEvent, PosEvent } from '@/lib/pos-device';
 import type { ApprovalFields } from '../_shell/line-approval';
 import { printAmount } from '@/lib/pos-print/layout';
 import { formatReceipt } from '@/lib/pos-print/receipt-text';
-import type { PrintLayout, ReceiptDiner, ReceiptHeader, ReceiptLine, ReceiptView } from '@/lib/pos-print/types';
+import type { PrintLayout, ReceiptCharge, ReceiptDiner, ReceiptHeader, ReceiptLine, ReceiptView } from '@/lib/pos-print/types';
 
 /** The server takes between 1 and 20 payments (completeSale). */
 export const MAX_TENDERS = 20;
@@ -239,12 +239,13 @@ export function checkDiscount(bill: readonly BillLine[], heads: number, add: Dis
 // ---------------------------------------------------------------------------------------------------------------------
 // Pricing: the SAME function the server uses
 // ---------------------------------------------------------------------------------------------------------------------
-export function priceBill(i: { lines: PriceLineInput[]; rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number }; vatRegistered: boolean }): PricedSession {
+export function priceBill(i: { lines: PriceLineInput[]; charges?: PriceChargeInput[]; rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number }; vatRegistered: boolean }): PricedSession {
   return priceSession({
     vatRegistered: i.vatRegistered,
     vatPercentBasisPoints: BigInt(i.rules.vatPercentBasisPoints),
     scPwdPercentBasisPoints: BigInt(i.rules.scPwdPercentBasisPoints),
     lines: i.lines,
+    charges: i.charges ?? [],
   });
 }
 
@@ -293,6 +294,8 @@ export function buildSalePayload(i: SaleInput): Record<string, unknown> {
       subtotal: i.priced.subtotal,
       discountTotal: i.priced.discountTotal,
       total: i.priced.total,
+      // T-627: only when there are charges, so a bill without them is the payload it always was (the server reads an absent chargeTotal as 0.00).
+      ...(toCentavos(money(i.priced.chargeTotal)) > 0n ? { chargeTotal: i.priced.chargeTotal } : {}),
       lines: i.priced.lines.map((l) => ({ lineId: l.lineId, gross: l.gross, discountTotal: l.discountTotal, net: l.net })),
     },
     payments: i.rows.map((r) => {
@@ -339,6 +342,28 @@ export function applyToAllEvent(i: { personId: string; now: Date; sessionId: str
   return { kind: 'discount.applied_to_all', personId: i.personId, occurredAtDevice: at, payload: { sessionId: i.sessionId, presetId: i.presetId, applyId: i.applyId, appliedAtDevice: at, ...i.approval } };
 }
 
+/** T-627: put a store charge on the table: a preset (with a quantity when it is per unit) or a custom one (name and pesos, once). */
+export function chargeAddedEvent(i: { personId: string; now: Date; chargeId: string; sessionId: string; presetId?: string; name?: string; unitAmount?: string; qty: number }): NewPosEvent {
+  const at = i.now.toISOString();
+  return {
+    kind: 'charge.added',
+    personId: i.personId,
+    occurredAtDevice: at,
+    payload: {
+      chargeId: i.chargeId,
+      sessionId: i.sessionId,
+      ...(i.presetId !== undefined ? { presetId: i.presetId } : { name: i.name ?? '', unitAmount: i.unitAmount ?? '' }),
+      qty: i.qty,
+      addedAtDevice: at,
+    },
+  };
+}
+
+export function chargeRemovedEvent(i: { personId: string; now: Date; chargeId: string }): NewPosEvent {
+  const at = i.now.toISOString();
+  return { kind: 'charge.removed', personId: i.personId, occurredAtDevice: at, payload: { chargeId: i.chargeId, removedAtDevice: at } };
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Pay: one tap, local-first
 // ---------------------------------------------------------------------------------------------------------------------
@@ -374,12 +399,12 @@ export interface PayInput {
   layout: PrintLayout;
   /** Customer copies, from the till's settings (printSettingsOf). */
   copies: number;
-  receipt: { header: ReceiptHeader; tableLabel: string | null; heads: number | null; cashierName: string; issuedAtLocal: string; footerLines: string[]; lines: ReceiptLine[]; scPwdDiscount: Money };
+  receipt: { header: ReceiptHeader; tableLabel: string | null; heads: number | null; cashierName: string; issuedAtLocal: string; footerLines: string[]; lines: ReceiptLine[]; scPwdDiscount: Money; /** T-627: the bill's store charges, as the receipt prints them. */ charges?: ReceiptCharge[] };
 }
 export type PayResult = { ok: true; receiptNo: string; print: PrintOutcome; lines: string[]; notice: string | null; view: ReceiptView } | { ok: false; message: string };
 
 export function receiptViewOf(i: PayInput, receiptNo: string): ReceiptView {
-  const summary = paymentSummary({ total: i.priced.total, rows: i.rows, tenders: i.tenders });
+  const summary = paymentSummary({ total: i.priced.amountDue, rows: i.rows, tenders: i.tenders });
   const payments = (buildSalePayload({ ...i, receiptId: '', terminalSeq: 0 }).payments as { tenderId: string; amount: string; referenceNo?: string; toCheck: boolean }[]);
   const diners: ReceiptDiner[] = [...i.seniors].sort((a, b) => a.dinerNo - b.dinerNo).map((s) => ({ dinerNo: s.dinerNo, kind: s.kind, holderName: s.holderName.trim(), idNumber: s.idNumber.trim() }));
   return {
@@ -393,6 +418,7 @@ export function receiptViewOf(i: PayInput, receiptNo: string): ReceiptView {
     subtotal: i.priced.subtotal,
     discountTotal: i.priced.discountTotal,
     total: i.priced.total,
+    ...(i.receipt.charges && i.receipt.charges.length > 0 ? { charges: i.receipt.charges, amountDue: i.priced.amountDue } : {}),
     tenders: payments.map((p) => ({ name: i.tenders.find((t) => t.id === p.tenderId)?.name ?? 'Tender', amount: money(p.amount), reference: p.referenceNo ?? null, toCheck: p.toCheck })),
     change: money(summary.change),
     diners,
@@ -437,4 +463,30 @@ export function finishLabel(rows: readonly PayRow[], tenders: readonly Tender[])
     .filter((r) => amountCents(r.amount) > 0n)
     .map((r) => `${(tenders.find((t) => t.id === r.tenderId)?.name ?? 'Tender').toUpperCase()} ₱${printAmount(centsText(amountCents(r.amount)))}`)
     .join(' + ');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-627: the charge sheet's checks, in the server's sentences (`addCharge`), so a charge that breaks one cannot be added
+// ---------------------------------------------------------------------------------------------------------------------
+export const CHARGE_QTY_MAX = 1000;
+export const CHARGE_SENTENCES = {
+  name: 'A charge name must be 1 to 40 characters.',
+  amount: 'A charge must be more than 0.',
+  qty: `The quantity must be a whole number from 1 to ${CHARGE_QTY_MAX}.`,
+  max: 'A charge can be at most 100,000 pesos.',
+  tooMany: 'A table can have at most 50 charges. Remove one first.',
+} as const;
+/** The same limits as the server (`addCharge`): one unit at most 100,000 pesos, 50 active charges on a table. */
+export const CHARGE_UNIT_MAX_CENTAVOS = 10_000_000n;
+export const CHARGE_MAX_PER_TABLE = 50;
+
+/** null = the sheet may add it; otherwise the server's own sentence. A custom charge is added once, with its full peso amount typed. */
+export function checkCharge(add: { kind: 'preset'; qty: number } | { kind: 'custom'; name: string; amount: string }): string | null {
+  if (add.kind === 'preset') return Number.isInteger(add.qty) && add.qty >= 1 && add.qty <= CHARGE_QTY_MAX ? null : CHARGE_SENTENCES.qty;
+  const name = add.name.trim();
+  if (name.length < 1 || name.length > 40) return CHARGE_SENTENCES.name;
+  const typed = add.amount.trim();
+  if (!/^\d{1,12}(\.\d{1,2})?$/.test(typed) || amountCents(typed) <= 0n) return CHARGE_SENTENCES.amount;
+  if (amountCents(typed) > CHARGE_UNIT_MAX_CENTAVOS) return CHARGE_SENTENCES.max;
+  return null;
 }

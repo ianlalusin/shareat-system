@@ -1623,6 +1623,25 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'No discount is added to a line of a sales receipt written by an earlier transaction (reads the receipt of the PARENT line, by xmin) (0240, T-524 R11).',
   },
+  // T-627 (0275) - the store charges: three history guards, ENABLE ALWAYS. Raise 23001 restrict_violation (the status move: 23514).
+  table_session_charges_guard: {
+    table: 'table_session_charges',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No charge is inserted on a paid or voided session (reads the PARENT session status, as table_session_line_discounts_guard does); a charge moves active -> removed once and every other column is frozen (0275, T-627).',
+  },
+  pos_sales_receipt_charges_append_only: {
+    table: 'pos_sales_receipt_charges',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'The frozen copy of the charges on a sales receipt: UPDATE and DELETE refused (0275, T-627). Decides only from TG_OP.',
+  },
+  pos_sales_receipt_charges_append_guard: {
+    table: 'pos_sales_receipt_charges',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No charge is added to a sales receipt written by an earlier transaction (reads the PARENT receipt xmin, as the other receipt children do) (0275, T-627).',
+  },
   // T-534 S1 (0265) - the post-sale documents: eight history guards, all ENABLE ALWAYS (ALWAYS 62 -> 70). Raise 23001 restrict_violation.
   pos_payment_conversions_frozen: {
     table: 'pos_payment_conversions',

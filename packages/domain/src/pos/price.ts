@@ -14,6 +14,9 @@
  * G is the gross of the units the discount covers. On a bundle line ("up to N" heads, qty 1 at the bundle amount) a unit is a HEAD and
  * its price is the bundle amount allocated exactly over N heads (the extra centavo to the earliest heads); discounts take heads in
  * creation order, so two seniors are two different heads.
+ *
+ * T-627 store charges (leftover, an extra griller; docs/tasks/627-pos-charges.md): each active charge is qty x unit amount, exact centavos. They are added AFTER discounts and
+ * VAT, sit OUTSIDE the VAT base, are never discounted and never part of the senior/PWD base (as v1): `total` and `vat` do not move, `amountDue = total + chargeTotal`.
  */
 import { allocate, fromCentavos, money, toCentavos, type Money } from '@shareat/core/money';
 
@@ -35,6 +38,12 @@ export interface PriceLineInput {
   /** ACTIVE discounts only, in creation order. */
   readonly discounts: readonly PriceDiscountInput[];
 }
+export interface PriceChargeInput {
+  readonly chargeId: string;
+  /** A decimal string: the peso amount of ONE unit (or of the whole charge when it is once per bill, qty 1). */
+  readonly unitAmount: string;
+  readonly qty: number;
+}
 export interface PriceSnapshot {
   /** organizations.tax_type = 'vat' */
   readonly vatRegistered: boolean;
@@ -42,6 +51,13 @@ export interface PriceSnapshot {
   readonly scPwdPercentBasisPoints: bigint;
   /** NON-cancelled lines only. */
   readonly lines: readonly PriceLineInput[];
+  /** T-627: the ACTIVE store charges, in creation order. Absent = none. */
+  readonly charges?: readonly PriceChargeInput[];
+}
+export interface PricedCharge {
+  readonly chargeId: string;
+  /** qty x unit amount. */
+  readonly amount: Money;
 }
 export interface PricedDiscount {
   readonly discountId: string;
@@ -69,8 +85,14 @@ export interface PricedSession {
   readonly lines: PricedLine[];
   readonly subtotal: Money;
   readonly discountTotal: Money;
+  /** The goods: subtotal - discounts. Store charges are NOT in it (they sit outside the VAT base). */
   readonly total: Money;
   readonly vat: PricedVat;
+  /** T-627 */
+  readonly charges: PricedCharge[];
+  readonly chargeTotal: Money;
+  /** total + chargeTotal: what the customer pays. */
+  readonly amountDue: Money;
 }
 
 /** n / d rounded half-up, n >= 0, d > 0. */
@@ -137,5 +159,10 @@ export function priceSession(snapshot: PriceSnapshot): PricedSession {
   const vat: PricedVat = snapshot.vatRegistered
     ? { vatableSales: fromCentavos(restNet - vatAmount), vatExemptSales: fromCentavos(exempt), vatAmount: fromCentavos(vatAmount), vatRemovedForScPwd: fromCentavos(removed) }
     : { vatableSales: fromCentavos(0n), vatExemptSales: fromCentavos(exempt), vatAmount: fromCentavos(0n), vatRemovedForScPwd: fromCentavos(0n) };
-  return { lines, subtotal: fromCentavos(subtotal), discountTotal: fromCentavos(discountTotal), total: fromCentavos(total), vat };
+  const charges: PricedCharge[] = (snapshot.charges ?? []).map((c) => ({ chargeId: c.chargeId, amount: fromCentavos(BigInt(c.qty) * toCentavos(money(c.unitAmount))) }));
+  const chargeTotal = charges.reduce((a, c) => a + toCentavos(c.amount), 0n);
+  return {
+    lines, subtotal: fromCentavos(subtotal), discountTotal: fromCentavos(discountTotal), total: fromCentavos(total), vat,
+    charges, chargeTotal: fromCentavos(chargeTotal), amountDue: fromCentavos(total + chargeTotal),
+  };
 }

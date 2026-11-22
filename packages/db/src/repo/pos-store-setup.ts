@@ -4,7 +4,7 @@
  * Every function takes the caller's transaction first and filters by org AND store; RLS is the backstop.
  */
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { posDiscountPresets, posStands, type PosDiscountPresetRow, type PosStandRow } from '../../schema/pos-v2';
+import { posChargePresets, posDiscountPresets, posStands, type PosChargePresetRow, type PosDiscountPresetRow, type PosStandRow } from '../../schema/pos-v2';
 import { posV1StoreLinks } from '../../schema/pos-v1';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
@@ -69,6 +69,42 @@ export async function retirePreset(tx: Tx, orgId: string, storeId: string, prese
     .set({ status: 'retired', updatedAt: new Date() })
     .where(and(eq(posDiscountPresets.id, presetId), eq(posDiscountPresets.orgId, orgId), eq(posDiscountPresets.storeId, storeId), eq(posDiscountPresets.status, 'active')))
     .returning({ id: posDiscountPresets.id });
+  return rows.length > 0;
+}
+
+// ---- T-627: the store's named charges (leftover, an extra griller) -----------------------------------------------------
+
+/** The ACTIVE charge of this name (case-insensitive, the same key the unique index uses), or undefined. */
+export async function getActiveChargeByName(tx: Tx, orgId: string, storeId: string, name: string): Promise<PosChargePresetRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posChargePresets)
+    .where(and(eq(posChargePresets.orgId, orgId), eq(posChargePresets.storeId, storeId), eq(posChargePresets.status, 'active'), sql`lower(${posChargePresets.name}) = lower(${name})`));
+  return row;
+}
+
+export async function insertChargePreset(tx: Tx, input: { orgId: string; storeId: string; name: string; amount: Money; perUnit: boolean; createdBy: string }): Promise<PosChargePresetRow> {
+  const [row] = await tx
+    .insert(posChargePresets)
+    .values({ orgId: input.orgId, storeId: input.storeId, name: input.name, amount: input.amount, perUnit: input.perUnit, status: 'active', createdBy: input.createdBy })
+    .returning();
+  return row!;
+}
+
+export async function updateChargePreset(tx: Tx, orgId: string, storeId: string, presetId: string, set: { amount: Money; perUnit: boolean }): Promise<void> {
+  await tx
+    .update(posChargePresets)
+    .set({ amount: set.amount, perUnit: set.perUnit, updatedAt: new Date() })
+    .where(and(eq(posChargePresets.id, presetId), eq(posChargePresets.orgId, orgId), eq(posChargePresets.storeId, storeId)));
+}
+
+/** Retire an ACTIVE charge (the row is kept: past sales name it). Returns whether a row changed. */
+export async function retireChargePreset(tx: Tx, orgId: string, storeId: string, presetId: string): Promise<boolean> {
+  const rows = await tx
+    .update(posChargePresets)
+    .set({ status: 'retired', updatedAt: new Date() })
+    .where(and(eq(posChargePresets.id, presetId), eq(posChargePresets.orgId, orgId), eq(posChargePresets.storeId, storeId), eq(posChargePresets.status, 'active')))
+    .returning({ id: posChargePresets.id });
   return rows.length > 0;
 }
 

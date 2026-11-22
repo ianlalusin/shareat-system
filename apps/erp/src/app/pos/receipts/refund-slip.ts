@@ -12,6 +12,8 @@ export interface RefundSlipJson {
   recordedAt: string;
   reason: string;
   total: string;
+  /** T-627: absent from an older answer. */
+  charges?: string;
   lines: { name: string; qty: number; amount: string }[];
   payments: { tenderName: string; amount: string; referenceNo: string | null }[];
   approvedByName: string;
@@ -34,6 +36,7 @@ export function refundSlipView(slip: RefundSlipJson, ctx: RefundSlipContext, rep
     refundedAtLocal: formatBusinessDateTime(new Date(slip.recordedAt), { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', ''),
     lines: slip.lines.map((l) => ({ name: l.name, qty: l.qty, amount: money(l.amount) })),
     total: money(slip.total),
+    ...(slip.charges ? { charges: money(slip.charges) } : {}),
     payments: slip.payments.map((p) => ({ name: p.tenderName, amount: money(p.amount), reference: p.referenceNo })),
     reason: slip.reason,
     approvedBy: slip.approvedByName,

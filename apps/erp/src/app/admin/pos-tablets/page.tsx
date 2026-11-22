@@ -3,8 +3,9 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { staffStoresFor } from '../../staff/lib';
 import { clearLockAction, registerTabletAction, revokeTabletAction } from './actions';
-import { deviceTail, loadCopyStores, loadDiscounts, loadPosTablets, loadTills, revokeConfirmName, type PosTabletLinkView, type TerminalLockView } from './lib';
+import { deviceTail, loadCharges, loadCopyStores, loadDiscounts, loadPosTablets, loadTills, revokeConfirmName, type PosTabletLinkView, type TerminalLockView } from './lib';
 import { TillsSection } from './TillsSection';
+import { ChargesSection } from './ChargesSection';
 import { DiscountsSection } from './DiscountsSection';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -97,7 +98,9 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
   const tills = await loadTills(actor, store.id);
   // T-622: the store's named discounts. T-611 S3: the Copy button sits in that section, for an administrator only (presentation; the domain and a PIN gate the write).
   const discounts = await loadDiscounts(actor, store.id);
-  const copyStores = discounts.canManage ? await loadCopyStores(actor, store.id) : null;
+  // T-627: the store's named charges (leftover, an extra griller), beside the discounts. Both are the same right (manage_store_settings at the store).
+  const charges = await loadCharges(actor, store.id);
+  const copyStores = discounts.canManage || charges.canManage ? await loadCopyStores(actor, store.id) : null;
   const activeLock = active ? terminals.find((t) => t.personId === active.terminalPersonId) : undefined;
   const otherLogins = terminals.filter((t) => t.personId !== active?.terminalPersonId);
 
@@ -242,6 +245,7 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
       </section>
 
       <DiscountsSection store={store} presets={discounts.presets} canManage={discounts.canManage} copyStores={copyStores} />
+      <ChargesSection store={store} presets={charges.presets} canManage={charges.canManage} copyStores={copyStores} />
 
       <TillsSection store={store} tills={tills} returnTo={RETURN_TO} />
     </Page>

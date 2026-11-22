@@ -26,6 +26,7 @@ import {
   businessDateAndRules,
   businessDateOf,
   deviceTime,
+  loadLiveCharges,
   loadLiveLines,
   recordedDifferently,
   requireContext,
@@ -33,6 +34,7 @@ import {
   snapshotOf,
   uuidInput,
   wholeNumber,
+  type LoadedCharge,
   type LoadedLine,
   type PosDeps,
 } from './shared';
@@ -78,11 +80,14 @@ export async function voidUnpaidSession(tx: Tx, actor: Actor, input: VoidInput):
   const queued = lines.filter((l) => l.kitchenStatus === 'queued').map((l) => l.id);
   const discounts = (await posV2Repo.listLineDiscounts(tx, actor.orgId, input.storeId, lines.map((l) => l.id))).filter((d) => d.status === 'active');
   await posV2Repo.removeLineDiscounts(tx, actor.orgId, input.storeId, discounts.map((d) => d.id), actor.personId, at);
+  // T-627: the table's store charges come off with it, for the same reason (the database refuses to change them once the session is closed).
+  const charges = await loadLiveCharges(tx, actor.orgId, input.storeId, session.id);
+  await posV2Repo.removeSessionCharges(tx, actor.orgId, input.storeId, charges.map((c) => c.id), actor.personId, at);
   await posV2Repo.markLinesCancelled(tx, actor.orgId, input.storeId, queued);
   await posV2Repo.markSessionVoided(tx, actor.orgId, input.storeId, session.id, { voidedBy: approverId, voidedAtDevice: at, voidReason: reason!, voidedOffline: offline });
   await audit(tx, actor, 'pos.session_voided', {
     storeId: input.storeId, entityId: session.id, pairingId, at,
-    before: { status: 'open', linesCancelled: queued.length, discountsRemoved: discounts.length },
+    before: { status: 'open', linesCancelled: queued.length, discountsRemoved: discounts.length, chargesRemoved: charges.length },
     after: { status: 'voided', reason, offline, approvedBy: approverId },
   });
   await posV2Repo.bumpStateVersion(tx, actor.orgId, input.storeId);
@@ -101,7 +106,7 @@ export interface CompleteSaleInput {
   terminalSeq: number;
   issuedAtDevice: string | Date;
   offline: boolean;
-  device: { subtotal: string; discountTotal: string; total: string; lines: { lineId: string; gross: string; discountTotal: string; net: string }[] };
+  device: { subtotal: string; discountTotal: string; total: string; /** T-627: absent on a sale queued before charges existed (= 0.00). */ chargeTotal?: string; lines: { lineId: string; gross: string; discountTotal: string; net: string }[] };
   payments: { tenderId: string; amount: string; referenceNo?: string; toCheck: boolean }[];
   seniors: { dinerNo: number; kind: 'senior' | 'pwd'; idNumber: string; holderName: string }[];
 }
@@ -112,11 +117,11 @@ const MISMATCH_LINE_CAP = 200;
 const pad = (n: number, w: number) => String(n).padStart(w, '0');
 
 /** What the bill is, priced from the database (the screen's figure and the receipt's figure are this one). */
-async function priceFromDb(tx: Tx, actor: Actor, storeId: string, lines: LoadedLine[], deps: PosDeps | undefined, at?: Date): Promise<{ priced: PricedSession; rules: Awaited<ReturnType<typeof businessDateAndRules>> | undefined }> {
+async function priceFromDb(tx: Tx, actor: Actor, storeId: string, lines: LoadedLine[], charges: LoadedCharge[], deps: PosDeps | undefined, at?: Date): Promise<{ priced: PricedSession; rules: Awaited<ReturnType<typeof businessDateAndRules>> | undefined }> {
   const taxType = await posV2Repo.getOrgTaxType(tx, actor.orgId);
   // T-528: always the real rates, so `priced.vat` (the receipt's VAT split) is right for every bill, not only one with a senior/PWD discount.
   const resolved = await businessDateAndRules(tx, actor.orgId, storeId, deps, at);
-  return { priced: priceSession(snapshotOf(lines, taxType === 'vat', resolved.rules)), rules: resolved };
+  return { priced: priceSession(snapshotOf(lines, taxType === 'vat', resolved.rules, charges)), rules: resolved };
 }
 
 const sameCentavos = (a: string, b: Money) => {
@@ -189,19 +194,29 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   if (await posV2Repo.terminalSeqUsed(tx, actor.orgId, terminal.id, terminalSeq)) throw refuse('pos: receipt number reused', 'That receipt number is already used on this till.');
 
   // 2. Recompute from the database; the server's figures are the receipt's.
-  const { priced, rules } = await priceFromDb(tx, actor, storeId, lines, deps, issuedAt); // the day is the sale's own (its device time), not the replay's
+  const charges = await loadLiveCharges(tx, actor.orgId, storeId, sessionId); // T-627
+  const { priced, rules } = await priceFromDb(tx, actor, storeId, lines, charges, deps, issuedAt); // the day is the sale's own (its device time), not the replay's
   const dev = input.device;
   const devLines = new Map((dev?.lines ?? []).map((l) => [l.lineId, l]));
   const matches =
     sameCentavos(dev?.subtotal ?? '', money(priced.subtotal)) &&
     sameCentavos(dev?.discountTotal ?? '', money(priced.discountTotal)) &&
     sameCentavos(dev?.total ?? '', money(priced.total)) &&
+    sameCentavos(dev?.chargeTotal ?? '0.00', money(priced.chargeTotal)) &&
     (dev?.lines ?? []).length === priced.lines.length &&
     priced.lines.every((l) => {
       const d = devLines.get(l.lineId);
       return d !== undefined && sameCentavos(d.gross, l.gross) && sameCentavos(d.discountTotal, l.discountTotal) && sameCentavos(d.net, l.net);
     });
+  // `device_total` on the receipt stays the tablet's GOODS total (as before 0275, beside `total`). The shortfall audit compares the amount due with the amount due: device goods + device charges.
   const deviceTotal = parseMoneyInput(String(dev?.total ?? ''), 'pos: the tablet total', 'The tablet total');
+  const deviceCharges = ((): Money => {
+    try {
+      return parseMoneyInput(String(dev?.chargeTotal ?? '0.00'), 'pos: the tablet charge total', 'The tablet charge total');
+    } catch {
+      return money('0');
+    }
+  })();
 
   // 3. Payments (row 438).
   const pays = input.payments;
@@ -221,7 +236,8 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     return { tenderId: t.id, kind: t.kind, amount, referenceNo, toCheck: p.toCheck };
   });
   const paid = rows.reduce((a, r) => add(a, r.amount), money('0'));
-  const total = money(priced.total);
+  // T-627: what the customer owes is the goods plus the store charges (charges sit outside `total`, so the receipt's total identity is untouched).
+  const total = money(priced.amountDue);
   // T-558 (row 453): a short payment is RECORDED, never refused (the customer has already left). gap > 0 means no change; it is a routine variance up to the
   // tolerance in force on the sale's business date, a finding above it. Overpayment keeps the change-only-from-cash rule below.
   const gap = compare(paid, total) < 0 ? subtract(total, paid) : money('0');
@@ -284,7 +300,7 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   try {
     await posV2Repo.insertReceipt(tx, {
       id: receiptId, orgId: actor.orgId, storeId, terminalId: terminal.id, terminalSeq, tableSessionId: sessionId, cashierId: actor.personId, issuedAtDevice: issuedAt,
-      subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, deviceTotal, offline,
+      subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, deviceTotal, offline, chargeTotal: priced.chargeTotal,
     });
   } catch (err) {
     if (isUniqueViolation(err, 'pos_sales_receipts_terminal_seq_unique')) throw refuse('pos: receipt number reused (race)', 'That receipt number is already used on this till.');
@@ -316,6 +332,10 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     }
   }
   await posV2Repo.insertReceiptLineDiscounts(tx, discountRows);
+  await posV2Repo.insertReceiptCharges(
+    tx,
+    charges.map((c, i) => ({ orgId: actor.orgId, receiptId, chargeNo: i + 1, sessionChargeId: c.id, presetId: c.presetId, name: c.name, unitAmount: money(c.unitAmount), qty: c.qty, amount: priced.charges[i]!.amount })),
+  );
   await posV2Repo.insertReceiptPayments(
     tx,
     rows.map((r, i) => ({ orgId: actor.orgId, receiptId, tenderId: r.tenderId, amount: r.amount, changeGiven: i === changeRow ? change : money('0'), referenceNo: r.referenceNo, toCheck: r.toCheck })),
@@ -325,9 +345,9 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   if (!matches) {
     await audit(tx, actor, 'pos.sale_recompute_mismatch', {
       storeId, entityId: receiptId, pairingId, at: issuedAt,
-      before: { subtotal: dev.subtotal, discountTotal: dev.discountTotal, total: dev.total, lines: (dev.lines ?? []).slice(0, MISMATCH_LINE_CAP).map((l) => ({ lineId: l.lineId, net: l.net })), truncated: (dev.lines ?? []).length > MISMATCH_LINE_CAP },
+      before: { subtotal: dev.subtotal, discountTotal: dev.discountTotal, total: dev.total, chargeTotal: dev.chargeTotal ?? '0.00', lines: (dev.lines ?? []).slice(0, MISMATCH_LINE_CAP).map((l) => ({ lineId: l.lineId, net: l.net })), truncated: (dev.lines ?? []).length > MISMATCH_LINE_CAP },
       after: {
-        subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total,
+        subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, chargeTotal: priced.chargeTotal,
         lines: priced.lines.slice(0, MISMATCH_LINE_CAP).map((l, i) => ({ lineId: l.lineId, qty: lines[i]!.qty, unitPrice: lines[i]!.unitPrice, net: l.net })),
         truncated: priced.lines.length > MISMATCH_LINE_CAP,
       },
@@ -338,7 +358,7 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     const o = {
       storeId, entityId: receiptId, pairingId, at: issuedAt,
       after: {
-        gap: gap.toString(), tolerance: fromCentavos(tolerance).toString(), deviceTotal: deviceTotal.toString(), serverTotal: priced.total,
+        gap: gap.toString(), tolerance: fromCentavos(tolerance).toString(), deviceTotal: add(deviceTotal, deviceCharges).toString(), serverTotal: priced.amountDue,
         payments: rows.map((r) => ({ tenderId: r.tenderId, amount: r.amount.toString() })),
       },
     };
@@ -350,7 +370,7 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   if (repeatedCard) await audit(tx, actor, 'pos.senior_id_repeat', { storeId, entityId: receiptId, pairingId, at: issuedAt, after: { receiptId, earlierReceiptIds: [...earlierReceipts].slice(0, 50) } });
   await audit(tx, actor, 'pos.sale_completed', {
     storeId, entityId: receiptId, pairingId, at: issuedAt,
-    after: { sessionId, receiptNo: printed, offline, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, payments: rows.length, statutoryDiners: holders.length },
+    after: { sessionId, receiptNo: printed, offline, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, chargeTotal: priced.chargeTotal, payments: rows.length, statutoryDiners: holders.length },
   });
   await posV2Repo.bumpStateVersion(tx, actor.orgId, storeId);
   return { wrote: true, receiptId };
@@ -371,7 +391,8 @@ export async function getSessionBill(tx: Tx, actor: Actor, input: { storeId: str
   const session = await posV2Repo.getTableSession(tx, actor.orgId, input.storeId, uuidInput(input.sessionId, 'The table id'));
   if (!session) throw gone('pos: table session not found', 'table');
   const lines = await loadLiveLines(tx, actor.orgId, input.storeId, session.id);
-  const { priced } = await priceFromDb(tx, actor, input.storeId, lines, deps);
+  const charges = await loadLiveCharges(tx, actor.orgId, input.storeId, session.id);
+  const { priced } = await priceFromDb(tx, actor, input.storeId, lines, charges, deps);
   const store = await posV2Repo.getPosStore(tx, actor.orgId, input.storeId);
   return {
     stateVersion: store?.stateVersion ?? 0,
@@ -381,6 +402,8 @@ export async function getSessionBill(tx: Tx, actor: Actor, input: { storeId: str
       menuItemId: l.menuItemId, note: l.note, addedAtDevice: l.addedAtDevice,
       discounts: l.discounts.map((d) => ({ id: d.id, kind: d.kind, valueType: d.valueType, value: money(d.value), qty: d.qty, dinerNo: d.dinerNo, presetId: d.presetId })),
     })),
+    // T-627: the table's ACTIVE store charges (an older tablet body has none).
+    charges: charges.map((c) => ({ id: c.id, presetId: c.presetId, name: c.name, unitAmount: money(c.unitAmount), qty: c.qty })),
     pricing: priced,
   };
 }
@@ -477,6 +500,7 @@ async function receiptsView(tx: Tx, actor: Actor, storeId: string, rows: Awaited
   const refunds = await posV2Repo.listRefundsOfReceipts(tx, actor.orgId, ids);
   const refundLines = await posV2Repo.listRefundLinesOfReceipts(tx, actor.orgId, ids);
   const refundPays = await posV2Repo.listRefundPaymentsOfReceipts(tx, actor.orgId, ids);
+  const receiptCharges = await posV2Repo.listReceiptCharges(tx, actor.orgId, ids); // T-627
   const refundRoutesOf = refundRoutes(payments, corrections, refundPays);
   const kindOf = new Map(tenderRows.map((t) => [t.id, t.kind as 'cash' | 'wallet']));
   return {
@@ -493,6 +517,10 @@ async function receiptsView(tx: Tx, actor: Actor, storeId: string, rows: Awaited
       );
       return {
         receiptId: r.receiptId, sessionId: r.sessionId, terminalId: r.terminalId, terminalSeq: r.terminalSeq, issuedAtDevice: r.issuedAtDevice, subtotal: r.subtotal, discountTotal: r.discountTotal, total: r.total, offline: r.offline,
+        /** T-627: the store charges on this receipt (outside `total`; the amount due was total + chargeTotal), and how much of them can still be refunded (worked out here). */
+        chargeTotal: r.chargeTotal,
+        charges: receiptCharges.filter((c) => c.receiptId === r.receiptId).map((c) => ({ name: c.name, qty: c.qty, amount: c.amount })),
+        chargesLeft: String(fromCentavos(toCentavos(money(r.chargeTotal)) - refunds.filter((x) => x.parentReceiptId === r.receiptId).reduce((a, x) => a + toCentavos(money(x.chargesAmount)), 0n))),
         terminalNo: r.terminalNo,
         receiptNo: `${storeCode}-${pad(r.terminalNo, 2)}-${pad(r.terminalSeq, 6)}`,
         table: r.standNumber === null ? 'Take-out' : `Stand ${r.standNumber}`,

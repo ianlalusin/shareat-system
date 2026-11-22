@@ -11,12 +11,14 @@ import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import {
   posDayCloseTenders,
   posDayCloses,
+  posChargePresets,
   posDiscountPresets,
   posEvents,
   posPaymentConversions,
   posRefundLines,
   posRefundPayments,
   posRefunds,
+  posSalesReceiptCharges,
   posSalesReceiptLineDiscounts,
   posSalesReceiptLines,
   posSalesReceiptPayments,
@@ -25,9 +27,11 @@ import {
   posStores,
   posTenderCorrections,
   posTerminals,
+  tableSessionCharges,
   tableSessionLineDiscounts,
   tableSessionLines,
   tableSessions,
+  type PosChargePresetRow,
   type PosDayCloseRow,
   type PosDiscountPresetRow,
   type PosEventRow,
@@ -35,11 +39,13 @@ import {
   type PosRefundLineRow,
   type PosRefundPaymentRow,
   type PosRefundRow,
+  type PosSalesReceiptChargeRow,
   type PosSalesReceiptRow,
   type PosStandRow,
   type PosStoreRow,
   type PosTenderCorrectionRow,
   type PosTerminalRow,
+  type TableSessionChargeRow,
   type TableSessionLineDiscountRow,
   type TableSessionLineRow,
   type TableSessionRow,
@@ -53,6 +59,7 @@ import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 
 export type {
+  PosChargePresetRow,
   PosDayCloseRow,
   PosDiscountPresetRow,
   PosEventRow,
@@ -60,11 +67,13 @@ export type {
   PosRefundLineRow,
   PosRefundPaymentRow,
   PosRefundRow,
+  PosSalesReceiptChargeRow,
   PosSalesReceiptRow,
   PosStandRow,
   PosStoreRow,
   PosTenderCorrectionRow,
   PosTerminalRow,
+  TableSessionChargeRow,
   TableSessionLineDiscountRow,
   TableSessionLineRow,
   TableSessionRow,
@@ -487,6 +496,8 @@ export interface NewReceipt {
   total: Money;
   deviceTotal: Money;
   offline: boolean;
+  /** T-627: the store charges on the bill, outside `total` (the amount due is total + chargeTotal). Absent = 0. */
+  chargeTotal?: Money;
 }
 export interface NewReceiptLine {
   id: string;
@@ -543,6 +554,7 @@ export async function insertReceipt(tx: Tx, r: NewReceipt): Promise<void> {
     total: r.total,
     deviceTotal: r.deviceTotal,
     offline: r.offline,
+    ...(r.chargeTotal !== undefined ? { chargeTotal: r.chargeTotal } : {}),
   });
 }
 export async function insertReceiptLines(tx: Tx, rows: NewReceiptLine[]): Promise<void> {
@@ -623,6 +635,8 @@ export interface ReceiptListRow {
   terminalSeq: number;
   issuedAtDevice: Date;
   total: string;
+  /** T-627: the store charges on the bill (the amount due is total + chargeTotal). */
+  chargeTotal: string;
   offline: boolean;
   mode: 'dine_in' | 'take_out';
   /** The stand number, or null for take-out. */
@@ -649,6 +663,7 @@ export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: s
       terminalSeq: posSalesReceipts.terminalSeq,
       issuedAtDevice: posSalesReceipts.issuedAtDevice,
       total: posSalesReceipts.total,
+      chargeTotal: posSalesReceipts.chargeTotal,
       offline: posSalesReceipts.offline,
       mode: tableSessions.mode,
       standNumber: posStands.number,
@@ -680,6 +695,7 @@ export async function listReceiptsSinceForList(tx: Tx, orgId: string, storeId: s
       posSalesReceipts.terminalSeq,
       posSalesReceipts.issuedAtDevice,
       posSalesReceipts.total,
+      posSalesReceipts.chargeTotal,
       posSalesReceipts.offline,
       tableSessions.mode,
       posStands.number,
@@ -837,6 +853,92 @@ export async function listActivePresets(tx: Tx, orgId: string, storeId: string):
     .from(posDiscountPresets)
     .where(and(eq(posDiscountPresets.orgId, orgId), eq(posDiscountPresets.storeId, storeId), eq(posDiscountPresets.status, 'active')))
     .orderBy(asc(posDiscountPresets.name), asc(posDiscountPresets.id));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-627 store charges (migration 0275): the store's list, the charges on an open table, the frozen copy on a receipt.
+// ---------------------------------------------------------------------------------------------------------------------
+export async function listActiveChargePresets(tx: Tx, orgId: string, storeId: string): Promise<PosChargePresetRow[]> {
+  return tx
+    .select()
+    .from(posChargePresets)
+    .where(and(eq(posChargePresets.orgId, orgId), eq(posChargePresets.storeId, storeId), eq(posChargePresets.status, 'active')))
+    .orderBy(asc(posChargePresets.name), asc(posChargePresets.id));
+}
+
+export async function getChargePreset(tx: Tx, orgId: string, storeId: string, presetId: string): Promise<PosChargePresetRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posChargePresets)
+    .where(and(eq(posChargePresets.id, presetId), eq(posChargePresets.orgId, orgId), eq(posChargePresets.storeId, storeId)));
+  return row;
+}
+
+export interface NewSessionCharge {
+  id: string;
+  orgId: string;
+  storeId: string;
+  sessionId: string;
+  presetId: string | null;
+  name: string;
+  unitAmount: Money;
+  qty: number;
+  addedBy: string;
+  addedAtDevice: Date;
+}
+export async function insertSessionCharge(tx: Tx, r: NewSessionCharge): Promise<void> {
+  await tx.insert(tableSessionCharges).values({ id: r.id, orgId: r.orgId, storeId: r.storeId, sessionId: r.sessionId, presetId: r.presetId, name: r.name, unitAmount: r.unitAmount, qty: r.qty, addedBy: r.addedBy, addedAtDevice: r.addedAtDevice });
+}
+
+export async function getSessionCharge(tx: Tx, orgId: string, storeId: string, chargeId: string): Promise<TableSessionChargeRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(tableSessionCharges)
+    .where(and(eq(tableSessionCharges.id, chargeId), eq(tableSessionCharges.orgId, orgId), eq(tableSessionCharges.storeId, storeId)));
+  return row;
+}
+
+/** Every charge (active and removed) of a table, in creation order: device time, then id. */
+export async function listSessionCharges(tx: Tx, orgId: string, storeId: string, sessionId: string): Promise<TableSessionChargeRow[]> {
+  return tx
+    .select()
+    .from(tableSessionCharges)
+    .where(and(eq(tableSessionCharges.sessionId, sessionId), eq(tableSessionCharges.orgId, orgId), eq(tableSessionCharges.storeId, storeId)))
+    .orderBy(asc(tableSessionCharges.addedAtDevice), asc(tableSessionCharges.id));
+}
+
+export async function removeSessionCharges(tx: Tx, orgId: string, storeId: string, chargeIds: string[], by: string, at: Date): Promise<void> {
+  if (chargeIds.length === 0) return;
+  await tx
+    .update(tableSessionCharges)
+    .set({ status: 'removed', removedBy: by, removedAtDevice: at })
+    .where(and(inArray(tableSessionCharges.id, chargeIds), eq(tableSessionCharges.orgId, orgId), eq(tableSessionCharges.storeId, storeId)));
+}
+
+export interface NewReceiptCharge {
+  orgId: string;
+  receiptId: string;
+  chargeNo: number;
+  sessionChargeId: string | null;
+  presetId: string | null;
+  name: string;
+  unitAmount: Money;
+  qty: number;
+  amount: Money;
+}
+export async function insertReceiptCharges(tx: Tx, rows: NewReceiptCharge[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(posSalesReceiptCharges).values(rows);
+}
+
+/** The frozen charges of the given receipts, in receipt then charge order. */
+export async function listReceiptCharges(tx: Tx, orgId: string, receiptIds: readonly string[]): Promise<PosSalesReceiptChargeRow[]> {
+  if (receiptIds.length === 0) return [];
+  return tx
+    .select()
+    .from(posSalesReceiptCharges)
+    .where(and(inArray(posSalesReceiptCharges.receiptId, [...receiptIds]), eq(posSalesReceiptCharges.orgId, orgId)))
+    .orderBy(asc(posSalesReceiptCharges.receiptId), asc(posSalesReceiptCharges.chargeNo));
 }
 
 /** The till this pairing currently acts as (`pos_terminals.pairing_id`), or undefined. */
@@ -1411,6 +1513,8 @@ export interface NewRefund {
   parentReceiptId: string;
   refundSeq: number;
   total: Money;
+  /** T-627: the part of `total` that gives store charges back. Absent = 0. */
+  chargesAmount?: Money;
   reason: string;
   approvedBy: string;
   recordedBy: string;

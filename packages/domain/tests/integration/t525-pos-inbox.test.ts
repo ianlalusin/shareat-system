@@ -1002,7 +1002,7 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
   it('contains exactly the R7 keys, in a body that survives JSON (no bigint)', async () => {
     const f = await fixture();
     const s = await snapshot(f);
-    expect(Object.keys(s.body).sort()).toEqual(['businessDate', 'device', 'discountPresets', 'menu', 'rules', 'staff', 'stands', 'store', 'tenders']);
+    expect(Object.keys(s.body).sort()).toEqual(['businessDate', 'chargePresets', 'device', 'discountPresets', 'menu', 'rules', 'staff', 'stands', 'store', 'tenders']); // T-627 added chargePresets
     expect(() => JSON.stringify(s.body)).not.toThrow();
     expect(s.etag).toMatch(/^"[0-9a-f]{64}"$/);
   });

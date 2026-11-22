@@ -12,6 +12,8 @@ export interface ReadingJson {
   grossTotal: string;
   subtotal: string;
   discountTotal: string;
+  /** T-627: Σ of the store charges (inside `grossTotal`); absent from older callers. */
+  chargeTotal?: string;
   discounts: { senior: string; pwd: string; other: string };
   byTender: { name: string; amount: string }[];
   toCheckCount: number;
@@ -64,6 +66,7 @@ export function readingSlipView(reading: ReadingJson, ctx: SlipContext): Reading
     subtotal: amountOf(reading.subtotal),
     discounts: { senior: amountOf(reading.discounts.senior), pwd: amountOf(reading.discounts.pwd), other: amountOf(reading.discounts.other) },
     discountTotal: amountOf(reading.discountTotal),
+    ...(reading.chargeTotal ? { chargeTotal: amountOf(reading.chargeTotal) } : {}),
     grossTotal: amountOf(reading.grossTotal),
     unliSales: amountOf(reading.unliSales),
     alaCarteSales: amountOf(reading.alaCarteSales),

@@ -1651,6 +1651,20 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason:
       'Discounts on frozen lines of pilot sales receipts (T-523 R13): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379); the statutory records they point at are purged the same way. Append-only.',
   },
+  pos_charge_presets: {
+    class: 'keep',
+    reason: 'A store’s named charges (T-627: leftover, an extra griller) are standing master data, kept like the discount presets; a session or receipt charge that cites one is purged, the preset stays.',
+  },
+  table_session_charges: {
+    class: 'purge',
+    reason:
+      'Charges on pilot table sessions (T-627): row 436: v1 receives Lipa’s December day totals through T-531’s bridge (its chargesTotal included), so no booked figure lives only here (pre-2027 POS data is test data, row 379).',
+  },
+  pos_sales_receipt_charges: {
+    class: 'purge',
+    reason:
+      'Charges frozen on pilot sales receipts (T-627): row 436: v1 receives Lipa’s December day totals, charges included, through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Append-only.',
+  },
   pos_payment_conversions: {
     class: 'purge',
     reason:
