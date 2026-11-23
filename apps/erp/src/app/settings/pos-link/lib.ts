@@ -85,6 +85,8 @@ export async function posStoreOptions(): Promise<PosV1StoreOption[] | null> {
 // ---------------------------------------------------------------------------------------------
 export interface TenderAdminRow {
   readonly id: string;
+  /** T-629: the master option this tender switches on. */
+  readonly paymentOptionId: string;
   readonly name: string;
   readonly kind: 'cash' | 'wallet';
   readonly moneyAccountId: string | null;
@@ -121,6 +123,7 @@ export async function storeTenders(actor: Actor, storeId: string, posStoreId: st
   return {
     tenders: rows.map((t) => ({
       id: t.id,
+      paymentOptionId: t.paymentOptionId,
       name: t.name,
       kind: t.kind,
       moneyAccountId: t.moneyAccountId,
@@ -206,4 +209,28 @@ export function tenderMapping(
     rows.push({ posMethod: null, ...tenderCells(t), status, statusText: STATUS_TEXT[status] });
   }
   return rows;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Payment options (T-629): the org's master list, with how many stores use each
+// ---------------------------------------------------------------------------------------------
+export interface PaymentOptionAdminRow {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: 'cash' | 'wallet';
+  readonly status: 'active' | 'retired';
+  /** Stores that have it switched on, and stores that ever held a tender for it (the kind is fixed once this is above zero). */
+  readonly storesOn: number;
+  readonly storesTotal: number;
+}
+
+export async function paymentOptionRows(actor: Actor): Promise<PaymentOptionAdminRow[]> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const out: PaymentOptionAdminRow[] = [];
+    for (const o of await posV1Repo.listPaymentOptions(tx, actor.orgId)) {
+      const used = await posV1Repo.countTendersOfOption(tx, actor.orgId, o.id);
+      out.push({ id: o.id, name: o.name, kind: o.kind, status: o.status, storesOn: used.active, storesTotal: used.total });
+    }
+    return out;
+  });
 }

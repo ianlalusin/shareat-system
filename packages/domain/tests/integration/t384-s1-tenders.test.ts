@@ -33,6 +33,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, posV1Repo, type Tx } from '@shareat/db';
+import { createTenderByName } from './_fixtures/t629-options';
 import type { Actor } from '@shareat/auth';
 
 const sql = postgres(url, { max: 6 });
@@ -69,8 +70,12 @@ async function sentenceOf(p: Promise<unknown>): Promise<string> {
   return sentence(err);
 }
 
+/** T-629: a tender is a store's switch for an org payment option (made here by name when the org has none). */
+function asTender(_f: Fixture, input: Record<string, unknown>): Record<string, unknown> {
+  return input;
+}
 async function create(f: Fixture, input: Record<string, unknown>): Promise<{ id: string }> {
-  return asOrg(f.orgId, (tx) => mod.createTender(tx, f.admin, { storeId: f.storeId, ...input } as never));
+  return asOrg(f.orgId, (tx) => createTenderByName(mod, tx, f.admin, { storeId: f.storeId, ...asTender(f, input) } as never));
 }
 async function update(f: Fixture, input: Record<string, unknown>) {
   return asOrg(f.orgId, (tx) => mod.updateTender(tx, f.admin, input as never));
@@ -128,7 +133,7 @@ describe('D0 - a version exists on every tender, including one never updated', (
     expect(v0.length, 'not an empty string').toBeGreaterThan(0);
     expect(v0, 'not the text null').not.toBe('null');
     expect(await versionOf(f, t.id), 'reading twice gives the same version').toBe(v0);
-    await update(f, { tenderId: t.id, name: 'Drawer' });
+    await update(f, { tenderId: t.id, posV1Alias: 'Drawer' });
     const v1 = await versionOf(f, t.id);
     expect(v1, 'a write moves the version').not.toBe(v0);
   });
@@ -139,25 +144,25 @@ describe('D1 - a stale update is refused in words, writes nothing, audits nothin
     const f = await fixture('d1');
     const t = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
     const v = await versionOf(f, t.id);
-    await update(f, { tenderId: t.id, name: 'A2', expectedVersion: v });
-    expect((await row(t.id)).name).toBe('A2');
+    await update(f, { tenderId: t.id, posV1Alias: 'A2', expectedVersion: v });
+    expect((await row(t.id)).pos_v1_alias).toBe('A2');
 
-    expect(await sentenceOf(update(f, { tenderId: t.id, name: 'A3', expectedVersion: v }))).toBe(STALE_SENTENCE);
-    expect((await row(t.id)).name, 'the stale write must not land').toBe('A2');
+    expect(await sentenceOf(update(f, { tenderId: t.id, posV1Alias: 'A3', expectedVersion: v }))).toBe(STALE_SENTENCE);
+    expect((await row(t.id)).pos_v1_alias, 'the stale write must not land').toBe('A2');
     expect(await audits(t.id, 'update_tender'), 'a refused write is not audited').toHaveLength(1);
 
     // control: the version read AFTER the first write is the fresh one
     const v2 = await versionOf(f, t.id);
-    await update(f, { tenderId: t.id, name: 'A3', expectedVersion: v2 });
-    expect((await row(t.id)).name).toBe('A3');
+    await update(f, { tenderId: t.id, posV1Alias: 'A3', expectedVersion: v2 });
+    expect((await row(t.id)).pos_v1_alias).toBe('A3');
   });
 
   it('the refusal names no id and no constraint text', async () => {
     const f = await fixture('d1s');
     const t = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
     const v = await versionOf(f, t.id);
-    await update(f, { tenderId: t.id, name: 'A2', expectedVersion: v });
-    const s = await sentenceOf(update(f, { tenderId: t.id, name: 'A3', expectedVersion: v }));
+    await update(f, { tenderId: t.id, posV1Alias: 'A2', expectedVersion: v });
+    const s = await sentenceOf(update(f, { tenderId: t.id, posV1Alias: 'A3', expectedVersion: v }));
     expect(s).not.toContain(t.id);
     expect(s).not.toMatch(/constraint|tenders_|violates/i);
   });
@@ -168,7 +173,7 @@ describe('D2 - retire and restore carry the guard too', () => {
     const f = await fixture('d2');
     const t = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
     const v0 = await versionOf(f, t.id);
-    await update(f, { tenderId: t.id, name: 'A2', expectedVersion: v0 });
+    await update(f, { tenderId: t.id, posV1Alias: 'A2', expectedVersion: v0 });
 
     expect(await sentenceOf(setActive(f, { tenderId: t.id, isActive: false, expectedVersion: v0 }))).toBe(STALE_SENTENCE);
     expect((await row(t.id)).is_active, 'a stale retire must not land').toBe(true);
@@ -188,61 +193,54 @@ describe('D2 - retire and restore carry the guard too', () => {
   });
 });
 
-describe('D3 - kind is corrected in place (R5), audited with kind', () => {
-  it('cash -> wallet with BPI: row is a wallet on BPI; audit before.kind=cash, after.kind=wallet', async () => {
+describe('D3 - T-629: a tender cannot change cash / wallet or its name (they are the option\'s); its account moves, audited', () => {
+  it('a wallet moves to another account of the store: the row follows, the audit says before and after; a kind or name passed in is NOT applied', async () => {
     const f = await fixture('d3a');
-    const t = await create(f, { name: 'Gcash', kind: 'cash', posV1Alias: 'Gcash' });
-    await update(f, { tenderId: t.id, kind: 'wallet', moneyAccountId: f.bpiAcct });
+    const t = await create(f, { name: 'Gcash', kind: 'wallet', moneyAccountId: f.gcashAcct, posV1Alias: 'Gcash' });
+    await update(f, { tenderId: t.id, kind: 'cash', name: 'Hacked', moneyAccountId: f.bpiAcct });
     const r = await row(t.id);
-    expect(r.kind).toBe('wallet');
-    expect(r.money_account_id).toBe(f.bpiAcct);
+    expect(r).toMatchObject({ kind: 'wallet', name: 'Gcash', money_account_id: f.bpiAcct });
     const [a] = await audits(t.id, 'update_tender');
-    expect(a, 'the kind change is audited').toBeDefined();
-    expect((a!.before as { kind?: string }).kind).toBe('cash');
+    expect(a, 'the move is audited').toBeDefined();
+    expect((a!.before as { moneyAccountId?: string }).moneyAccountId).toBe(f.gcashAcct);
+    expect((a!.after as { moneyAccountId?: string; kind?: string }).moneyAccountId).toBe(f.bpiAcct);
     expect((a!.after as { kind?: string }).kind).toBe('wallet');
-    expect((a!.after as { moneyAccountId?: string }).moneyAccountId).toBe(f.bpiAcct);
   });
 
-  it('cash -> wallet with no account: wallet sentence, row unchanged, no audit', async () => {
+  it('a wallet with its account cleared is refused in words; row unchanged, no audit', async () => {
     const f = await fixture('d3b');
-    const t = await create(f, { name: 'Gcash', kind: 'cash', posV1Alias: 'Gcash' });
-    expect(await sentenceOf(update(f, { tenderId: t.id, kind: 'wallet' }))).toBe(WALLET_NEEDS_ACCOUNT);
-    const r = await row(t.id);
-    expect(r.kind).toBe('cash');
-    expect(r.money_account_id).toBeNull();
+    const t = await create(f, { name: 'Gcash', kind: 'wallet', moneyAccountId: f.gcashAcct, posV1Alias: 'Gcash' });
+    expect(await sentenceOf(update(f, { tenderId: t.id, moneyAccountId: null }))).toBe(WALLET_NEEDS_ACCOUNT);
+    expect((await row(t.id)).money_account_id).toBe(f.gcashAcct);
     expect(await audits(t.id, 'update_tender')).toHaveLength(0);
   });
 
-  it('cash -> wallet pointing at a cash drawer is still refused (assertStoreAccount); unchanged', async () => {
+  it('a wallet pointed at a cash drawer is refused (assertStoreAccount); unchanged', async () => {
     const f = await fixture('d3c');
-    const t = await create(f, { name: 'Gcash', kind: 'cash', posV1Alias: 'Gcash' });
-    const s = await sentenceOf(update(f, { tenderId: t.id, kind: 'wallet', moneyAccountId: f.drawerAcct }));
+    const t = await create(f, { name: 'Gcash', kind: 'wallet', moneyAccountId: f.gcashAcct, posV1Alias: 'Gcash' });
+    const s = await sentenceOf(update(f, { tenderId: t.id, moneyAccountId: f.drawerAcct }));
     expect(s).toContain('cash drawer');
-    expect((await row(t.id)).kind).toBe('cash');
+    expect((await row(t.id)).money_account_id).toBe(f.gcashAcct);
   });
 
-  it('wallet -> cash clears the account; audit before.kind=wallet, after.kind=cash, after account null', async () => {
+  it('a cash tender given an account is refused in words; the cash row stays without one', async () => {
     const f = await fixture('d3d');
-    const t = await create(f, { name: 'Gcash', kind: 'wallet', moneyAccountId: f.gcashAcct, posV1Alias: 'Gcash' });
-    await update(f, { tenderId: t.id, kind: 'cash' });
+    const t = await create(f, { name: 'Cash', kind: 'cash', posV1Alias: 'Cash' });
+    expect(await sentenceOf(update(f, { tenderId: t.id, moneyAccountId: f.bpiAcct }))).toBe('A cash tender has no money account.');
     const r = await row(t.id);
     expect(r.kind).toBe('cash');
-    expect(r.money_account_id, 'the shape CHECK holds: a cash tender has no account').toBeNull();
-    const [a] = await audits(t.id, 'update_tender');
-    expect((a!.before as { kind?: string }).kind).toBe('wallet');
-    expect((a!.after as { kind?: string }).kind).toBe('cash');
-    expect((a!.after as { moneyAccountId?: string | null }).moneyAccountId).toBeNull();
+    expect(r.money_account_id).toBeNull();
   });
 
-  it('a kind change with a fresh expectedVersion succeeds; with a stale one it is refused and the kind stays', async () => {
+  it('an account change with a fresh expectedVersion succeeds; with a stale one it is refused and the account stays', async () => {
     const f = await fixture('d3e');
-    const t = await create(f, { name: 'Gcash', kind: 'cash', posV1Alias: 'Gcash' });
+    const t = await create(f, { name: 'Gcash', kind: 'wallet', moneyAccountId: f.gcashAcct, posV1Alias: 'Gcash' });
     const v0 = await versionOf(f, t.id);
-    await update(f, { tenderId: t.id, name: 'Gcash 2', expectedVersion: v0 });
-    expect(await sentenceOf(update(f, { tenderId: t.id, kind: 'wallet', moneyAccountId: f.bpiAcct, expectedVersion: v0 }))).toBe(STALE_SENTENCE);
-    expect((await row(t.id)).kind).toBe('cash');
-    await update(f, { tenderId: t.id, kind: 'wallet', moneyAccountId: f.bpiAcct, expectedVersion: await versionOf(f, t.id) });
-    expect((await row(t.id)).kind).toBe('wallet');
+    await update(f, { tenderId: t.id, posV1Alias: 'Gcash 2', expectedVersion: v0 });
+    expect(await sentenceOf(update(f, { tenderId: t.id, moneyAccountId: f.bpiAcct, expectedVersion: v0 }))).toBe(STALE_SENTENCE);
+    expect((await row(t.id)).money_account_id).toBe(f.gcashAcct);
+    await update(f, { tenderId: t.id, moneyAccountId: f.bpiAcct, expectedVersion: await versionOf(f, t.id) });
+    expect((await row(t.id)).money_account_id).toBe(f.bpiAcct);
   });
 });
 
@@ -257,15 +255,15 @@ describe("D4 - control: Lipa's four tenders each keep their own values through o
       // a never-updated row's version must be usable (updated_at is NULL until the first write)
       const v = await versionOf(f, t.id);
       expect(typeof v, 'each never-updated row carries a usable version').toBe('string');
-      await update(f, { tenderId: t.id, name, expectedVersion: v });
+      await update(f, { tenderId: t.id, posV1Alias: name, expectedVersion: v });
     }
     const rows = await sql<{ name: string; kind: string; money_account_id: string | null; pos_v1_alias: string | null }[]>`
       select name, kind, money_account_id, pos_v1_alias from tenders where store_id = ${f.storeId} order by name`;
     expect(rows).toEqual([
-      { name: 'Bank Transfer 2', kind: 'wallet', money_account_id: f.bpiAcct, pos_v1_alias: 'Bank Transfer' },
-      { name: 'Cash 2', kind: 'cash', money_account_id: null, pos_v1_alias: 'Cash' },
-      { name: 'Gcash 2', kind: 'wallet', money_account_id: f.gcashAcct, pos_v1_alias: 'Gcash' },
-      { name: 'QRPH 2', kind: 'wallet', money_account_id: f.bpiAcct, pos_v1_alias: 'QRPH' },
+      { name: 'Bank Transfer', kind: 'wallet', money_account_id: f.bpiAcct, pos_v1_alias: 'Bank Transfer 2' },
+      { name: 'Cash', kind: 'cash', money_account_id: null, pos_v1_alias: 'Cash 2' },
+      { name: 'Gcash', kind: 'wallet', money_account_id: f.gcashAcct, pos_v1_alias: 'Gcash 2' },
+      { name: 'QRPH', kind: 'wallet', money_account_id: f.bpiAcct, pos_v1_alias: 'QRPH 2' },
     ]);
     const c = await sql<{ n: string }[]>`select count(*)::text n from audit_log where org_id = ${f.orgId} and entity = 'tenders' and action = 'create_tender'`;
     const u = await sql<{ n: string }[]>`select count(*)::text n from audit_log where org_id = ${f.orgId} and entity = 'tenders' and action = 'update_tender'`;
@@ -277,9 +275,9 @@ describe('D5 - control: no expectedVersion behaves as before', () => {
   it('two updates without a version both land (no guard unless asked); nothing is refused', async () => {
     const f = await fixture('d5');
     const t = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
-    await update(f, { tenderId: t.id, name: 'A2' });
-    await update(f, { tenderId: t.id, name: 'A3' });
-    expect((await row(t.id)).name).toBe('A3');
+    await update(f, { tenderId: t.id, posV1Alias: 'A2' });
+    await update(f, { tenderId: t.id, posV1Alias: 'A3' });
+    expect((await row(t.id)).pos_v1_alias).toBe('A3');
     await setActive(f, { tenderId: t.id, isActive: false });
     expect((await row(t.id)).is_active).toBe(false);
     expect(await audits(t.id, 'update_tender')).toHaveLength(2);
@@ -287,14 +285,14 @@ describe('D5 - control: no expectedVersion behaves as before', () => {
 });
 
 describe('D6 - the version moves on every write, even inside one transaction', () => {
-  it('create, read v, update with v, update again with the same v, all in ONE transaction: the second is refused and its name does not land', async () => {
+  it('create, read v, update with v, update again with the same v, all in ONE transaction: the second is refused and its alias does not land', async () => {
     const f = await fixture('d6');
     const out = await asOrg(f.orgId, async (tx) => {
-      const t = await mod.createTender(tx, f.admin, { storeId: f.storeId, name: 'A', kind: 'cash', posV1Alias: 'A' } as never);
+      const t = await createTenderByName(mod, tx, f.admin, { storeId: f.storeId, ...asTender(f, { name: 'A', kind: 'cash', posV1Alias: 'A' }) } as never);
       const v = ((await posV1Repo.getTenderById(tx, f.orgId, t.id)) as unknown as { version: string }).version;
-      await mod.updateTender(tx, f.admin, { tenderId: t.id, name: 'A2', expectedVersion: v } as never);
-      const err = await mod.updateTender(tx, f.admin, { tenderId: t.id, name: 'A3', expectedVersion: v } as never).then(() => null, (e) => e);
-      const name = ((await posV1Repo.getTenderById(tx, f.orgId, t.id)) as { name: string }).name;
+      await mod.updateTender(tx, f.admin, { tenderId: t.id, posV1Alias: 'A2', expectedVersion: v } as never);
+      const err = await mod.updateTender(tx, f.admin, { tenderId: t.id, posV1Alias: 'A3', expectedVersion: v } as never).then(() => null, (e) => e);
+      const name = ((await posV1Repo.getTenderById(tx, f.orgId, t.id)) as { posV1Alias: string }).posV1Alias;
       return { err, name };
     });
     expect(out.err, 'the second update carries a version the first update already moved').toBeInstanceOf(Error);
@@ -305,10 +303,10 @@ describe('D6 - the version moves on every write, even inside one transaction', (
   it('same, for an existing row: update with v then retire with the same v in one transaction is refused', async () => {
     const f = await fixture('d6b');
     const t = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
-    await update(f, { tenderId: t.id, name: 'A1' });
+    await update(f, { tenderId: t.id, posV1Alias: 'A1' });
     const out = await asOrg(f.orgId, async (tx) => {
       const v = ((await posV1Repo.getTenderById(tx, f.orgId, t.id)) as unknown as { version: string }).version;
-      await mod.updateTender(tx, f.admin, { tenderId: t.id, name: 'A2', expectedVersion: v } as never);
+      await mod.updateTender(tx, f.admin, { tenderId: t.id, posV1Alias: 'A2', expectedVersion: v } as never);
       return mod.setTenderActive(tx, f.admin, { tenderId: t.id, isActive: false, expectedVersion: v } as never).then(() => null, (e) => e);
     });
     expect(out, 'the retire carries a version the update already moved').toBeInstanceOf(Error);
@@ -322,26 +320,26 @@ describe('D7 - the version is checked first: a stale form gets the stale sentenc
     const a = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
     await create(f, { name: 'B', kind: 'cash', posV1Alias: 'B' });
     const v0 = await versionOf(f, a.id);
-    await update(f, { tenderId: a.id, name: 'A2', expectedVersion: v0 });
+    await update(f, { tenderId: a.id, posV1Alias: 'A2', expectedVersion: v0 });
     expect(await sentenceOf(update(f, { tenderId: a.id, posV1Alias: 'B', expectedVersion: v0 }))).toBe(STALE_SENTENCE);
     const alias = await sentenceOf(update(f, { tenderId: a.id, posV1Alias: 'B', expectedVersion: await versionOf(f, a.id) }));
     expect(alias).toContain('already answers to');
   });
 
-  it('stale kind change cash -> wallet with no account -> stale sentence; control: fresh -> the wallet-needs-account sentence', async () => {
+  it('stale clearing of a wallet account -> stale sentence; control: fresh -> the wallet-needs-account sentence', async () => {
     const f = await fixture('d7b');
-    const a = await create(f, { name: 'A', kind: 'cash', posV1Alias: 'A' });
+    const a = await create(f, { name: 'A', kind: 'wallet', moneyAccountId: f.bpiAcct, posV1Alias: 'A' });
     const v0 = await versionOf(f, a.id);
-    await update(f, { tenderId: a.id, name: 'A2', expectedVersion: v0 });
-    expect(await sentenceOf(update(f, { tenderId: a.id, kind: 'wallet', expectedVersion: v0 }))).toBe(STALE_SENTENCE);
-    expect(await sentenceOf(update(f, { tenderId: a.id, kind: 'wallet', expectedVersion: await versionOf(f, a.id) }))).toBe(WALLET_NEEDS_ACCOUNT);
+    await update(f, { tenderId: a.id, posV1Alias: 'A2', expectedVersion: v0 });
+    expect(await sentenceOf(update(f, { tenderId: a.id, moneyAccountId: null, expectedVersion: v0 }))).toBe(STALE_SENTENCE);
+    expect(await sentenceOf(update(f, { tenderId: a.id, moneyAccountId: null, expectedVersion: await versionOf(f, a.id) }))).toBe(WALLET_NEEDS_ACCOUNT);
   });
 
   it('stale update pointing a wallet at a cash drawer -> stale sentence', async () => {
     const f = await fixture('d7c');
     const a = await create(f, { name: 'G', kind: 'wallet', moneyAccountId: f.gcashAcct, posV1Alias: 'G' });
     const v0 = await versionOf(f, a.id);
-    await update(f, { tenderId: a.id, name: 'G2', expectedVersion: v0 });
+    await update(f, { tenderId: a.id, posV1Alias: 'G2', expectedVersion: v0 });
     expect(await sentenceOf(update(f, { tenderId: a.id, moneyAccountId: f.drawerAcct, expectedVersion: v0 }))).toBe(STALE_SENTENCE);
   });
 

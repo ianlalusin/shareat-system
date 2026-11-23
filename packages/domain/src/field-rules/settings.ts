@@ -136,10 +136,10 @@ export const SETTINGS_POS_UNLINK_RULES = defineFieldRules('settings.unlinkStoreF
   reason: { label: 'The reason', kind: 'text', max: 500, requires: 'Say why this store is being unlinked, in under 500 characters.' },
 });
 
-/** /settings/pos-link, a tender (add and edit share it). */
-export const SETTINGS_TENDER_RULES = defineFieldRules('settings.tender', {
-  name: { label: 'The tender name', kind: 'text', requires: 'Give the tender a name.' },
-  kind: { label: 'The tender kind', kind: 'text', requires: 'Choose whether this tender is cash or a wallet.' },
+/** /settings/payment-options (T-629): the master list's name (1-40) and cash-or-wallet choice. The same set the form shows live and `createPaymentOption` judges. */
+export const SETTINGS_PAYMENT_OPTION_RULES = defineFieldRules('settings.paymentOption', {
+  name: { label: 'The payment option name', kind: 'text', plainText: true, max: 40, requires: 'Give the payment option a name of at most 40 characters.' },
+  kind: { label: 'The payment option kind', kind: 'text', requires: 'Choose whether this payment option is cash or a wallet.' },
 });
 
 const BUSINESS_RULE_VALUE_SAYS = 'A value is a plain number with at most two decimals, for example 50 or 12.5.';

@@ -33,6 +33,7 @@ if (!isTestDatabaseUrl(url)) {
 }
 
 import { APP_ROLE } from '../../src/rls/registry';
+import { insertTenderRaw } from './_fixtures/t629-tender';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -78,9 +79,8 @@ const insertFeed = (f: F, o: { kind?: string; purpose?: string; hash?: string; p
   values (${f.orgId}, ${f.storeId}, '2027-01-05', ${o.kind ?? 'sales'}, ${o.purpose ?? 'import'}, ${o.batch ?? crypto.randomUUID()},
           ${o.posStoreId ?? 'pos-abc'}, '{"found":true}', '{"found":true}'::jsonb, ${o.hash ?? HASH}, now(), ${f.personId}) returning id`;
 
-const insertTender = (f: F, o: { storeId?: string; name: string; kind: string; account?: string | null; alias?: string | null; active?: boolean }) => sql`
-  insert into tenders (org_id, store_id, name, kind, money_account_id, pos_v1_alias, is_active)
-  values (${f.orgId}, ${o.storeId ?? f.storeId}, ${o.name}, ${o.kind}, ${o.account ?? null}, ${o.alias ?? null}, ${o.active ?? true})`;
+const insertTender = (f: F, o: { storeId?: string; name: string; kind: string; account?: string | null; alias?: string | null; active?: boolean }) =>
+  insertTenderRaw(sql, { orgId: f.orgId, storeId: o.storeId ?? f.storeId, name: o.name, kind: o.kind, moneyAccountId: o.account, posV1Alias: o.alias, isActive: o.active });
 
 const sqlstate = (e: unknown) => (e as { code?: string }).code;
 

@@ -5,6 +5,7 @@
  */
 import type postgres from 'postgres';
 import { menuFixture, refusal, sql, uid, type PgErr } from './t401-menu';
+import { insertTenderRaw } from './t629-tender';
 
 export { refusal, sql, uid };
 export type { PgErr };
@@ -33,9 +34,9 @@ export async function baseWorld(hint: string) {
   const manager = await ins('persons', { org_id: f.orgId, display_name: 'Manager' });
   const pairingId = await ins('pos_tablet_pairings', { org_id: f.orgId, store_id: f.storeId, label: 'Tablet 1', cookie_digest: uid('dg'), paired_by: f.personId });
   const pairing2Id = await ins('pos_tablet_pairings', { org_id: f.orgId, store_id: f.store2Id, label: 'Tablet B', cookie_digest: uid('dg'), paired_by: f.personId });
-  const cash = await ins('tenders', { org_id: f.orgId, store_id: f.storeId, name: uid('Cash'), kind: 'cash' });
+  const cash = await insertTenderRaw(sql, { orgId: f.orgId, storeId: f.storeId, name: uid('Cash'), kind: 'cash' });
   const gcashAccount = await ins('money_accounts', { org_id: f.orgId, store_id: f.storeId, name: 'GCash', instrument: 'bank', gl_account_code: '1140', custodian: 'office' });
-  const wallet = await ins('tenders', { org_id: f.orgId, store_id: f.storeId, name: uid('GCash'), kind: 'wallet', money_account_id: gcashAccount });
+  const wallet = await insertTenderRaw(sql, { orgId: f.orgId, storeId: f.storeId, name: uid('GCash'), kind: 'wallet', moneyAccountId: gcashAccount });
   const terminalId = await ins('pos_terminals', { org_id: f.orgId, store_id: f.storeId, terminal_no: 1, pairing_id: pairingId, created_by: f.personId, created_at: T() });
   const terminal2Id = await ins('pos_terminals', { org_id: f.orgId, store_id: f.store2Id, terminal_no: 1, pairing_id: pairing2Id, created_by: f.personId, created_at: T() });
   return { ...f, manager, pairingId, pairing2Id, cash, wallet, terminalId, terminal2Id };

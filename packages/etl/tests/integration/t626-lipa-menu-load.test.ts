@@ -10,6 +10,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { buildPosSnapshot, loadStoreMenu } from '@shareat/domain';
+import { seedPaymentOptions } from '../../../db/seed/payment-options';
 import { asOrg, closeAll, fixture, RATES, sql, type Fx } from '../../../domain/tests/integration/_fixtures/t525-pos';
 import { superAdminOf } from '../../../domain/tests/integration/_fixtures/t626-super-admin';
 import { checkStoreSetup, formatStoreSetupCheck } from '../../src/pos-v2/check-store-setup';
@@ -138,13 +139,35 @@ describe('the loader, menu part', () => {
     expect(formatStoreSetupReport(r).join('\n')).toMatch(/Cola \(all day\): ₱60.00 in v1, ₱80.00 here/);
   });
 
-  it('a wallet payment method with no matching tender is listed (it needs a money account), never invented; a cash one is made', async () => {
+  it('T-629: a wallet method whose master option exists but is off here is listed (it needs a money account); a method with NO master option is reported, never invented; a cash one is switched on', async () => {
     const { f, sa } = await world();
+    await seedPaymentOptions(sql, f.orgId); // the org's master list of Ian's six: Cash, GCash, Maya, QRPH, Credit card, Debit card
+    const options = async () => (await sql`select name from payment_options where org_id = ${f.orgId} order by name`).map((x) => x.name as string);
+    const before = await options();
     const menu = lipa({ payModes: [{ name: 'Cash', type: 'cash', isActive: true, isArchived: false }, { name: 'QRPH', type: 'online', isActive: true, isArchived: false }, { name: 'Petty', type: 'cash', isActive: true, isArchived: false }] });
     const r = await load(f, sa, menu);
     expect(r.menu!.walletsNeedAccount).toEqual(['QRPH']);
-    expect(r.menu!.created['payment methods']).toEqual(['Cash: v1 name filled in', 'Petty']);
-    expect((await sql`select 1 from tenders where store_id = ${f.storeId} and name = 'QRPH'`).length).toBe(0);
+    expect(r.menu!.optionsMissing).toEqual(['Petty']);
+    expect(r.menu!.created['payment methods']).toEqual(['Cash: v1 name filled in']);
+    expect((await sql`select 1 from tenders where store_id = ${f.storeId} and name in ('QRPH', 'Petty')`).length).toBe(0);
+    expect(await options(), 'the load never makes a master option').toEqual(before);
+    expect(formatStoreSetupReport(r).join('\n')).toMatch(/no payment option in the master list.*: 1 \(Petty\)/);
+    // a re-run changes nothing
+    const again = await load(f, sa, menu);
+    expect(again.menu!.optionsMissing).toEqual(['Petty']);
+    expect(await options()).toEqual(before);
+  });
+
+  it('T-629: the match goes through the master option, so v1 "G-Cash" finds the GCash option and the store\'s GCash tender (v1 name filled in)', async () => {
+    const { f, sa } = await world();
+    await seedPaymentOptions(sql, f.orgId);
+    const menu = lipa({ payModes: [{ name: 'G-Cash', type: 'online', isActive: true, isArchived: false }] });
+    const r = await load(f, sa, menu);
+    expect(r.menu!.created['payment methods']).toEqual(['G-Cash: v1 name filled in']);
+    expect(r.menu!.walletsNeedAccount).toEqual([]);
+    expect(r.menu!.optionsMissing).toEqual([]);
+    const [t] = await sql<{ name: string; pos_v1_alias: string }[]>`select name, pos_v1_alias from tenders where id = ${f.gcash}`;
+    expect(t).toEqual({ name: 'GCash', pos_v1_alias: 'G-Cash' });
   });
 });
 

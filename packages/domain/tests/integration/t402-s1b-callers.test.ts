@@ -27,6 +27,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { createTenderByName } from './_fixtures/t629-options';
 import { catalogueEntry, retentionFor, severityFor } from '../../../db/src/audit/catalogue';
 import * as auth from '@shareat/auth';
 import type { Actor } from '@shareat/auth';
@@ -144,7 +145,7 @@ describe('create_tender - money/normal at a store', () => {
     const fx = await fixture('tender');
     const mod = await import('../../src/pos/tenders');
     const created = (await asOrg(fx.orgId, (tx) =>
-      mod.createTender(tx, fx.admin, { storeId: fx.storeId, name: 'Cash', kind: 'cash', posV1Alias: 'Cash' } as never),
+      createTenderByName(mod, tx, fx.admin, { storeId: fx.storeId, name: 'Cash', kind: 'cash', posV1Alias: 'Cash' } as never),
     )) as { id: string };
     const all = await rows(fx.orgId, 'create_tender', created.id);
     expect(all).toHaveLength(1);

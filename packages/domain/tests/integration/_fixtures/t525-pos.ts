@@ -18,6 +18,7 @@ import { APP_ROLE, closeDb, transaction, type Tx } from '@shareat/db';
 import { hashPin, newSessionToken, pinLookupHash, posTabletTokenHash, sessionTokenHash, type Actor } from '@shareat/auth';
 import { grantEverydayPositionAccess } from './staff-everyday-access';
 import { insRule, menuFixture, newItem, sql, uid } from '../../../../db/tests/integration/_fixtures/t401-menu';
+import { insertTenderRaw } from '../../../../db/tests/integration/_fixtures/t629-tender';
 
 export { sql, uid };
 
@@ -134,9 +135,8 @@ export async function fixture(mode: 'off' | 'test' | 'live' = 'test') {
   // ---- tenders and presets
   const [acct] = await sql<{ id: string }[]>`
     insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian) values (${orgId}, ${storeId}, 'GCash wallet', 'bank', '1140', 'office') returning id`;
-  const tender = async (st: string, name: string, kind: 'cash' | 'wallet', active = true) =>
-    (await sql<{ id: string }[]>`
-      insert into tenders (org_id, store_id, name, kind, money_account_id, is_active) values (${orgId}, ${st}, ${name}, ${kind}, ${kind === 'wallet' ? acct!.id : null}, ${active}) returning id`)[0]!.id;
+  const tender = (st: string, name: string, kind: 'cash' | 'wallet', active = true) =>
+    insertTenderRaw(sql, { orgId, storeId: st, name, kind, moneyAccountId: kind === 'wallet' ? acct!.id : null, isActive: active });
   const cash = await tender(storeId, 'Cash', 'cash');
   const gcash = await tender(storeId, 'GCash', 'wallet');
   const mayaOff = await tender(storeId, 'Maya', 'wallet', false);

@@ -1661,6 +1661,25 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'Under a row lock on the reservation (reads its status and its held balance from the events): a deposit is taken only on a booked or seated reservation, nothing leaves more than is held, a void is refused once a deposit was applied, an apply needs a seated reservation (0276, T-628).',
   },
+  // T-629 (0277) - the payment-option master: three origin triggers (they read another row's CURRENT state: no ALWAYS).
+  tenders_mirror_option: {
+    table: 'tenders',
+    mode: 'origin',
+    kind: 'derivation',
+    reason: 'A store tender takes its name and kind FROM its payment option, cannot change option, cannot be switched on while the option is retired (0277, T-629). A tender insert without an option fails on NOT NULL: nothing makes an option silently.',
+  },
+  payment_options_guard: {
+    table: 'payment_options',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'Reads the store tenders that use the option: its kind is frozen while any exists, and retiring is refused while any store has it switched on; the org never changes (0277, T-629).',
+  },
+  payment_options_rename_tenders: {
+    table: 'payment_options',
+    mode: 'origin',
+    kind: 'derivation',
+    reason: 'A renamed option copies its name onto the store tenders that mirror it (0277, T-629).',
+  },
   // T-534 S1 (0265) - the post-sale documents: eight history guards, all ENABLE ALWAYS (ALWAYS 62 -> 70). Raise 23001 restrict_violation.
   pos_payment_conversions_frozen: {
     table: 'pos_payment_conversions',
