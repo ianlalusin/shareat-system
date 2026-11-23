@@ -221,8 +221,7 @@ export const paymentOptions = pgTable(
     check('payment_options_kind_check', sql`${t.kind} in ('cash', 'wallet')`),
     check('payment_options_status_check', sql`${t.status} in ('active', 'retired')`),
     check('payment_options_name_check', sql`char_length(btrim(${t.name})) between 1 and 40`),
-    // NOTE: payment_options_org_name_unique UNIQUE (org_id, lower(btrim(name))) (expression index) and
-    // payment_options_one_cash_per_org UNIQUE (org_id) WHERE kind = 'cash' (partial index, retired rows count) are hand-added in migration 0277.
+    // NOTE: payment_options_org_name_unique UNIQUE (org_id, lower(btrim(name))) (expression index) is hand-added in migration 0277. There may be several cash options (Cash and Collected).
     // NOTE: the payment_options_guard trigger (kind frozen while any store tender uses it; retire refused while any store has it ON) is hand-added in migration 0277.
   ],
 );
@@ -261,8 +260,7 @@ export const tenders = pgTable(
       foreignColumns: [paymentOptions.orgId, paymentOptions.id],
       name: 'tenders_payment_option_same_org_fk',
     }).onDelete('restrict'),
-    // NOTE: the tenders_mirror_option trigger (name and kind come from the option; the option cannot change; a retired option cannot be switched on;
-    // an insert without payment_option_id is matched by normalised name, or made, for raw SQL callers) is hand-added in migration 0277.
+    // NOTE: the tenders_mirror_option trigger (name and kind come from the option; the option cannot change; a retired option cannot be switched on) is hand-added in migration 0277.
     check('tenders_kind_check', sql`${t.kind} in ('cash', 'wallet')`),
     check('tenders_wallet_account_shape_check', sql`(${t.kind} = 'wallet') = (${t.moneyAccountId} is not null)`),
     check('tenders_name_not_blank_check', sql`btrim(${t.name}) <> ''`),

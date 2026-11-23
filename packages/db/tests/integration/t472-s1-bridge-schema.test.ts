@@ -20,6 +20,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 
 import { APP_ROLE } from '../../src/rls/registry';
+import { insertTenderRaw } from './_fixtures/t629-tender';
 
 config({ path: '.env.local' });
 
@@ -75,9 +76,8 @@ async function orgFixture(hint: string) {
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('ST')}, 'Lipa') returning id`;
-  const [tender] = await sql<{ id: string }[]>`
-    insert into tenders (org_id, store_id, name, kind) values (${orgId}, ${store!.id}, 'Cash', 'cash') returning id`;
-  return { orgId, storeId: store!.id, tenderId: tender!.id };
+  const tenderId = await insertTenderRaw(sql, { orgId, storeId: store!.id, name: 'Cash', kind: 'cash' });
+  return { orgId, storeId: store!.id, tenderId };
 }
 type F = Awaited<ReturnType<typeof orgFixture>>;
 

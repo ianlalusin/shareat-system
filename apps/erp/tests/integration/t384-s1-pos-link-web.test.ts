@@ -102,6 +102,7 @@ import { sql as dsql } from 'drizzle-orm';
 import { s6Fixture } from '../../../../packages/domain/tests/integration/_fixtures/pos-s6';
 import PosLinkSettingsPage from '../../src/app/settings/pos-link/page';
 import { FLASH_COOKIE, captureRedirect, currentJar, outcomeOf, pageParamsOf, resetJar, seedSearch } from '../helpers/flash-jar';
+import { insertTenderRaw } from '../../../../packages/db/tests/integration/_fixtures/t629-tender';
 
 const sql = postgres(url, { max: 6 });
 afterAll(async () => {
@@ -143,10 +144,8 @@ async function fixture(hint: string) {
     (await sql<{ id: string }[]>`
       insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
       values (${base.orgId}, ${storeId}, ${name}, ${instrument}, ${gl}, ${custodian}) returning id`)[0]!.id;
-  const tender = async (storeId: string, name: string, kind: 'cash' | 'wallet', accountId: string | null, alias: string | null) =>
-    (await sql<{ id: string }[]>`
-      insert into tenders (org_id, store_id, name, kind, money_account_id, pos_v1_alias)
-      values (${base.orgId}, ${storeId}, ${name}, ${kind}, ${accountId}, ${alias}) returning id`)[0]!.id;
+  const tender = (storeId: string, name: string, kind: 'cash' | 'wallet', accountId: string | null, alias: string | null) =>
+    insertTenderRaw(sql, { orgId: base.orgId, storeId, name, kind, moneyAccountId: accountId, posV1Alias: alias });
 
   const drawer = await acct(base.storeId, 'Cashier drawer', 'cash', 'cashier', '1110');
   const bpi = await acct(base.storeId, 'BPI', 'bank', 'office', '1120');
@@ -275,7 +274,7 @@ describe('W1 - a store switches the master options on (T-629)', () => {
     // Mutant: keep the old add form in TendersSection -> "Add a tender" shows, red.
   });
 
-  it('W1b: the master list is above the stores, with + Add payment option: Kind starts blank, is required, and offers no second cash', async () => {
+  it('W1b: the master list is above the stores, with + Add payment option: Kind starts blank, is required, and offers Cash and Wallet (an org may hold several cash options)', async () => {
     const f = await fixture('w1b');
     const html = await render(f);
     expect(html.indexOf('id="payment-options"'), 'the master section comes before the first store card').toBeGreaterThanOrEqual(0);
@@ -286,9 +285,9 @@ describe('W1 - a store switches the master options on (T-629)', () => {
     expect(sel, 'a kind select').not.toBeNull();
     expect(sel).toMatch(/<select\b[^>]*\brequired/);
     expect(/<option\b[^>]*>/.exec(sel)![0]).toMatch(/value=""/);
-    expect(sel, 'a cash option already exists, so Cash is not offered').not.toMatch(/value="cash"/);
+    expect(sel, 'Cash is offered even though a cash option exists (Cash and Collected)').toMatch(/value="cash"/);
     expect(plain(master)).toMatch(/Bank Transfer.*wallet, switched on at 2 stores/);
-    // Mutant: offer Cash again -> value="cash" in the add form, red.
+    // Mutant: drop the Cash option from the add form -> no value="cash", red.
   });
 
   it('W1c: switching on a WALLET asks for the money account (a blank is refused by the domain, bank and e-wallet accounts only); a CASH option asks only for the POS name', async () => {

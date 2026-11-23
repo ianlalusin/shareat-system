@@ -37,6 +37,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { APP_ROLE } from '../../src/rls/registry';
 import { world, closeAll, sql, D1, D2, type World } from '../../../domain/tests/integration/_fixtures/t531-day-close';
+import { insertTenderRaw } from './_fixtures/t629-tender';
 
 afterAll(closeAll);
 
@@ -309,7 +310,7 @@ describe('T10 - no platform tender; no typed figure on a pos_receipts day (unlin
     for (const kind of ['platform', 'foodpanda', 'grab', 'delivery']) {
       let caught: PgErr = null;
       try {
-        await sql`insert into tenders (org_id, store_id, name, kind) values (${w.orgId}, ${w.storeId}, ${`T10 ${kind}`}, ${kind})`;
+        await insertTenderRaw(sql, { orgId: w.orgId, storeId: w.storeId, name: `T10 ${kind}`, kind });
       } catch (e) {
         caught = e as PgErr;
       }
@@ -317,7 +318,7 @@ describe('T10 - no platform tender; no typed figure on a pos_receipts day (unlin
     }
     // control: cash is accepted
     const [fresh] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${w.orgId}, ${`t10-${Date.now()}`}, 'T10 store') returning id`;
-    await expect(sql`insert into tenders (org_id, store_id, name, kind) values (${w.orgId}, ${fresh!.id}, 'Cash', 'cash')`).resolves.toBeDefined();
+    await expect(insertTenderRaw(sql, { orgId: w.orgId, storeId: fresh!.id, name: 'Cash', kind: 'cash' })).resolves.toBeDefined();
   });
 
   it('on an UNLINKED live store a pos_receipts day\'s figures are locked outside the derivation flag too, and its tender rows are', async () => {

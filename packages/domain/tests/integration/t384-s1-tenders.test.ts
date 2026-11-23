@@ -70,9 +70,9 @@ async function sentenceOf(p: Promise<unknown>): Promise<string> {
   return sentence(err);
 }
 
-/** T-629: a tender is a store's switch for an org payment option, and an org has ONE cash option: only "Cash" is cash here; the other names are wallets on the shared BPI account. */
-function asTender(f: Fixture, input: Record<string, unknown>): Record<string, unknown> {
-  return input.kind === 'cash' && input.name !== 'Cash' ? { ...input, kind: 'wallet', moneyAccountId: f.bpiAcct } : input;
+/** T-629: a tender is a store's switch for an org payment option (made here by name when the org has none). */
+function asTender(_f: Fixture, input: Record<string, unknown>): Record<string, unknown> {
+  return input;
 }
 async function create(f: Fixture, input: Record<string, unknown>): Promise<{ id: string }> {
   return asOrg(f.orgId, (tx) => createTenderByName(mod, tx, f.admin, { storeId: f.storeId, ...asTender(f, input) } as never));

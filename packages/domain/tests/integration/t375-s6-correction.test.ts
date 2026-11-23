@@ -48,6 +48,7 @@ import { humanDate as humanDateOf } from '../../src/shared/refusal-leaf';
 import { D1_FIGURES, importTestDay } from './_fixtures/pos-day';
 import { asOrgOn, DAY, insertSalesRecheck, R1_FIGURES, s6Fixture, type S6F } from './_fixtures/pos-s6';
 import { submitThenVerify } from './_fixtures/sales-day-flow';
+import { insertTenderRaw } from '../../../db/tests/integration/_fixtures/t629-tender';
 
 const hd = (d: string) => humanDateOf(parseBusinessDate(d));
 const sql = postgres(url, { max: 6 });
@@ -321,8 +322,7 @@ describe('C8 - reports reconcile with a correction in the period (R14)', () => {
 describe('C9 - old is what was POSTED, not what today\'s tenders would give (V7)', () => {
   const retireAndRemap = async (f: S6F, accountId: string) => {
     await sql`update tenders set is_active = false where id = ${f.walletTenderId}`;
-    await sql`insert into tenders (org_id, store_id, name, kind, money_account_id, pos_v1_alias)
-              values (${f.orgId}, ${f.storeId}, 'GCash (new)', 'wallet', ${accountId}, 'GCash')`;
+    await insertTenderRaw(sql, { orgId: f.orgId, storeId: f.storeId, name: 'GCash (new)', kind: 'wallet', moneyAccountId: accountId, posV1Alias: 'GCash' });
   };
 
   it('retire the GCash tender after verify, map a new one to the SAME account, correct -> no 1140 line: Dr 4100 50.00 / Cr 1110 50.00', async () => {

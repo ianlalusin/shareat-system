@@ -7,8 +7,8 @@
  * Capability `manage_chart_of_accounts`, org scope (admin and super-admin; a manager is refused, a cashier too): the same bar as the tenders a store holds and as every other
  * org-wide setting of where money is booked. `authorize()` is the first statement of every write; every write is audited against entity `payment_options`.
  *
- * Rules here speak first in words; the database holds them too (0277): one cash option per org, a name unique per org (case-insensitively), the kind frozen while any store
- * uses the option, retiring refused while any store has it switched on.
+ * Rules here speak first in words; the database holds them too (0277): a name unique per org (case-insensitively), the kind frozen while any store
+ * uses the option, retiring refused while any store has it switched on. An org may hold several cash options (Lipa's live tenders are Cash and Collected).
  */
 import { fromCentavos, toCentavos, type Money } from '@shareat/core/money';
 import { auditLogRepo, posV1Repo, type Tx } from '@shareat/db';
@@ -44,7 +44,6 @@ function constraintOf(err: unknown): string | undefined {
 function translate(err: unknown, name: string): never {
   const c = constraintOf(err);
   if (c === 'payment_options_org_name_unique') throw refuse(`payment options: ${c}`, `There is already a payment option called "${name}".`);
-  if (c === 'payment_options_one_cash_per_org') throw refuse(`payment options: ${c}`, 'There is already a cash payment option. An organisation has one.');
   throw err;
 }
 
@@ -60,21 +59,17 @@ function cleanKind(kind: unknown): TenderKind {
   return kind as TenderKind;
 }
 
-/** The same name twice (any case or punctuation: "G-Cash" is "GCash") and a second cash option are refused in words, before the indexes would. */
-async function assertFree(tx: Tx, orgId: string, name: string, kind: TenderKind, exceptId?: string): Promise<void> {
+/** The same name twice (any case or punctuation: "G-Cash" is "GCash") is refused in words, before the index would. */
+async function assertFree(tx: Tx, orgId: string, name: string, exceptId?: string): Promise<void> {
   const same = await posV1Repo.findPaymentOptionByKey(tx, orgId, normalizePosV1Alias(name));
   if (same && same.id !== exceptId) throw refuse(`payment options: "${name}" matches option ${same.id}`, `There is already a payment option called "${same.name}".`);
-  if (kind === 'cash') {
-    const cash = (await posV1Repo.listPaymentOptions(tx, orgId)).find((o) => o.kind === 'cash' && o.id !== exceptId);
-    if (cash) throw refuse(`payment options: second cash option "${name}"`, `There is already a cash payment option ("${cash.name}"). An organisation has one.`);
-  }
 }
 
 export async function createPaymentOption(tx: Tx, actor: Actor, input: CreatePaymentOptionInput): Promise<{ id: string }> {
   await authorize(tx, actor, CAPABILITY, {});
   const name = cleanName(input.name);
   const kind = cleanKind(input.kind);
-  await assertFree(tx, actor.orgId, name, kind);
+  await assertFree(tx, actor.orgId, name);
   const all = await posV1Repo.listPaymentOptions(tx, actor.orgId);
   const sortOrder = all.reduce((m, o) => Math.max(m, o.sortOrder), 0) + 10;
   let id: string;
@@ -114,7 +109,7 @@ export async function updatePaymentOption(tx: Tx, actor: Actor, input: UpdatePay
       throw refuse(`payment options: ${before.id} kind change while used`, `${before.name} is used by a store, so it cannot change between cash and wallet.`);
     }
   }
-  await assertFree(tx, actor.orgId, name, kind, before.id);
+  await assertFree(tx, actor.orgId, name, before.id);
   try {
     await posV1Repo.updatePaymentOptionRow(tx, actor.orgId, before.id, { name, kind });
   } catch (err) {

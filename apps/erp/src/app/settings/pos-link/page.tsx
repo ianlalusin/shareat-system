@@ -370,7 +370,6 @@ const KIND_TEXT = { cash: 'Cash', wallet: 'Wallet' } as const;
 function PaymentOptionsSection({ options, flash, actorId }: { options: readonly PaymentOptionAdminRow[]; flash: FlashFields; actorId: string }) {
   const active = options.filter((o) => o.status === 'active');
   const retired = options.filter((o) => o.status === 'retired');
-  const hasCash = options.some((o) => o.kind === 'cash');
   return (
     <details id="payment-options" open className="group scroll-mt-4 rounded-[20px] border border-surface-border bg-surface">
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
@@ -391,14 +390,10 @@ function PaymentOptionsSection({ options, flash, actorId }: { options: readonly 
                 <Field label="Name" rule={SETTINGS_PAYMENT_OPTION_RULES.name}>
                   <Input {...nativeAttrs(SETTINGS_PAYMENT_OPTION_RULES.name)} placeholder="e.g. Maya" autoComplete="off" className="mt-1 w-full" />
                 </Field>
-                <Field
-                  label="Kind"
-                  hint={hasCash ? 'There is already a cash option; a company has one.' : 'Cash is the till. A wallet pays into a bank or e-wallet account, cards included.'}
-                  rule={SETTINGS_PAYMENT_OPTION_RULES.kind}
-                >
+                <Field label="Kind" hint="Cash is money in the till (a store may also keep a second cash option, such as Collected). A wallet pays into a bank or e-wallet account, cards included." rule={SETTINGS_PAYMENT_OPTION_RULES.kind}>
                   <Select {...nativeAttrs(SETTINGS_PAYMENT_OPTION_RULES.kind)} defaultValue="" className="mt-1 w-full">
                     <option value="">Choose cash or wallet</option>
-                    {!hasCash && <option value="cash">Cash</option>}
+                    <option value="cash">Cash</option>
                     <option value="wallet">Wallet</option>
                   </Select>
                 </Field>
@@ -454,9 +449,7 @@ function PaymentOptionsSection({ options, flash, actorId }: { options: readonly 
               ) : (
                 <Field label="Kind" rule={SETTINGS_PAYMENT_OPTION_RULES.kind}>
                   <Select {...nativeAttrs(SETTINGS_PAYMENT_OPTION_RULES.kind)} defaultValue={o.kind} className="mt-1 w-full">
-                    <option value="cash" disabled={hasCash && o.kind !== 'cash'}>
-                      Cash
-                    </option>
+                    <option value="cash">Cash</option>
                     <option value="wallet">Wallet</option>
                   </Select>
                 </Field>

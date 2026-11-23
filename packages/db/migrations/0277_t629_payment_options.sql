@@ -7,21 +7,22 @@
 --
 -- WHAT IT ADDS
 --   payment_options          the org's master list: name (1-40, unique per org case-insensitively), kind cash|wallet, sort order, status active|retired. KEEP (master data).
---                            ONE cash option per org at most (a partial unique, retired rows count).
+--                            An org may hold several cash options (BOSS ruling, 23 Nov: Lipa's live tenders are Cash AND "Collected", bible row 292 / docs/tasks/396).
 --   tenders.payment_option_id   NOT NULL after the backfill below, same-org composite FK, UNIQUE (store_id, payment_option_id): a store tender IS the store's switch for an option.
 --                            tenders.name and tenders.kind stay as a MIRROR the option owns (the trigger below forces them), so every reader keeps working.
 --
 -- BACKFILL (inside this file; prints nothing). Every tender is matched to an option by its NORMALISED name inside its org (lower, a-z0-9 only: the alias normalisation); an
--- option is made when none matches; the six of Ian's list are then added to every org that lacks them (the one cash option only if the org has no cash option yet). The
+-- option is made when none matches; the six of Ian's list are then added to every org that lacks them (matched by normalised name). The
 -- option's name is the Ian-list spelling when the key is one of the six, else the earliest tender's spelling; every tender is renamed to its option's name (that is the point).
 -- It STOPS (raises, so nothing is applied) instead of guessing when
 --   (a) two tenders of ONE store map to one option (no money rows are merged),
---   (b) the tenders of one option disagree on cash / wallet, or one of Ian's six names is held with the other kind,
---   (c) an org holds cash tenders under two different names (one cash option per org).
+--   (b) the tenders of one option disagree on cash / wallet,
+--   (c) one of Ian's six names is held with the other kind.
+-- A store holding Cash and "Collected" (two cash tenders, by design) becomes two cash options.
 --
 -- TRIGGERS (all origin, not history guards: they read other rows' current state; triggers/registry.ts)
---   tenders_mirror_option       BEFORE INSERT OR UPDATE on tenders: the option cannot change; name and kind are set FROM the option; a retired option cannot be switched on; an INSERT without
---                               payment_option_id (raw SQL, old fixtures) is matched by normalised name or the option is made, the kind must agree.
+--   tenders_mirror_option       BEFORE INSERT OR UPDATE on tenders: the option cannot change; name and kind are set FROM the option; a retired option cannot be switched on. An INSERT without
+--                               payment_option_id fails on NOT NULL: nothing makes an option silently.
 --   payment_options_guard       BEFORE UPDATE on payment_options: kind frozen while any store tender uses the option; retiring refused while any store has it ON; org frozen.
 --   payment_options_rename_tenders  AFTER UPDATE of name: the store tenders of the option take the new name.
 --
@@ -50,8 +51,6 @@ ALTER TABLE "payment_options" ADD CONSTRAINT "payment_options_org_id_organizatio
 	FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT;
 --> statement-breakpoint
 CREATE UNIQUE INDEX "payment_options_org_name_unique" ON "payment_options" ("org_id", lower(btrim("name")));
---> statement-breakpoint
-CREATE UNIQUE INDEX "payment_options_one_cash_per_org" ON "payment_options" ("org_id") WHERE "kind" = 'cash';
 --> statement-breakpoint
 ALTER TABLE "tenders" ADD COLUMN "payment_option_id" uuid;
 --> statement-breakpoint
@@ -82,10 +81,6 @@ BEGIN
 	IF FOUND THEN
 		RAISE EXCEPTION 'T-629 STOP: org % holds a tender "%" with the wrong kind for the payment option of that name. Report to BOSS; nothing was changed.', bad.org_id, bad.n;
 	END IF;
-	SELECT g.org_id, string_agg(DISTINCT g.name, ', ') AS n INTO bad FROM t629_keys g WHERE g.kind = 'cash' GROUP BY g.org_id HAVING count(DISTINCT g.k) > 1 LIMIT 1;
-	IF FOUND THEN
-		RAISE EXCEPTION 'T-629 STOP: org % holds cash tenders under more than one name (%); there is one cash option per org. Report to BOSS; nothing was changed.', bad.org_id, bad.n;
-	END IF;
 
 	INSERT INTO payment_options (org_id, name, kind, sort_order)
 	SELECT g.org_id, coalesce(s.name, left(g.name, 40)), g.kind, coalesce(s.sort_order, 100)
@@ -95,8 +90,7 @@ BEGIN
 	INSERT INTO payment_options (org_id, name, kind, sort_order)
 	SELECT o.id, s.name, s.kind, s.sort_order
 	FROM organizations o CROSS JOIN t629_seed s
-	WHERE NOT EXISTS (SELECT 1 FROM payment_options p WHERE p.org_id = o.id AND regexp_replace(lower(p.name), '[^a-z0-9]', '', 'g') = s.k)
-		AND (s.kind <> 'cash' OR NOT EXISTS (SELECT 1 FROM payment_options p WHERE p.org_id = o.id AND p.kind = 'cash'));
+	WHERE NOT EXISTS (SELECT 1 FROM payment_options p WHERE p.org_id = o.id AND regexp_replace(lower(p.name), '[^a-z0-9]', '', 'g') = s.k);
 
 	UPDATE tenders t SET payment_option_id = p.id, name = p.name
 	FROM t629_keys g JOIN payment_options p ON p.org_id = g.org_id
@@ -118,22 +112,9 @@ ALTER TABLE "tenders" ADD CONSTRAINT "tenders_store_payment_option_unique" UNIQU
 CREATE FUNCTION "tenders_mirror_option"() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $fn$
 DECLARE
 	o record;
-	k text;
 BEGIN
 	IF TG_OP = 'UPDATE' AND NEW.payment_option_id IS DISTINCT FROM OLD.payment_option_id THEN
 		RAISE EXCEPTION 'A store tender stays on its payment option (tender %).', OLD.id USING ERRCODE = 'restrict_violation';
-	END IF;
-	IF NEW.payment_option_id IS NULL THEN
-		-- raw SQL and old fixtures: match by normalised name, or make the option (the domain always names one)
-		k := coalesce(nullif(regexp_replace(lower(NEW.name), '[^a-z0-9]', '', 'g'), ''), lower(btrim(NEW.name)));
-		SELECT p.* INTO o FROM payment_options p WHERE p.org_id = NEW.org_id
-			AND coalesce(nullif(regexp_replace(lower(p.name), '[^a-z0-9]', '', 'g'), ''), lower(btrim(p.name))) = k;
-		IF NOT FOUND THEN
-			INSERT INTO payment_options (org_id, name, kind, sort_order) VALUES (NEW.org_id, left(btrim(NEW.name), 40), NEW.kind, 100) RETURNING * INTO o;
-		ELSIF o.kind <> NEW.kind THEN
-			RAISE EXCEPTION 'The payment option "%" is % and a tender cannot be % (tender %).', o.name, o.kind, NEW.kind, NEW.id USING ERRCODE = 'check_violation';
-		END IF;
-		NEW.payment_option_id := o.id;
 	END IF;
 	SELECT p.* INTO o FROM payment_options p WHERE p.org_id = NEW.org_id AND p.id = NEW.payment_option_id FOR SHARE;
 	IF NOT FOUND THEN

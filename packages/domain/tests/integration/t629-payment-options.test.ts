@@ -105,13 +105,13 @@ describe('P1 - the seed: Ian\'s six, matched by normalised name', () => {
     expect((await seedPaymentOptions(sql, f.orgId)).inserted).toBe(0);
   });
 
-  it('an org that already has "G-Cash" does not get a second GCash, and one that has a cash option under another name gets no second cash option', async () => {
+  it('an org that already has "G-Cash" does not get a second GCash; a cash option under another name (Till) does not stop the seed adding Cash', async () => {
     const f = await fixture('p1b', { seed: false });
     await sql`insert into payment_options (org_id, name, kind, sort_order) values (${f.orgId}, 'G-Cash', 'wallet', 1), (${f.orgId}, 'Till', 'cash', 2)`;
     const r = await seedPaymentOptions(sql, f.orgId);
     const names = (await sql<{ name: string }[]>`select name from payment_options where org_id = ${f.orgId} order by name`).map((x) => x.name);
-    expect(names).toEqual(['Credit card', 'Debit card', 'G-Cash', 'Maya', 'QRPH', 'Till']);
-    expect(r.inserted).toBe(4);
+    expect(names).toEqual(['Cash', 'Credit card', 'Debit card', 'G-Cash', 'Maya', 'QRPH', 'Till']);
+    expect(r.inserted).toBe(5);
   });
 });
 
@@ -132,6 +132,16 @@ describe('P2 - a store switches an option on (test 2)', () => {
     const rows = await tendersOf(f.storeId);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ name: 'GCash', kind: 'wallet', is_active: true, money_account_id: f.wallet });
+  });
+
+  it('P2e: a tender insert with no payment_option_id fails on NOT NULL; nothing makes an option silently', async () => {
+    const f = await fixture('p2e');
+    const before = (await sql<{ n: number }[]>`select count(*)::int n from payment_options where org_id = ${f.orgId}`)[0]!.n;
+    const raw = await sql`insert into tenders (org_id, store_id, name, kind) values (${f.orgId}, ${f.storeId}, 'Brand New Method', 'cash')`.then(() => null, (e) => e as { code?: string; column_name?: string });
+    expect(raw?.code).toBe('23502');
+    expect(raw?.column_name).toBe('payment_option_id');
+    expect((await sql<{ n: number }[]>`select count(*)::int n from payment_options where org_id = ${f.orgId}`)[0]!.n, 'no option was made').toBe(before);
+    expect(await tendersOf(f.storeId)).toHaveLength(0);
   });
 
   it('P2b: a wallet option without a money account is refused in words and writes nothing', async () => {
@@ -202,24 +212,28 @@ describe('P3 - the master list\'s own rules (test 3)', () => {
     expect(raw?.message).toMatch(/cannot change between cash and wallet/);
     // switched off still counts as used (its history keeps the kind)
     expect(await sentenceOf(asOrg(f.orgId, (tx) => updatePaymentOption(tx, f.admin, { paymentOptionId: maya, kind: 'cash' })))).toMatch(/used by a store/);
-    // QRPH has no store: its kind may change (to cash, only if there is no cash option, so first a wallet-to-wallet no-op, then check the cash refusal in P3c)
+    // QRPH has no store: it can still be renamed
     await asOrg(f.orgId, (tx) => updatePaymentOption(tx, f.admin, { paymentOptionId: qr, name: 'QR Ph' }));
     expect((await sql<{ name: string }[]>`select name from payment_options where id = ${qr}`)[0]!.name).toBe('QR Ph');
   });
 
-  it('P3c: a second cash option is refused (create, and change to cash), and so is a name that is already there in any case or punctuation', async () => {
+  it('P3c: a second cash option is ALLOWED (Cash and Collected, bible row 292), a name that is already there in any case or punctuation is refused', async () => {
     const f = await fixture('p3c');
-    expect(await sentenceOf(asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: 'Petty cash', kind: 'cash' })))).toBe('There is already a cash payment option ("Cash"). An organisation has one.');
+    const collected = await asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: 'Collected', kind: 'cash' }));
+    expect((await sql<{ kind: string }[]>`select kind from payment_options where id = ${collected.id}`)[0]!.kind).toBe('cash');
     const qr = await optionId(f.orgId, 'QRPH');
-    expect(await sentenceOf(asOrg(f.orgId, (tx) => updatePaymentOption(tx, f.admin, { paymentOptionId: qr, kind: 'cash' })))).toMatch(/There is already a cash payment option/);
+    await asOrg(f.orgId, (tx) => updatePaymentOption(tx, f.admin, { paymentOptionId: qr, kind: 'cash' })); // unused, so its kind may change
+    expect((await sql<{ kind: string }[]>`select kind from payment_options where id = ${qr}`)[0]!.kind).toBe('cash');
+    expect(await sql`select 1 from payment_options where org_id = ${f.orgId} and kind = 'cash'`).toHaveLength(3);
     expect(await sentenceOf(asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: 'g-cash', kind: 'wallet' })))).toBe('There is already a payment option called "GCash".');
     expect(await sentenceOf(asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: 'x'.repeat(41), kind: 'wallet' })))).toMatch(/40 characters/);
     expect(await sentenceOf(asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: '###', kind: 'wallet' })))).toBe('The name needs at least one letter or digit.');
-    // the database holds the cash rule too
-    const raw = await sql`insert into payment_options (org_id, name, kind) values (${f.orgId}, 'Petty cash', 'cash')`.then(() => null, (e) => e as { code?: string });
+    // the database holds the name rule too (and a raw second cash option is fine)
+    const raw = await sql`insert into payment_options (org_id, name, kind) values (${f.orgId}, 'COLLECTED', 'cash')`.then(() => null, (e) => e as { code?: string });
     expect(raw?.code).toBe('23505');
+    await sql`insert into payment_options (org_id, name, kind) values (${f.orgId}, 'Petty cash', 'cash')`;
     const ok = await asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: '  Bank Transfer ', kind: 'wallet' }));
-    expect((await sql<{ name: string; sort_order: number }[]>`select name, sort_order from payment_options where id = ${ok.id}`)[0]).toEqual({ name: 'Bank Transfer', sort_order: 70 });
+    expect((await sql<{ name: string; sort_order: number }[]>`select name, sort_order from payment_options where id = ${ok.id}`)[0]).toMatchObject({ name: 'Bank Transfer' });
   });
 
   it('P3d: renaming an option renames the store tenders that use it, at every store', async () => {

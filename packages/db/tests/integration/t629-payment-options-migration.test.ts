@@ -5,7 +5,7 @@
  * option), inside a transaction that is always rolled back, so what is proven is the migration's own text, not a copy of it. Raw SQL on the migration role.
  *
  * Mutants (each proven red by hand, see docs/tasks/629 "As built"): key the option per STORE instead of per org (B1 red); drop the "two tenders of one store" STOP (B3 red);
- * drop the kind-disagreement STOP (B4 red); drop the cash-under-two-names STOP (B5 red); skip the rename of tenders to the option's name (B2 red); drop the seed insert (B6 red).
+ * drop the kind-disagreement STOPs (B4 red); fold every cash tender into one option (B5 red); skip the rename of tenders to the option's name (B2 red); drop the seed insert (B6 red).
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -144,14 +144,21 @@ describe('0277 backfill', () => {
     expect(e2?.message).toMatch(/T-629 STOP: org .* wrong kind for the payment option of that name/);
   });
 
-  it('B5: cash tenders under two different names in one org STOP (one cash option per org)', async () => {
-    const err = await inOldWorld(async (tx) => {
+  it('B5: a store that holds Cash AND "Collected" (two cash tenders, by design: bible row 292) gets TWO cash options; nothing stops', async () => {
+    const r = await inOldWorld(async (tx) => {
       const w = await world(tx, 't629b5');
-      await addTender(tx, { org: w.orgId, store: w.a, name: 'Cash', kind: 'cash' });
-      await addTender(tx, { org: w.orgId, store: w.b, name: 'Cash Drawer', kind: 'cash' });
-      return tx.savepoint((sp) => sp.unsafe(BACKFILL)).then(() => null, (e: Error) => e);
+      const cash = await addTender(tx, { org: w.orgId, store: w.a, name: 'Cash', kind: 'cash' });
+      const collected = await addTender(tx, { org: w.orgId, store: w.a, name: 'Collected', kind: 'cash' });
+      const cashB = await addTender(tx, { org: w.orgId, store: w.b, name: 'cash', kind: 'cash' });
+      await tx.unsafe(BACKFILL);
+      const t = await tx<{ id: string; name: string; payment_option_id: string }[]>`select id, name, payment_option_id from tenders where org_id = ${w.orgId}`;
+      return { opts: await optionsOf(tx, w.orgId), t: new Map(t.map((x) => [x.id, x])), cash, collected, cashB };
     });
-    expect(err?.message).toMatch(/T-629 STOP: org .* cash tenders under more than one name/);
+    const cashOptions = r.opts.filter((o) => o.kind === 'cash').map((o) => o.name).sort();
+    expect(cashOptions).toEqual(['Cash', 'Collected']);
+    expect(r.t.get(r.cash)!.payment_option_id, 'Cash at both stores is one option').toBe(r.t.get(r.cashB)!.payment_option_id);
+    expect(r.t.get(r.collected)!.payment_option_id, 'Collected is its own option').not.toBe(r.t.get(r.cash)!.payment_option_id);
+    expect(r.t.get(r.collected)!.name).toBe('Collected');
   });
 
   it('B7: the migration prints nothing (no NOTICE or WARNING while the backfill runs)', async () => {

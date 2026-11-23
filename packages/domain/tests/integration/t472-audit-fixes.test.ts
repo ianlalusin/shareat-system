@@ -19,6 +19,7 @@ if (!isTestDatabaseUrl(url)) {
 import { closeDb } from '@shareat/db';
 import type { PosReceiptBridgePort } from '../../src/pos/receipt-bridge-port';
 import { DEC_NOW, FakePort, NOW, YESTERDAY, receipt } from './_fixtures/pos-bridge';
+import { insertTenderRaw } from '../../../db/tests/integration/_fixtures/t629-tender';
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
@@ -40,7 +41,7 @@ async function fixture(hint: string) {
   const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin A') returning id`;
   const [chan] = await sql<{ id: string }[]>`
     insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code) values (${orgId}, ${store!.id}, 'Walk-in', true, null) returning id`;
-  await sql`insert into tenders (org_id, store_id, name, kind, pos_v1_alias) values (${orgId}, ${store!.id}, 'Cash', 'cash', 'Cash')`;
+  await insertTenderRaw(sql, { orgId, storeId: store!.id, name: 'Cash', kind: 'cash', posV1Alias: 'Cash' });
   const posStoreId = uid('pos-store');
   await sql`insert into pos_v1_store_links (org_id, store_id, pos_store_id, pos_store_name, sales_channel_id, pos_tax_type, created_by)
     values (${orgId}, ${store!.id}, ${posStoreId}, 'Test POS store', ${chan!.id}, 'vat_inclusive', ${person!.id})`;

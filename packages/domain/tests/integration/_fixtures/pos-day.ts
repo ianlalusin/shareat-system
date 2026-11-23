@@ -3,6 +3,7 @@ import type postgres from 'postgres';
 import type { Actor } from '@shareat/auth';
 import type { Tx } from '@shareat/db';
 import { posV1SalesBody, posV1SoldItemsBody, type PosV1SalesFigures, type PosV1SoldItemInput } from '../../../../db/src/pos-v1/fixtures';
+import { insertTenderRaw } from '../../../../db/tests/integration/_fixtures/t629-tender';
 
 /**
  * T-375 S3 - test helpers for a store LINKED to POS v1 and a day IMPORTED from it (docs/tasks/375-pos-v1-day-feed.md,
@@ -66,17 +67,12 @@ export async function seedTestTenders(
   sql: postgres.Sql,
   o: { orgId: string; storeId: string; walletAccountId: string; extra?: readonly { name: string; alias: string; accountId: string }[] },
 ): Promise<{ cashTenderId: string; walletTenderId: string }> {
-  const [cash] = await sql<{ id: string }[]>`
-    insert into tenders (org_id, store_id, name, kind, pos_v1_alias) values (${o.orgId}, ${o.storeId}, 'Cash', 'cash', 'Cash') returning id`;
-  const [wallet] = await sql<{ id: string }[]>`
-    insert into tenders (org_id, store_id, name, kind, money_account_id, pos_v1_alias)
-    values (${o.orgId}, ${o.storeId}, 'GCash', 'wallet', ${o.walletAccountId}, 'GCash') returning id`;
+  const cashTenderId = await insertTenderRaw(sql, { orgId: o.orgId, storeId: o.storeId, name: 'Cash', kind: 'cash', posV1Alias: 'Cash' });
+  const walletTenderId = await insertTenderRaw(sql, { orgId: o.orgId, storeId: o.storeId, name: 'GCash', kind: 'wallet', moneyAccountId: o.walletAccountId, posV1Alias: 'GCash' });
   for (const x of o.extra ?? []) {
-    await sql`
-      insert into tenders (org_id, store_id, name, kind, money_account_id, pos_v1_alias)
-      values (${o.orgId}, ${o.storeId}, ${x.name}, 'wallet', ${x.accountId}, ${x.alias})`;
+    await insertTenderRaw(sql, { orgId: o.orgId, storeId: o.storeId, name: x.name, kind: 'wallet', moneyAccountId: x.accountId, posV1Alias: x.alias });
   }
-  return { cashTenderId: cash!.id, walletTenderId: wallet!.id };
+  return { cashTenderId, walletTenderId };
 }
 
 export interface FeedCall {
