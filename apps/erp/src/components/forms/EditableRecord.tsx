@@ -337,6 +337,8 @@ export interface EditableRecordProps {
   summary?: ReadonlyArray<SummaryRow>;
   /** T-508 S2b: when set, the locked record's trigger is ONE text button reading this, instead of the round pencil. */
   editText?: string;
+  /** T-631: the locked trigger is a quiet outlined "Edit" (one of many in a list), not the heavy dark button. Same name, same dialog. */
+  quiet?: boolean;
   /**
    * T-389 / DEF-617: `typedFor(sp, DEF, record.id)`. After a refused Save the record reopens in edit mode holding what
    * the user typed, applied in the browser before paint. The page keeps drawing the STORED values as every
@@ -378,6 +380,10 @@ const EDIT_BTN =
 const TEXT_BTN =
   'inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-transparent bg-ink px-4 text-sm text-canvas hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
+// T-631: the quiet trigger for a record that is one row of a list. Still 44px tall; a hairline outline instead of the ink fill.
+const QUIET_BTN =
+  'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-surface-border bg-transparent px-4 text-sm text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+
 /** T-589 B2: the saved values, read-only. Two columns from `sm` up; label above value on a phone. */
 export function RecordSummary({ rows }: { rows: ReadonlyArray<SummaryRow> }) {
   return (
@@ -411,6 +417,7 @@ export function EditableRecordView({
   children,
   extra,
   editText,
+  quiet,
   summary,
   saveLabel = 'Save',
 }: EditableRecordViewProps) {
@@ -432,7 +439,7 @@ export function EditableRecordView({
               {editText}
             </button>
           ) : (
-            <button type="button" ref={editRef} className={EDIT_BTN} aria-label={`Edit ${label}`} aria-haspopup="dialog" onClick={onEdit}>
+            <button type="button" ref={editRef} className={quiet ? QUIET_BTN : EDIT_BTN} aria-label={`Edit ${label}`} aria-haspopup="dialog" onClick={onEdit}>
               <ActionIcon name="edit" />
               <span aria-hidden="true">Edit</span>
             </button>

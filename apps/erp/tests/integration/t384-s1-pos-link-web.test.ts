@@ -274,7 +274,7 @@ describe('W1 - a store switches the master options on (T-629)', () => {
     // Mutant: keep the old add form in TendersSection -> "Add a tender" shows, red.
   });
 
-  it('W1b: the master list is above the stores, with + Add payment option: Kind starts blank, is required, and offers Cash and Wallet (an org may hold several cash options)', async () => {
+  it('W1b: the master list is above the stores, with + Add payment option: Kind starts blank, is required, and offers Cash and Paid to an account (an org may hold several cash options)', async () => {
     const f = await fixture('w1b');
     const html = await render(f);
     expect(html.indexOf('id="payment-options"'), 'the master section comes before the first store card').toBeGreaterThanOrEqual(0);
@@ -286,7 +286,8 @@ describe('W1 - a store switches the master options on (T-629)', () => {
     expect(sel).toMatch(/<select\b[^>]*\brequired/);
     expect(/<option\b[^>]*>/.exec(sel)![0]).toMatch(/value=""/);
     expect(sel, 'Cash is offered even though a cash option exists (Cash and Collected)').toMatch(/value="cash"/);
-    expect(plain(master)).toMatch(/Bank Transfer.*wallet, switched on at 2 stores/);
+    expect(plain(master)).toMatch(/Bank Transfer\s*Paid to an account\s*2(?!\d)/);
+    expect(plain(master), 'the badge counts the options a store has switched on, not every option').toMatch(/\d+ of \d+ used at a store/);
     // Mutant: drop the Cash option from the add form -> no value="cash", red.
   });
 
@@ -538,11 +539,11 @@ describe('W6 - every tender is an EditableRecord (A0 L1, L2, L6)', () => {
     await sql`update tenders set is_active = false, updated_at = now() where id = ${f.qrTender}`;
     const card = cardOf(await render(f), f.storeId);
     expect(plain(card)).not.toMatch(/Retired tenders/);
-    expect(plain(card)).toMatch(/QRPH \(wallet\) off at this store/);
+    expect(plain(card)).toMatch(/QRPH \(paid to an account\) off at this store/);
     const form = switchOnForm(card, await optionIdOf(f.orgId, 'QRPH'))!;
     expect(form).toBeDefined();
     expect(selectOf(form, 'moneyAccountId')!, 'the old account is preselected').toMatch(new RegExp(`<option[^>]*value="${f.bpi}"[^>]*selected`));
-    expect(card.slice(0, card.indexOf('QRPH (wallet)')), 'the off one is not in the active records').not.toContain('aria-label="Edit QRPH"');
+    expect(card.slice(0, card.indexOf('QRPH (paid to an account)')), 'the off one is not in the active records').not.toContain('aria-label="Edit QRPH"');
   });
 });
 

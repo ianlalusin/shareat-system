@@ -470,7 +470,7 @@
   {
     "file": "apps/erp/src/app/settings/pos-link/page.tsx",
     "tables": 1,
-    "sharedTables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
