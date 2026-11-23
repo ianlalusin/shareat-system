@@ -304,7 +304,7 @@ describe('T9 - the channel rows of a pos_receipts day', () => {
 // T10 - BOSS: the POS cannot take a platform tender. v2 tenders are cash | wallet only (tenders_kind_check, T-375), so no receipt can carry Foodpanda or Grab money and a
 // typed platform row on a POS day cannot overlap a receipt. Plus row 270 on an UNLINKED live store: the figures of a pos_receipts day are not typed there either.
 describe('T10 - no platform tender; no typed figure on a pos_receipts day (unlinked store too)', () => {
-  it('a tender of kind platform, foodpanda or grab (anything but cash / wallet) is refused by tenders_kind_check', async () => {
+  it('a tender of kind platform, foodpanda or grab (anything but cash / wallet) is refused by a kind CHECK (the payment option kind check, since T-629)', async () => {
     const w = await world('live', D1);
     for (const kind of ['platform', 'foodpanda', 'grab', 'delivery']) {
       let caught: PgErr = null;
@@ -313,10 +313,11 @@ describe('T10 - no platform tender; no typed figure on a pos_receipts day (unlin
       } catch (e) {
         caught = e as PgErr;
       }
-      expect({ kind, code: caught?.code, constraint: caught?.constraint_name }).toEqual({ kind, code: '23514', constraint: 'tenders_kind_check' });
+      expect({ kind, code: caught?.code, constraint: caught?.constraint_name }).toEqual({ kind, code: '23514', constraint: 'payment_options_kind_check' }); // T-629: a raw insert makes its option first (the 0277 trigger), and the option's kind CHECK refuses it before tenders_kind_check
     }
     // control: cash is accepted
-    await expect(sql`insert into tenders (org_id, store_id, name, kind) values (${w.orgId}, ${w.storeId}, 'T10 cash', 'cash')`).resolves.toBeDefined();
+    const [fresh] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${w.orgId}, ${`t10-${Date.now()}`}, 'T10 store') returning id`;
+    await expect(sql`insert into tenders (org_id, store_id, name, kind) values (${w.orgId}, ${fresh!.id}, 'Cash', 'cash')`).resolves.toBeDefined();
   });
 
   it('on an UNLINKED live store a pos_receipts day\'s figures are locked outside the derivation flag too, and its tender rows are', async () => {

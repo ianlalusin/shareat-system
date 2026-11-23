@@ -281,7 +281,7 @@ describe('W1 - a store switches the master options on (T-629)', () => {
     expect(html.indexOf('id="payment-options"'), 'the master section comes before the first store card').toBeGreaterThanOrEqual(0);
     expect(html.indexOf('id="payment-options"')).toBeLessThan(html.indexOf('<details id="store-'));
     const master = html.slice(html.indexOf('id="payment-options"'), html.indexOf('<details id="store-'));
-    expect(plain(master)).toContain('+ Add payment option');
+    expect(plain(master)).toContain('Add payment option');
     const sel = selectOf(master, 'kind')!;
     expect(sel, 'a kind select').not.toBeNull();
     expect(sel).toMatch(/<select\b[^>]*\brequired/);
@@ -296,7 +296,7 @@ describe('W1 - a store switches the master options on (T-629)', () => {
     const card = cardOf(await render(f), f.bareId);
     const wallet = switchOnForm(card, await optionIdOf(f.orgId, 'QRPH'))!;
     expect(wallet).toMatch(/<select\b[^>]*\bname="moneyAccountId"[^>]*\brequired/);
-    expect(wallet, 'an add dialog ends in Save (L4)').toMatch(/<button[^>]*type="submit"[^>]*>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>/);
+    expect(wallet, 'an add dialog ends in Save (L4)').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"/);
     const cash = switchOnForm(card, await optionIdOf(f.orgId, 'Cash'))!;
     expect(cash).not.toMatch(/name="moneyAccountId"/);
     expect(cash).toMatch(/name="posV1Alias"/);

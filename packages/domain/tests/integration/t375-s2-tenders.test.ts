@@ -36,6 +36,7 @@ if (!isTestDatabaseUrl(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { createTenderByName } from './_fixtures/t629-options';
+import { createPaymentOption } from '../../src/pos/payment-options';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 
 const sql = postgres(url, { max: 6 });
@@ -193,12 +194,12 @@ describe('T1 - who may map tenders (manage_chart_of_accounts, admin only) and wh
     expect((await tenderRows(f.storeId))[0]!.money_account_id).toBe(f.mayaAcct);
   });
 
-  it('updateTender changes name and alias, and the change is audited', async () => {
+  it('updateTender changes the alias (the name is the option\'s, a name passed in is not applied), and the change is audited', async () => {
     const f = await fixture('t1n');
     const cash = await create(f, f.admin, { name: 'Cash', kind: 'cash', posV1Alias: 'Cash' });
     await update(f, f.admin, { tenderId: cash.id, name: 'Drawer cash', posV1Alias: 'Cash on hand' });
     const [row] = await tenderRows(f.storeId);
-    expect(row).toMatchObject({ name: 'Drawer cash', pos_v1_alias: 'Cash on hand' });
+    expect(row).toMatchObject({ name: 'Cash', pos_v1_alias: 'Cash on hand' });
     const [n] = await sql<{ n: number }[]>`select count(*)::int as n from audit_log where org_id = ${f.orgId} and entity = 'tenders' and entity_id = ${cash.id}`;
     expect(n!.n, 'create + update both audited').toBeGreaterThanOrEqual(2);
   });
@@ -263,9 +264,9 @@ describe('RED-1 - a retired money account', () => {
     const f = await fixture('r1a');
     const t = await create(f, f.admin, { name: 'GCash', kind: 'wallet', moneyAccountId: f.gcashAcct, posV1Alias: 'GCash' });
     await sql`update money_accounts set is_active = false where id = ${f.gcashAcct}`;
-    await update(f, f.admin, { tenderId: t.id, name: 'GCash main', posV1Alias: 'G-Cash Main' });
+    await update(f, f.admin, { tenderId: t.id, posV1Alias: 'G-Cash Main' });
     expect(await tenderRows(f.storeId)).toEqual([
-      { id: t.id, name: 'GCash main', kind: 'wallet', money_account_id: f.gcashAcct, pos_v1_alias: 'G-Cash Main', is_active: true },
+      { id: t.id, name: 'GCash', kind: 'wallet', money_account_id: f.gcashAcct, pos_v1_alias: 'G-Cash Main', is_active: true },
     ]);
   });
 
@@ -320,23 +321,23 @@ describe('Gaps - domain shape rules, audit, scope, org', () => {
   it('a wallet with NO account is refused - Mutant: allow a null account for a wallet', async () => {
     const f = await fixture('g2');
     expect(await sentenceOf(create(f, f.admin, { name: 'GCash', kind: 'wallet', posV1Alias: 'GCash' }))).toBe(
-      'A wallet tender needs the money account it pays into.',
+      'GCash needs the money account it pays into at this store.',
     );
     expect(await tenderRows(f.storeId)).toHaveLength(0);
   });
 
-  it('a blank name is refused; control: a named tender is created - Mutant: drop cleanName', async () => {
+  it('T-629: a blank option name is refused (now the master list\'s rule); control: a named tender is created - Mutant: drop cleanName', async () => {
     const f = await fixture('g3');
-    expect(await sentenceOf(create(f, f.admin, { name: '   ', kind: 'cash', posV1Alias: 'Cash' }))).toBe('Give the tender a name.');
+    expect(await sentenceOf(asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: '   ', kind: 'cash' })))).toBe('Give the payment option a name of at most 40 characters.');
     expect(await tenderRows(f.storeId)).toHaveLength(0);
     await expect(create(f, f.admin, { name: 'Cash', kind: 'cash', posV1Alias: 'Cash' })).resolves.toHaveProperty('id');
   });
 
-  it('a duplicate NAME (case-insensitive) gets the name sentence, not constraint text - Mutant: drop the name branch of translate()', async () => {
+  it('the same option twice at a store gets the words, not constraint text (T-629: one tender per option) - Mutant: drop the already-on check', async () => {
     const f = await fixture('g4');
     await create(f, f.admin, { name: 'Cash', kind: 'cash', posV1Alias: 'Cash' });
     const text = await sentenceOf(create(f, f.admin, { name: 'cash', kind: 'cash', posV1Alias: 'Drawer' }));
-    expect(text).toBe('This store already has a tender called "cash".');
+    expect(text).toBe('Cash is already switched on at this store.');
     expect(await tenderRows(f.storeId)).toHaveLength(1);
   });
 
@@ -358,14 +359,16 @@ describe('Gaps - domain shape rules, audit, scope, org', () => {
     const f = await fixture('g6');
     await expect(create(f, f.scopedManager, { name: 'Cash', kind: 'cash', posV1Alias: 'Cash' })).rejects.toBeInstanceOf(AuthorizationError);
     const t = await create(f, f.admin, { name: 'Cash', kind: 'cash', posV1Alias: 'Cash' });
-    await expect(update(f, f.scopedManager, { tenderId: t.id, name: 'X' })).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(update(f, f.scopedManager, { tenderId: t.id, posV1Alias: 'X' })).rejects.toBeInstanceOf(AuthorizationError);
     await expect(setActive(f, f.scopedManager, t.id, false)).rejects.toBeInstanceOf(AuthorizationError);
     expect(await tenderRows(f.storeId)).toEqual([{ id: t.id, name: 'Cash', kind: 'cash', money_account_id: null, pos_v1_alias: 'Cash', is_active: true }]);
     // controls: even on her OWN store the manager is refused (role), and an admin scoped only to the other store is let in (org-scoped capability)
     await expect(
       asOrg(f.orgId, (tx) => createTenderByName(mod, tx, f.scopedManager, { storeId: f.store2Id, name: 'Cash', kind: 'cash', posV1Alias: 'Cash' } as never)),
     ).rejects.toBeInstanceOf(AuthorizationError);
-    await expect(create(f, f.scopedAdmin, { name: 'Till', kind: 'cash', posV1Alias: 'Till' })).resolves.toHaveProperty('id');
+    await expect(
+      asOrg(f.orgId, (tx) => createTenderByName(mod, tx, f.scopedAdmin, { storeId: f.store2Id, name: 'Cash', kind: 'cash', posV1Alias: 'Till' } as never)),
+    ).resolves.toHaveProperty('id');
   });
 
   it('a tender id from ANOTHER org is "gone" for update and retire, and the owner org sees it unchanged - Mutant: read the tender without the org filter', async () => {
@@ -373,10 +376,10 @@ describe('Gaps - domain shape rules, audit, scope, org', () => {
     const b = await fixture('g7b');
     const t = await create(a, a.admin, { name: 'Cash', kind: 'cash', posV1Alias: 'Cash' });
     const goneText = 'That tender could not be found';
-    expect(await sentenceOf(update(b, b.admin, { tenderId: t.id, name: 'Hijack' }))).toContain(goneText);
+    expect(await sentenceOf(update(b, b.admin, { tenderId: t.id, posV1Alias: 'Hijack' }))).toContain(goneText);
     expect(await sentenceOf(setActive(b, b.admin, t.id, false))).toContain(goneText);
     expect(await tenderRows(a.storeId)).toEqual([{ id: t.id, name: 'Cash', kind: 'cash', money_account_id: null, pos_v1_alias: 'Cash', is_active: true }]);
-    await update(a, a.admin, { tenderId: t.id, name: 'Drawer cash' });
-    expect((await tenderRows(a.storeId))[0]!.name).toBe('Drawer cash');
+    await update(a, a.admin, { tenderId: t.id, posV1Alias: 'Drawer cash' });
+    expect((await tenderRows(a.storeId))[0]!.pos_v1_alias).toBe('Drawer cash');
   });
 });
