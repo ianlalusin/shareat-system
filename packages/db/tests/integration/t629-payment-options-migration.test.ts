@@ -161,6 +161,36 @@ describe('0277 backfill', () => {
     expect(r.t.get(r.collected)!.name).toBe('Collected');
   });
 
+  it('B8: a 45-character tender name becomes a 40-character option, the tender joins it and takes its name; SET NOT NULL then holds (the deploy does not fail)', async () => {
+    const long = 'Lipa Branch Special Bank Transfer Account'.padEnd(45, 'X'); // 45 characters
+    expect(long).toHaveLength(45);
+    const r = await inOldWorld(async (tx) => {
+      const w = await world(tx, 't629b8');
+      const t = await addTender(tx, { org: w.orgId, store: w.a, name: long, kind: 'wallet', account: w.acctA });
+      await tx.unsafe(BACKFILL);
+      await tx`alter table tenders alter column payment_option_id set not null`; // what the migration does next: it must not fail
+      const [row] = await tx<{ name: string; payment_option_id: string }[]>`select name, payment_option_id from tenders where id = ${t}`;
+      const [opt] = await tx<{ name: string }[]>`select name from payment_options where id = ${row!.payment_option_id}`;
+      return { row: row!, opt: opt! };
+    });
+    expect(r.opt.name).toBe(long.slice(0, 40));
+    expect(r.row.name, 'the tender takes the option name').toBe(long.slice(0, 40));
+  });
+
+  it('B9: two different tenders whose names share their first 40 characters STOP with a clear message, not a raw unique error', async () => {
+    const stem = 'Lipa Branch Special Bank Transfer Accoun'; // 40 characters
+    expect(stem).toHaveLength(40);
+    const err = await inOldWorld(async (tx) => {
+      const w = await world(tx, 't629b9');
+      await addTender(tx, { org: w.orgId, store: w.a, name: `${stem}t one`, kind: 'wallet', account: w.acctA });
+      await addTender(tx, { org: w.orgId, store: w.b, name: `${stem}t two`, kind: 'wallet', account: w.acctB });
+      return tx.savepoint((sp) => sp.unsafe(BACKFILL)).then(() => null, (e: Error) => e);
+    });
+    expect(err, 'the backfill must refuse').not.toBeNull();
+    expect(err!.message).toMatch(/T-629 STOP: org .* two different tenders whose names are the same in their first 40 characters/);
+    expect(err!.message).not.toMatch(/duplicate key|violates/);
+  });
+
   it('B7: the migration prints nothing (no NOTICE or WARNING while the backfill runs)', async () => {
     const seen: string[] = [];
     const quiet = postgres(url!, { max: 1, onnotice: (n) => seen.push(String(n.message)) });

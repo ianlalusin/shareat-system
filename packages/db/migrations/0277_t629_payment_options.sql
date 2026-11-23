@@ -6,7 +6,7 @@
 -- as a bank charge); each store enables them in settings.
 --
 -- WHAT IT ADDS
---   payment_options          the org's master list: name (1-40, unique per org case-insensitively), kind cash|wallet, sort order, status active|retired. KEEP (master data).
+--   payment_options          the org's master list: name (1-40, unique per org by its a-z0-9 form, so "G-Cash" and "GCash" cannot both exist), kind cash|wallet, sort order, status active|retired. KEEP (master data).
 --                            An org may hold several cash options (BOSS ruling, 23 Nov: Lipa's live tenders are Cash AND "Collected", bible row 292 / docs/tasks/396).
 --   tenders.payment_option_id   NOT NULL after the backfill below, same-org composite FK, UNIQUE (store_id, payment_option_id): a store tender IS the store's switch for an option.
 --                            tenders.name and tenders.kind stay as a MIRROR the option owns (the trigger below forces them), so every reader keeps working.
@@ -17,7 +17,9 @@
 -- It STOPS (raises, so nothing is applied) instead of guessing when
 --   (a) two tenders of ONE store map to one option (no money rows are merged),
 --   (b) the tenders of one option disagree on cash / wallet,
---   (c) one of Ian's six names is held with the other kind.
+--   (c) one of Ian's six names is held with the other kind,
+--   (d) two different tenders of an org have names that are the same in their first 40 characters (an option name is at most 40).
+-- A tender name longer than 40 characters gives an option with the first 40; the tenders are joined to their option through a map made here (never by re-deriving the key).
 -- A store holding Cash and "Collected" (two cash tenders, by design) becomes two cash options.
 --
 -- TRIGGERS (all origin, not history guards: they read other rows' current state; triggers/registry.ts)
@@ -50,7 +52,7 @@ CREATE TABLE "payment_options" (
 ALTER TABLE "payment_options" ADD CONSTRAINT "payment_options_org_id_organizations_id_fk"
 	FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT;
 --> statement-breakpoint
-CREATE UNIQUE INDEX "payment_options_org_name_unique" ON "payment_options" ("org_id", lower(btrim("name")));
+CREATE UNIQUE INDEX "payment_options_org_name_unique" ON "payment_options" ("org_id", (coalesce(nullif(regexp_replace(lower("name"), '[^a-z0-9]', '', 'g'), ''), lower(btrim("name")))));
 --> statement-breakpoint
 ALTER TABLE "tenders" ADD COLUMN "payment_option_id" uuid;
 --> statement-breakpoint
@@ -82,19 +84,27 @@ BEGIN
 		RAISE EXCEPTION 'T-629 STOP: org % holds a tender "%" with the wrong kind for the payment option of that name. Report to BOSS; nothing was changed.', bad.org_id, bad.n;
 	END IF;
 
-	INSERT INTO payment_options (org_id, name, kind, sort_order)
-	SELECT g.org_id, coalesce(s.name, left(g.name, 40)), g.kind, coalesce(s.sort_order, 100)
-	FROM (SELECT DISTINCT ON (x.org_id, x.k) x.org_id, x.k, x.kind, x.name FROM t629_keys x ORDER BY x.org_id, x.k, x.created_at, x.id) g
-	LEFT JOIN t629_seed s ON s.k = g.k;
+	-- one row per (org, normalised name): the option it becomes, with its id made HERE (the final UPDATE joins on this map, never on a re-derived key)
+	CREATE TEMP TABLE t629_map ON COMMIT DROP AS
+		SELECT g.org_id, g.k, g.kind, uuidv7() AS option_id, btrim(left(coalesce(s.name, g.name), 40)) AS option_name, coalesce(s.sort_order, 100) AS sort_order
+		FROM (SELECT DISTINCT ON (x.org_id, x.k) x.org_id, x.k, x.kind, x.name FROM t629_keys x ORDER BY x.org_id, x.k, x.created_at, x.id) g
+		LEFT JOIN t629_seed s ON s.k = g.k;
+	SELECT a.org_id, a.option_name AS n INTO bad FROM t629_map a JOIN t629_map b ON b.org_id = a.org_id AND b.k > a.k
+		AND coalesce(nullif(regexp_replace(lower(b.option_name), '[^a-z0-9]', '', 'g'), ''), lower(btrim(b.option_name)))
+		  = coalesce(nullif(regexp_replace(lower(a.option_name), '[^a-z0-9]', '', 'g'), ''), lower(btrim(a.option_name))) LIMIT 1;
+	IF FOUND THEN
+		RAISE EXCEPTION 'T-629 STOP: org % has two different tenders whose names are the same in their first 40 characters ("%"); an option name is at most 40. Rename one of them, then run again. Report to BOSS; nothing was changed.', bad.org_id, bad.n;
+	END IF;
+
+	INSERT INTO payment_options (id, org_id, name, kind, sort_order) SELECT m.option_id, m.org_id, m.option_name, m.kind, m.sort_order FROM t629_map m;
 
 	INSERT INTO payment_options (org_id, name, kind, sort_order)
 	SELECT o.id, s.name, s.kind, s.sort_order
 	FROM organizations o CROSS JOIN t629_seed s
 	WHERE NOT EXISTS (SELECT 1 FROM payment_options p WHERE p.org_id = o.id AND regexp_replace(lower(p.name), '[^a-z0-9]', '', 'g') = s.k);
 
-	UPDATE tenders t SET payment_option_id = p.id, name = p.name
-	FROM t629_keys g JOIN payment_options p ON p.org_id = g.org_id
-		AND coalesce(nullif(regexp_replace(lower(p.name), '[^a-z0-9]', '', 'g'), ''), lower(btrim(p.name))) = g.k
+	UPDATE tenders t SET payment_option_id = m.option_id, name = m.option_name
+	FROM t629_keys g JOIN t629_map m ON m.org_id = g.org_id AND m.k = g.k
 	WHERE t.id = g.id;
 END;
 $do$;

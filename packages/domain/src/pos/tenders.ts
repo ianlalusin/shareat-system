@@ -227,6 +227,11 @@ export async function setTenderActive(tx: Tx, actor: Actor, input: { tenderId: s
   if (before.isActive === input.isActive) return;
 
   if (input.isActive) {
+    // A retired option cannot be switched on again: the same sentence as switchOnPaymentOption, before the database trigger would refuse it in raw words.
+    const option = await posV1Repo.getPaymentOptionById(tx, actor.orgId, before.paymentOptionId);
+    if (option?.status === 'retired') {
+      throw refuse(`tenders: payment option ${option.id} is retired`, `${option.name} is retired. An admin brings it back under Settings > Payment options first.`);
+    }
     // Reactivating must not put two active tenders on one alias.
     await assertAliasFree(tx, actor.orgId, before.storeId, before.posV1Alias, before.id);
     if (before.moneyAccountId) await assertStoreAccount(tx, actor.orgId, before.storeId, before.moneyAccountId);

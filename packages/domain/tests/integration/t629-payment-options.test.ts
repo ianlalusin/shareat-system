@@ -144,6 +144,28 @@ describe('P2 - a store switches an option on (test 2)', () => {
     expect(await tendersOf(f.storeId)).toHaveLength(0);
   });
 
+  it('P2f: setTenderActive refuses switching on a tender whose option is retired, in the same words as switchOn (not the database\'s)', async () => {
+    const f = await fixture('p2f');
+    const qr = await optionId(f.orgId, 'QRPH');
+    const t = await asOrg(f.orgId, (tx) => switchOnPaymentOption(tx, f.admin, { storeId: f.storeId, paymentOptionId: qr, moneyAccountId: f.bank }));
+    await asOrg(f.orgId, (tx) => setTenderActive(tx, f.admin, { tenderId: t.id, isActive: false }));
+    await asOrg(f.orgId, (tx) => setPaymentOptionStatus(tx, f.admin, { paymentOptionId: qr, status: 'retired' }));
+    expect(await sentenceOf(asOrg(f.orgId, (tx) => setTenderActive(tx, f.admin, { tenderId: t.id, isActive: true })))).toBe('QRPH is retired. An admin brings it back under Settings > Payment options first.');
+    expect((await tendersOf(f.storeId))[0]!.is_active).toBe(false);
+    await asOrg(f.orgId, (tx) => setPaymentOptionStatus(tx, f.admin, { paymentOptionId: qr, status: 'active' }));
+    await asOrg(f.orgId, (tx) => setTenderActive(tx, f.admin, { tenderId: t.id, isActive: true }));
+    expect((await tendersOf(f.storeId))[0]!.is_active).toBe(true);
+  });
+
+  it('P2g: a tender cannot use ANOTHER org\'s payment option: tenders_payment_option_same_org_fk refuses a raw insert (23503)', async () => {
+    const f = await fixture('p2g');
+    const g = await fixture('p2g2');
+    const foreign = await optionId(g.orgId, 'GCash');
+    const raw = await sql`insert into tenders (org_id, store_id, payment_option_id, name, kind, money_account_id) values (${f.orgId}, ${f.storeId}, ${foreign}, 'GCash', 'wallet', ${f.wallet})`.then(() => null, (e) => e as { code?: string; constraint_name?: string });
+    expect({ code: raw?.code, constraint: raw?.constraint_name }).toEqual({ code: '23503', constraint: 'tenders_payment_option_same_org_fk' });
+    expect(await tendersOf(f.storeId)).toHaveLength(0);
+  });
+
   it('P2b: a wallet option without a money account is refused in words and writes nothing', async () => {
     const f = await fixture('p2b');
     const maya = await optionId(f.orgId, 'Maya');
@@ -228,9 +250,11 @@ describe('P3 - the master list\'s own rules (test 3)', () => {
     expect(await sentenceOf(asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: 'g-cash', kind: 'wallet' })))).toBe('There is already a payment option called "GCash".');
     expect(await sentenceOf(asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: 'x'.repeat(41), kind: 'wallet' })))).toMatch(/40 characters/);
     expect(await sentenceOf(asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: '###', kind: 'wallet' })))).toBe('The name needs at least one letter or digit.');
-    // the database holds the name rule too (and a raw second cash option is fine)
+    // the database holds the name rule too, on the SAME a-z0-9 key as the domain (and a raw second cash option is fine)
     const raw = await sql`insert into payment_options (org_id, name, kind) values (${f.orgId}, 'COLLECTED', 'cash')`.then(() => null, (e) => e as { code?: string });
     expect(raw?.code).toBe('23505');
+    const rawKey = await sql`insert into payment_options (org_id, name, kind) values (${f.orgId}, 'G-Cash', 'wallet')`.then(() => null, (e) => e as { code?: string; constraint_name?: string });
+    expect({ code: rawKey?.code, constraint: rawKey?.constraint_name }, 'G-Cash cannot sit beside GCash').toEqual({ code: '23505', constraint: 'payment_options_org_name_unique' });
     await sql`insert into payment_options (org_id, name, kind) values (${f.orgId}, 'Petty cash', 'cash')`;
     const ok = await asOrg(f.orgId, (tx) => createPaymentOption(tx, f.admin, { name: '  Bank Transfer ', kind: 'wallet' }));
     expect((await sql<{ name: string; sort_order: number }[]>`select name, sort_order from payment_options where id = ${ok.id}`)[0]).toMatchObject({ name: 'Bank Transfer' });

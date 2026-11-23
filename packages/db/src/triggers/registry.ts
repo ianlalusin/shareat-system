@@ -1666,7 +1666,7 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'tenders',
     mode: 'origin',
     kind: 'derivation',
-    reason: 'A store tender takes its name and kind FROM its payment option, cannot change option, cannot be switched on while the option is retired; an insert without an option is matched by normalised name or the option is made (0277, T-629).',
+    reason: 'A store tender takes its name and kind FROM its payment option, cannot change option, cannot be switched on while the option is retired (0277, T-629). A tender insert without an option fails on NOT NULL: nothing makes an option silently.',
   },
   payment_options_guard: {
     table: 'payment_options',

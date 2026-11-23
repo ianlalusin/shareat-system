@@ -221,7 +221,7 @@ export const paymentOptions = pgTable(
     check('payment_options_kind_check', sql`${t.kind} in ('cash', 'wallet')`),
     check('payment_options_status_check', sql`${t.status} in ('active', 'retired')`),
     check('payment_options_name_check', sql`char_length(btrim(${t.name})) between 1 and 40`),
-    // NOTE: payment_options_org_name_unique UNIQUE (org_id, lower(btrim(name))) (expression index) is hand-added in migration 0277. There may be several cash options (Cash and Collected).
+    // NOTE: payment_options_org_name_unique UNIQUE (org_id, coalesce(nullif(regexp_replace(lower(name), '[^a-z0-9]', '', 'g'), ''), lower(btrim(name)))) (expression index: the a-z0-9 key the domain and the backfill use) is hand-added in migration 0277. There may be several cash options (Cash and Collected).
     // NOTE: the payment_options_guard trigger (kind frozen while any store tender uses it; retire refused while any store has it ON) is hand-added in migration 0277.
   ],
 );
