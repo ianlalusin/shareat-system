@@ -264,7 +264,7 @@ describe('W1 - a store switches the master options on (T-629)', () => {
     expect(plain(card)).not.toMatch(/Add a tender|Add tender/);
     expect(plain(card)).toContain('Payment options at this store');
     for (const name of ['Cash', 'GCash', 'Bank Transfer', 'QRPH']) {
-      expect(plain(card), `${name} is an OFF row at the bare store`).toContain(`${name} (`);
+      expect(plain(card), `${name} is an OFF row at the bare store`).toMatch(new RegExp(`${name}\\s+(?:Cash|Paid to an account)\\s+Off(?![A-Za-z])`));
       expect(switchOnForm(card, await optionIdOf(f.orgId, name)), `${name} has a Switch on form`).toBeDefined();
     }
     // the Lipa store has them ON: records, no Switch on form for an ON option
@@ -539,7 +539,7 @@ describe('W6 - every tender is an EditableRecord (A0 L1, L2, L6)', () => {
     await sql`update tenders set is_active = false, updated_at = now() where id = ${f.qrTender}`;
     const card = cardOf(await render(f), f.storeId);
     expect(plain(card)).not.toMatch(/Retired tenders/);
-    expect(plain(card)).toMatch(/QRPH\s+Paid to an account\s+Off/);
+    expect(plain(card)).toMatch(/QRPH\s+Paid to an account\s+Off(?![A-Za-z])/);
     const form = switchOnForm(card, await optionIdOf(f.orgId, 'QRPH'))!;
     expect(form).toBeDefined();
     expect(selectOf(form, 'moneyAccountId')!, 'the old account is preselected').toMatch(new RegExp(`<option[^>]*value="${f.bpi}"[^>]*selected`));
