@@ -46,7 +46,12 @@ async function inOldWorld<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
       await tx`alter table tenders alter column payment_option_id drop not null`;
       await tx`alter table tenders disable trigger tenders_mirror_option`;
       await tx`update tenders set payment_option_id = null`;
+      // Other test files leave their own tenders in this shared test database; the backfill runs over every tender, so a real STOP case from some other
+      // file would stop this one. Inside this always-rolled-back transaction only, take them out (FK checks off) so the world is exactly what the case builds.
+      await tx`set local session_replication_role = replica`;
+      await tx`delete from tenders`;
       await tx`delete from payment_options`;
+      await tx`set local session_replication_role = origin`;
       out = await fn(tx);
       throw new Rollback();
     });
@@ -157,7 +162,10 @@ describe('0277 backfill', () => {
         await tx`alter table tenders alter column payment_option_id drop not null`;
         await tx`alter table tenders disable trigger tenders_mirror_option`;
         await tx`update tenders set payment_option_id = null`;
+        await tx`set local session_replication_role = replica`;
+        await tx`delete from tenders`;
         await tx`delete from payment_options`;
+        await tx`set local session_replication_role = origin`;
         await tx.unsafe(BACKFILL);
         throw new Rollback();
       });
