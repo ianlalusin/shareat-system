@@ -139,7 +139,7 @@ export const SETTINGS_POS_UNLINK_RULES = defineFieldRules('settings.unlinkStoreF
 /** /settings/payment-options (T-629): the master list's name (1-40) and cash-or-wallet choice. The same set the form shows live and `createPaymentOption` judges. */
 export const SETTINGS_PAYMENT_OPTION_RULES = defineFieldRules('settings.paymentOption', {
   name: { label: 'The payment option name', kind: 'text', plainText: true, max: 40, requires: 'Give the payment option a name of at most 40 characters.' },
-  kind: { label: 'The payment option kind', kind: 'text', requires: 'Choose whether this payment option is cash or a wallet.' },
+  kind: { label: 'The payment option kind', kind: 'text', requires: 'Choose Cash or Paid to an account.' },
 });
 
 const BUSINESS_RULE_VALUE_SAYS = 'A value is a plain number with at most two decimals, for example 50 or 12.5.';

@@ -364,6 +364,10 @@ const ACCOUNT_HINT =
 // T-631: the stored kind stays cash | wallet; people read "Cash" or "Paid to an account" (a card is paid to an account too).
 const KIND_TEXT = { cash: 'Cash', wallet: 'Paid to an account' } as const;
 
+function KindPill({ kind }: { kind: keyof typeof KIND_TEXT }) {
+  return <span className="inline-flex rounded-full border border-surface-border bg-canvas px-2 py-0.5 text-xs text-ink">{KIND_TEXT[kind]}</span>;
+}
+
 /**
  * T-629: the org's MASTER LIST of payment options, above the store cards. One list for every store (a store switches an option on in its own card below);
  * the option owns the name and the kind. Same page, same capability (`manage_chart_of_accounts`) as the store tenders, so no new route.
@@ -418,7 +422,7 @@ function PaymentOptionsSection({ options, flash, actorId }: { options: readonly 
                 <Th>Payment option</Th>
                 <Th>Type</Th>
                 <Th numeric>Stores using</Th>
-                <Th className="w-24" />
+                <Th />
               </tr>
             </thead>
             <tbody>
@@ -426,7 +430,7 @@ function PaymentOptionsSection({ options, flash, actorId }: { options: readonly 
                 <tr key={o.id}>
                   <Td className="font-medium">{o.name}</Td>
                   <Td>
-                    <span className="inline-flex rounded-full border border-surface-border bg-canvas px-2 py-0.5 text-xs text-ink">{KIND_TEXT[o.kind]}</span>
+                    <KindPill kind={o.kind} />
                   </Td>
                   <NumTd className={o.storesOn > 0 ? undefined : 'text-muted'}>{o.storesOn > 0 ? o.storesOn : 'Not used yet'}</NumTd>
                   <Td className="text-right whitespace-nowrap">
@@ -541,7 +545,7 @@ function TendersSection({
           <a href="/money-accounts" className={NAV_LINK}>
             Money accounts
           </a>{' '}
-          first. A wallet option can&apos;t be switched on without one.
+          first. An option paid to an account can&apos;t be switched on without one.
         </p>
       )}
 
@@ -574,7 +578,7 @@ function TendersSection({
                   <tr key={`${m.posMethod ?? ''}:${m.tenderId ?? ''}:${i}`} className="border-b border-neutral-100 dark:border-neutral-900">
                     <td className="py-1 pr-3">{m.posMethod ?? '—'}</td>
                     <td className="py-1 pr-3">{m.tenderName ?? '—'}</td>
-                    <td className="py-1 pr-3">{m.kind === 'cash' ? 'Cash' : m.kind === 'wallet' ? 'Wallet' : '—'}</td>
+                    <td className="py-1 pr-3">{m.kind === 'cash' || m.kind === 'wallet' ? KIND_TEXT[m.kind] : '—'}</td>
                     <td className="py-1 pr-3">{m.moneyAccountName ?? '—'}</td>
                     <td className={m.status === 'mapped' ? 'py-1' : 'py-1 text-warning-ink'}>{m.statusText}</td>
                   </tr>
@@ -587,24 +591,53 @@ function TendersSection({
 
       {rows.length === 0 && <p className="text-xs text-neutral-500 dark:text-neutral-400">No payment options yet. Add them in the list above.</p>}
 
-      {rows.map(({ option, tender }) =>
-        tender?.isActive ? (
-          <TenderRecord key={`${tender.id}:${tender.version}`} storeId={storeId} x={tender} t={t} typed={typedFor(flash, TENDER_EDIT, tender.id, actorId)} />
-        ) : (
-          <div key={option.id} className="flex flex-wrap items-center justify-between gap-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-            <span className="text-neutral-600 dark:text-neutral-400">
-              {option.name} ({KIND_TEXT[option.kind].toLowerCase()}) <span className="text-xs">off at this store</span>
-            </span>
-            <SwitchOnForm
-              storeId={storeId}
-              storeName={storeName}
-              option={option}
-              accounts={t.accounts}
-              defaultAccountId={tender?.moneyAccountId ?? ''}
-              defaultAlias={tender?.posV1Alias ?? ''}
-            />
-          </div>
-        ),
+      {rows.length > 0 && (
+        <Table label={`Payment options at ${storeName}`} card={{ title: 'Payment option', subtitle: 'Type', keys: ['Status'] }}>
+          <thead>
+            <tr>
+              <Th>Payment option</Th>
+              <Th>Type</Th>
+              <Th>Status</Th>
+              <Th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ option, tender }) => (
+              <tr key={option.id}>
+                <Td className="font-medium">{option.name}</Td>
+                <Td>
+                  <KindPill kind={option.kind} />
+                </Td>
+                <Td>
+                  {tender?.isActive ? (
+                    <>
+                      <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">On</span>
+                      {tender.kind === 'wallet' && <span className="mt-1 block text-xs text-muted">{tender.moneyAccountName ?? 'No account'}</span>}
+                    </>
+                  ) : (
+                    <span className="text-muted">Off</span>
+                  )}
+                </Td>
+                <Td className="text-right whitespace-nowrap">
+                  <div data-card-ignore className="flex items-center justify-end">
+                    {tender?.isActive ? (
+                      <TenderRecord key={`${tender.id}:${tender.version}`} storeId={storeId} x={tender} t={t} typed={typedFor(flash, TENDER_EDIT, tender.id, actorId)} />
+                    ) : (
+                      <SwitchOnForm
+                        storeId={storeId}
+                        storeName={storeName}
+                        option={option}
+                        accounts={t.accounts}
+                        defaultAccountId={tender?.moneyAccountId ?? ''}
+                        defaultAlias={tender?.posV1Alias ?? ''}
+                      />
+                    )}
+                  </div>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
       )}
     </div>
   );
@@ -622,10 +655,7 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
       label={x.name}
       hidden={{ storeId, tenderId: x.id, version: x.version }}
       typed={typed}
-      summary={[
-        { label: 'Payment option', value: x.kind === 'cash' ? `${x.name}: cash, switched on` : `${x.name}: wallet, pays into ${x.moneyAccountName ?? 'no account'}` },
-        { label: 'POS name', value: x.posV1Alias },
-      ]}
+      quiet
       extra={
         <form action={setTenderActiveAction} className="mt-2">
           <input type="hidden" name="storeId" value={storeId} />
@@ -709,7 +739,7 @@ function SwitchOnForm({
     </>
   );
   return (
-    <FormModal trigger="Switch on" triggerVariant="secondary" title={`Switch on ${option.name} — ${storeName}`} size="md">
+    <FormModal trigger="Switch on" triggerVariant="secondary" triggerIcon={null} triggerLabel={`Switch on ${option.name}`} title={`Switch on ${option.name} — ${storeName}`} size="md">
       <form action={switchOnPaymentOptionAction} autoComplete="off" className="space-y-3">
         {fields}
         <DialogActions>

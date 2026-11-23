@@ -55,7 +55,7 @@ function cleanName(raw: string): string {
 }
 
 function cleanKind(kind: unknown): TenderKind {
-  if (!(TENDER_KINDS as readonly unknown[]).includes(kind)) throw refuse(`payment options: unknown kind ${String(kind)}`, 'Choose whether this payment option is cash or a wallet.');
+  if (!(TENDER_KINDS as readonly unknown[]).includes(kind)) throw refuse(`payment options: unknown kind ${String(kind)}`, 'Choose Cash or Paid to an account.');
   return kind as TenderKind;
 }
 

@@ -539,11 +539,11 @@ describe('W6 - every tender is an EditableRecord (A0 L1, L2, L6)', () => {
     await sql`update tenders set is_active = false, updated_at = now() where id = ${f.qrTender}`;
     const card = cardOf(await render(f), f.storeId);
     expect(plain(card)).not.toMatch(/Retired tenders/);
-    expect(plain(card)).toMatch(/QRPH \(paid to an account\) off at this store/);
+    expect(plain(card)).toMatch(/QRPH\s+Paid to an account\s+Off/);
     const form = switchOnForm(card, await optionIdOf(f.orgId, 'QRPH'))!;
     expect(form).toBeDefined();
     expect(selectOf(form, 'moneyAccountId')!, 'the old account is preselected').toMatch(new RegExp(`<option[^>]*value="${f.bpi}"[^>]*selected`));
-    expect(card.slice(0, card.indexOf('QRPH (paid to an account)')), 'the off one is not in the active records').not.toContain('aria-label="Edit QRPH"');
+    expect(card, 'the off one has no Edit, only Switch on').not.toContain('aria-label="Edit QRPH"');
   });
 });
 
