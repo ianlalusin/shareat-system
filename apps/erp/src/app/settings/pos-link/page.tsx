@@ -689,17 +689,17 @@ function SwitchOnForm({
           <Input name="posV1Alias" defaultValue={defaultAlias} autoComplete="off" className="mt-1 w-full" />
         </Field>
       </FormGrid>
-      <DialogActions>
-        <Button type="submit" variant="secondary">
-          Save
-        </Button>
-      </DialogActions>
     </>
   );
   return (
     <FormModal trigger="Switch on" triggerVariant="secondary" title={`Switch on ${option.name} — ${storeName}`} size="md">
       <form action={switchOnPaymentOptionAction} autoComplete="off" className="space-y-3">
         {fields}
+        <DialogActions>
+          <Button type="submit" variant="secondary">
+            Save
+          </Button>
+        </DialogActions>
       </form>
     </FormModal>
   );
