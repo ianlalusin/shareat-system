@@ -21,6 +21,7 @@ import {
   date,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -46,6 +47,9 @@ export type PosV1FeedPurpose = (typeof POS_V1_FEED_PURPOSES)[number];
 
 export const TENDER_KINDS = ['cash', 'wallet'] as const;
 export type TenderKind = (typeof TENDER_KINDS)[number];
+
+export const PAYMENT_OPTION_STATUSES = ['active', 'retired'] as const;
+export type PaymentOptionStatus = (typeof PAYMENT_OPTION_STATUSES)[number];
 
 export const SALES_DAY_SOURCES = ['legacy_typed', 'pos_v1_day_feed'] as const;
 export type SalesDaySource = (typeof SALES_DAY_SOURCES)[number];
@@ -192,6 +196,37 @@ export const posV1DayFeeds = pgTable(
   ],
 );
 
+/**
+ * T-629, migration 0277 - the ORG's one master list of payment options (Cash, GCash, Maya, QRPH, Credit card, Debit card). A store switches an
+ * option on by holding a `tenders` row for it; the option owns the NAME and the KIND (the tender's own `name` / `kind` are a mirror a trigger keeps equal).
+ * `docs/tasks/629-payment-options-master-list.md`.
+ */
+export const paymentOptions = pgTable(
+  'payment_options',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    kind: text('kind', { enum: TENDER_KINDS }).notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    status: text('status', { enum: PAYMENT_OPTION_STATUSES }).notNull().default('active'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    // The target of tenders' same-org composite FK.
+    unique('payment_options_org_id_id_unique').on(t.orgId, t.id),
+    check('payment_options_kind_check', sql`${t.kind} in ('cash', 'wallet')`),
+    check('payment_options_status_check', sql`${t.status} in ('active', 'retired')`),
+    check('payment_options_name_check', sql`char_length(btrim(${t.name})) between 1 and 40`),
+    // NOTE: payment_options_org_name_unique UNIQUE (org_id, lower(btrim(name))) (expression index) and
+    // payment_options_one_cash_per_org UNIQUE (org_id) WHERE kind = 'cash' (partial index, retired rows count) are hand-added in migration 0277.
+    // NOTE: the payment_options_guard trigger (kind frozen while any store tender uses it; retire refused while any store has it ON) is hand-added in migration 0277.
+  ],
+);
+
 export const tenders = pgTable(
   'tenders',
   {
@@ -202,6 +237,9 @@ export const tenders = pgTable(
     storeId: uuid('store_id')
       .notNull()
       .references(() => stores.id, { onDelete: 'restrict' }),
+    /** T-629 (0277): the master option this store tender switches on. NOT NULL, same org by the composite FK, one tender per (store, option). */
+    paymentOptionId: uuid('payment_option_id').notNull(),
+    /** A MIRROR of the option's name and kind, kept equal by the `tenders_mirror_option` trigger (0277): the option is the ONE source, readers keep reading these. */
     name: text('name').notNull(),
     kind: text('kind', { enum: TENDER_KINDS }).notNull(),
     /** Required iff `kind = 'wallet'`. Same ORG by the composite FK below; same STORE by the domain. */
@@ -216,6 +254,15 @@ export const tenders = pgTable(
     // T-472 S1, migration 0216 - the target of pos_bridge_receipt_tenders' same-org composite FK (id alone is already unique).
     unique('tenders_org_id_id_unique').on(t.orgId, t.id),
     index('tenders_org_store_idx').on(t.orgId, t.storeId),
+    // T-629 (0277): a store switches an option on once; its row IS the switch (is_active).
+    unique('tenders_store_payment_option_unique').on(t.storeId, t.paymentOptionId),
+    foreignKey({
+      columns: [t.orgId, t.paymentOptionId],
+      foreignColumns: [paymentOptions.orgId, paymentOptions.id],
+      name: 'tenders_payment_option_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: the tenders_mirror_option trigger (name and kind come from the option; the option cannot change; a retired option cannot be switched on;
+    // an insert without payment_option_id is matched by normalised name, or made, for raw SQL callers) is hand-added in migration 0277.
     check('tenders_kind_check', sql`${t.kind} in ('cash', 'wallet')`),
     check('tenders_wallet_account_shape_check', sql`(${t.kind} = 'wallet') = (${t.moneyAccountId} is not null)`),
     check('tenders_name_not_blank_check', sql`btrim(${t.name}) <> ''`),

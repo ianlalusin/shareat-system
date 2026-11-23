@@ -10,8 +10,8 @@
  */
 import { kitchenRepo, menuRepo, posV1Repo, daypartsRepo, RefusalError, type Tx } from '@shareat/db';
 import {
-  addMenuVariant, addOptionValue, createDaypart, createKitchenStation, createMenuCategory, createMenuItem, createOptionGroup, createTender, editMenuVariant, linkOptionGroup,
-  normalizePosV1Alias, setDepletionRule, setKitchenRoute, setMenuOffer, setOptionOffer, setPackageRefills, updateTender,
+  addMenuVariant, addOptionValue, createDaypart, createKitchenStation, createMenuCategory, createMenuItem, createOptionGroup, editMenuVariant, linkOptionGroup,
+  normalizePosV1Alias, setDepletionRule, setKitchenRoute, setMenuOffer, setOptionOffer, setPackageRefills, switchOnPaymentOption, updateTender,
 } from '@shareat/domain';
 import { defaultVariantLabel, key, refillLinkStep, type MenuPlan, type PlannedSlot } from './plan-store-menu';
 
@@ -36,6 +36,8 @@ export interface MenuSetupReport {
   readonly noStockRule: string[];
   /** Wallet payment methods that need a money account before they can be made. */
   readonly walletsNeedAccount: string[];
+  /** T-629: v1 payment methods with no master payment option in this org. The load never makes one (Ian's list is the admin's, under Settings > Payment options): it names them. */
+  readonly optionsMissing: string[];
   readonly notCopied: string[];
 }
 
@@ -46,7 +48,7 @@ export async function applyMenuPlan(sp: Tx, actor: Actor, storeId: string, plan:
   const { orgId } = actor;
   const report: MenuSetupReport = {
     created: Object.fromEntries(PARTS.map((p) => [p, [] as string[]])) as Record<MenuPart, string[]>,
-    unchanged: 0, differences: [], refused: [], skipped: [...plan.skipped], notes: [...plan.notes], noStockRule: [], walletsNeedAccount: [], notCopied: [...plan.notCopied],
+    unchanged: 0, differences: [], refused: [], skipped: [...plan.skipped], notes: [...plan.notes], noStockRule: [], walletsNeedAccount: [], optionsMissing: [], notCopied: [...plan.notCopied],
   };
   const made = (part: MenuPart, name: string): void => { report.created[part].push(name); };
   const same = (): void => { report.unchanged++; };
@@ -262,7 +264,9 @@ export async function applyMenuPlan(sp: Tx, actor: Actor, storeId: string, plan:
   for (const t of plan.tenders) {
     const all = await posV1Repo.listTendersByStore(sp, orgId, storeId);
     const alias = normalizePosV1Alias(t.alias);
-    const have = all.find((x) => x.isActive && x.posV1Alias !== null && normalizePosV1Alias(x.posV1Alias) === alias) ?? all.find((x) => x.isActive && key(x.name) === key(t.name));
+    // T-629: a payment method is matched THROUGH the org's master option (by normalised name); the load never makes an option, it reports the missing one.
+    const option = await posV1Repo.findPaymentOptionByKey(sp, orgId, normalizePosV1Alias(t.name));
+    const have = all.find((x) => x.isActive && x.posV1Alias !== null && normalizePosV1Alias(x.posV1Alias) === alias) ?? (option ? all.find((x) => x.isActive && x.paymentOptionId === option.id) : undefined);
     if (have) {
       if (have.posV1Alias === null) {
         if (await step(`Payment method ${t.name}`, async (tx) => { await updateTender(tx, actor, { tenderId: have.id, posV1Alias: t.alias }); return true; })) made('payment methods', `${t.name}: v1 name filled in`);
@@ -270,8 +274,10 @@ export async function applyMenuPlan(sp: Tx, actor: Actor, storeId: string, plan:
       else same();
       continue;
     }
-    if (t.kind === 'wallet') { report.walletsNeedAccount.push(t.name); continue; }
-    if (await step(`Payment method ${t.name}`, (tx) => createTender(tx, actor, { storeId, name: t.name, kind: 'cash', posV1Alias: t.alias }))) made('payment methods', t.name);
+    if (!option) { report.optionsMissing.push(t.name); continue; }
+    if (option.kind !== t.kind) { differ(`Payment method ${t.name}: ${t.kind} in v1, ${option.kind} in the master list here`); continue; }
+    if (option.kind === 'wallet') { report.walletsNeedAccount.push(t.name); continue; }
+    if (await step(`Payment method ${t.name}`, (tx) => switchOnPaymentOption(tx, actor, { storeId, paymentOptionId: option.id, posV1Alias: t.alias }))) made('payment methods', option.name);
   }
 
   return report;
@@ -290,6 +296,7 @@ export function formatMenuSetupReport(r: MenuSetupReport, dryRun: boolean): stri
   lines.push(`  notes: ${r.notes.length}${r.notes.map((n) => `\n    ${n}`).join('')}`);
   lines.push(`  given the placeholder "uses no stock" (set the real stock use in the ERP): ${r.noStockRule.length} (${list(r.noStockRule)})`);
   lines.push(`  wallet payment methods that need a money account first (add them in POS link settings): ${r.walletsNeedAccount.length} (${list(r.walletsNeedAccount)})`);
+  lines.push(`  payment methods with no payment option in the master list (an admin adds them under Settings > Payment options, then loads again): ${r.optionsMissing.length} (${list(r.optionsMissing)})`);
   lines.push('NOT COPIED (reported only):', ...r.notCopied.map((n) => `  ${n}`));
   return lines;
 }

@@ -35,6 +35,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { createTenderByName } from './_fixtures/t629-options';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 
 const sql = postgres(url, { max: 6 });
@@ -70,7 +71,7 @@ async function sentenceOf(p: Promise<unknown>): Promise<string> {
 
 type Created = { id: string };
 async function create(f: Fixture, who: Actor, input: Record<string, unknown>) {
-  return asOrg(f.orgId, (tx) => mod.createTender(tx, who, { storeId: f.storeId, ...input } as never)) as Promise<Created>;
+  return asOrg(f.orgId, (tx) => createTenderByName(mod, tx, who, { storeId: f.storeId, ...input } as never)) as Promise<Created>;
 }
 async function update(f: Fixture, who: Actor, input: Record<string, unknown>) {
   return asOrg(f.orgId, (tx) => mod.updateTender(tx, who, input as never));
@@ -220,7 +221,7 @@ describe('T2 - an alias is unique among a store\'s active tenders, by its normal
     const f = await fixture('t2s');
     await create(f, f.admin, { name: 'GCash', kind: 'wallet', moneyAccountId: f.gcashAcct, posV1Alias: 'GCash' });
     await expect(
-      asOrg(f.orgId, (tx) => mod.createTender(tx, f.admin, { storeId: f.store2Id, name: 'GCash', kind: 'wallet', moneyAccountId: f.otherStoreAcct, posV1Alias: 'GCash' } as never)),
+      asOrg(f.orgId, (tx) => createTenderByName(mod, tx, f.admin, { storeId: f.store2Id, name: 'GCash', kind: 'wallet', moneyAccountId: f.otherStoreAcct, posV1Alias: 'GCash' } as never)),
     ).resolves.toHaveProperty('id');
   });
 
@@ -362,7 +363,7 @@ describe('Gaps - domain shape rules, audit, scope, org', () => {
     expect(await tenderRows(f.storeId)).toEqual([{ id: t.id, name: 'Cash', kind: 'cash', money_account_id: null, pos_v1_alias: 'Cash', is_active: true }]);
     // controls: even on her OWN store the manager is refused (role), and an admin scoped only to the other store is let in (org-scoped capability)
     await expect(
-      asOrg(f.orgId, (tx) => mod.createTender(tx, f.scopedManager, { storeId: f.store2Id, name: 'Cash', kind: 'cash', posV1Alias: 'Cash' } as never)),
+      asOrg(f.orgId, (tx) => createTenderByName(mod, tx, f.scopedManager, { storeId: f.store2Id, name: 'Cash', kind: 'cash', posV1Alias: 'Cash' } as never)),
     ).rejects.toBeInstanceOf(AuthorizationError);
     await expect(create(f, f.scopedAdmin, { name: 'Till', kind: 'cash', posV1Alias: 'Till' })).resolves.toHaveProperty('id');
   });

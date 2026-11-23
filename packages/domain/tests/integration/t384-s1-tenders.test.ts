@@ -33,6 +33,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, posV1Repo, type Tx } from '@shareat/db';
+import { createTenderByName } from './_fixtures/t629-options';
 import type { Actor } from '@shareat/auth';
 
 const sql = postgres(url, { max: 6 });
@@ -70,7 +71,7 @@ async function sentenceOf(p: Promise<unknown>): Promise<string> {
 }
 
 async function create(f: Fixture, input: Record<string, unknown>): Promise<{ id: string }> {
-  return asOrg(f.orgId, (tx) => mod.createTender(tx, f.admin, { storeId: f.storeId, ...input } as never));
+  return asOrg(f.orgId, (tx) => createTenderByName(mod, tx, f.admin, { storeId: f.storeId, ...input } as never));
 }
 async function update(f: Fixture, input: Record<string, unknown>) {
   return asOrg(f.orgId, (tx) => mod.updateTender(tx, f.admin, input as never));
@@ -290,7 +291,7 @@ describe('D6 - the version moves on every write, even inside one transaction', (
   it('create, read v, update with v, update again with the same v, all in ONE transaction: the second is refused and its name does not land', async () => {
     const f = await fixture('d6');
     const out = await asOrg(f.orgId, async (tx) => {
-      const t = await mod.createTender(tx, f.admin, { storeId: f.storeId, name: 'A', kind: 'cash', posV1Alias: 'A' } as never);
+      const t = await createTenderByName(mod, tx, f.admin, { storeId: f.storeId, name: 'A', kind: 'cash', posV1Alias: 'A' } as never);
       const v = ((await posV1Repo.getTenderById(tx, f.orgId, t.id)) as unknown as { version: string }).version;
       await mod.updateTender(tx, f.admin, { tenderId: t.id, name: 'A2', expectedVersion: v } as never);
       const err = await mod.updateTender(tx, f.admin, { tenderId: t.id, name: 'A3', expectedVersion: v } as never).then(() => null, (e) => e);
