@@ -291,11 +291,12 @@ describe('W1 - a store switches the master options on (T-629)', () => {
     // Mutant: offer Cash again -> value="cash" in the add form, red.
   });
 
-  it('W1c: switching on a WALLET asks for the money account (required, bank and e-wallet accounts only); a CASH option asks only for the POS name', async () => {
+  it('W1c: switching on a WALLET asks for the money account (a blank is refused by the domain, bank and e-wallet accounts only); a CASH option asks only for the POS name', async () => {
     const f = await fixture('w1c');
     const card = cardOf(await render(f), f.bareId);
     const wallet = switchOnForm(card, await optionIdOf(f.orgId, 'QRPH'))!;
-    expect(wallet).toMatch(/<select\b[^>]*\bname="moneyAccountId"[^>]*\brequired/);
+    expect(wallet).toMatch(/<select\b[^>]*\bname="moneyAccountId"/);
+    expect(wallet, 'the placeholder is the selected, disabled option').toMatch(/<option value="" disabled="" selected="">Choose the account it pays into/);
     expect(wallet, 'an add dialog ends in Save (L4)').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"/);
     const cash = switchOnForm(card, await optionIdOf(f.orgId, 'Cash'))!;
     expect(cash).not.toMatch(/name="moneyAccountId"/);

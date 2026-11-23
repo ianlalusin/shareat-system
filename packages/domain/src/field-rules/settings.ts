@@ -142,11 +142,6 @@ export const SETTINGS_PAYMENT_OPTION_RULES = defineFieldRules('settings.paymentO
   kind: { label: 'The payment option kind', kind: 'text', requires: 'Choose whether this payment option is cash or a wallet.' },
 });
 
-/** /settings/pos-link, switching a WALLET payment option on at a store (T-629): the money account it pays into (a cash option has no such field). */
-export const SETTINGS_TENDER_SWITCH_ON_RULES = defineFieldRules('settings.tenderSwitchOn', {
-  moneyAccountId: { label: 'The money account', kind: 'text', requires: 'Choose the money account this payment option pays into.' },
-});
-
 const BUSINESS_RULE_VALUE_SAYS = 'A value is a plain number with at most two decimals, for example 50 or 12.5.';
 /**
  * /settings/business-rules (T-512): the shape of a new value, its start day and its reason, for the live line only. The bounds differ per rule

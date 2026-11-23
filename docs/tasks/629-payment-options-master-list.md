@@ -54,3 +54,30 @@
 6. The T-626 loader matches an existing wallet option and reports a missing one without creating it.
 
 Migration 0277 is hand-authored (ADR-012 §5): classification + RLS registry + journal (`when` = 0276's + 86400000). The full CI suite is required. Run `npm run census:write`. Typecheck apps/erp, plus the package tests via a temp tsconfig.
+
+## As built (builder, Sonnet, 23 Nov 2026)
+
+**Capability.** `manage_chart_of_accounts`, org scope (admin and super-admin; manager and below refused). It is what already gates a store's tenders, the money accounts and every other org-wide "where money is booked" setting (CAPABILITY-MATRIX), so no new capability. Master list writes call `authorize(tx, actor, 'manage_chart_of_accounts', {})` first; the store switch keeps `{ storeId }`.
+
+**Migration 0277** (`packages/db/migrations/0277_t629_payment_options.sql`, journal idx 277, `when` 1810006307084 = 0276's + 86400000):
+- `payment_options` (org, name 1-40 unique per org by `lower(btrim(name))`, kind cash|wallet, sort_order, status active|retired); partial unique `payment_options_one_cash_per_org` (retired rows count); RLS ENABLE + FORCE, `app_current_org()` policy, SELECT/INSERT plus column UPDATE grants, no DELETE.
+- `tenders.payment_option_id` NOT NULL, composite same-org FK, `UNIQUE (store_id, payment_option_id)`.
+- ONE source of truth: the option owns name and kind; `tenders.name` / `tenders.kind` stay as a MIRROR forced by trigger `tenders_mirror_option` (BEFORE INSERT/UPDATE: the option cannot change, name/kind are set from the option, a retired option cannot be switched on; an INSERT with no option, i.e. old raw SQL and fixtures, is matched by normalised name or the option is made). `payment_options_guard` (kind frozen while any tender uses it, retire refused while any store has it ON) and `payment_options_rename_tenders` (a rename copies onto the tenders). All three are origin triggers (registered: derivation / validator / derivation), so the ALWAYS count is unchanged. Every reader (snapshot, day close, convert, refunds, bridge alias, T-623) keeps reading `tenders.name` / `kind`.
+- Backfill inside the file (prints nothing): matched by normalised name inside the org; the Ian-list spelling wins; the six are then added to every org (the one cash option only when the org has no cash option). It RAISES (nothing applied) when two tenders of one store map to one option, when one option's tenders disagree on cash/wallet, when one of the six names is held with the other kind, or when an org has cash tenders under two names. Run the read-only pre-check on production before deploy (below).
+- Seed for a new org: `packages/db/seed/payment-options.ts`, called from `seedReferenceData` (so `createOrganization` gets the six).
+
+**Screens.** Both on Settings > POS link (same page, same capability, no new route): an org-level "Payment options (all stores)" section above the store cards (add / rename / retire-restore; Cash is not offered while a cash option exists; kind locked once a store uses it), and each store card now lists every active option as ON (the old tender record: money account and POS name editable, Switch off) or OFF (Switch on dialog, money account required for a wallet). The free-typed "Add a tender" form and the Name / Kind fields of the tender record are gone.
+
+**Readers.** `TenderLine` (X/Z reading) and `DayCloseListItem.byTender` carry `paymentOptionId`; `groupByPaymentOption` sums any such lines per option and `listDayCloses` returns `byPaymentOption` (the report hook, with a production caller). The T-626 loader matches a v1 method THROUGH the org's option (v1 "G-Cash" finds GCash), switches a CASH option on, lists a wallet option as needing a money account, and lists a method with no master option under `optionsMissing` (never creates one).
+
+**Tests (mutants proven red by hand).** Backfill `t629-payment-options-migration.test.ts` (B1/B2 one option per name across stores, tenders renamed to the option; B3 same-store STOP; B4 kind STOPs; B5 two cash names STOP; B6 six for an org with no tenders; B7 prints nothing; mutants M1-M6 each red). Rules `t629-payment-options.test.ts` (12 cases: unique switch, wallet account rules, retire/kind/second-cash refused in domain AND database, rename cascade, authorize-first for manager and cashier, audit rows; mutants S1, T1-T3, O1-O5 each red). Readers `t629-day-close-options.test.ts` (names and amounts unchanged, option on each line, snapshot names, grouping; mutants D1-D3 red). Loader: two new cases in `t626-lipa-menu-load.test.ts` (L1, L2 red). Older tender tests were rewritten where they edited a tender's name or kind (now the option's).
+
+**Production pre-check for BOSS (read-only, run before deploy; each must return 0 rows):**
+```sql
+-- (a) two tenders of one store with one normalised name
+select store_id, regexp_replace(lower(name),'[^a-z0-9]','','g') k, count(*) from tenders group by 1,2 having count(*) > 1;
+-- (b) one normalised name that is cash somewhere and a wallet elsewhere
+select org_id, regexp_replace(lower(name),'[^a-z0-9]','','g') k from tenders group by 1,2 having count(distinct kind) > 1;
+-- (c) cash tenders under more than one name in an org
+select org_id from tenders where kind='cash' group by 1 having count(distinct regexp_replace(lower(name),'[^a-z0-9]','','g')) > 1;
+```

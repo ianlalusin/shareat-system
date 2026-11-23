@@ -31,7 +31,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { ChevronIcon } from '@/components/shell/icons';
 import { CheckedForm, EditableRecord } from '@/components/forms';
-import { SETTINGS_POS_LINK_RULES, SETTINGS_PAYMENT_OPTION_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_TENDER_SWITCH_ON_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { SETTINGS_POS_LINK_RULES, SETTINGS_PAYMENT_OPTION_RULES, SETTINGS_POS_UNLINK_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select, Textarea } from '@/components/ui';
 import { NAV_LINK } from '@/components/action-link';
 
@@ -648,8 +648,8 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
 }
 
 /**
- * T-629: the dialog that switches an OFF payment option on. A wallet asks for the store's money account (required, live-checked); a cash option asks only for the POS name.
- * It is an add form, so it ends in Save (A0 L4). The defaults carry what a switched-off tender kept (its account and POS name), so switching back on is one click.
+ * T-629: the dialog that switches an OFF payment option on. A wallet asks for the store's money account; a cash option asks only for the POS name.
+ * A wallet with no account chosen is refused by the domain in words (it lands on the store card). It is an add form, so it ends in Save (A0 L4). The defaults carry what a switched-off tender kept (its account and POS name), so switching back on is one click.
  */
 function SwitchOnForm({
   storeId,
@@ -672,8 +672,8 @@ function SwitchOnForm({
       <input type="hidden" name="paymentOptionId" value={option.id} />
       <FormGrid>
         {option.kind === 'wallet' && (
-          <Field label="Money account" hint={ACCOUNT_HINT} rule={SETTINGS_TENDER_SWITCH_ON_RULES.moneyAccountId}>
-            <Select {...nativeAttrs(SETTINGS_TENDER_SWITCH_ON_RULES.moneyAccountId)} defaultValue={defaultAccountId} className="mt-1 w-full">
+          <Field label="Money account" hint={ACCOUNT_HINT}>
+            <Select name="moneyAccountId" defaultValue={defaultAccountId} className="mt-1 w-full">
               <option value="" disabled>
                 Choose the account it pays into
               </option>
@@ -698,15 +698,9 @@ function SwitchOnForm({
   );
   return (
     <FormModal trigger="Switch on" triggerVariant="secondary" title={`Switch on ${option.name} — ${storeName}`} size="md">
-      {option.kind === 'wallet' ? (
-        <CheckedForm rules={SETTINGS_TENDER_SWITCH_ON_RULES} action={switchOnPaymentOptionAction} autoComplete="off" className="space-y-3">
-          {fields}
-        </CheckedForm>
-      ) : (
-        <form action={switchOnPaymentOptionAction} autoComplete="off" className="space-y-3">
-          {fields}
-        </form>
-      )}
+      <form action={switchOnPaymentOptionAction} autoComplete="off" className="space-y-3">
+        {fields}
+      </form>
     </FormModal>
   );
 }
