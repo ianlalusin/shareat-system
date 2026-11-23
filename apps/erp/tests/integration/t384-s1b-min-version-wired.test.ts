@@ -168,7 +168,7 @@ describe('V - the page posts the tender version', () => {
     const [opt] = await sql<{ payment_option_id: string }[]>`select payment_option_id from tenders where id = ${f.tenderId}`;
     const html = await render(f);
     expect(retireForm(html, f.tenderId), 'no tender form while it is off').toBeUndefined();
-    const on = html.split('<form').slice(1).map((c) => c.split('</form>')[0]!).find((b) => b.includes(`name="paymentOptionId" value="${opt!.payment_option_id}"`) && b.includes('Switch on'));
+    const on = html.split('<form').slice(1).map((c) => c.split('</form>')[0]!).find((b) => b.includes(`name="paymentOptionId" value="${opt!.payment_option_id}"`));
     expect(on, 'a Switch on form for the option').toBeDefined();
     const sw = new FormData();
     sw.set('storeId', f.storeId);

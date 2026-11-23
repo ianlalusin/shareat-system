@@ -42,6 +42,7 @@ import { isUniqueViolation } from './order';
 import { audit, NOT_ON, readRules, requireContext, startHourDate, uuidInput, uuidv5, type PosDeps } from './shared';
 import { convertBlockOf, kindsOf, postConversionsForZ, type ConvertBlock } from './convert';
 import { tenderNetsAfterCorrections } from './tender-correction';
+import { groupByPaymentOption } from './payment-options';
 import { refundBlockOf, refundCentsByTender, type RefundBlock } from './refund';
 import { allocateDepositToTenders, depositBlockOf, postDepositsForZ, type DepositBlock } from './reservations';
 import { buildV1BridgePayload, v1BridgeDateAllowed, V1_BRIDGE_LAST_DATE, type V1BridgeClose } from './v1-bridge-payload';
@@ -855,6 +856,8 @@ export interface DayCloseListItem {
   businessDate: string;
   grossTotal: string;
   byTender: { tenderId: string; paymentOptionId: string; name: string; amount: Money }[];
+  /** T-629: the same lines summed per payment OPTION (the company-wide grouping hook; one figure per option at this store). */
+  byPaymentOption: { paymentOptionId: string; amount: Money }[];
   v1Status: V1HistoryStatus;
   closedByName: string;
   approvedByName: string;
@@ -878,12 +881,14 @@ export async function listDayCloses(tx: Tx, actor: Actor, input: { storeId: stri
   for (const { close, tenders: tl } of rows) {
     const mark = marks.find((m) => (m.after as { businessDate?: string } | null)?.businessDate === close.businessDate);
     const v1Status: V1HistoryStatus = !link || !v1BridgeDateAllowed(close.businessDate) ? 'not_applicable' : mark ? (mark.action === 'pos.v1_bridge_sent' ? 'sent' : 'failed') : 'pending';
+    const byTender = tl.map((t) => ({ tenderId: t.tenderId, paymentOptionId: tenders.get(t.tenderId)?.paymentOptionId ?? '', name: tenders.get(t.tenderId)?.name ?? 'Unknown tender', amount: money(t.amount) }));
     closes.push({
       id: close.id,
       zNo: close.zNo,
       businessDate: close.businessDate,
       grossTotal: close.grossTotal,
-      byTender: tl.map((t) => ({ tenderId: t.tenderId, paymentOptionId: tenders.get(t.tenderId)?.paymentOptionId ?? '', name: tenders.get(t.tenderId)?.name ?? 'Unknown tender', amount: money(t.amount) })),
+      byTender,
+      byPaymentOption: groupByPaymentOption(byTender),
       v1Status,
       closedByName: names.get(close.closedBy) ?? '',
       approvedByName: names.get(close.approvedBy) ?? '',

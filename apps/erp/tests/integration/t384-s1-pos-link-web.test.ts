@@ -230,7 +230,7 @@ function recordForm(card: string, tenderId: string): string | undefined {
 function switchOnForm(card: string, paymentOptionId: string): string | undefined {
   for (const chunk of card.split('<form').slice(1)) {
     const body = chunk.split('</form>')[0]!;
-    if (hiddenValue(body, 'paymentOptionId') === paymentOptionId && /Switch on/.test(body)) return body;
+    if (hiddenValue(body, 'paymentOptionId') === paymentOptionId && !/Retire payment option/.test(body)) return body;
   }
   return undefined;
 }
@@ -296,6 +296,7 @@ describe('W1 - a store switches the master options on (T-629)', () => {
     const card = cardOf(await render(f), f.bareId);
     const wallet = switchOnForm(card, await optionIdOf(f.orgId, 'QRPH'))!;
     expect(wallet).toMatch(/<select\b[^>]*\bname="moneyAccountId"[^>]*\brequired/);
+    expect(wallet, 'an add dialog ends in Save (L4)').toMatch(/<button[^>]*type="submit"[^>]*>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>/);
     const cash = switchOnForm(card, await optionIdOf(f.orgId, 'Cash'))!;
     expect(cash).not.toMatch(/name="moneyAccountId"/);
     expect(cash).toMatch(/name="posV1Alias"/);
