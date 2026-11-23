@@ -2,7 +2,6 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { addShiftDays, toShiftDay } from '@shareat/domain';
 import { addLeaveTypeAction, saveLeaveCapAction, setLeaveTypeActiveAction, updateAttendanceConfigAction } from './actions';
 import { leaveSettingsFor, liveConfigFor, listStores } from './lib';
-import { NAV_LINK } from '@/components/action-link';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_ATTENDANCE_POLICY_RULES, SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -51,15 +50,6 @@ interface SearchParams {
  * the only way to change one was an engineer writing a migration — which happened twice this week
  * (T-197, DEF-119).
  */
-const CRUMB = (
-  <>
-    <a href="/settings" className={NAV_LINK}>
-      Settings
-    </a>{' '}
-    / Attendance & payroll
-  </>
-);
-
 const DESCRIPTION = (
   <>
     One policy per store, starting from a day you choose. A change never rewrites a day already
@@ -85,7 +75,7 @@ export default async function AttendanceSettingsPage({
   const storeId = sp.store || stores[0]?.id;
   if (!storeId) {
     return (
-      <Page density="table" className="space-y-4" crumb={CRUMB} title="Attendance & payroll settings" description={DESCRIPTION}>
+      <Page density="table" className="space-y-4" title="Attendance & payroll settings" description={DESCRIPTION}>
         <EmptyState illustration="magnifier" title="No stores yet" body="Create a store under Stores first. An attendance policy belongs to a store." />
       </Page>
     );
@@ -96,7 +86,7 @@ export default async function AttendanceSettingsPage({
   const leave = await leaveSettingsFor(actor, storeId).catch(() => null);
 
   return (
-    <Page density="table" crumb={CRUMB} title="Attendance & payroll settings" description={DESCRIPTION}>
+    <Page density="table" title="Attendance & payroll settings" description={DESCRIPTION}>
 
       <form className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 flex-col gap-1">

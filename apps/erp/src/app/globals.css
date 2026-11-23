@@ -354,6 +354,8 @@
   background-color: var(--workspace);
   background-image: none;
 }
+/* T-630: the page under a breadcrumb starts closer to it, so the trail reads as part of the page header. */
+.erp-crumbs ~ .erp-page { padding-top: 0.5rem; }
 /* Scope content surfaces to the page, keeping the sidebar and semantic status fills unchanged. */
 :root:not([data-theme='dark']) .erp-page {
   --surface: var(--workspace);

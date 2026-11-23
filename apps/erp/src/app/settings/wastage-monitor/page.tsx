@@ -3,7 +3,6 @@ import { setWastageMonitorAction } from './actions';
 import { listActivePersons, listStores, monitorView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { NAV_LINK } from '@/components/action-link';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Button, EmptyState, Field, FlashBanner, FormGrid, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -45,15 +44,6 @@ interface SearchParams {
  * allocation is an attribution; back-filling one would assert a decision nobody made. A number
  * that stubbornly does not drop needs its sentence, or it reads as a bug.
  */
-const CRUMB = (
-  <>
-    <a href="/settings" className={NAV_LINK}>
-      Settings
-    </a>{' '}
-    / Wastage Monitor
-  </>
-);
-
 const DESCRIPTION = (
   <>
     Who answers for a wasted or refunded order at this store when nobody else is named. A
@@ -77,7 +67,7 @@ export default async function WastageMonitorSettingsPage({
 
   if (!storeId) {
     return (
-      <Page density="table" className="space-y-4" crumb={CRUMB} title="Wastage Monitor" description={DESCRIPTION}>
+      <Page density="table" className="space-y-4" title="Wastage Monitor" description={DESCRIPTION}>
         <EmptyState illustration="magnifier" title="No stores yet" body="Create a store under Stores first. A Monitor belongs to a store." />
       </Page>
     );
@@ -89,7 +79,7 @@ export default async function WastageMonitorSettingsPage({
   ]);
 
   return (
-    <Page density="table" crumb={CRUMB} title="Wastage Monitor" description={DESCRIPTION}>
+    <Page density="table" title="Wastage Monitor" description={DESCRIPTION}>
 
       <FilterRow>
         <label className="text-sm">

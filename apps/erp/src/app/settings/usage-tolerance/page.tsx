@@ -3,7 +3,6 @@ import { withFlash } from '../../../lib/flash';
 import { setItemUsageToleranceAction, setOrgUsageToleranceAction } from './actions';
 import { percentOf, toleranceView } from './lib';
 import { Page } from '@/components/shell/Page';
-import { NAV_LINK } from '@/components/action-link';
 import { CheckedForm } from '@/components/forms';
 import { Button, DialogActions, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
 import { SETTINGS_ITEM_TOLERANCE_RULES, SETTINGS_ORG_TOLERANCE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -29,7 +28,6 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
     <Page
       density="table"
       className="space-y-6"
-      crumb={<><a href="/settings" className={NAV_LINK}>Settings</a> / Usage tolerance</>}
       title="Usage tolerance"
       description={
         <>

@@ -47,7 +47,6 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
   return (
     <Page
       density="table"
-      crumb={<><a href="/settings" className={NAV_LINK}>Settings</a> / Link to POS store</>}
       title="Link to POS store"
       description={
         <>
