@@ -36,7 +36,7 @@ const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 class Rollback extends Error {}
 
 type Tx = postgres.TransactionSql;
-type Old = { org: string; store: string; name: string; kind: 'cash' | 'wallet'; account?: string };
+type Old = { org: string; store: string; name: string; kind: 'cash' | 'wallet'; account?: string; alias?: string };
 
 /** Puts the database in its pre-0277 shape inside a transaction (no options, tenders without one, no mirror trigger), runs `fn`, and always rolls back. */
 async function inOldWorld<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
@@ -74,7 +74,7 @@ async function world(tx: Tx, hint: string) {
 
 async function addTender(tx: Tx, t: Old): Promise<string> {
   const [r] = await tx<{ id: string }[]>`
-    insert into tenders (org_id, store_id, name, kind, money_account_id) values (${t.org}, ${t.store}, ${t.name}, ${t.kind}, ${t.account ?? null}) returning id`;
+    insert into tenders (org_id, store_id, name, kind, money_account_id, pos_v1_alias) values (${t.org}, ${t.store}, ${t.name}, ${t.kind}, ${t.account ?? null}, ${t.alias ?? null}) returning id`;
   return r!.id;
 }
 
@@ -189,6 +189,48 @@ describe('0277 backfill', () => {
     expect(err, 'the backfill must refuse').not.toBeNull();
     expect(err!.message).toMatch(/T-629 STOP: org .* two different tenders whose names are the same in their first 40 characters/);
     expect(err!.message).not.toMatch(/duplicate key|violates/);
+  });
+
+  it('B10: Lipa\'s "QR" (wallet, alias "QRPH") maps to the SEEDED QRPH option: same tender id and alias kept, its name becomes QRPH, no option "QR" is invented', async () => {
+    const r = await inOldWorld(async (tx) => {
+      const w = await world(tx, 't629b10');
+      const qr = await addTender(tx, { org: w.orgId, store: w.a, name: 'QR', kind: 'wallet', account: w.acctA, alias: 'QRPH' });
+      const cash = await addTender(tx, { org: w.orgId, store: w.a, name: 'Cash', kind: 'cash', alias: 'Cash' });
+      await tx.unsafe(BACKFILL);
+      const [row] = await tx<{ id: string; name: string; pos_v1_alias: string; payment_option_id: string }[]>`select id, name, pos_v1_alias, payment_option_id from tenders where id = ${qr}`;
+      const [opt] = await tx<{ name: string; sort_order: number }[]>`select name, sort_order from payment_options where id = ${row!.payment_option_id}`;
+      return { qr, cash, row: row!, opt: opt!, opts: await optionsOf(tx, w.orgId) };
+    });
+    expect(r.row.id).toBe(r.qr);
+    expect(r.row.pos_v1_alias).toBe('QRPH');
+    expect(r.opt).toMatchObject({ name: 'QRPH', sort_order: 40 }); // the seeded one
+    expect(r.opts.map((o) => o.name), 'no option called QR').not.toContain('QR');
+    expect(r.opts.filter((o) => o.name === 'QRPH')).toHaveLength(1);
+  });
+
+  it('B11: the alias fallback is only for the six seeded options with the SAME kind (a cash tender aliased QRPH stays its own), and a name match comes first', async () => {
+    const r = await inOldWorld(async (tx) => {
+      const w = await world(tx, 't629b11');
+      const wrongKind = await addTender(tx, { org: w.orgId, store: w.a, name: 'Box', kind: 'cash', alias: 'QRPH' });
+      const unknown = await addTender(tx, { org: w.orgId, store: w.b, name: 'Bank Transfer', kind: 'wallet', account: w.acctB, alias: 'Whatever' });
+      const nameFirst = await addTender(tx, { org: w.orgId, store: w.b, name: 'Maya', kind: 'wallet', account: w.acctB, alias: 'GCash' });
+      await tx.unsafe(BACKFILL);
+      const t = await tx<{ id: string; name: string }[]>`select id, name from tenders where org_id = ${w.orgId}`;
+      return { t: new Map(t.map((x) => [x.id, x.name])), wrongKind, unknown, nameFirst };
+    });
+    expect(r.t.get(r.wrongKind)).toBe('Box');
+    expect(r.t.get(r.unknown)).toBe('Bank Transfer');
+    expect(r.t.get(r.nameFirst), 'Maya matches the seeded Maya by NAME, whatever its alias').toBe('Maya');
+  });
+
+  it('B12: an alias match that would put two tenders of one store on one option STOPS (same-store STOP)', async () => {
+    const err = await inOldWorld(async (tx) => {
+      const w = await world(tx, 't629b12');
+      await addTender(tx, { org: w.orgId, store: w.a, name: 'QR', kind: 'wallet', account: w.acctA, alias: 'QRPH' });
+      await addTender(tx, { org: w.orgId, store: w.a, name: 'QRPH', kind: 'wallet', account: w.acctA });
+      return tx.savepoint((sp) => sp.unsafe(BACKFILL)).then(() => null, (e: Error) => e);
+    });
+    expect(err?.message).toMatch(/T-629 STOP: store .* holds two tenders/);
   });
 
   it('B7: the migration prints nothing (no NOTICE or WARNING while the backfill runs)', async () => {

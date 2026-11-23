@@ -65,7 +65,7 @@ Migration 0277 is hand-authored (ADR-012 §5): classification + RLS registry + j
 - `payment_options` (org, name 1-40 unique per org by `lower(btrim(name))`, kind cash|wallet, sort_order, status active|retired); no limit on cash options; RLS ENABLE + FORCE, `app_current_org()` policy, SELECT/INSERT plus column UPDATE grants, no DELETE.
 - `tenders.payment_option_id` NOT NULL, composite same-org FK, `UNIQUE (store_id, payment_option_id)`.
 - ONE source of truth: the option owns name and kind; `tenders.name` / `tenders.kind` stay as a MIRROR forced by trigger `tenders_mirror_option` (BEFORE INSERT/UPDATE: the option cannot change, name/kind are set from the option, a retired option cannot be switched on). `payment_options_guard` (kind frozen while any tender uses it, retire refused while any store has it ON) and `payment_options_rename_tenders` (a rename copies onto the tenders). All three are origin triggers (registered: derivation / validator / derivation), so the ALWAYS count is unchanged. Every reader (snapshot, day close, convert, refunds, bridge alias, T-623) keeps reading `tenders.name` / `kind`.
-- Backfill inside the file (prints nothing): matched by normalised name inside the org; the Ian-list spelling wins; the six are then added to every org that lacks them. A store with Cash and Collected gets two cash options. It RAISES (nothing applied) in THREE cases: two tenders of one store map to one option; one option's tenders disagree on cash/wallet; one of the six names is held with the other kind. Run the read-only pre-check on production before deploy (below).
+- Backfill inside the file (prints nothing): matched by normalised name inside the org; the Ian-list spelling wins; the six are then added to every org that lacks them. A store with Cash and Collected gets two cash options. ALIAS FALLBACK (BOSS 23 Nov): a tender whose name matches none of the six but whose pos_v1_alias equals one of the six keys with the SAME kind maps to that seeded option, so Lipa's "QR" (alias QRPH) becomes QRPH; the name match stays first and an alias never invents an option. It RAISES (nothing applied) in THREE cases: two tenders of one store map to one option; one option's tenders disagree on cash/wallet; one of the six names is held with the other kind. Run the read-only pre-check on production before deploy (below).
 - Seed for a new org: `packages/db/seed/payment-options.ts`, called from `seedReferenceData` (so `createOrganization` gets the six).
 
 **Screens.** Both on Settings > POS link (same page, same capability, no new route): an org-level "Payment options (all stores)" section above the store cards (add / rename / retire-restore; Cash is not offered while a cash option exists; kind locked once a store uses it), and each store card now lists every active option as ON (the old tender record: money account and POS name editable, Switch off) or OFF (Switch on dialog, money account required for a wallet). The free-typed "Add a tender" form and the Name / Kind fields of the tender record are gone.
@@ -76,8 +76,16 @@ Migration 0277 is hand-authored (ADR-012 §5): classification + RLS registry + j
 
 **Production pre-check for BOSS (read-only, run before deploy; each must return 0 rows; three STOP cases):**
 ```sql
--- (a) two tenders of one store with one normalised name
-select store_id, regexp_replace(lower(name),'[^a-z0-9]','','g') k, count(*) from tenders group by 1,2 having count(*) > 1;
+-- (a) two tenders of one store that land on one option: same normalised name, or the alias fallback (QR with alias QRPH beside QRPH)
+select store_id, k, count(*) from (
+  select t.store_id,
+    case when n.k in ('cash','gcash','maya','qrph','creditcard','debitcard') then n.k
+         when a.k in ('cash','gcash','maya','qrph','creditcard','debitcard') and t.kind = (case when a.k = 'cash' then 'cash' else 'wallet' end) then a.k
+         else n.k end k
+  from tenders t
+  cross join lateral (select regexp_replace(lower(t.name),'[^a-z0-9]','','g') k) n
+  cross join lateral (select regexp_replace(lower(coalesce(t.pos_v1_alias,'')),'[^a-z0-9]','','g') k) a) x
+group by 1,2 having count(*) > 1;
 -- (b) one normalised name that is cash somewhere and a wallet elsewhere
 select org_id, regexp_replace(lower(name),'[^a-z0-9]','','g') k from tenders group by 1,2 having count(distinct kind) > 1;
 -- (c) a tender named like one of Ian's six with the wrong kind (Cash must be cash; GCash, Maya, QRPH, Credit card, Debit card must be wallets)

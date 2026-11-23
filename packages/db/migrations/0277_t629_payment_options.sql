@@ -19,6 +19,9 @@
 --   (b) the tenders of one option disagree on cash / wallet,
 --   (c) one of Ian's six names is held with the other kind,
 --   (d) two different tenders of an org have names that are the same in their first 40 characters (an option name is at most 40).
+-- ALIAS FALLBACK (BOSS, 23 Nov: Lipa's "QR" becomes "QRPH"): a tender whose normalised NAME matches none of the six seeded options, but whose normalised pos_v1_alias equals the key of one of
+-- the six with the SAME kind, is mapped to that seeded option (the mirror then renames the tender to the option's name; its id and alias are kept). The name match always comes first and an
+-- alias never invents an option. Two tenders of one store landing on one option that way fall into STOP (a).
 -- A tender name longer than 40 characters gives an option with the first 40; the tenders are joined to their option through a map made here (never by re-deriving the key).
 -- A store holding Cash and "Collected" (two cash tenders, by design) becomes two cash options.
 --
@@ -64,12 +67,18 @@ DECLARE
 BEGIN
 	CREATE TEMP TABLE t629_keys ON COMMIT DROP AS
 		SELECT t.id, t.org_id, t.store_id, t.kind, btrim(t.name) AS name, t.created_at,
-			coalesce(nullif(regexp_replace(lower(t.name), '[^a-z0-9]', '', 'g'), ''), lower(btrim(t.name))) AS k
+			coalesce(nullif(regexp_replace(lower(t.name), '[^a-z0-9]', '', 'g'), ''), lower(btrim(t.name))) AS k,
+			coalesce(nullif(regexp_replace(lower(t.name), '[^a-z0-9]', '', 'g'), ''), lower(btrim(t.name))) AS nk,
+			nullif(regexp_replace(lower(coalesce(t.pos_v1_alias, '')), '[^a-z0-9]', '', 'g'), '') AS ak
 		FROM tenders t;
 	CREATE TEMP TABLE t629_seed (name text, kind text, sort_order integer, k text) ON COMMIT DROP;
 	INSERT INTO t629_seed (name, kind, sort_order, k) VALUES
 		('Cash', 'cash', 10, 'cash'), ('GCash', 'wallet', 20, 'gcash'), ('Maya', 'wallet', 30, 'maya'),
 		('QRPH', 'wallet', 40, 'qrph'), ('Credit card', 'wallet', 50, 'creditcard'), ('Debit card', 'wallet', 60, 'debitcard');
+
+	-- the alias fallback onto the six seeded options (same kind only; never when the NAME already matches a seeded option)
+	UPDATE t629_keys g SET k = s.k FROM t629_seed s
+	WHERE s.k = g.ak AND s.kind = g.kind AND NOT EXISTS (SELECT 1 FROM t629_seed s2 WHERE s2.k = g.nk);
 
 	SELECT g.store_id, min(g.name) AS n INTO bad FROM t629_keys g GROUP BY g.org_id, g.store_id, g.k HAVING count(*) > 1 LIMIT 1;
 	IF FOUND THEN
