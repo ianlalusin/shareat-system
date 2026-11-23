@@ -62,7 +62,7 @@ const ROWS: Record<string, Row> = {
   'settings.addLeaveType.code': { ok: 'study_2', bad: [['x', KIND], ['1abc', KIND], ['a-b', KIND]], blank: KIND },
   'settings.expenseCategory.category': { ok: 'Scooter rental', bad: [[BLANK, 'A category needs a name.']], blank: 'A category needs a name.' },
   'settings.paymentOption.name': { ok: 'Maya', bad: [[BLANK, 'Give the payment option a name of at most 40 characters.'], ['x'.repeat(41), 'Give the payment option a name of at most 40 characters.']], blank: 'Give the payment option a name of at most 40 characters.' },
-  'settings.paymentOption.kind': { ok: 'wallet', bad: [[BLANK, 'Choose whether this payment option is cash or a wallet.']], blank: 'Choose whether this payment option is cash or a wallet.' },
+  'settings.paymentOption.kind': { ok: 'wallet', bad: [[BLANK, 'Choose Cash or Paid to an account.']], blank: 'Choose Cash or Paid to an account.' },
   'settings.salesChannel.name': { ok: 'Grab', bad: [[BLANK, 'A sales channel needs a name.']], blank: 'A sales channel needs a name.' },
   'settings.storeSettlement.storeKey': {
     ok: 'lipa',
