@@ -323,21 +323,21 @@ describe('T10 - no platform tender; no typed figure on a pos_receipts day (unlin
     const [opt] = await sql<{ id: string }[]>`select id from payment_options where org_id = ${w.orgId} limit 1`;
     const [fresh0] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${w.orgId}, ${`t10d-${Date.now()}`}, 'T10 direct') returning id`;
     class Rollback extends Error {}
-    let direct: PgErr = null;
+    const direct: { err: PgErr } = { err: null }; // a holder, so the closure's assignment is not narrowed away
     try {
       await sql.begin(async (tx) => {
         await tx`alter table tenders disable trigger tenders_mirror_option`;
         try {
           await tx.savepoint((sp) => sp`insert into tenders (org_id, store_id, payment_option_id, name, kind) values (${w.orgId}, ${fresh0!.id}, ${opt!.id}, 'T10 direct', 'platform')`);
         } catch (e) {
-          direct = e as PgErr;
+          direct.err = e as PgErr;
         }
         throw new Rollback();
       });
     } catch (e) {
       if (!(e instanceof Rollback)) throw e;
     }
-    expect({ code: direct?.code, constraint: direct?.constraint_name }).toEqual({ code: '23514', constraint: 'tenders_kind_check' });
+    expect({ code: direct.err?.code, constraint: direct.err?.constraint_name }).toEqual({ code: '23514', constraint: 'tenders_kind_check' });
     // control: cash is accepted
     const [fresh] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${w.orgId}, ${`t10-${Date.now()}`}, 'T10 store') returning id`;
     await expect(insertTenderRaw(sql, { orgId: w.orgId, storeId: fresh!.id, name: 'Cash', kind: 'cash' })).resolves.toBeDefined();

@@ -160,7 +160,8 @@ describe('T-402 S1a - every audit action the code writes is labelled, in both pl
     const notInMigration = [...found].filter((a) => (!a.includes('.') || a === 'dual_run.compare') && !mig.has(a)).sort();
     const notCatalogued = [...found].filter((a) => a.includes('.') && !catalogueEntry(a)).sort();
     // other `action:` fields that sit in files which also append to the audit log: not audit actions
-    const NOT_AUDIT = new Set(['action', 'charge', 'inactive', 'read', 'recognise_income', 'supplier', 'write_off']);
+    // 'retired': T-629's `action: retiring ? ...` line once read `input.status === 'retired' ? ...` (a status word in the condition, since reworded to a boolean; the early commit stays in history)
+    const NOT_AUDIT = new Set(['action', 'charge', 'inactive', 'read', 'recognise_income', 'retired', 'supplier', 'write_off']);
     expect(notInMigration.filter((a) => !NOT_AUDIT.has(a)), 'an action ever written but missing from 0197 would make the deploy refuse').toEqual([]);
     expect(notCatalogued.filter((a) => !NOT_AUDIT.has(a))).toEqual([]);
   }, 180_000);

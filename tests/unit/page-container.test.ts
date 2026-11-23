@@ -260,6 +260,7 @@ describe('T-234 — every route uses the Page container', () => {
       /<p className="[^"]*\bmax-w-/.test(readFileSync(join(repoRoot, f), 'utf8')),
     );
     // 4 -> 5, T-512 (T-511 S5c), 6 Nov 2026: /settings/business-rules caps each rule's help sentence at a prose measure; re-measured 5.
-    expect(withProseMeasure.length).toBe(5);
+    // 5 -> 6, T-629, 23 Nov 2026: the Payment options section on /settings/pos-link caps its one explanatory sentence at a prose measure; re-measured 6.
+    expect(withProseMeasure.length).toBe(6);
   });
 });

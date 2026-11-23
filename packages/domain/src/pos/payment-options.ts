@@ -132,7 +132,9 @@ export async function setPaymentOptionStatus(tx: Tx, actor: Actor, input: { paym
   if (!(PAYMENT_OPTION_STATUSES as readonly unknown[]).includes(input.status)) throw refuse(`payment options: unknown status ${String(input.status)}`, 'Choose active or retired.');
   const before = await loadLocked(tx, actor, input.paymentOptionId);
   if (before.status === input.status) return;
-  if (input.status === 'retired') {
+  // a boolean, so the audit `action:` line below holds only dotted action names (t402-s1a scans git history for any quoted word on that line)
+  const retiring = input.status === 'retired';
+  if (retiring) {
     const used = await posV1Repo.countTendersOfOption(tx, actor.orgId, before.id);
     if (used.active > 0) {
       throw refuse(
@@ -144,7 +146,7 @@ export async function setPaymentOptionStatus(tx: Tx, actor: Actor, input: { paym
   await posV1Repo.updatePaymentOptionRow(tx, actor.orgId, before.id, { status: input.status });
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
-    action: input.status === 'retired' ? 'payment_option.retired' : 'payment_option.reactivated',
+    action: retiring ? 'payment_option.retired' : 'payment_option.reactivated',
     storeId: null,
     entityId: before.id,
     before: { status: before.status },
