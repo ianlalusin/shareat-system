@@ -4,6 +4,7 @@ import { CheckedForm, EditableRecord } from '@/components/forms';
 import { Button, Checkbox, ConfirmDestructive, DialogActions, Field, FormGrid, FormModal, Input, NumTd, Table, Td, Th } from '@/components/ui';
 import { createChargeOptionAction, setChargeOptionStatusAction, updateChargeOptionAction } from './actions';
 import { chargeText, type ChargeOptionView } from './lib';
+import type { typedFor } from '@/lib/keep-typing';
 
 /**
  * T-634 (docs/tasks/634-central-charges.md): "Charges (all stores)", the org's ONE list of charges (Leftover, Extra griller). Ian, 24 Nov: "charges i guess shall be
@@ -11,7 +12,18 @@ import { chargeText, type ChargeOptionView } from './lib';
  * Charges section below). The T-631 compact-table look: Charge / Amount / Stores using / a quiet Edit. `canManage` is `manage_menu` (org): it only decides whether
  * Add, Edit, Retire and Restore are drawn; the domain gates every write again.
  */
-export function ChargeOptionsSection({ options, canManage, storeId }: { options: ChargeOptionView[]; canManage: boolean; storeId: string }) {
+export function ChargeOptionsSection({
+  options,
+  canManage,
+  storeId,
+  typedOf,
+}: {
+  options: ChargeOptionView[];
+  canManage: boolean;
+  storeId: string;
+  /** T-389: per charge, what was typed before a refused Edit (from `typedFor` in the page), so the record reopens with it. */
+  typedOf: Readonly<Record<string, ReturnType<typeof typedFor>>>;
+}) {
   const active = options.filter((o) => o.status === 'active');
   const retired = options.filter((o) => o.status === 'retired');
   const used = active.filter((o) => o.storesOn > 0).length;
@@ -77,6 +89,7 @@ export function ChargeOptionsSection({ options, canManage, storeId }: { options:
                         action={updateChargeOptionAction}
                         label={o.name}
                         hidden={{ chargeOptionId: o.id, storeId }}
+                        typed={typedOf[o.id] ?? null}
                         rules={POS_CHARGE_AMOUNT_RULES}
                         extra={
                           <form action={setChargeOptionStatusAction} className="mt-2">

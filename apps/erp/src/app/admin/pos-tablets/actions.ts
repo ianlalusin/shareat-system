@@ -28,6 +28,8 @@ import { redirectWithFlash } from '../../../lib/flash';
 import { retypeRefusalError } from '@/lib/destructive';
 import { retypeMatches } from '@/lib/retype';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { keepTyping } from '../../../lib/keep-typing';
+import { CHARGE_OPTION_EDIT } from './typed-forms';
 import { deviceTail, normaliseDeviceId, revokeConfirmName } from './lib';
 
 const RETURN_TO = '/admin/pos-tablets';
@@ -232,7 +234,11 @@ export async function updateChargeOptionAction(fd: FormData): Promise<void> {
         ? 'That charge already has that amount. Nothing changed.'
         : `Charge changed for all stores (${r.storesOn} ${r.storesOn === 1 ? 'store has' : 'stores have'} it on). Charges already on a table keep their amount.`;
   } catch (err) {
-    return await redirectWithFlash(RETURN_TO, storeId ? { store: storeId } : {}, { error: errorMessage(err) });
+    // T-389: a refused save reopens the Edit with what was typed
+    return await redirectWithFlash(RETURN_TO, storeId ? { store: storeId } : {}, {
+      error: errorMessage(err),
+      typed: keepTyping(fd, CHARGE_OPTION_EDIT, str(fd, 'chargeOptionId'), { actorId: actor.personId, stale: false }),
+    });
   }
   revalidatePath(RETURN_TO);
   return await redirectWithFlash(RETURN_TO, storeId ? { store: storeId } : {}, { ok });

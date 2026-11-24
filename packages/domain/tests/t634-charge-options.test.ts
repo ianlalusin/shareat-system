@@ -1,7 +1,7 @@
 /**
  * T-634 - central charges, unit level (no database): the database and the capability check are replaced by spies, so the ORDER of decisions is visible
  * (authorize first, with the right capability and scope; nothing read or written after a refusal), and the retire / bump / switch rules are checked.
- * The DB-backed versions: tests/integration/t634-central-charges.test.ts and packages/db/tests/integration/t634-charge-options-migration.test.ts (CI runs them).
+ * The DB-backed versions: integration/t634-central-charges.test.ts and packages/db/tests/integration/t634-charge-options-migration.test.ts (CI runs them).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,7 +23,7 @@ const authorize = vi.fn(async (_tx: unknown, _actor: unknown, cap: string, scope
   calls.push(`authorize:${cap}:${JSON.stringify(scope)}`);
   if (state.refuse.has(cap)) {
     const { AuthorizationError } = await vi.importActual<typeof import('@shareat/auth')>('@shareat/auth');
-    throw new AuthorizationError(`test: no ${cap}` as never);
+    throw new AuthorizationError(`test: no ${cap}`, cap as never);
   }
 });
 
@@ -54,7 +54,7 @@ vi.mock('@shareat/db', async (orig) => {
 });
 
 const { AuthorizationError } = await import('@shareat/auth');
-const { createChargeOption, setChargeOptionStatus, setStoreCharge, updateChargeOption } = await import('./charge-options');
+const { createChargeOption, setChargeOptionStatus, setStoreCharge, updateChargeOption } = await import('../src/pos/charge-options');
 
 const actor = { orgId: '0190a000-0000-7000-8000-0000000000aa', personId: '0190a000-0000-7000-8000-0000000000bb' } as never;
 const tx = {} as never;
