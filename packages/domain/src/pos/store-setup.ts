@@ -60,11 +60,10 @@ export function parseTableNumbers(raw: unknown): number[] {
   const text = typeof raw === 'string' ? raw.trim() : '';
   const m = /^(\d{1,4})(?:\s*[-–]\s*(\d{1,4}))?$/.exec(text);
   if (!m) throw refuse(`parseTableNumbers: "${text}"`, 'Type one table number, like 5, or a range, like 1-20.');
-  const from = Number(m[1]);
-  const to = m[2] === undefined ? from : Number(m[2]);
-  if (from < TABLE_NUMBER_MIN || to > TABLE_NUMBER_MAX || to < TABLE_NUMBER_MIN || from > TABLE_NUMBER_MAX) {
-    throw refuse(`parseTableNumbers: out of range "${text}"`, `Table numbers go from ${TABLE_NUMBER_MIN} to ${TABLE_NUMBER_MAX}.`);
-  }
+  // wholeNumber checks a whole number within 1 to 999 (NaN-safe, Number.isInteger) and owns the sentence; its result is not string-derived for the T-371 guard.
+  const bounds = { what: 'A table number', min: TABLE_NUMBER_MIN, max: TABLE_NUMBER_MAX };
+  const from = wholeNumber(Number(m[1]), bounds);
+  const to = m[2] === undefined ? from : wholeNumber(Number(m[2]), bounds);
   if (to < from) throw refuse(`parseTableNumbers: reversed "${text}"`, `The range ${from}-${to} goes backwards. Put the smaller number first, like ${to}-${from}.`);
   const count = to - from + 1;
   if (count > TABLE_ADD_MAX) {

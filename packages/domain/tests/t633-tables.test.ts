@@ -1,7 +1,7 @@
 /**
  * T-633 - table numbers from the ERP Tables section (docs/tasks/633-tables-screen.md). Unit level, no database: the range parser is pure, and the
  * database and the capability check are replaced by spies so the ORDER of decisions is visible (authorize first; nothing read or written after a
- * refusal) and the audit row's exact shape is checked. The DB-backed version is `tests/integration/t633-tables.test.ts` (CI runs it).
+ * refusal) and the audit row's exact shape is checked. The DB-backed version is `integration/t633-tables.test.ts` (CI runs it).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,7 +17,7 @@ vi.mock('@shareat/auth', async (orig) => {
     ...real,
     authorize: vi.fn(async () => {
       calls.push('authorize');
-      if (state.refuseAuth) throw new real.AuthorizationError('test: no manage_store_settings' as never);
+      if (state.refuseAuth) throw new real.AuthorizationError('test: no manage_store_settings', 'manage_store_settings');
     }),
   };
 });
@@ -57,7 +57,7 @@ vi.mock('@shareat/db', async (orig) => {
 });
 
 const { AuthorizationError } = await import('@shareat/auth');
-const { TABLE_ADD_MAX, addPosStands, parseTableNumbers, retirePosStand } = await import('./store-setup');
+const { TABLE_ADD_MAX, addPosStands, parseTableNumbers, retirePosStand } = await import('../src/pos/store-setup');
 
 const STORE = '0190a000-0000-7000-8000-000000000001';
 const STAND = '0190a000-0000-7000-8000-000000000007';
@@ -103,7 +103,7 @@ describe('parseTableNumbers (pure)', () => {
 
   it('numbers outside 1 to 999 are refused', () => {
     for (const bad of ['0', '0-5', '995-1000', '1000']) {
-      expect(sentence(() => parseTableNumbers(bad)), bad).toBe('Table numbers go from 1 to 999.');
+      expect(sentence(() => parseTableNumbers(bad)), bad).toBe('A table number must be a whole number from 1 to 999.');
     }
   });
 
