@@ -545,6 +545,15 @@ export async function getOptionOffer(tx: Tx, orgId: string, id: string): Promise
   return row;
 }
 
+/** T-632: the option-offer rows of one value at one store that start after `at` (scheduled, not yet in force), newest first. */
+export async function scheduledOptionOffers(tx: Tx, storeId: string, optionValueId: string, at: Date): Promise<MenuOptionOfferRow[]> {
+  return tx
+    .select()
+    .from(menuOptionOffers)
+    .where(and(eq(menuOptionOffers.storeId, storeId), eq(menuOptionOffers.optionValueId, optionValueId), sql`${menuOptionOffers.effectiveFrom} > ${at.toISOString()}::timestamptz`))
+    .orderBy(desc(menuOptionOffers.effectiveFrom));
+}
+
 export async function deleteOptionOffer(tx: Tx, id: string): Promise<void> {
   await tx.delete(menuOptionOffers).where(eq(menuOptionOffers.id, id));
 }
@@ -686,6 +695,27 @@ export async function catalogOfOrg(tx: Tx, orgId: string) {
     tx.select().from(menuPackageRefills).where(eq(menuPackageRefills.orgId, orgId)),
   ]);
   return { categories, items, variants, optionGroups, optionValues, optionGroupLinks, packageRefills };
+}
+
+/**
+ * T-632: the newest STORE-channel fixed price this store ever had per variant and daypart (withdrawn rows skipped), so a switched-off item can be
+ * offered again at the price it last had. A suggestion only; nothing here says the price is live.
+ */
+export async function lastStorePrices(tx: Tx, storeId: string, at: Date): Promise<{ variantId: string; daypartId: string | null; amount: string; bundleHeads: number | null; extraHeadAmount: string | null }[]> {
+  const rows = await tx
+    .select()
+    .from(menuOffers)
+    .where(and(eq(menuOffers.storeId, storeId), eq(menuOffers.channel, 'store'), eq(menuOffers.withdrawn, false), eq(menuOffers.pricingMode, 'fixed'), sql`${menuOffers.amount} is not null`, sql`${menuOffers.effectiveFrom} <= ${at.toISOString()}::timestamptz`))
+    .orderBy(desc(menuOffers.effectiveFrom), desc(menuOffers.createdAt));
+  const seen = new Set<string>();
+  const out: { variantId: string; daypartId: string | null; amount: string; bundleHeads: number | null; extraHeadAmount: string | null }[] = [];
+  for (const r of rows) {
+    const k = `${r.variantId}|${r.daypartId ?? ''}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ variantId: r.variantId, daypartId: r.daypartId, amount: String(r.amount), bundleHeads: r.bundleHeads, extraHeadAmount: r.extraHeadAmount == null ? null : String(r.extraHeadAmount) });
+  }
+  return out;
 }
 
 /** Every offer row for one variant at one store (both channels, withdrawals and scheduled changes included), newest first. */

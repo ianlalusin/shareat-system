@@ -149,6 +149,9 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
           {canPrice && !canPair && data.slots.some((r) => r.daypartId !== null) && (
             <p className="text-sm text-muted">Only a super admin can change which prices belong to menu hours. You can still change a price.</p>
           )}
+          <Link href={`/menu/stores/${store.id}`} className={NAV_LINK}>
+            What this store sells: switch items on or off
+          </Link>
           {canHours && (
             <Link href={`/menu/hours?store=${store.id}`} className={NAV_LINK}>
               Change the menu hours
