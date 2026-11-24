@@ -3,8 +3,8 @@
  * docs/tasks/533-pos-lipa-switch.md R2. The domain (`packages/domain/src/pos/store-setup.ts`) decides every rule; these only read and write.
  * Every function takes the caller's transaction first and filters by org AND store; RLS is the backstop.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
-import { posChargePresets, posDiscountPresets, posStands, type PosChargePresetRow, type PosDiscountPresetRow, type PosStandRow } from '../../schema/pos-v2';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { chargeOptions, posChargePresets, posDiscountPresets, posStands, type ChargeOptionRow, type PosChargePresetRow, type PosDiscountPresetRow, type PosStandRow } from '../../schema/pos-v2';
 import { posV1StoreLinks } from '../../schema/pos-v1';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
@@ -72,40 +72,97 @@ export async function retirePreset(tx: Tx, orgId: string, storeId: string, prese
   return rows.length > 0;
 }
 
-// ---- T-627: the store's named charges (leftover, an extra griller) -----------------------------------------------------
+// ---- T-634 (0278): the org's master list of charges, and each store's switch for one -----------------------------------
+// A store's `pos_charge_presets` row IS its switch (status active = on); its name, amount and per_unit are a mirror the 0278 trigger sets from the option.
 
-/** The ACTIVE charge of this name (case-insensitive, the same key the unique index uses), or undefined. */
-export async function getActiveChargeByName(tx: Tx, orgId: string, storeId: string, name: string): Promise<PosChargePresetRow | undefined> {
-  const [row] = await tx
-    .select()
-    .from(posChargePresets)
-    .where(and(eq(posChargePresets.orgId, orgId), eq(posChargePresets.storeId, storeId), eq(posChargePresets.status, 'active'), sql`lower(${posChargePresets.name}) = lower(${name})`));
+/** Every option of the org, active and retired, in sort order then name. */
+export async function listChargeOptions(tx: Tx, orgId: string): Promise<ChargeOptionRow[]> {
+  return tx.select().from(chargeOptions).where(eq(chargeOptions.orgId, orgId)).orderBy(asc(chargeOptions.sortOrder), asc(chargeOptions.name), asc(chargeOptions.id));
+}
+
+/** One option of the org; `lock` takes it FOR UPDATE (an amount change or a retire decides on the current row). */
+export async function getChargeOptionById(tx: Tx, orgId: string, id: string, lock = false): Promise<ChargeOptionRow | undefined> {
+  const q = tx.select().from(chargeOptions).where(and(eq(chargeOptions.orgId, orgId), eq(chargeOptions.id, id)));
+  const [row] = lock ? await q.for('update') : await q;
   return row;
 }
 
-export async function insertChargePreset(tx: Tx, input: { orgId: string; storeId: string; name: string; amount: Money; perUnit: boolean; createdBy: string }): Promise<PosChargePresetRow> {
+/** The option whose a-z0-9 name key is `key` (the same expression as charge_options_org_name_unique), or undefined. */
+export async function findChargeOptionByKey(tx: Tx, orgId: string, key: string): Promise<ChargeOptionRow | undefined> {
   const [row] = await tx
-    .insert(posChargePresets)
-    .values({ orgId: input.orgId, storeId: input.storeId, name: input.name, amount: input.amount, perUnit: input.perUnit, status: 'active', createdBy: input.createdBy })
-    .returning();
+    .select()
+    .from(chargeOptions)
+    .where(and(eq(chargeOptions.orgId, orgId), sql`coalesce(nullif(regexp_replace(lower(${chargeOptions.name}), '[^a-z0-9]', '', 'g'), ''), lower(btrim(${chargeOptions.name}))) = ${key}`));
+  return row;
+}
+
+export async function insertChargeOption(tx: Tx, input: { orgId: string; name: string; amount: Money; perUnit: boolean; sortOrder: number }): Promise<ChargeOptionRow> {
+  const [row] = await tx.insert(chargeOptions).values({ ...input, status: 'active' }).returning();
   return row!;
 }
 
-export async function updateChargePreset(tx: Tx, orgId: string, storeId: string, presetId: string, set: { amount: Money; perUnit: boolean }): Promise<void> {
+/** The name is never changed (the 0278 guard refuses it): a rename is retire + add. */
+export async function updateChargeOptionRow(tx: Tx, orgId: string, id: string, set: { amount?: Money; perUnit?: boolean; status?: 'active' | 'retired' }): Promise<void> {
   await tx
-    .update(posChargePresets)
-    .set({ amount: set.amount, perUnit: set.perUnit, updatedAt: new Date() })
-    .where(and(eq(posChargePresets.id, presetId), eq(posChargePresets.orgId, orgId), eq(posChargePresets.storeId, storeId)));
+    .update(chargeOptions)
+    .set({ ...set, updatedAt: new Date() })
+    .where(and(eq(chargeOptions.orgId, orgId), eq(chargeOptions.id, id)));
 }
 
-/** Retire an ACTIVE charge (the row is kept: past sales name it). Returns whether a row changed. */
-export async function retireChargePreset(tx: Tx, orgId: string, storeId: string, presetId: string): Promise<boolean> {
+/** The stores that have this option switched ON (an ACTIVE row), each once. */
+export async function storesWithChargeOn(tx: Tx, orgId: string, chargeOptionId: string): Promise<string[]> {
+  const rows = await tx
+    .selectDistinct({ storeId: posChargePresets.storeId })
+    .from(posChargePresets)
+    .where(and(eq(posChargePresets.orgId, orgId), eq(posChargePresets.chargeOptionId, chargeOptionId), eq(posChargePresets.status, 'active')));
+  return rows.map((r) => r.storeId);
+}
+
+/** The store's newest row for this option (on or off), or undefined when the store never had it. Switching on again reuses it, so no duplicate is made. */
+export async function latestChargeSwitch(tx: Tx, orgId: string, storeId: string, chargeOptionId: string): Promise<PosChargePresetRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posChargePresets)
+    .where(and(eq(posChargePresets.orgId, orgId), eq(posChargePresets.storeId, storeId), eq(posChargePresets.chargeOptionId, chargeOptionId)))
+    .orderBy(asc(posChargePresets.status), desc(posChargePresets.createdAt), desc(posChargePresets.id)) // active sorts before retired
+    .limit(1)
+    .for('update');
+  return row;
+}
+
+/** A first switch-on at this store. name / amount / per_unit are passed for the column types; the 0278 trigger overwrites them from the option. */
+export async function insertChargeSwitch(
+  tx: Tx,
+  input: { orgId: string; storeId: string; chargeOptionId: string; name: string; amount: Money; perUnit: boolean; createdBy: string },
+): Promise<PosChargePresetRow> {
+  const [row] = await tx.insert(posChargePresets).values({ ...input, status: 'active' }).returning();
+  return row!;
+}
+
+/** Switch a store's row on or off. Returns whether a row changed. */
+export async function setChargeSwitchStatus(tx: Tx, orgId: string, storeId: string, presetId: string, status: 'active' | 'retired'): Promise<boolean> {
   const rows = await tx
     .update(posChargePresets)
-    .set({ status: 'retired', updatedAt: new Date() })
-    .where(and(eq(posChargePresets.id, presetId), eq(posChargePresets.orgId, orgId), eq(posChargePresets.storeId, storeId), eq(posChargePresets.status, 'active')))
+    .set({ status, updatedAt: new Date() })
+    .where(
+      and(
+        eq(posChargePresets.id, presetId),
+        eq(posChargePresets.orgId, orgId),
+        eq(posChargePresets.storeId, storeId),
+        eq(posChargePresets.status, status === 'active' ? 'retired' : 'active'),
+      ),
+    )
     .returning({ id: posChargePresets.id });
   return rows.length > 0;
+}
+
+/** The option ids switched ON at a store. */
+export async function chargeOptionsOnAt(tx: Tx, orgId: string, storeId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ id: posChargePresets.chargeOptionId })
+    .from(posChargePresets)
+    .where(and(eq(posChargePresets.orgId, orgId), eq(posChargePresets.storeId, storeId), eq(posChargePresets.status, 'active')));
+  return rows.map((r) => r.id);
 }
 
 /** The store's POS id in v1 (Firestore store id) through its LIVE link, or undefined when the store is not linked. */

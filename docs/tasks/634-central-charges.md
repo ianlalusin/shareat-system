@@ -51,4 +51,47 @@ locally, do not push. Report (≤20 lines) to `C:\shareat\t634-report.txt`.
 
 ## As built
 
-(filled in by the builder)
+- **Migration 0278** (`packages/db/migrations/0278_t634_charge_options.sql`): `charge_options` (org, name 1-40 unique per org on the a-z0-9 key, amount
+  > 0 and ≤ 100,000, per_unit, sort_order, status), RLS + FORCE, grants SELECT/INSERT and UPDATE (amount, per_unit, sort_order, status, updated_at): never
+  name, never DELETE. `pos_charge_presets.charge_option_id` NOT NULL with a same-org composite FK. Three origin triggers: `pos_charge_presets_mirror_option`
+  (name/amount/per_unit come from the option; the option cannot change; a retired option cannot be switched on), `charge_options_guard` (org and name
+  frozen; retire refused while any store has it on), `charge_options_mirror_presets` (an amount / per-unit change is copied onto every store row).
+  Registered in classification (keep), the RLS registry (org_column), the trigger registry (+3) and the audit catalogue (+4: `charge_option.created`,
+  `.updated`, `.retired`, `.reactivated`; ceiling 308 -> 312).
+- **Deviation for BOSS: "unique per store+option" is a partial UNIQUE (WHERE status = 'active'), not a full one.** Under T-627 a store could retire
+  "Leftover" and add it again, which leaves an old retired row that past bills point at and that can never be deleted. Both rows must join the one option.
+  The domain's switch-on reuses the store's newest row, so no new duplicate is ever made.
+- **Backfill**: one option per (org, normalised name). Its spelling, amount and per unit come from the earliest ACTIVE preset (or the newest retired one
+  when none is active); its status is active if any store has it on. Every preset is set to its option's values. STOP (RAISE) when two ACTIVE presets of
+  one store share a key (never merged), or when the ACTIVE presets of one key differ in amount or per unit at two stores. Retired rows are history and are
+  not compared.
+- **Snapshots checked**: `charges.ts` `resolveCharge` copies the preset's name and amount into `table_session_charges` when the charge is added;
+  `sale.ts` copies those rows onto `pos_sales_receipt_charges`. So an amount change never moves a charge already on a table or a receipt. (Already true before
+  this task: the server takes the amount when the tablet's `charge.added` event reaches it, not when the cashier tapped.)
+- **Domain** `packages/domain/src/pos/charge-options.ts`: `createChargeOption`, `updateChargeOption` (bumps the snapshot version of every store that has it
+  on), `setChargeOptionStatus` (retire refused while on, in words), `setStoreCharge` (on/off). Master capability **`manage_menu`** (org; admin and
+  super admin): a charge is part of what the brand sells and at what price, which is what `manage_menu` governs. Not `manage_chart_of_accounts` (where
+  money is booked) and not `set_menu_price` (store scope, the opposite of brand-wide). Store switch: `manage_store_settings` at the store.
+  `upsertPosChargePreset` / `retirePosChargePreset` are gone.
+- **Copy from another store**: the 'charges' kind is removed (domain, ERP dialog and action). `t627-copy-charges.test.ts` is deleted.
+- **ERP** `/admin/pos-tablets`: "Charges (all stores)" (`ChargeOptionsSection`) above the store picker, as a compact table (Charge / Amount / Stores
+  using / quiet Edit with Retire inside; a collapsed "Retired charges" block with Restore). Each store's Charges section is a compact table of switches
+  (Status On/Off; "On" is one tap, "Off" asks once).
+
+### Pre-check for Ian, before deploying (read-only)
+
+Run this on production. **No rows = the migration will apply.** Each row names a charge that would stop it, and why.
+
+```sql
+with p as (
+  select org_id, store_id, name, amount, per_unit,
+         coalesce(nullif(regexp_replace(lower(name), '[^a-z0-9]', '', 'g'), ''), lower(btrim(name))) as k
+  from pos_charge_presets where status = 'active'
+)
+select 'switched on twice at one store' as problem, org_id, store_id, string_agg(name || ' ' || amount::text, ' | ') as charges
+from p group by org_id, store_id, k having count(*) > 1
+union all
+select 'different amount or per-unit between stores', org_id, null,
+       string_agg(distinct name || ' ' || amount::text || case when per_unit then ' each' else ' per bill' end, ' | ')
+from p group by org_id, k having count(distinct amount::text || '|' || per_unit::text) > 1;
+```

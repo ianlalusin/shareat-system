@@ -7,9 +7,8 @@ import { afterAll, describe, expect, it } from 'vitest';
  */
 import { applyPosEvents } from '../../src/pos/inbox';
 import { buildPosSnapshot } from '../../src/pos/snapshot';
-import { getSessionBill, removeCharge, retirePosChargePreset, upsertPosChargePreset } from '../../src/pos';
-import { AuthorizationError } from '@shareat/auth';
-import type { Tx } from '@shareat/db';
+import { createChargeOption, getSessionBill, removeCharge } from '../../src/pos';
+import { chargePresetRow } from './_fixtures/t634-charges';
 import {
   asOrg, auditRows, closeAll, ev, fixture, linesAddedPayload, nowIso, RATES, salePayload, signedIn, sql, standOpenedPayload, uuid, type Ev, type Fx,
 } from './_fixtures/t525-pos';
@@ -26,9 +25,9 @@ async function world(): Promise<Fx> {
 const send = (f: Fx, events: Ev[]) => applyPosEvents({ pairing: { pairingId: f.pairingId, orgId: f.orgId, storeId: f.storeId }, events }, RATES);
 const statuses = (r: Awaited<ReturnType<typeof send>>) => r.results.map((x) => (x.status === 'applied' || x.status === 'duplicate' ? x.status : `${x.status}: ${x.error}`));
 
-async function preset(f: Fx, name: string, amount: string, perUnit: boolean, status = 'active') {
-  return (await sql<{ id: string }[]>`
-    insert into pos_charge_presets (org_id, store_id, name, amount, per_unit, status, created_by) values (${f.orgId}, ${f.storeId}, ${name}, ${amount}, ${perUnit}, ${status}, ${f.adminId}) returning id`)[0]!.id;
+/** T-634 (0278): a store charge row is the store's switch for an org charge option; the helper makes the option too. */
+async function preset(f: Fx, name: string, amount: string, perUnit: boolean, status: 'active' | 'retired' = 'active') {
+  return chargePresetRow(sql as never, { orgId: f.orgId, storeId: f.storeId, name, amount, perUnit, status, createdBy: f.adminId });
 }
 const chargeAdded = (sessionId: string, o: { chargeId?: string; presetId?: string; name?: string; unitAmount?: string; qty?: number; addedAtDevice?: string }) => ({
   chargeId: o.chargeId ?? uuid(), sessionId, qty: o.qty ?? 1, addedAtDevice: o.addedAtDevice ?? nowIso(),
@@ -221,39 +220,7 @@ describe('T-627 store charges through the inbox', () => {
     expect(snap.body.chargePresets).toHaveLength(1);
   });
 
-  it('the store charge list (domain, authorize first): an administrator adds, changes and retires; a cashier is refused for all three; each change is audited and moves the snapshot version', async () => {
-    const f = await world();
-    const version = async () => Number((await sql<{ v: string }[]>`select state_version::text v from pos_stores where store_id = ${f.storeId}`)[0]!.v);
-    const v0 = await version();
-    const created = await asOrg(f.orgId, (tx) => upsertPosChargePreset(tx, f.admin, { storeId: f.storeId, name: ' Leftover ', amount: '100', perUnit: true }));
-    expect(created.outcome).toBe('created');
-    expect(await asOrg(f.orgId, (tx) => upsertPosChargePreset(tx, f.admin, { storeId: f.storeId, name: 'leftover', amount: '100.00', perUnit: true }))).toMatchObject({ outcome: 'unchanged', presetId: created.presetId });
-    expect(await version()).toBe(v0 + 1); // the repeat wrote nothing
-    expect(await asOrg(f.orgId, (tx) => upsertPosChargePreset(tx, f.admin, { storeId: f.storeId, name: 'Leftover', amount: '120.50', perUnit: false }))).toMatchObject({ outcome: 'updated' });
-    const changed = await auditRows(f, 'pos.charge_preset_set');
-    expect(changed).toHaveLength(2);
-    expect(changed[1]).toMatchObject({ before: { name: 'Leftover', amount: '100.00', perUnit: true }, after: { name: 'Leftover', amount: '120.50', perUnit: false } });
-
-    const attempts: ((tx: Tx) => Promise<unknown>)[] = [
-      (tx: Tx) => upsertPosChargePreset(tx, f.counter, { storeId: f.storeId, name: 'Sneaky', amount: '5' }),
-      (tx: Tx) => retirePosChargePreset(tx, f.counter, { storeId: f.storeId, presetId: created.presetId }),
-    ];
-    for (const attempt of attempts) {
-      const err = await asOrg(f.orgId, attempt).then(() => null, (e: unknown) => e);
-      expect(err, 'a cashier must be refused').toBeInstanceOf(AuthorizationError);
-    }
-    expect((await sql<{ status: string }[]>`select status from pos_charge_presets where id = ${created.presetId}`)[0]!.status).toBe('active');
-
-    expect(await asOrg(f.orgId, (tx) => retirePosChargePreset(tx, f.admin, { storeId: f.storeId, presetId: created.presetId }))).toEqual({ outcome: 'retired' });
-    expect(await asOrg(f.orgId, (tx) => retirePosChargePreset(tx, f.admin, { storeId: f.storeId, presetId: created.presetId }))).toEqual({ outcome: 'unchanged' });
-    expect(await auditRows(f, 'pos.charge_preset_retired')).toHaveLength(1);
-    // the name is free again once retired
-    expect((await asOrg(f.orgId, (tx) => upsertPosChargePreset(tx, f.admin, { storeId: f.storeId, name: 'Leftover', amount: '90', perUnit: true }))).outcome).toBe('created');
-    const snap = await asOrg(f.orgId, (tx) => buildPosSnapshot(tx, { pairing: { pairingId: f.pairingId, orgId: f.orgId, storeId: f.storeId } }, RATES));
-    expect(snap.body.chargePresets).toMatchObject([{ name: 'Leftover', amount: '90.00', perUnit: true }]);
-  });
-
-  it('the caps: a unit above 100,000 is refused (custom, and in the store list), exactly 100,000 is fine, the database says it too, 1001 units is refused', async () => {
+  it('the caps: a unit above 100,000 is refused (custom, and in the org list), exactly 100,000 is fine, the database says it too, 1001 units is refused', async () => {
     const f = await world();
     const per = await preset(f, 'Leftover', '100.00', true);
     const t = table(f);
@@ -270,12 +237,12 @@ describe('T-627 store charges through the inbox', () => {
       'applied',
       'quarantined: POS_EVENT_REFUSED: The quantity must be a whole number from 1 to 1000.',
     ]);
-    // the store list: the same limit, in the domain's words ...
-    const err = await asOrg(f.orgId, (tx) => upsertPosChargePreset(tx, f.admin, { storeId: f.storeId, name: 'Big', amount: '100000.01', perUnit: false })).then(() => null, (e: unknown) => e);
+    // the org's charge list (T-634): the same limit, in the domain's words ...
+    const err = await asOrg(f.orgId, (tx) => createChargeOption(tx, f.admin, { name: 'Big', amount: '100000.01', perUnit: false })).then(() => null, (e: unknown) => e);
     expect((err as { userMessage?: string }).userMessage).toBe('A charge can be at most 100,000 pesos.');
-    expect((await asOrg(f.orgId, (tx) => upsertPosChargePreset(tx, f.admin, { storeId: f.storeId, name: 'Edge', amount: '100000', perUnit: false }))).outcome).toBe('created');
-    // ... and the database CHECK, even for a writer that skips the domain
-    await expect(sql`insert into pos_charge_presets (org_id, store_id, name, amount, created_by) values (${f.orgId}, ${f.storeId}, 'Sneaky', 100000.01, ${f.adminId})`).rejects.toMatchObject({ code: '23514' });
+    expect((await asOrg(f.orgId, (tx) => createChargeOption(tx, f.admin, { name: 'Edge', amount: '100000', perUnit: false }))).id).toBeTruthy();
+    // ... and the database CHECK, even for a writer that skips the domain (the store row's amount is the option's, so the option holds the cap)
+    await expect(sql`insert into charge_options (org_id, name, amount) values (${f.orgId}, 'Sneaky', 100000.01)`).rejects.toMatchObject({ code: '23514' });
     await expect(
       sql`insert into table_session_charges (org_id, store_id, session_id, name, unit_amount, qty, added_by, added_at_device) values (${f.orgId}, ${f.storeId}, ${t.sessionId}, 'Sneaky', 100000.01, 1, ${f.counterId}, now())`,
     ).rejects.toMatchObject({ code: '23514' });

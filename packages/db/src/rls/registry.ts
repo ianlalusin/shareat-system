@@ -1350,6 +1350,10 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-629: an org’s own master list of payment options (org-level, no store); org isolation is the point.',
   },
+  charge_options: {
+    scope: 'org_column',
+    reason: 'T-634: an org’s own master list of charges (org-level, no store); org isolation is the point.',
+  },
   pos_reservations: {
     scope: 'org_column',
     reason: 'T-628: an org’s own table reservation at its own store (a customer name and phone); org isolation is the point, and the repo filters by store.',

@@ -135,17 +135,9 @@ export async function retirePosDiscountPreset(tx: Tx, actor: Actor, input: { sto
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// T-627 (docs/tasks/627-pos-charges.md): the store's named charges (leftover, an extra griller). The same shape as the discount presets above: authorize FIRST
-// (`manage_store_settings` at the store), the name is the key (a rename is retire + add), a repeat writes nothing, every change is audited and bumps the snapshot.
+// T-627 (docs/tasks/627-pos-charges.md): the rules of a named charge (leftover, an extra griller). Since T-634 (0278) the org owns the list
+// (`charge-options.ts`); a store only switches a charge on or off.
 // ---------------------------------------------------------------------------------------------------------------------
-export interface ChargePresetInput {
-  readonly storeId: string;
-  readonly name: unknown;
-  /** A number or a decimal string, never more than two decimals. */
-  readonly amount: unknown;
-  /** true: the cashier enters a quantity; false (or absent): once per bill. */
-  readonly perUnit?: unknown;
-}
 export interface CheckedChargePreset {
   readonly name: string;
   /** Two decimals, as the column stores it. */
@@ -168,58 +160,5 @@ export function checkChargePreset(raw: { name: unknown; amount: unknown; perUnit
   return { name, amount, perUnit: raw.perUnit === true || raw.perUnit === 'true' || raw.perUnit === 'on' };
 }
 
-/** Add a named charge, or change the amount / per-unit of the active one with that name. `source` is the caller's own, written on the audit rows ('web' from the screen, 'web' from the store copy). */
-export async function upsertPosChargePreset(tx: Tx, actor: Actor, input: ChargePresetInput, source: 'web' | 'etl' = 'web'): Promise<{ presetId: string; outcome: PresetOutcome }> {
-  const storeId = uuidInput(input.storeId, 'That store');
-  await authorize(tx, actor, CAPABILITY, { storeId });
-  const p = checkChargePreset(input);
-  const existing = await posStoreSetupRepo.getActiveChargeByName(tx, actor.orgId, storeId, p.name);
-  if (!existing) {
-    const row = await posStoreSetupRepo.insertChargePreset(tx, { orgId: actor.orgId, storeId, name: p.name, amount: p.amount, perUnit: p.perUnit, createdBy: actor.personId });
-    await auditLogRepo.append(tx, actor.orgId, {
-      actorPersonId: actor.personId,
-      action: 'pos.charge_preset_set',
-      storeId,
-      entityId: row.id,
-      before: null,
-      after: { name: p.name, amount: p.amount, perUnit: p.perUnit },
-      source,
-    });
-    await bump(tx, actor.orgId, storeId);
-    return { presetId: row.id, outcome: 'created' };
-  }
-  if (existing.amount === p.amount && existing.perUnit === p.perUnit) return { presetId: existing.id, outcome: 'unchanged' };
-  await posStoreSetupRepo.updateChargePreset(tx, actor.orgId, storeId, existing.id, { amount: p.amount, perUnit: p.perUnit });
-  await auditLogRepo.append(tx, actor.orgId, {
-    actorPersonId: actor.personId,
-    action: 'pos.charge_preset_set',
-    storeId,
-    entityId: existing.id,
-    before: { name: existing.name, amount: existing.amount, perUnit: existing.perUnit },
-    after: { name: p.name, amount: p.amount, perUnit: p.perUnit },
-    source,
-  });
-  await bump(tx, actor.orgId, storeId);
-  return { presetId: existing.id, outcome: 'updated' };
-}
-
-/** Retire a named charge. The row is kept (past sales name it) and the snapshot stops carrying it. Retiring one that is already retired writes nothing. */
-export async function retirePosChargePreset(tx: Tx, actor: Actor, input: { storeId: string; presetId: string }): Promise<{ outcome: 'retired' | 'unchanged' }> {
-  const storeId = uuidInput(input.storeId, 'That store');
-  await authorize(tx, actor, CAPABILITY, { storeId });
-  const presetId = uuidInput(input.presetId, 'That charge');
-  const existing = await posV2Repo.getChargePreset(tx, actor.orgId, storeId, presetId);
-  if (!existing) throw refuse(`retirePosChargePreset: preset ${presetId} not at store ${storeId}`, 'That charge does not exist any more.');
-  if (!(await posStoreSetupRepo.retireChargePreset(tx, actor.orgId, storeId, presetId))) return { outcome: 'unchanged' };
-  await auditLogRepo.append(tx, actor.orgId, {
-    actorPersonId: actor.personId,
-    action: 'pos.charge_preset_retired',
-    storeId,
-    entityId: presetId,
-    before: { name: existing.name, amount: existing.amount, perUnit: existing.perUnit },
-    after: null,
-    source: 'web',
-  });
-  await bump(tx, actor.orgId, storeId);
-  return { outcome: 'retired' };
-}
+// T-634 (0278): a store no longer adds or prices its own charges. The org master list and the store switch are in charge-options.ts; checkChargePreset above
+// is still the one rule set of a charge (the master list uses it).
