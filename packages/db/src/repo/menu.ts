@@ -545,6 +545,15 @@ export async function getOptionOffer(tx: Tx, orgId: string, id: string): Promise
   return row;
 }
 
+/** T-632: the option-offer rows of one value at one store that start after `at` (scheduled, not yet in force), newest first. */
+export async function scheduledOptionOffers(tx: Tx, storeId: string, optionValueId: string, at: Date): Promise<MenuOptionOfferRow[]> {
+  return tx
+    .select()
+    .from(menuOptionOffers)
+    .where(and(eq(menuOptionOffers.storeId, storeId), eq(menuOptionOffers.optionValueId, optionValueId), sql`${menuOptionOffers.effectiveFrom} > ${at.toISOString()}::timestamptz`))
+    .orderBy(desc(menuOptionOffers.effectiveFrom));
+}
+
 export async function deleteOptionOffer(tx: Tx, id: string): Promise<void> {
   await tx.delete(menuOptionOffers).where(eq(menuOptionOffers.id, id));
 }

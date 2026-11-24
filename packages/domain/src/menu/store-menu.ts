@@ -10,7 +10,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { daypartsRepo, kitchenRepo, menuRepo, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { inTx, parseMenuAmount } from './shared';
-import { setMenuOffer, setOptionOffer, withdrawMenuOffer } from './pricing';
+import { cancelScheduledOffer, cancelScheduledOptionOffer, setMenuOffer, setOptionOffer, withdrawMenuOffer } from './pricing';
 
 export interface SwitchPrice {
   /** null or omitted = all day. */
@@ -23,7 +23,7 @@ export interface SwitchPrice {
 
 const slotKey = (daypartId: string | null | undefined): string => daypartId ?? '';
 
-/** Switches a variant ON at a store (store channel): one offer per price given, one per daypart. A slot already live at the same price is left alone. */
+/** Switches a variant ON at a store (store channel): one offer per price given, one per daypart. A slot already live at the same price is left alone; a blank price withdraws a live slot. */
 export async function switchVariantOn(
   actor: Actor,
   input: { storeId: string; variantId: string; prices: SwitchPrice[] },
@@ -47,7 +47,14 @@ export async function switchVariantOn(
     let written = 0;
     for (const p of input.prices) {
       const blank = isBlank(p);
-      if (blank && !isRefill) continue;
+      if (blank && !isRefill) {
+        // Blank = not sold at that time of day: a slot that is live is withdrawn (the pairing rule applies), one that is not live stays unsold.
+        if (live.some((r) => slotKey(r.daypartId) === slotKey(p.daypartId))) {
+          await withdrawMenuOffer(actor, { storeId: input.storeId, variantId: input.variantId, channel: 'store', daypartId: p.daypartId ?? null }, trx);
+          written += 1;
+        }
+        continue;
+      }
       const amount = blank ? null : parseMenuAmount(p.amount, 'switchVariantOn: the price', 'The price', false);
       const heads = p.bundleHeads ?? undefined;
       const extra = p.extraHeadAmount ?? undefined;
@@ -72,19 +79,25 @@ export async function switchVariantOn(
   });
 }
 
-/** Switches a variant OFF at a store: withdraws EVERY live row (each daypart, each channel), online first. History is kept; past sales are untouched. */
-export async function switchVariantOff(actor: Actor, input: { storeId: string; variantId: string }, tx?: Tx): Promise<{ withdrawn: number }> {
+/**
+ * Switches a variant OFF at a store: cancels every FUTURE-dated row first (a scheduled price must not switch it back on, and a later row would
+ * also block the withdrawal), then withdraws EVERY live row (each daypart, each channel), online first. History is kept; past sales are untouched.
+ */
+export async function switchVariantOff(actor: Actor, input: { storeId: string; variantId: string }, tx?: Tx): Promise<{ withdrawn: number; cancelled: number }> {
   return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     if (!(await menuRepo.getVariant(trx, actor.orgId, input.variantId))) throw gone(`switchVariantOff: variant ${input.variantId} does not exist.`, 'variant');
-    const live = (await menuRepo.offersInForce(trx, input.storeId, await menuRepo.dbNow(trx))).filter((r) => r.variantId === input.variantId && !r.withdrawn);
+    const now = await menuRepo.dbNow(trx);
+    const later = (await menuRepo.offerHistory(trx, input.storeId, input.variantId)).filter((r) => r.effectiveFrom > now);
+    for (const r of later) await cancelScheduledOffer(actor, { id: r.id, storeId: input.storeId }, trx);
+    const live = (await menuRepo.offersInForce(trx, input.storeId, now)).filter((r) => r.variantId === input.variantId && !r.withdrawn);
     live.sort((a, b) => (a.channel === b.channel ? 0 : a.channel === 'online' ? -1 : 1));
     for (const r of live) await withdrawMenuOffer(actor, { storeId: input.storeId, variantId: input.variantId, channel: r.channel, daypartId: r.daypartId }, trx);
-    return { withdrawn: live.length };
+    return { withdrawn: live.length, cancelled: later.length };
   });
 }
 
-/** Switches a flavour (an option value) on at a store with its price difference (signed text, 0.00 for none), or off on every channel it is live on. */
+/** Switches a flavour (an option value) on at a store with its price difference (signed text, 0.00 for none), or off: future rows cancelled, every live channel withdrawn. */
 export async function switchOptionValue(
   actor: Actor,
   input: { storeId: string; optionValueId: string; on: boolean; priceDelta?: string },
@@ -97,7 +110,9 @@ export async function switchOptionValue(
       await setOptionOffer(actor, { storeId: input.storeId, optionValueId: input.optionValueId, channel: 'store', priceDelta: input.priceDelta }, trx);
       return { written: 1 };
     }
-    const live = (await menuRepo.optionOffersInForce(trx, input.storeId, await menuRepo.dbNow(trx))).filter((r) => r.optionValueId === input.optionValueId);
+    const now = await menuRepo.dbNow(trx);
+    for (const r of await menuRepo.scheduledOptionOffers(trx, input.storeId, input.optionValueId, now)) await cancelScheduledOptionOffer(actor, { id: r.id, storeId: input.storeId }, trx);
+    const live = (await menuRepo.optionOffersInForce(trx, input.storeId, now)).filter((r) => r.optionValueId === input.optionValueId);
     for (const r of live) await setOptionOffer(actor, { storeId: input.storeId, optionValueId: input.optionValueId, channel: r.channel, priceDelta: null }, trx);
     return { written: live.length };
   });
@@ -246,7 +261,7 @@ export async function loadStoreSells(tx: Tx, orgId: string, storeId: string, oth
         label: v.label,
         on: mine.length > 0,
         onlineOnly: mine.length > 0 && storeRows.length === 0,
-        dayparted: storeRows.some((r) => r.daypartId !== null),
+        dayparted: mine.some((r) => r.daypartId !== null),
         formSlots,
         prefill,
       };

@@ -255,7 +255,7 @@ function PriceForm({ item, variant: v, hidden, changing }: { item: SellsItem; va
               </Field>
             ))}
           </FormGrid>
-          {!changing && v.formSlots.length > 1 && <p className="text-xs text-muted">Leave a time of day empty to not sell it then.</p>}
+          {v.formSlots.length > 1 && <p className="text-xs text-muted">{changing ? 'Leave a time of day empty to stop selling it then.' : 'Leave a time of day empty to not sell it then.'}</p>}
           {!changing && v.prefill?.from === 'last_here' && <p className="text-sm text-muted">Starting from the price it had here before. Nothing is saved until you press Save.</p>}
           {!changing && v.prefill?.from === 'other_store' && (
             <p className="text-sm text-muted">{`Suggested from ${v.prefill.storeName ?? 'another store'}. Nothing is saved until you press Save.`}</p>
