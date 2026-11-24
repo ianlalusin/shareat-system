@@ -32,6 +32,7 @@ import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { PosReceiptBridgePort } from '../../src/pos/receipt-bridge-port';
 import { posV1SalesBody } from '../../../db/src/pos-v1/fixtures';
 import { DEC_NOW, FakePort, NOW, YESTERDAY, receipt, sha } from './_fixtures/pos-bridge';
+import { insertTenderRaw } from '../../../db/tests/integration/_fixtures/t629-tender';
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
@@ -65,10 +66,8 @@ async function fixture(hint: string, opts: { linked?: boolean; unlinked?: boolea
     insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code) values (${orgId}, ${storeId}, 'Walk-in', true, null) returning id`;
   const [acct] = await sql<{ id: string }[]>`
     insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian) values (${orgId}, ${storeId}, 'GCash - Alpha', 'ewallet', '1140', 'cashier') returning id`;
-  const [cash] = await sql<{ id: string }[]>`
-    insert into tenders (org_id, store_id, name, kind, pos_v1_alias) values (${orgId}, ${storeId}, 'Cash', 'cash', 'Cash') returning id`;
-  const [gcash] = await sql<{ id: string }[]>`
-    insert into tenders (org_id, store_id, name, kind, money_account_id, pos_v1_alias) values (${orgId}, ${storeId}, 'GCash', 'wallet', ${acct!.id}, 'G-Cash') returning id`;
+  const cash = { id: await insertTenderRaw(sql, { orgId, storeId, name: 'Cash', kind: 'cash', posV1Alias: 'Cash' }) };
+  const gcash = { id: await insertTenderRaw(sql, { orgId, storeId, name: 'GCash', kind: 'wallet', moneyAccountId: acct!.id, posV1Alias: 'G-Cash' }) };
   const posStoreId = uid('pos-store');
   if (opts.linked !== false) {
     const [link] = await sql<{ id: string }[]>`

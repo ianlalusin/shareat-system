@@ -37,6 +37,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { APP_ROLE } from '../../src/rls/registry';
 import { world, closeAll, sql, D1, D2, type World } from '../../../domain/tests/integration/_fixtures/t531-day-close';
+import { insertTenderRaw } from './_fixtures/t629-tender';
 
 afterAll(closeAll);
 
@@ -304,19 +305,42 @@ describe('T9 - the channel rows of a pos_receipts day', () => {
 // T10 - BOSS: the POS cannot take a platform tender. v2 tenders are cash | wallet only (tenders_kind_check, T-375), so no receipt can carry Foodpanda or Grab money and a
 // typed platform row on a POS day cannot overlap a receipt. Plus row 270 on an UNLINKED live store: the figures of a pos_receipts day are not typed there either.
 describe('T10 - no platform tender; no typed figure on a pos_receipts day (unlinked store too)', () => {
-  it('a tender of kind platform, foodpanda or grab (anything but cash / wallet) is refused by tenders_kind_check', async () => {
+  it('a tender of kind platform, foodpanda or grab (anything but cash / wallet) is refused: by the payment option kind check on the normal path, and by tenders_kind_check itself on a direct path', async () => {
     const w = await world('live', D1);
     for (const kind of ['platform', 'foodpanda', 'grab', 'delivery']) {
       let caught: PgErr = null;
       try {
-        await sql`insert into tenders (org_id, store_id, name, kind) values (${w.orgId}, ${w.storeId}, ${`T10 ${kind}`}, ${kind})`;
+        await insertTenderRaw(sql, { orgId: w.orgId, storeId: w.storeId, name: `T10 ${kind}`, kind });
       } catch (e) {
         caught = e as PgErr;
       }
-      expect({ kind, code: caught?.code, constraint: caught?.constraint_name }).toEqual({ kind, code: '23514', constraint: 'tenders_kind_check' });
+      // T-629: the option is made first and its own CHECK refuses the kind before a tender row exists
+      expect({ kind, code: caught?.code, constraint: caught?.constraint_name }).toEqual({ kind, code: '23514', constraint: 'payment_options_kind_check' });
     }
+    // direct coverage of tenders_kind_check: the constraint exists, and with the mirror trigger (which sets kind from the option) switched off inside a rolled-back transaction it fires
+    const [c] = await sql<{ n: number }[]>`select count(*)::int n from pg_constraint where conname = 'tenders_kind_check' and conrelid = 'tenders'::regclass`;
+    expect(c!.n).toBe(1);
+    const [opt] = await sql<{ id: string }[]>`select id from payment_options where org_id = ${w.orgId} limit 1`;
+    const [fresh0] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${w.orgId}, ${`t10d-${Date.now()}`}, 'T10 direct') returning id`;
+    class Rollback extends Error {}
+    const direct: { err: PgErr } = { err: null }; // a holder, so the closure's assignment is not narrowed away
+    try {
+      await sql.begin(async (tx) => {
+        await tx`alter table tenders disable trigger tenders_mirror_option`;
+        try {
+          await tx.savepoint((sp) => sp`insert into tenders (org_id, store_id, payment_option_id, name, kind) values (${w.orgId}, ${fresh0!.id}, ${opt!.id}, 'T10 direct', 'platform')`);
+        } catch (e) {
+          direct.err = e as PgErr;
+        }
+        throw new Rollback();
+      });
+    } catch (e) {
+      if (!(e instanceof Rollback)) throw e;
+    }
+    expect({ code: direct.err?.code, constraint: direct.err?.constraint_name }).toEqual({ code: '23514', constraint: 'tenders_kind_check' });
     // control: cash is accepted
-    await expect(sql`insert into tenders (org_id, store_id, name, kind) values (${w.orgId}, ${w.storeId}, 'T10 cash', 'cash')`).resolves.toBeDefined();
+    const [fresh] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${w.orgId}, ${`t10-${Date.now()}`}, 'T10 store') returning id`;
+    await expect(insertTenderRaw(sql, { orgId: w.orgId, storeId: fresh!.id, name: 'Cash', kind: 'cash' })).resolves.toBeDefined();
   });
 
   it('on an UNLINKED live store a pos_receipts day\'s figures are locked outside the derivation flag too, and its tender rows are', async () => {

@@ -13,9 +13,11 @@ import type { Tx } from '../client';
 import { POS_V1_SALES_FIELDS, POS_V1_SOLD_ITEMS_FIELDS } from '../pos-v1/wire';
 import {
   posV1DayFeeds,
+  paymentOptions,
   posV1StoreLinks,
   salesDayPosCorrections,
   tenders,
+  type PaymentOptionStatus,
   type PosV1FeedKind,
   type PosV1FeedPurpose,
   type PosV1TaxType,
@@ -695,6 +697,8 @@ export interface TenderRow {
   readonly storeId: string;
   readonly name: string;
   readonly kind: TenderKind;
+  /** T-629: the master option this tender switches on (the option owns `name` and `kind`; these are its mirror). */
+  readonly paymentOptionId: string;
   readonly moneyAccountId: string | null;
   readonly posV1Alias: string | null;
   readonly isActive: boolean;
@@ -710,6 +714,7 @@ const tenderColumns = {
   storeId: tenders.storeId,
   name: tenders.name,
   kind: tenders.kind,
+  paymentOptionId: tenders.paymentOptionId,
   moneyAccountId: tenders.moneyAccountId,
   posV1Alias: tenders.posV1Alias,
   isActive: tenders.isActive,
@@ -770,6 +775,8 @@ export async function findActiveTenderByAlias(
 export interface InsertTenderInput {
   readonly orgId: string;
   readonly storeId: string;
+  readonly paymentOptionId: string;
+  /** The option's name and kind: the 0277 trigger sets them from the option whatever is passed. */
   readonly name: string;
   readonly kind: TenderKind;
   readonly moneyAccountId: string | null;
@@ -782,8 +789,6 @@ export async function insertTender(tx: Tx, input: InsertTenderInput): Promise<{ 
 }
 
 export interface UpdateTenderPatch {
-  readonly name?: string;
-  readonly kind?: TenderKind;
   readonly posV1Alias?: string | null;
   readonly moneyAccountId?: string | null;
   readonly isActive?: boolean;
@@ -808,4 +813,92 @@ export async function updateTenderRow(
     .where(and(...conds))
     .returning({ id: tenders.id });
   return rows.length;
+}
+
+/** T-629: the store's tender for one payment option (active or not), the row that IS its switch. */
+export async function findTenderByOption(tx: Tx, orgId: string, storeId: string, paymentOptionId: string): Promise<TenderRow | undefined> {
+  const [row] = await tx
+    .select(tenderColumns)
+    .from(tenders)
+    .where(and(eq(tenders.orgId, orgId), eq(tenders.storeId, storeId), eq(tenders.paymentOptionId, paymentOptionId)))
+    .limit(1);
+  return row;
+}
+
+// ---------------------------------------------------------------------------------------------
+// payment_options (T-629, migration 0277): the org's master list
+// ---------------------------------------------------------------------------------------------
+export interface PaymentOptionRow {
+  readonly id: string;
+  readonly orgId: string;
+  readonly name: string;
+  readonly kind: TenderKind;
+  readonly sortOrder: number;
+  readonly status: PaymentOptionStatus;
+}
+
+const optionColumns = {
+  id: paymentOptions.id,
+  orgId: paymentOptions.orgId,
+  name: paymentOptions.name,
+  kind: paymentOptions.kind,
+  sortOrder: paymentOptions.sortOrder,
+  status: paymentOptions.status,
+};
+
+/** The org's options, active first, in their sort order. */
+export async function listPaymentOptions(tx: Tx, orgId: string): Promise<PaymentOptionRow[]> {
+  return tx
+    .select(optionColumns)
+    .from(paymentOptions)
+    .where(eq(paymentOptions.orgId, orgId))
+    .orderBy(asc(sql`${paymentOptions.status} = 'retired'`), asc(paymentOptions.sortOrder), asc(paymentOptions.name));
+}
+
+export async function getPaymentOptionById(tx: Tx, orgId: string, id: string, forUpdate = false): Promise<PaymentOptionRow | undefined> {
+  const q = tx.select(optionColumns).from(paymentOptions).where(and(eq(paymentOptions.orgId, orgId), eq(paymentOptions.id, id))).limit(1);
+  const [row] = await (forUpdate ? q.for('update') : q);
+  return row;
+}
+
+/** The option whose NAME normalises (lowercase, a-z0-9 only) to `normalizedName`; the same key the 0277 backfill and trigger use. */
+export async function findPaymentOptionByKey(tx: Tx, orgId: string, normalizedName: string): Promise<PaymentOptionRow | undefined> {
+  const [row] = await tx
+    .select(optionColumns)
+    .from(paymentOptions)
+    .where(and(eq(paymentOptions.orgId, orgId), sql`regexp_replace(lower(${paymentOptions.name}), '[^a-z0-9]', '', 'g') = ${normalizedName}`))
+    .limit(1);
+  return row;
+}
+
+export async function insertPaymentOption(
+  tx: Tx,
+  input: { orgId: string; name: string; kind: TenderKind; sortOrder: number },
+): Promise<{ id: string }> {
+  const [row] = await tx.insert(paymentOptions).values(input).returning({ id: paymentOptions.id });
+  return row!;
+}
+
+export async function updatePaymentOptionRow(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  patch: { name?: string; kind?: TenderKind; sortOrder?: number; status?: PaymentOptionStatus },
+): Promise<void> {
+  await tx
+    .update(paymentOptions)
+    .set({ ...patch, updatedAt: sql`clock_timestamp()` })
+    .where(and(eq(paymentOptions.orgId, orgId), eq(paymentOptions.id, id)));
+}
+
+/** How many store tenders use an option, and how many of those are switched on. */
+export async function countTendersOfOption(tx: Tx, orgId: string, paymentOptionId: string): Promise<{ total: number; active: number }> {
+  const [row] = await tx
+    .select({
+      total: sql<number>`count(*)::int`,
+      active: sql<number>`(count(*) filter (where ${tenders.isActive}))::int`,
+    })
+    .from(tenders)
+    .where(and(eq(tenders.orgId, orgId), eq(tenders.paymentOptionId, paymentOptionId)));
+  return { total: row?.total ?? 0, active: row?.active ?? 0 };
 }

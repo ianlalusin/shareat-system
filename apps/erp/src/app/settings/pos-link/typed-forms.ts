@@ -8,7 +8,13 @@ import { defineTypedForm } from '@/lib/keep-typing';
 /** One tender's edit form. The record is the tender id. */
 export const TENDER_EDIT = defineTypedForm({
   form: 'tender.edit',
-  fields: ['name', 'kind', 'moneyAccountId', 'posV1Alias'],
+  fields: ['moneyAccountId', 'posV1Alias'],
+});
+
+/** T-629: one master payment option's edit form. The record is the option id. */
+export const PAYMENT_OPTION_EDIT = defineTypedForm({
+  form: 'paymentOption.edit',
+  fields: ['name', 'kind'],
 });
 
 /** A linked store's link record. The record is the store id. `posStoreName` exists only while the POS bridge is down. */

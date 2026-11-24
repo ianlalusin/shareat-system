@@ -256,6 +256,11 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('pos.deposit_voided', 'money', 'high', 'store', 'pos_reservation_deposits', 'T-628'),
   def('pos.deposit_refunded', 'money', 'high', 'store', 'pos_reservation_deposits', 'T-628'),
   def('pos.deposit_kept', 'money', 'high', 'store', 'pos_reservation_deposits', 'T-628'),
+  // T-629: the org's master list of payment options (entity = the payment_options row). Org-level (no store). A retire is the one that can stop a till taking a method, so it is high.
+  def('payment_option.created', 'money', 'normal', 'org', 'payment_options', 'T-629'),
+  def('payment_option.updated', 'money', 'normal', 'org', 'payment_options', 'T-629'),
+  def('payment_option.retired', 'money', 'high', 'org', 'payment_options', 'T-629'),
+  def('payment_option.reactivated', 'money', 'normal', 'org', 'payment_options', 'T-629'),
   // T-533 S1: a store's POS mode set or moved (off, test, live from a date, or the roll-back); entity = the pos_stores row. `high`: it decides whether real sales days come from the new POS.
   def('pos.store_mode_set', 'settings', 'high', 'store', 'pos_stores', 'T-533'),
   // T-531: the day close (the Z; entity = the pos_day_closes row, or the run id for the backlog), the ERP sales day it derives, and the December bridge to v1 (entity = the store).

@@ -72,9 +72,9 @@ async function fixture(hint: string) {
   await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${base.orgId}, 'super_admin')`;
   await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${base.storeId})`;
   const superAdmin = { personId: p!.id, orgId: base.orgId };
-  const { id: tenderId } = await asOrg(base.orgId, (tx) =>
-    D.createTender(tx, superAdmin, { storeId: base.storeId, name: 'Cash drawer', kind: 'cash', posV1Alias: 'T384 Drawer' }),
-  );
+  // T-629: a tender is a store's switch for an org payment option, so the fixture's own Cash tender (the one cash option) is the record under test.
+  const tenderId = base.cashTenderId;
+  await sql`update tenders set pos_v1_alias = 'T384 Drawer' where id = ${tenderId}`;
   return { ...base, superAdmin, tenderId };
 }
 type F = Awaited<ReturnType<typeof fixture>>;
@@ -85,7 +85,7 @@ async function repoVersion(tenderId: string): Promise<string> {
   return r!.v;
 }
 const tenderRow = async (id: string) =>
-  (await sql<{ name: string; is_active: boolean }[]>`select name, is_active from tenders where id = ${id}`)[0]!;
+  (await sql<{ name: string; is_active: boolean; pos_v1_alias: string | null }[]>`select name, is_active, pos_v1_alias from tenders where id = ${id}`)[0]!;
 
 async function render(f: F): Promise<string> {
   h.actor = f.superAdmin;
@@ -113,19 +113,18 @@ const editForm = (html: string, id: string) => formsFor(html, id).find((x) => !(
 const retireForm = (html: string, id: string) => formsFor(html, id).find((x) => 'isActive' in x.fields);
 
 type ActionFn = (fd: FormData) => Promise<void>;
-async function act(name: 'updateTenderAction' | 'setTenderActiveAction', who: F['superAdmin'], fd: FormData) {
+async function act(name: 'updateTenderAction' | 'setTenderActiveAction' | 'switchOnPaymentOptionAction', who: F['superAdmin'], fd: FormData) {
   resetJar();
   h.actor = who;
   const mod = (await import('../../src/app/settings/pos-link/actions')) as unknown as Record<string, ActionFn>;
   const signal = await captureRedirect(() => mod[name]!(fd));
   return { signal, outcome: outcomeOf(signal) };
 }
-function edit(f: F, version: string, name: string): FormData {
+function edit(f: F, version: string, alias: string): FormData {
   const fd = new FormData();
   fd.set('storeId', f.storeId);
   fd.set('tenderId', f.tenderId);
-  fd.set('name', name);
-  fd.set('posV1Alias', 'T384 Drawer');
+  fd.set('posV1Alias', alias);
   fd.set('version', version);
   return fd;
 }
@@ -135,8 +134,8 @@ function retire(f: F, version: string, isActive: boolean): FormData {
   fd.set('tenderId', f.tenderId);
   fd.set('isActive', String(isActive));
   fd.set('version', version);
-  // T-412: retiring a tender asks for its name (this fixture's tender is 'Cash drawer'); restoring needs none.
-  fd.set('confirmName', 'Cash drawer');
+  // T-412: switching a tender off asks for its name (this fixture's tender is 'Cash'); switching on needs none.
+  fd.set('confirmName', 'Cash');
   return fd;
 }
 
@@ -162,14 +161,21 @@ describe('V - the page posts the tender version', () => {
     expect(src, 'Retire form posts name="version"').toMatch(/setTenderActiveAction[\s\S]{0,700}name="version"/);
   });
 
-  it('V3: after a retire the Restore form carries the NEW version, not the old one', async () => {
+  it('V3 (T-629): after a switch-off the option is an OFF row with a Switch on form (it carries the option id), and switching on turns the SAME tender row back on', async () => {
     const f = await fixture('v3');
     const v0 = await repoVersion(f.tenderId);
     await act('setTenderActiveAction', f.superAdmin, retire(f, v0, false));
-    const form = retireForm(await render(f), f.tenderId);
-    expect(form!.text).toContain('Restore');
-    expect(form!.fields['version'], 'restore form hidden version').toBe(await repoVersion(f.tenderId));
-    expect(form!.fields['version']).not.toBe(v0);
+    const [opt] = await sql<{ payment_option_id: string }[]>`select payment_option_id from tenders where id = ${f.tenderId}`;
+    const html = await render(f);
+    expect(retireForm(html, f.tenderId), 'no tender form while it is off').toBeUndefined();
+    const on = html.split('<form').slice(1).map((c) => c.split('</form>')[0]!).find((b) => b.includes(`name="paymentOptionId" value="${opt!.payment_option_id}"`));
+    expect(on, 'a Switch on form for the option').toBeDefined();
+    const sw = new FormData();
+    sw.set('storeId', f.storeId);
+    sw.set('paymentOptionId', opt!.payment_option_id);
+    const r = await act('switchOnPaymentOptionAction', f.superAdmin, sw);
+    expect(r.outcome.flash.error).toBeUndefined();
+    expect((await tenderRow(f.tenderId)).is_active).toBe(true);
   });
 });
 
@@ -186,15 +192,15 @@ describe('E - end to end: the version read off the page drives the actions', () 
     const f = await fixture('e1');
     const pageV = editForm(await render(f), f.tenderId)?.fields['version'];
     expect(pageV, 'the page offers a version to submit').toBeTruthy();
-    const ok = await act('updateTenderAction', f.superAdmin, edit(f, pageV!, 'Cash box'));
+    const ok = await act('updateTenderAction', f.superAdmin, edit(f, pageV!, 'T384 Box'));
     expect(ok.outcome.flash.error).toBeUndefined();
-    expect(ok.outcome.flash.ok).toBe('Cash box saved.'); // 2026-10-09 (T-384 S1b R7): ok names the tender; was 'Tender saved.'
-    expect((await tenderRow(f.tenderId)).name).toBe('Cash box');
+    expect(ok.outcome.flash.ok).toBe('Cash saved.'); // 2026-10-09 (T-384 S1b R7): ok names the tender; T-629: the name is the option's
+    expect((await tenderRow(f.tenderId)).pos_v1_alias).toBe('T384 Box');
     expect(ok.signal.url).toContain(`#store-${f.storeId}`);
 
     const stale = await act('updateTenderAction', f.superAdmin, edit(f, pageV!, 'Third name'));
     expect(stale.outcome.flash.error).toBe(STALE);
-    expect((await tenderRow(f.tenderId)).name, 'a stale post changes nothing').toBe('Cash box');
+    expect((await tenderRow(f.tenderId)).pos_v1_alias, 'a stale post changes nothing').toBe('T384 Box');
   });
 
   it('E2: setTenderActiveAction with the page version retires; the same (now old) version is refused', async () => {
@@ -203,7 +209,7 @@ describe('E - end to end: the version read off the page drives the actions', () 
     expect(pageV, 'the page offers a version to submit').toBeTruthy();
     const ok = await act('setTenderActiveAction', f.superAdmin, retire(f, pageV!, false));
     expect(ok.outcome.flash.error).toBeUndefined();
-    expect(ok.outcome.flash.ok).toBe('Cash drawer retired.'); // 2026-10-09 (T-384 S1b R7): was 'Tender retired.'
+    expect(ok.outcome.flash.ok).toBe('Cash switched off.'); // T-629: was 'Cash drawer retired.'
     expect((await tenderRow(f.tenderId)).is_active).toBe(false);
 
     const stale = await act('setTenderActiveAction', f.superAdmin, retire(f, pageV!, true));

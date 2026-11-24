@@ -1665,6 +1665,10 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason:
       'Charges frozen on pilot sales receipts (T-627): row 436: v1 receives Lipa’s December day totals, charges included, through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Append-only.',
   },
+  payment_options: {
+    class: 'keep',
+    reason: 'The org’s master list of payment options (T-629: Cash, GCash, Maya, QRPH, Credit card, Debit card) is standing master data that every store’s tenders point at, kept with them; nothing booked lives only here.',
+  },
   pos_reservations: {
     class: 'purge',
     reason:

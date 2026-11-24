@@ -55,6 +55,7 @@ import { addDays, toBusinessDate } from '@shareat/core/datetime';
 import { uuidv5 } from '../../src/pos/shared';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { insDaypart, insDaypartOffer, insOptionOffer, insRule, menuFixture, newItem, newOption, sql, uid } from '../../../db/tests/integration/_fixtures/t401-menu';
+import { insertTenderRaw } from '../../../db/tests/integration/_fixtures/t629-tender';
 
 // ------------------------------------------------------------------------------------------------------------------------------
 // The subject, loaded lazily so a missing module fails each case with its own message instead of killing the file at import.
@@ -294,9 +295,8 @@ async function fixture(mode: 'off' | 'test' | 'live' = 'test') {
   // ---- tenders and presets
   const [acct] = await sql<{ id: string }[]>`
     insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian) values (${orgId}, ${storeId}, 'GCash wallet', 'bank', '1140', 'office') returning id`;
-  const tender = async (store: string, name: string, kind: 'cash' | 'wallet', active = true) =>
-    (await sql<{ id: string }[]>`
-      insert into tenders (org_id, store_id, name, kind, money_account_id, is_active) values (${orgId}, ${store}, ${name}, ${kind}, ${kind === 'wallet' ? acct!.id : null}, ${active}) returning id`)[0]!.id;
+  const tender = (store: string, name: string, kind: 'cash' | 'wallet', active = true) =>
+    insertTenderRaw(sql, { orgId, storeId: store, name, kind, moneyAccountId: kind === 'wallet' ? acct!.id : null, isActive: active });
   const cash = await tender(storeId, 'Cash', 'cash');
   const gcash = await tender(storeId, 'GCash', 'wallet');
   const mayaOff = await tender(storeId, 'Maya', 'wallet', false);

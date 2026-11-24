@@ -102,6 +102,7 @@ import { sql as dsql } from 'drizzle-orm';
 import { s6Fixture } from '../../../../packages/domain/tests/integration/_fixtures/pos-s6';
 import PosLinkSettingsPage from '../../src/app/settings/pos-link/page';
 import { FLASH_COOKIE, captureRedirect, currentJar, outcomeOf, pageParamsOf, resetJar, seedSearch } from '../helpers/flash-jar';
+import { insertTenderRaw } from '../../../../packages/db/tests/integration/_fixtures/t629-tender';
 
 const sql = postgres(url, { max: 6 });
 afterAll(async () => {
@@ -110,7 +111,7 @@ afterAll(async () => {
 });
 
 const STALE = 'This tender was changed after this page was opened. The page now shows what is saved. Check it and save again.';
-const NEED_KIND = 'Choose whether this tender is cash or a wallet.';
+const NEED_ACCOUNT = 'QRPH needs the money account it pays into at this store.';
 const POS_METHODS = ['Bank Transfer', 'Cash', 'Gcash', 'QRPH'];
 
 async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
@@ -143,10 +144,8 @@ async function fixture(hint: string) {
     (await sql<{ id: string }[]>`
       insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
       values (${base.orgId}, ${storeId}, ${name}, ${instrument}, ${gl}, ${custodian}) returning id`)[0]!.id;
-  const tender = async (storeId: string, name: string, kind: 'cash' | 'wallet', accountId: string | null, alias: string | null) =>
-    (await sql<{ id: string }[]>`
-      insert into tenders (org_id, store_id, name, kind, money_account_id, pos_v1_alias)
-      values (${base.orgId}, ${storeId}, ${name}, ${kind}, ${accountId}, ${alias}) returning id`)[0]!.id;
+  const tender = (storeId: string, name: string, kind: 'cash' | 'wallet', accountId: string | null, alias: string | null) =>
+    insertTenderRaw(sql, { orgId: base.orgId, storeId, name, kind, moneyAccountId: accountId, posV1Alias: alias });
 
   const drawer = await acct(base.storeId, 'Cashier drawer', 'cash', 'cashier', '1110');
   const bpi = await acct(base.storeId, 'BPI', 'bank', 'office', '1120');
@@ -183,6 +182,8 @@ async function repoVersion(tenderId: string): Promise<string> {
 const tenderRow = async (id: string) =>
   (await sql<{ name: string; kind: string; money_account_id: string | null; pos_v1_alias: string | null; is_active: boolean }[]>`
     select name, kind, money_account_id, pos_v1_alias, is_active from tenders where id = ${id}`)[0]!;
+const optionIdOf = async (orgId: string, name: string) =>
+  (await sql<{ id: string }[]>`select id from payment_options where org_id = ${orgId} and name = ${name}`)[0]!.id;
 const tenderCount = async (storeId: string) =>
   Number((await sql<{ n: string }[]>`select count(*)::text as n from tenders where store_id = ${storeId}`)[0]!.n);
 
@@ -224,14 +225,13 @@ function recordForm(card: string, tenderId: string): string | undefined {
   }
   return undefined;
 }
-/** The "Add a tender" box: everything after its heading, within the card. */
-function addBox(card: string): string {
-  const i = card.indexOf('Add a tender');
-  expect(i, 'the card has an "Add a tender" heading (R3)').toBeGreaterThanOrEqual(0);
-  // T-448 A3: the add form is a FormModal now; its box ends at the dialog's close (the tender rows follow it).
-  const rest = card.slice(i);
-  const end = rest.indexOf('</dialog>');
-  return end === -1 ? rest : rest.slice(0, end);
+/** T-629: a store's OFF row for one option: its "Switch on" dialog form (carries the option id), or undefined. */
+function switchOnForm(card: string, paymentOptionId: string): string | undefined {
+  for (const chunk of card.split('<form').slice(1)) {
+    const body = chunk.split('</form>')[0]!;
+    if (hiddenValue(body, 'paymentOptionId') === paymentOptionId && !/Retire payment option/.test(body)) return body;
+  }
+  return undefined;
 }
 const selectOf = (markup: string, name: string): string | null =>
   new RegExp(`<select\\b[^>]*\\bname="${name}"[^>]*>[\\s\\S]*?</select>`).exec(markup)?.[0] ?? null;
@@ -239,7 +239,7 @@ const formWith = (card: string, fieldName: string): string | undefined =>
   card.split('<form').slice(1).map((c) => c.split('</form>')[0]!).find((b) => new RegExp(`name="${fieldName}"`).test(b));
 
 type ActionFn = (fd: FormData) => Promise<void>;
-type Acts = Record<'createTenderAction' | 'updateTenderAction' | 'setTenderActiveAction', ActionFn>;
+type Acts = Record<'switchOnPaymentOptionAction' | 'updateTenderAction' | 'setTenderActiveAction' | 'createPaymentOptionAction' | 'updatePaymentOptionAction' | 'setPaymentOptionStatusAction', ActionFn>;
 async function act(name: keyof Acts, who: F['superAdmin'], fields: Record<string, string>) {
   resetJar();
   h.actor = who;
@@ -257,45 +257,67 @@ beforeAll(async () => {
 }, 120_000);
 
 // ---------------------------------------------------------------------------------------------------------------
-describe('W1 - the add form (R4, L4)', () => {
-  it('W1a: headed "Add a tender", ends in exactly "Save", and is not inside any EditableRecord', async () => {
+describe('W1 - a store switches the master options on (T-629)', () => {
+  it('W1a: there is no free-typed "Add a tender" form; every active option is a row, ON as a record or OFF with a Switch on button', async () => {
     const f = await fixture('w1a');
-    const add = addBox(cardOf(await render(f), f.storeId));
-    expect(add, 'the submit reads exactly Save (L4)').toMatch(/<button[^>]*type="submit"[^>]*(?:aria-label="Save"[^>]*>|>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>)/);
-    expect(plain(add)).not.toMatch(/Add tender/);
-    expect(add, 'an add form is not a locked record').not.toContain('<fieldset disabled');
-    // Red on HEAD: no "Add a tender" heading (the form is headed by a label "New tender") and the button reads "Add tender".
-    // Mutant: put the add form inside an EditableRecord -> `<fieldset disabled`, red.
+    const card = cardOf(await render(f), f.bareId);
+    expect(plain(card)).not.toMatch(/Add a tender|Add tender/);
+    expect(plain(card)).toContain('Payment options at this store');
+    for (const name of ['Cash', 'GCash', 'Bank Transfer', 'QRPH']) {
+      expect(plain(card), `${name} is an OFF row at the bare store`).toMatch(new RegExp(`${name}\\s+(?:Cash|Paid to an account)\\s+Off(?![A-Za-z])`));
+      expect(switchOnForm(card, await optionIdOf(f.orgId, name)), `${name} has a Switch on form`).toBeDefined();
+    }
+    // the Lipa store has them ON: records, no Switch on form for an ON option
+    const lipa = cardOf(await render(f), f.storeId);
+    expect(switchOnForm(lipa, await optionIdOf(f.orgId, 'QRPH'))).toBeUndefined();
+    expect(lipa).toMatch(/aria-label="Edit QRPH"/);
+    // Mutant: keep the old add form in TendersSection -> "Add a tender" shows, red.
   });
 
-  it('W1b: Kind starts blank (no default Cash) and is required', async () => {
+  it('W1b: the master list is above the stores, with + Add payment option: Kind starts blank, is required, and offers Cash and Paid to an account (an org may hold several cash options)', async () => {
     const f = await fixture('w1b');
-    const sel = selectOf(addBox(cardOf(await render(f), f.storeId)), 'kind');
-    expect(sel, 'the add form has a kind select').not.toBeNull();
-    expect(sel!, 'required').toMatch(/<select\b[^>]*\brequired/);
-    const first = /<option\b[^>]*>/.exec(sel!)![0];
-    expect(first, 'the first option is the blank "Choose" one').toMatch(/value=""/);
-    expect(first, 'and it is the selected one').toMatch(/\bselected/);
-    expect(plain(sel!)).toMatch(/Choose cash or wallet/);
-    expect(sel!, 'Cash is not the pre-selected option').not.toMatch(/<option[^>]*value="cash"[^>]*selected/);
-    // Red on HEAD: `defaultValue="cash"` -> option value="cash" selected, no required, no blank option.
-    // Mutant: restore defaultValue="cash" -> red.
+    const html = await render(f);
+    expect(html.indexOf('id="payment-options"'), 'the master section comes before the first store card').toBeGreaterThanOrEqual(0);
+    expect(html.indexOf('id="payment-options"')).toBeLessThan(html.indexOf('<details id="store-'));
+    const master = html.slice(html.indexOf('id="payment-options"'), html.indexOf('<details id="store-'));
+    expect(plain(master)).toContain('Add payment option');
+    const sel = selectOf(master, 'kind')!;
+    expect(sel, 'a kind select').not.toBeNull();
+    expect(sel).toMatch(/<select\b[^>]*\brequired/);
+    expect(/<option\b[^>]*>/.exec(sel)![0]).toMatch(/value=""/);
+    expect(sel, 'Cash is offered even though a cash option exists (Cash and Collected)').toMatch(/value="cash"/);
+    expect(plain(master)).toMatch(/Bank Transfer\s*Paid to an account\s*2(?!\d)/);
+    expect(plain(master), 'the badge counts the options a store has switched on, not every option').toMatch(/\d+ of \d+ used at a store/);
+    // Mutant: drop the Cash option from the add form -> no value="cash", red.
   });
 
-  it('W1c: its hint tells the user to leave the account blank for cash', async () => {
+  it('W1c: switching on a WALLET asks for the money account (a blank is refused by the domain, bank and e-wallet accounts only); a CASH option asks only for the POS name', async () => {
     const f = await fixture('w1c');
-    expect(plain(addBox(cardOf(await render(f), f.storeId)))).toContain('Leave it blank for cash');
+    const card = cardOf(await render(f), f.bareId);
+    const wallet = switchOnForm(card, await optionIdOf(f.orgId, 'QRPH'))!;
+    expect(wallet).toMatch(/<select\b[^>]*\bname="moneyAccountId"/);
+    expect(wallet, 'the placeholder is the selected, disabled option').toMatch(/<option value="" disabled="" selected="">Choose the account it pays into/);
+    expect(wallet, 'an add dialog ends in Save (L4)').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"/);
+    const cash = switchOnForm(card, await optionIdOf(f.orgId, 'Cash'))!;
+    expect(cash).not.toMatch(/name="moneyAccountId"/);
+    expect(cash).toMatch(/name="posV1Alias"/);
+    const lipa = cardOf(await render(f), f.storeId);
+    // an OFF wallet at a store with accounts offers BPI, never the drawer
+    await sql`update tenders set is_active = false, updated_at = now() where id = ${f.qrTender}`;
+    const off = switchOnForm(cardOf(await render(f), f.storeId), await optionIdOf(f.orgId, 'QRPH'))!;
+    expect(plain(selectOf(off, 'moneyAccountId') ?? '')).toContain('BPI');
+    expect(plain(selectOf(off, 'moneyAccountId') ?? '')).not.toContain('Cashier drawer');
+    expect(lipa).toBeTruthy();
   });
 
-  it('W1d (control, green on HEAD): createTenderAction with kind "" is refused with the domain sentence and creates no row', async () => {
+  it('W1d (control): switchOnPaymentOptionAction for a wallet with no account is refused with the domain sentence, creates no row, and lands on the store card', async () => {
     const f = await fixture('w1d');
-    const before = await tenderCount(f.storeId);
-    const r = await act('createTenderAction', f.superAdmin, { storeId: f.storeId, name: 'Maya', kind: '', moneyAccountId: '', posV1Alias: 'Maya' });
-    expect(r.outcome.flash.error).toBe(NEED_KIND);
+    const before = await tenderCount(f.bareId);
+    const r = await act('switchOnPaymentOptionAction', f.superAdmin, { storeId: f.bareId, paymentOptionId: await optionIdOf(f.orgId, 'QRPH'), moneyAccountId: '', posV1Alias: 'QRPH' });
+    expect(r.outcome.flash.error).toBe(NEED_ACCOUNT);
     expect(r.outcome.flash.ok).toBeUndefined();
-    expect(await tenderCount(f.storeId)).toBe(before);
-    expect(r.signal.url, 'the refusal lands on the store card (R7)').toMatch(new RegExp(`#store-${f.storeId}$`));
-    // Mutant: restore `kind === 'wallet' ? 'wallet' : 'cash'` -> a Cash tender "Maya" is created, red.
+    expect(await tenderCount(f.bareId)).toBe(before);
+    expect(r.signal.url, 'the refusal lands on the store card (R7)').toMatch(new RegExp(`#store-${f.bareId}$`));
   });
 });
 
@@ -305,19 +327,21 @@ describe('W2 - only accounts a wallet can use (R6, DEF-611)', () => {
     const f = await fixture('w2a');
     const card = cardOf(await render(f), f.storeId);
     const selects = [...card.matchAll(/<select\b[^>]*\bname="moneyAccountId"[^>]*>[\s\S]*?<\/select>/g)].map((m) => m[0]);
-    expect(selects.length, 'the card has money-account selects (add form at least)').toBeGreaterThan(0);
+    expect(selects.length, 'the card has money-account selects (its records at least)').toBeGreaterThan(0);
     for (const s of selects) {
       expect(plain(s), 'a cash drawer is not a wallet account').not.toContain('Cashier drawer');
     }
-    expect(plain(selectOf(addBox(card), 'moneyAccountId') ?? ''), 'the add form offers the bank account').toContain('BPI');
+    expect(plain(selects.join(' ')), 'the records offer the bank account').toContain('BPI');
     // Red on HEAD: `listMoneyAccounts` is unfiltered, so "Cashier drawer" is offered. Mutant: drop the instrument filter -> red.
   });
 
-  it('W2b: the label reads "Money account (wallets only)" with the sharing hint', async () => {
+  it('W2b: the label reads "Money account" with the sharing hint', async () => {
     const f = await fixture('w2b');
-    const text = plain(addBox(cardOf(await render(f), f.storeId)));
-    expect(text).toContain('Money account (wallets only)');
-    expect(text).toContain('Two wallets may pay into the same account');
+    const lipa = cardOf(await render(f), f.storeId);
+    const text = plain(recordForm(lipa, f.qrTender)!);
+    expect(text).toContain('Money account');
+    expect(text).toContain('Two options may pay into the same account');
+    expect(plain(recordForm(lipa, f.cashTenderId)!), 'a cash record has no money account field').not.toContain('Money account');
   });
 
   it('W2c: a store with no bank or e-wallet account says so and links to /money-accounts', async () => {
@@ -365,36 +389,37 @@ describe('W3 - feedback lands on the store card (R7, DEF-612)', () => {
 
   it('W3d (control, green on HEAD): a refused create redirects to #store-<that store>, with no typed value in the URL', async () => {
     const f = await fixture('w3d');
-    const r = await act('createTenderAction', f.superAdmin, { storeId: f.otherId, name: 'Maya', kind: '' });
-    expect(r.signal.url.endsWith(`#store-${f.otherId}`)).toBe(true);
-    expect(r.signal.url, 'I3: no typed value in the URL').not.toContain('Maya');
+    const r = await act('switchOnPaymentOptionAction', f.superAdmin, { storeId: f.bareId, paymentOptionId: await optionIdOf(f.orgId, 'QRPH'), posV1Alias: 'TypedQrAlias' });
+    expect(r.signal.url.endsWith(`#store-${f.bareId}`)).toBe(true);
+    expect(r.signal.url, 'I3: no typed value in the URL').not.toContain('TypedQrAlias');
   });
 });
 
 // ---------------------------------------------------------------------------------------------------------------
 describe('W4 - every ok sentence names the tender (R7)', () => {
-  it('W4: "Maya added.", "<new name> saved.", "<name> retired.", "<name> restored."', async () => {
+  it('W4: "Maya switched on.", "<name> saved.", "<name> switched off.", "<name> switched on." (the name is the option\'s, read back from the saved row)', async () => {
     const f = await fixture('w4');
-    const add = await act('createTenderAction', f.superAdmin, {
-      storeId: f.storeId, name: 'Maya', kind: 'wallet', moneyAccountId: f.bpi, posV1Alias: 'Maya',
+    await sql`insert into payment_options (org_id, name, kind, sort_order) values (${f.orgId}, 'Maya', 'wallet', 90)`;
+    const add = await act('switchOnPaymentOptionAction', f.superAdmin, {
+      storeId: f.storeId, paymentOptionId: await optionIdOf(f.orgId, 'Maya'), moneyAccountId: f.bpi, posV1Alias: 'Maya',
     });
     expect(add.outcome.flash.error).toBeUndefined();
-    expect(add.outcome.flash.ok).toBe('Maya added.');
+    expect(add.outcome.flash.ok).toBe('Maya switched on.');
 
     const v0 = await repoVersion(f.bankTender);
     const saved = await act('updateTenderAction', f.superAdmin, {
-      storeId: f.storeId, tenderId: f.bankTender, version: v0, name: 'Bank Xfer', kind: 'wallet', moneyAccountId: f.bpi, posV1Alias: 'Bank Transfer',
+      storeId: f.storeId, tenderId: f.bankTender, version: v0, name: 'Hacked', kind: 'cash', moneyAccountId: f.bpi, posV1Alias: 'Bank Xfer',
     });
-    expect(saved.outcome.flash.ok, 'the name is read back from the saved row, not trusted from the form').toBe('Bank Xfer saved.');
+    expect(saved.outcome.flash.ok, 'the name is read back from the saved row (the option\'s), not trusted from the form').toBe('Bank Transfer saved.');
+    expect((await tenderRow(f.bankTender)).name).toBe('Bank Transfer');
 
     const v1 = await repoVersion(f.bankTender);
-    // T-412: retiring a tender asks for its name (the saved name 'Bank Xfer'); restoring below needs none.
-    const ret = await act('setTenderActiveAction', f.superAdmin, { storeId: f.storeId, tenderId: f.bankTender, version: v1, isActive: 'false', confirmName: 'Bank Xfer' });
-    expect(ret.outcome.flash.ok).toBe('Bank Xfer retired.');
+    // T-412: switching a tender off asks for its name; switching on needs none.
+    const ret = await act('setTenderActiveAction', f.superAdmin, { storeId: f.storeId, tenderId: f.bankTender, version: v1, isActive: 'false', confirmName: 'Bank Transfer' });
+    expect(ret.outcome.flash.ok).toBe('Bank Transfer switched off.');
     const v2 = await repoVersion(f.bankTender);
     const res = await act('setTenderActiveAction', f.superAdmin, { storeId: f.storeId, tenderId: f.bankTender, version: v2, isActive: 'true' });
-    expect(res.outcome.flash.ok).toBe('Bank Xfer restored.');
-    // Red on HEAD: the sentences are "Tender added." / "Tender saved." / "Tender retired." / "Tender restored.".
+    expect(res.outcome.flash.ok).toBe('Bank Transfer switched on.');
   });
 });
 
@@ -509,67 +534,66 @@ describe('W6 - every tender is an EditableRecord (A0 L1, L2, L6)', () => {
     expect(plain(addLink!)).not.toMatch(/Link store|Save link/);
   });
 
-  it('W6e: Retired tenders sit in a closed <details>, each with Restore (a command: keeps its verb), version attached', async () => {
+  it('W6e (T-629): a switched-off tender is an OFF row with Switch on (no "Retired tenders" block); the dialog keeps its money account', async () => {
     const f = await fixture('w6e');
     await sql`update tenders set is_active = false, updated_at = now() where id = ${f.qrTender}`;
     const card = cardOf(await render(f), f.storeId);
-    // Anchored on its summary: the store card is itself a closed <details> (T-568), so "first closed details" is the card.
-    const det = /<details\b(?![^>]*\bopen\b)[^>]*>\s*<summary[^>]*>Retired tenders[\s\S]*?<\/details>/.exec(card)?.[0];
-    expect(det, 'a closed <details> for retired tenders').toBeDefined();
-    expect(plain(det!)).toMatch(/Retired tenders \(1\)/);
-    expect(plain(det!)).toContain('Restore');
-    expect(det!, 'Restore is not a locked field').not.toContain('<fieldset disabled');
-    expect(det!).toContain(`value="${await repoVersion(f.qrTender)}"`);
-    expect(card.slice(0, card.indexOf('Retired tenders')), 'the retired one is not in the active list').not.toContain('aria-label="Edit QRPH"');
+    expect(plain(card)).not.toMatch(/Retired tenders/);
+    expect(plain(card)).toMatch(/QRPH\s+Paid to an account\s+Off(?![A-Za-z])/);
+    const form = switchOnForm(card, await optionIdOf(f.orgId, 'QRPH'))!;
+    expect(form).toBeDefined();
+    expect(selectOf(form, 'moneyAccountId')!, 'the old account is preselected').toMatch(new RegExp(`<option[^>]*value="${f.bpi}"[^>]*selected`));
+    expect(card, 'the off one has no Edit, only Switch on').not.toContain('aria-label="Edit QRPH"');
   });
 });
 
 // ---------------------------------------------------------------------------------------------------------------
-describe('W7 - Kind can be corrected in place (R3, R5)', () => {
-  it('W7a: the edit form shows Name, Kind, Money account and POS name, inside the fieldset', async () => {
+describe('W7 - a store edits only its own side of a tender (T-629: name and kind are the option\'s)', () => {
+  it('W7a: the record form shows Money account (wallets) and POS name inside the fieldset, and no Name or Kind', async () => {
     const f = await fixture('w7a');
-    const form = recordForm(cardOf(await render(f), f.storeId), f.cashTenderId)!;
-    expect(form).toBeDefined();
-    expect(form.indexOf('<fieldset'), 'the fields are in a fieldset').toBeGreaterThanOrEqual(0);
-    const inside = form.slice(form.indexOf('<fieldset'));
-    for (const n of ['name', 'kind', 'moneyAccountId', 'posV1Alias']) {
-      expect(inside, `${n} is in the fieldset`).toMatch(new RegExp(`name="${n}"`));
-    }
-    expect(selectOf(inside, 'kind'), "the cash tender's kind reads cash").toMatch(/<option[^>]*value="cash"[^>]*selected/);
+    const card = cardOf(await render(f), f.storeId);
+    const wallet = recordForm(card, f.qrTender)!;
+    const inside = wallet.slice(wallet.indexOf('<fieldset'));
+    expect(wallet.indexOf('<fieldset'), 'the fields are in a fieldset').toBeGreaterThanOrEqual(0);
+    for (const n of ['moneyAccountId', 'posV1Alias']) expect(inside, `${n} is in the fieldset`).toMatch(new RegExp(`name="${n}"`));
+    for (const n of ['name', 'kind']) expect(inside, `${n} is not editable here`).not.toMatch(new RegExp(`name="${n}"`));
     const accts = plain(selectOf(inside, 'moneyAccountId') ?? '');
-    expect(accts, 'a cash tender can still be switched to a wallet: accounts offered').toContain('BPI');
+    expect(accts).toContain('BPI');
     expect(accts).not.toContain('Cashier drawer');
+    const cash = recordForm(card, f.cashTenderId)!;
+    expect(cash.slice(cash.indexOf('<fieldset'))).not.toMatch(/name="moneyAccountId"/);
   });
 
-  it('W7b (control, green on HEAD): kind wallet + BPI on a cash tender -> ok and the row is a wallet', async () => {
+  it('W7b (control): a money account sent for a CASH tender is refused in words; the row is unchanged', async () => {
     const f = await fixture('w7b');
     const r = await act('updateTenderAction', f.superAdmin, {
-      storeId: f.storeId, tenderId: f.cashTenderId, version: await repoVersion(f.cashTenderId), name: 'Cash', kind: 'wallet', moneyAccountId: f.bpi, posV1Alias: 'Cash',
+      storeId: f.storeId, tenderId: f.cashTenderId, version: await repoVersion(f.cashTenderId), moneyAccountId: f.bpi, posV1Alias: 'Cash',
     });
-    expect(r.outcome.flash.error).toBeUndefined();
+    expect(r.outcome.flash.error).toBe('A cash tender has no money account.');
     const row = await tenderRow(f.cashTenderId);
-    expect(row.kind).toBe('wallet');
-    expect(row.money_account_id).toBe(f.bpi);
-  });
-
-  it('W7c (control): kind cash on a wallet clears the account even though the form still submits the select', async () => {
-    const f = await fixture('w7c');
-    const r = await act('updateTenderAction', f.superAdmin, {
-      storeId: f.storeId, tenderId: f.bankTender, version: await repoVersion(f.bankTender), name: 'Bank Transfer', kind: 'cash', moneyAccountId: f.bpi, posV1Alias: 'Bank Transfer',
-    });
-    expect(r.outcome.flash.error).toBeUndefined();
-    const row = await tenderRow(f.bankTender);
     expect(row.kind).toBe('cash');
     expect(row.money_account_id).toBeNull();
+  });
+
+  it('W7c (control): a name or kind posted with the form is ignored; the wallet moves to the new account and stays a wallet with the option\'s name', async () => {
+    const f = await fixture('w7c');
+    const before = await tenderRow(f.bankTender);
+    const r = await act('updateTenderAction', f.superAdmin, {
+      storeId: f.storeId, tenderId: f.walletTenderId, version: await repoVersion(f.walletTenderId), name: 'Hacked', kind: 'cash', moneyAccountId: f.bpi, posV1Alias: 'GCash',
+    });
+    expect(r.outcome.flash.error).toBeUndefined();
+    const row = await tenderRow(f.walletTenderId);
+    expect(row).toMatchObject({ name: 'GCash', kind: 'wallet', money_account_id: f.bpi });
+    expect(before.name).toBe('Bank Transfer');
   });
 
   it("W7d (control): a stale version is refused in the domain's words and the row is unchanged", async () => {
     const f = await fixture('w7d');
     const v = await repoVersion(f.cashTenderId);
-    await act('updateTenderAction', f.superAdmin, { storeId: f.storeId, tenderId: f.cashTenderId, version: v, name: 'Cash A', kind: 'cash', posV1Alias: 'Cash' });
-    const stale = await act('updateTenderAction', f.superAdmin, { storeId: f.storeId, tenderId: f.cashTenderId, version: v, name: 'Cash B', kind: 'cash', posV1Alias: 'Cash' });
+    await act('updateTenderAction', f.superAdmin, { storeId: f.storeId, tenderId: f.cashTenderId, version: v, posV1Alias: 'Cash A' });
+    const stale = await act('updateTenderAction', f.superAdmin, { storeId: f.storeId, tenderId: f.cashTenderId, version: v, posV1Alias: 'Cash B' });
     expect(stale.outcome.flash.error).toBe(STALE);
-    expect((await tenderRow(f.cashTenderId)).name).toBe('Cash A');
+    expect((await tenderRow(f.cashTenderId)).pos_v1_alias).toBe('Cash A');
     // Mutant: the action omits expectedVersion -> the second save lands, red.
   });
 });
@@ -579,7 +603,7 @@ describe('W8 - a blank POS name clears the alias (R8)', () => {
   it('W8: Save with a blank POS name clears it, and the mapping row then reads "No POS name"; the field says so', async () => {
     const f = await fixture('w8');
     const r = await act('updateTenderAction', f.superAdmin, {
-      storeId: f.storeId, tenderId: f.qrTender, version: await repoVersion(f.qrTender), name: 'QRPH', kind: 'wallet', moneyAccountId: f.bpi, posV1Alias: '',
+      storeId: f.storeId, tenderId: f.qrTender, version: await repoVersion(f.qrTender), moneyAccountId: f.bpi, posV1Alias: '',
     });
     expect(r.outcome.flash.error).toBeUndefined();
     expect((await tenderRow(f.qrTender)).pos_v1_alias).toBeNull();
@@ -613,9 +637,9 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
   // BEHAVIOURAL: they say only what the user must see, however it is built.
   async function refused(f: F) {
     const v = await repoVersion(f.cashTenderId);
-    await act('updateTenderAction', f.superAdmin, { storeId: f.storeId, tenderId: f.cashTenderId, version: v, name: 'Cash A', kind: 'cash', posV1Alias: 'Cash' });
+    await act('updateTenderAction', f.superAdmin, { storeId: f.storeId, tenderId: f.cashTenderId, version: v, posV1Alias: 'Cash A' });
     return act('updateTenderAction', f.superAdmin, {
-      storeId: f.storeId, tenderId: f.cashTenderId, version: v, name: 'Typed Name Zed', kind: 'cash', posV1Alias: 'TypedAliasQ',
+      storeId: f.storeId, tenderId: f.cashTenderId, version: v, posV1Alias: 'TypedAliasQ',
     });
   }
 
@@ -629,7 +653,7 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
   /** A refusal that is NOT a stale version: a wallet pointed at the cash drawer (R6), with the CURRENT version. */
   async function refusedNonStale(f: F) {
     return act('updateTenderAction', f.superAdmin, {
-      storeId: f.storeId, tenderId: f.walletTenderId, version: await repoVersion(f.walletTenderId), name: 'Typed Name Zed', kind: 'wallet',
+      storeId: f.storeId, tenderId: f.walletTenderId, version: await repoVersion(f.walletTenderId),
       moneyAccountId: f.drawer, posV1Alias: 'TypedAliasQ',
     });
   }
@@ -655,7 +679,7 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     expect(p.t).toMatchObject({
       form: 'tender.edit',
       record: f.walletTenderId,
-      fields: { name: 'Typed Name Zed', kind: 'wallet', moneyAccountId: f.drawer, posV1Alias: 'TypedAliasQ' },
+      fields: { moneyAccountId: f.drawer, posV1Alias: 'TypedAliasQ' },
     });
     expect(Object.keys(p.keep), 'the tender keep keys are gone').toEqual([]);
     expect(decodeURIComponent(r.signal.url), 'and nothing typed is in the address').not.toMatch(/Typed|Zed/);
@@ -667,8 +691,8 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     expect(form, 'reopened: not disabled').not.toContain('<fieldset disabled');
     expect(form, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*(?:aria-label="Save"[^>]*>|>(?:\s*<[^>]+>)*\s*Save\s*(?:<[^>]+>\s*)*<\/button>)/);
     expect(form).toContain('aria-label="Cancel"'); // T-448: Cancel is an icon button
-    expect(form, 'the page draws the STORED value (so Cancel restores it) ...').toContain(`value="${stored.name}"`);
-    expect(form, '... and never a typed one: the browser applies the typing (R3)').not.toContain('Typed Name Zed');
+    expect(form, 'the page draws the STORED value (so Cancel restores it) ...').toContain(`value="${stored.pos_v1_alias}"`);
+    expect(form, '... and never a typed one: the browser applies the typing (R3)').not.toContain('TypedAliasQ');
     expect(form).not.toContain('TypedAliasQ');
     expect(tenderRecordProps(f.walletTenderId)?.typed, 'the record is handed the typing').toEqual({ kind: 'typed', fields: p.t!.fields });
     // Other tenders: handed nothing, rendered locked.
@@ -684,8 +708,8 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     const f = await fixture('x4');
     const stored = await tenderRow(f.walletTenderId);
     const r = await act('updateTenderAction', f.superAdmin, {
-      storeId: f.storeId, tenderId: f.walletTenderId, version: await repoVersion(f.walletTenderId), name: 'N'.repeat(5000), kind: 'wallet',
-      moneyAccountId: f.drawer, posV1Alias: 'TypedAliasQ',
+      storeId: f.storeId, tenderId: f.walletTenderId, version: await repoVersion(f.walletTenderId),
+      moneyAccountId: f.drawer, posV1Alias: 'N'.repeat(5000),
     });
     expect(r.outcome.flash.error, 'a real refusal').toBeTruthy();
     const p = await cookiePayload();
@@ -694,7 +718,7 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     const card = cardOf(await render(f, pageParamsOf(r.signal.url)), f.storeId);
     const form = recordForm(card, f.walletTenderId)!;
     expect(form).toContain('<fieldset disabled');
-    expect(form).toContain(`value="${stored.name}"`);
+    expect(form).toContain(`value="${stored.pos_v1_alias}"`);
     // T-448: the locked record's sentence sits beside the Edit button, outside the form (which is in a closed dialog).
     expect(plain(card)).toContain('What you typed was too long to keep. This shows what is saved. Press Edit and enter your change again.');
     expect(tenderRecordProps(f.walletTenderId)?.typed).toEqual({ kind: 'dropped' });
@@ -739,10 +763,10 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     // Mutant: typedFor ignores the form key -> the tenders reopen too, red.
   });
 
-  it('Z2 (T-389 audit): a refused CREATE (add form, not an EditableRecord) and a refused LINK of an unlinked store set no typed slot', async () => {
+  it('Z2 (T-389 audit): a refused SWITCH ON (a dialog form, not an EditableRecord) and a refused LINK of an unlinked store set no typed slot', async () => {
     const f = await fixture('z2');
-    const c = await act('createTenderAction', f.superAdmin, { storeId: f.storeId, name: 'Maya', kind: '', moneyAccountId: '', posV1Alias: 'Maya' });
-    expect(c.outcome.flash.error, 'a refusal').toBe(NEED_KIND);
+    const c = await act('switchOnPaymentOptionAction', f.superAdmin, { storeId: f.bareId, paymentOptionId: await optionIdOf(f.orgId, 'QRPH'), moneyAccountId: '', posV1Alias: 'QRPH' });
+    expect(c.outcome.flash.error, 'a refusal').toBe(NEED_ACCOUNT);
     let p = await cookiePayload();
     expect(p.t, 'create sets no t').toBeUndefined();
     expect(p.td).toBeUndefined();
@@ -756,7 +780,7 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     p = await cookiePayload();
     expect(p.t, 'linking an unlinked store (an add form) sets no t').toBeUndefined();
     expect(p.td).toBeUndefined();
-    // Mutant: wire keepTyping into createTenderAction / the unlinked link -> t present, red.
+    // Mutant: wire keepTyping into switchOnPaymentOptionAction / the unlinked link -> t present, red.
   });
 
   it('Y3 (audit fix, DEF-617 vs stale): after a STALE refusal the tender renders LOCKED with the stored values (the other user change) - no typed values, no new version for a blind second Save', async () => {
@@ -769,7 +793,6 @@ describe('X - DEF-617: a refused save keeps what was typed and reopens in edit m
     expect(form).toBeDefined();
     expect(form, 'locked: the user must look at what was saved before editing again').toContain('<fieldset disabled');
     expect(form, 'the other user change is what is shown').toContain('value="Cash A"');
-    expect(form, 'the typed name is dropped').not.toContain('Typed Name Zed');
     expect(form, 'the typed POS name is dropped').not.toContain('TypedAliasQ');
     expect(form, 'no Save showing').not.toMatch(/<button[^>]*type="submit"/);
     // Red on HEAD: the record reopens in edit mode holding the typed values (initialMode=editing), carrying the fresh version.
@@ -791,25 +814,25 @@ describe('Y - audit fix: the ok-sentence name lookup must never undo the write',
     h.readCalls = 0;
     h.failReadFrom = 2; // call 1 is the domain's own peek; every later read (the action's name lookup) fails
     try {
-      const r = await act('updateTenderAction', f.superAdmin, { storeId: f.storeId, tenderId: f.cashTenderId, version: v, name: 'Cash Renamed', kind: 'cash', posV1Alias: 'Cash' });
+      const r = await act('updateTenderAction', f.superAdmin, { storeId: f.storeId, tenderId: f.cashTenderId, version: v, posV1Alias: 'Cash Renamed' });
       expect(r.outcome.flash.error, 'no refusal: the write was valid (HEAD: the aborted transaction fails at COMMIT, a bogus database error)').toBeUndefined();
       expect(r.outcome.flash.ok ?? '', 'the user is told it saved').toMatch(/saved\.$/);
-      expect((await tenderRow(f.cashTenderId)).name, 'and it really is saved (HEAD: the aborted transaction rolled it back)').toBe('Cash Renamed');
+      expect((await tenderRow(f.cashTenderId)).pos_v1_alias, 'and it really is saved (HEAD: the aborted transaction rolled it back)').toBe('Cash Renamed');
     } finally {
       h.failReadFrom = 0;
     }
     // Mutant: lookup inside the write transaction with a swallowed error -> COMMIT of an aborted transaction is a ROLLBACK, red.
   });
 
-  it('Y2 (same hazard on the add path): a failing read-back after createTender still leaves the new tender in the table', async () => {
+  it('Y2 (same hazard on the switch-on path): a failing read-back after switchOnPaymentOption still leaves the tender switched on', async () => {
     const f = await fixture('y2');
-    const before = await tenderCount(f.storeId);
+    await sql`update tenders set is_active = false, updated_at = now() where id = ${f.qrTender}`;
     h.readCalls = 0;
     h.failReadFrom = 1;
     try {
-      const r = await act('createTenderAction', f.superAdmin, { storeId: f.storeId, name: 'Maya', kind: 'wallet', moneyAccountId: f.bpi, posV1Alias: 'Maya' });
+      const r = await act('switchOnPaymentOptionAction', f.superAdmin, { storeId: f.storeId, paymentOptionId: await optionIdOf(f.orgId, 'QRPH'), moneyAccountId: f.bpi, posV1Alias: 'QRPH' });
       expect(r.outcome.flash.error).toBeUndefined();
-      expect(await tenderCount(f.storeId), 'the tender exists').toBe(before + 1);
+      expect((await tenderRow(f.qrTender)).is_active, 'the tender is on').toBe(true);
     } finally {
       h.failReadFrom = 0;
     }

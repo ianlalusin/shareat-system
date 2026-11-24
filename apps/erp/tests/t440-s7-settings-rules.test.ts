@@ -61,6 +61,8 @@ const ROWS: Record<string, Row> = {
   'settings.addLeaveType.label': { ok: 'Study leave', bad: [[BLANK, KIND]], blank: KIND },
   'settings.addLeaveType.code': { ok: 'study_2', bad: [['x', KIND], ['1abc', KIND], ['a-b', KIND]], blank: KIND },
   'settings.expenseCategory.category': { ok: 'Scooter rental', bad: [[BLANK, 'A category needs a name.']], blank: 'A category needs a name.' },
+  'settings.paymentOption.name': { ok: 'Maya', bad: [[BLANK, 'Give the payment option a name of at most 40 characters.'], ['x'.repeat(41), 'Give the payment option a name of at most 40 characters.']], blank: 'Give the payment option a name of at most 40 characters.' },
+  'settings.paymentOption.kind': { ok: 'wallet', bad: [[BLANK, 'Choose Cash or Paid to an account.']], blank: 'Choose Cash or Paid to an account.' },
   'settings.salesChannel.name': { ok: 'Grab', bad: [[BLANK, 'A sales channel needs a name.']], blank: 'A sales channel needs a name.' },
   'settings.storeSettlement.storeKey': {
     ok: 'lipa',
@@ -81,8 +83,6 @@ const ROWS: Record<string, Row> = {
   'settings.unlinkStoreFromPos.reason': { ok: 'Moved to a new POS', bad: [[BLANK, UNLINK], ['q'.repeat(501), UNLINK]], blank: UNLINK },
   'settings.setSalesChannelPlatformCode.platform': { ok: 'grab', bad: [['amazon', 'Choose Grab, Foodpanda, or none.']] },
   'settings.setSalesChannelPlatformCode.code': { ok: 'AB12', bad: [['--', PCODE], ['not a code!', PCODE]] },
-  'settings.tender.name': { ok: 'GCash', bad: [[BLANK, 'Give the tender a name.']], blank: 'Give the tender a name.' },
-  'settings.tender.kind': { ok: 'wallet', bad: [[BLANK, 'Choose whether this tender is cash or a wallet.']], blank: 'Choose whether this tender is cash or a wallet.' },
   // T-512 (T-511 S5c, 6 Nov 2026): the business-rule change form. The value's bounds are per rule (the registry) and are judged by setBusinessRule, not here.
   'settings.setBusinessRule.value': { ok: '12.5', bad: [['abc', BRULE], ['1.234', BRULE], ['-1', BRULE]], blank: BRULE },
   'settings.setBusinessRule.effectiveFrom': { ok: '2999-12-31', bad: [['soon', 'The start day must be a real date.'], ['2000-01-01', "The start day can't be before today."]] },

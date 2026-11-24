@@ -10,14 +10,24 @@
 import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
 import { posV1Repo, storesRepo } from '@shareat/db';
-import { assertFieldRules, createTender, linkStoreToPos, setTenderActive, unlinkStoreFromPos, updateTender } from '@shareat/domain';
+import {
+  assertFieldRules,
+  createPaymentOption,
+  linkStoreToPos,
+  setPaymentOptionStatus,
+  setTenderActive,
+  switchOnPaymentOption,
+  unlinkStoreFromPos,
+  updatePaymentOption,
+  updateTender,
+} from '@shareat/domain';
 import { SETTINGS_POS_UNLINK_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '../../../lib/flash';
 import { keepTyping } from '../../../lib/keep-typing';
 import { posStoreOptions, withOrgPrincipal } from './lib';
-import { POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
+import { PAYMENT_OPTION_EDIT, POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
 import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
 import { retypeMatches } from '@/lib/retype';
 
@@ -85,7 +95,7 @@ export async function linkStoreToPosAction(fd: FormData): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Tenders (T-375 S2). Same rule: createTender, updateTender and setTenderActive each call
+// Tenders (T-375 S2; T-629: a tender is a store's switch for a master payment option). Same rule: switchOnPaymentOption, updateTender and setTenderActive each call
 // authorize(tx, actor, 'manage_chart_of_accounts', ...) first and own every sentence.
 // ---------------------------------------------------------------------------------------------
 /**
@@ -101,17 +111,16 @@ async function savedName(orgId: string, tenderId: string): Promise<string> {
   }
 }
 
-export async function createTenderAction(fd: FormData): Promise<void> {
+/** T-629: switch a master payment option on at a store (a wallet names the store's money account). */
+export async function switchOnPaymentOptionAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/settings/pos-link');
   const storeId = str(fd, 'storeId');
-  let name = 'Tender';
+  let name = 'Payment option';
   try {
-    const kind = str(fd, 'kind');
     const { id } = await withOrgPrincipal(actor.orgId, async (tx) =>
-      createTender(tx, actor, {
+      switchOnPaymentOption(tx, actor, {
         storeId,
-        name: str(fd, 'name'),
-        kind: kind as 'cash' | 'wallet', // R4: never decided here; a blank or unknown kind is the domain's to refuse
+        paymentOptionId: str(fd, 'paymentOptionId'),
         moneyAccountId: str(fd, 'moneyAccountId') || null,
         posV1Alias: str(fd, 'posV1Alias') || null,
       }),
@@ -121,7 +130,7 @@ export async function createTenderAction(fd: FormData): Promise<void> {
     return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }
   revalidatePath('/settings/pos-link');
-  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${name} added.` }, { anchor: anchorOf(storeId) });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${name} switched on.` }, { anchor: anchorOf(storeId) });
 }
 
 export async function updateTenderAction(fd: FormData): Promise<void> {
@@ -131,19 +140,15 @@ export async function updateTenderAction(fd: FormData): Promise<void> {
   let name = 'Tender';
   try {
     const accountId = str(fd, 'moneyAccountId');
-    const kind = str(fd, 'kind');
     const version = str(fd, 'version');
     if (!version) throw new Error(STALE_SENTENCE);
-    // R5: the account is forwarded only for a wallet (the form always submits the select); a cash result sends none
-    // and the domain clears it. A form with no kind field keeps the old behaviour.
+    // T-629: the name and kind are the payment option's; only the store's own money account (a wallet's: a cash form sends none) and POS name move here.
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await updateTender(tx, actor, {
         tenderId,
         expectedVersion: version,
-        name: str(fd, 'name'),
         posV1Alias: str(fd, 'posV1Alias') || null,
-        ...(kind ? { kind: kind as 'cash' | 'wallet' } : {}),
-        ...(kind === 'cash' ? {} : accountId ? { moneyAccountId: accountId } : {}),
+        ...(accountId ? { moneyAccountId: accountId } : {}),
       });
     });
     name = await savedName(actor.orgId, tenderId);
@@ -184,7 +189,58 @@ export async function setTenderActiveAction(fd: FormData): Promise<void> {
     return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { error: errorMessage(err) }, { anchor: anchorOf(storeId) });
   }
   revalidatePath('/settings/pos-link');
-  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${name} ${isActive ? 'restored' : 'retired'}.` }, { anchor: anchorOf(storeId) });
+  return await redirectWithFlash('/settings/pos-link', storeId ? { store: storeId } : {}, { ok: `${name} ${isActive ? 'switched on' : 'switched off'}.` }, { anchor: anchorOf(storeId) });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Payment options (T-629): the org's master list. createPaymentOption, updatePaymentOption and setPaymentOptionStatus each call
+// authorize(tx, actor, 'manage_chart_of_accounts', {}) first and own every sentence. The feedback lands on the master section.
+// ---------------------------------------------------------------------------------------------
+const OPTIONS_ANCHOR = 'payment-options';
+
+export async function createPaymentOptionAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/pos-link');
+  let name = 'Payment option';
+  try {
+    const made = await withOrgPrincipal(actor.orgId, (tx) => createPaymentOption(tx, actor, { name: str(fd, 'name'), kind: str(fd, 'kind') as 'cash' | 'wallet' }));
+    name = (await withOrgPrincipal(actor.orgId, (tx) => posV1Repo.getPaymentOptionById(tx, actor.orgId, made.id)))?.name ?? name;
+  } catch (err) {
+    return await redirectWithFlash('/settings/pos-link', {}, { error: errorMessage(err) }, { anchor: OPTIONS_ANCHOR });
+  }
+  revalidatePath('/settings/pos-link');
+  return await redirectWithFlash('/settings/pos-link', {}, { ok: `${name} added to the payment options.` }, { anchor: OPTIONS_ANCHOR });
+}
+
+export async function updatePaymentOptionAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/pos-link');
+  const paymentOptionId = str(fd, 'paymentOptionId');
+  try {
+    const kind = str(fd, 'kind');
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      updatePaymentOption(tx, actor, { paymentOptionId, name: str(fd, 'name'), ...(kind ? { kind: kind as 'cash' | 'wallet' } : {}) }),
+    );
+  } catch (err) {
+    return await redirectWithFlash(
+      '/settings/pos-link',
+      {},
+      { error: errorMessage(err), typed: keepTyping(fd, PAYMENT_OPTION_EDIT, paymentOptionId, { actorId: actor.personId, stale: false }) },
+      { anchor: OPTIONS_ANCHOR },
+    );
+  }
+  revalidatePath('/settings/pos-link');
+  return await redirectWithFlash('/settings/pos-link', {}, { ok: 'Payment option saved.' }, { anchor: OPTIONS_ANCHOR });
+}
+
+export async function setPaymentOptionStatusAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/pos-link');
+  const status = str(fd, 'status') === 'retired' ? 'retired' : 'active';
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => setPaymentOptionStatus(tx, actor, { paymentOptionId: str(fd, 'paymentOptionId'), status }));
+  } catch (err) {
+    return await redirectWithFlash('/settings/pos-link', {}, { error: errorMessage(err) }, { anchor: OPTIONS_ANCHOR });
+  }
+  revalidatePath('/settings/pos-link');
+  return await redirectWithFlash('/settings/pos-link', {}, { ok: status === 'retired' ? 'Payment option retired.' : 'Payment option restored.' }, { anchor: OPTIONS_ANCHOR });
 }
 
 // ---------------------------------------------------------------------------------------------

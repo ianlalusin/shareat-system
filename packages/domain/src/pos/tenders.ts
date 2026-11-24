@@ -1,34 +1,28 @@
 /**
- * T-375 S2 (R1, R3, R7) - the tender master. `docs/tasks/375-pos-v1-day-feed.md` S2.
+ * T-375 S2 (R1, R3, R7) - the store's tenders; T-629 (migration 0277) - a store tender IS the store's switch for one of the org's PAYMENT OPTIONS.
+ * `docs/tasks/629-payment-options-master-list.md`.
  *
- * A tender is what the till sells against (ADR-015 section 7); `pos_v1_alias` is how POS v1 names it, and its
- * normalized form is the identity among a store's ACTIVE tenders (R3). Capability `manage_chart_of_accounts` on the
- * store: where money is booked is not a manager's setting. `authorize()` comes first (I1).
+ * The option (`payment_options`, org-level, `pos/payment-options.ts`) owns the NAME and the KIND; the tender's own `name` / `kind` are a mirror the
+ * database keeps equal. The store owns the rest: the money account (a wallet's, one of THIS store's active accounts), its POS v1 alias and whether it is
+ * switched on. `pos_v1_alias`, normalized (lowercase, a-z0-9 only), is the identity among a store's ACTIVE tenders (R3).
  *
- * A wallet's money account must be an ACTIVE account of THIS store (the composite FK only proves the org).
+ * Capability `manage_chart_of_accounts` on the store: where money is booked is not a manager's setting. `authorize()` comes first (I1).
  * Every write is audited against entity `tenders`.
  */
 import { auditLogRepo, moneyAccountsRepo, posV1Repo, type Tx } from '@shareat/db';
-import { TENDER_KINDS, type TenderKind } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { gone, refuse } from '../shared/refusal';
-import { assertFieldRules } from '../shared/field-rules-assert';
-import { SETTINGS_TENDER_RULES } from '../field-rules/settings';
 import { normalizePosV1Alias } from './v1-methods';
 
 const CAPABILITY = 'manage_chart_of_accounts' as const;
-
-/** The tender screen's rules, as one set for an update (the same two rules the add form shows). */
-const TENDER_UPDATE_RULES = { form: SETTINGS_TENDER_RULES.form, name: SETTINGS_TENDER_RULES.name, kind: SETTINGS_TENDER_RULES.kind };
 
 const ACCOUNT_SENTENCE = "That money account isn't one of this store's.";
 
 const STALE_SENTENCE = 'This tender was changed after this page was opened. The page now shows what is saved. Check it and save again.';
 
-export interface CreateTenderInput {
+export interface SwitchOnPaymentOptionInput {
   readonly storeId: string;
-  readonly name: string;
-  readonly kind: TenderKind;
+  readonly paymentOptionId: string;
   readonly moneyAccountId?: string | null;
   readonly posV1Alias?: string | null;
 }
@@ -37,13 +31,11 @@ export interface UpdateTenderInput {
   readonly tenderId: string;
   /** R1: the version the page was drawn with; a write against a changed row is refused. */
   readonly expectedVersion?: string;
-  readonly name?: string;
-  readonly kind?: TenderKind;
   readonly posV1Alias?: string | null;
   readonly moneyAccountId?: string | null;
 }
 
-/** '' and whitespace are no alias; an alias that normalizes to nothing is refused in words. */
+/** An empty or whitespace alias is no alias; an alias that normalizes to nothing is refused in words. */
 function cleanAlias(raw: string | null | undefined): string | null {
   if (raw == null) return null;
   const alias = raw.trim();
@@ -99,56 +91,70 @@ function translate(err: unknown, name: string, alias: string | null): never {
   if (c === 'tenders_store_alias_active_unique') {
     throw refuse(`tenders: ${c}`, `Another tender of this store already answers to "${alias ?? ''}" from POS.`);
   }
-  if (c === 'tenders_store_name_unique') {
-    throw refuse(`tenders: ${c}`, `This store already has a tender called "${name}".`);
+  if (c === 'tenders_store_payment_option_unique' || c === 'tenders_store_name_unique') {
+    throw refuse(`tenders: ${c}`, `${name} is already switched on at this store.`);
   }
   throw err;
 }
 
-export async function createTender(tx: Tx, actor: Actor, input: CreateTenderInput): Promise<{ id: string }> {
+/**
+ * T-629: switch an option ON at a store. A store holds one tender per option (a unique): a first switch-on makes the row, a later one after a
+ * switch-off turns the same row back on, and an option that is already on is refused in words. A wallet option needs one of THIS store's active
+ * bank or e-wallet accounts; a cash option has none. A retired option cannot be switched on.
+ */
+export async function switchOnPaymentOption(tx: Tx, actor: Actor, input: SwitchOnPaymentOptionInput): Promise<{ id: string }> {
   await authorize(tx, actor, CAPABILITY, { storeId: input.storeId });
 
-  // T-440: the name and the kind choice are ONE rule set shared with the POS link screen (field-rules/settings.ts).
-  const checked = assertFieldRules(SETTINGS_TENDER_RULES, { name: input.name, kind: input.kind });
-  const name = checked.name ?? '';
-  if (!(TENDER_KINDS as readonly string[]).includes(input.kind)) {
-    throw refuse(`tenders: unknown kind ${String(input.kind)}`, 'Choose whether this tender is cash or a wallet.');
+  const option = await posV1Repo.getPaymentOptionById(tx, actor.orgId, input.paymentOptionId);
+  if (!option) throw gone(`tenders: payment option ${input.paymentOptionId} not in org`, 'payment option');
+  if (option.status === 'retired') {
+    throw refuse(`tenders: payment option ${option.id} is retired`, `${option.name} is retired. An admin brings it back under Settings > Payment options first.`);
   }
-  const alias = cleanAlias(input.posV1Alias);
-  const moneyAccountId = input.moneyAccountId ?? null;
-  if (input.kind === 'wallet') {
-    if (!moneyAccountId) throw refuse('tenders: wallet without a money account', 'A wallet tender needs the money account it pays into.');
+  const existing = await posV1Repo.findTenderByOption(tx, actor.orgId, input.storeId, option.id);
+  if (existing?.isActive) throw refuse(`tenders: ${option.name} already on at store ${input.storeId}`, `${option.name} is already switched on at this store.`);
+
+  const alias = input.posV1Alias === undefined && existing ? existing.posV1Alias : cleanAlias(input.posV1Alias);
+  const moneyAccountId = input.moneyAccountId === undefined && existing ? existing.moneyAccountId : (input.moneyAccountId ?? null);
+  if (option.kind === 'wallet') {
+    if (!moneyAccountId) throw refuse('tenders: wallet without a money account', `${option.name} needs the money account it pays into at this store.`);
     await assertStoreAccount(tx, actor.orgId, input.storeId, moneyAccountId);
   } else if (moneyAccountId) {
     throw refuse('tenders: cash tender with a money account', 'A cash tender has no money account.');
   }
-  await assertAliasFree(tx, actor.orgId, input.storeId, alias);
+  await assertAliasFree(tx, actor.orgId, input.storeId, alias, existing?.id);
 
   let id: string;
   try {
-    ({ id } = await posV1Repo.insertTender(tx, {
-      orgId: actor.orgId,
-      storeId: input.storeId,
-      name,
-      kind: input.kind,
-      moneyAccountId: input.kind === 'wallet' ? moneyAccountId : null,
-      posV1Alias: alias,
-    }));
+    if (existing) {
+      await posV1Repo.updateTenderRow(tx, actor.orgId, existing.id, { isActive: true, moneyAccountId: option.kind === 'wallet' ? moneyAccountId : null, posV1Alias: alias });
+      id = existing.id;
+    } else {
+      ({ id } = await posV1Repo.insertTender(tx, {
+        orgId: actor.orgId,
+        storeId: input.storeId,
+        paymentOptionId: option.id,
+        name: option.name,
+        kind: option.kind,
+        moneyAccountId: option.kind === 'wallet' ? moneyAccountId : null,
+        posV1Alias: alias,
+      }));
+    }
   } catch (err) {
-    translate(err, name, alias);
+    translate(err, option.name, alias);
   }
 
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
-    action: 'create_tender',
+    action: existing ? 'reactivate_tender' : 'create_tender',
     storeId: input.storeId,
     entityId: id,
-    before: null,
+    before: existing ? { isActive: false } : null,
     after: {
       storeId: input.storeId,
-      name,
-      kind: input.kind,
-      moneyAccountId: input.kind === 'wallet' ? moneyAccountId : null,
+      paymentOptionId: option.id,
+      name: option.name,
+      kind: option.kind,
+      moneyAccountId: option.kind === 'wallet' ? moneyAccountId : null,
       posV1Alias: alias,
     },
     source: 'web',
@@ -171,38 +177,22 @@ function assertFresh(current: string, expected: string | undefined, id: string):
   if (expected !== undefined && expected !== current) throw refuse(`tenders: ${id} version moved`, STALE_SENTENCE);
 }
 
+/** The store's own side of a tender: its money account (a wallet's) and its POS name. The name and kind are the option's and are never edited here. */
 export async function updateTender(tx: Tx, actor: Actor, input: UpdateTenderInput): Promise<void> {
   const before = await loadAndAuthorize(tx, actor, input.tenderId);
   assertFresh(before.version, input.expectedVersion, before.id);
 
-  const patch: { name?: string; kind?: TenderKind; posV1Alias?: string | null; moneyAccountId?: string | null } = {};
-  // T-440: the same rule set as createTender. A field the caller did not send is judged as what is stored (never blank).
-  const checked = assertFieldRules(TENDER_UPDATE_RULES, { name: input.name ?? before.name, kind: input.kind ?? before.kind });
-  if (input.name !== undefined) patch.name = checked.name ?? '';
+  const patch: { posV1Alias?: string | null; moneyAccountId?: string | null } = {};
   if (input.posV1Alias !== undefined) patch.posV1Alias = cleanAlias(input.posV1Alias);
-  if (input.kind !== undefined && !(TENDER_KINDS as readonly string[]).includes(input.kind)) {
-    throw refuse(`tenders: unknown kind ${String(input.kind)}`, 'Choose whether this tender is cash or a wallet.');
-  }
-  const kindChanged = input.kind !== undefined && input.kind !== before.kind;
-  const kind: TenderKind = input.kind ?? before.kind;
-  if (kind === 'wallet') {
-    // A wallet keeps its account unless a new one is given; a cash tender turned wallet must be given one.
-    if (input.moneyAccountId !== undefined || kindChanged) {
-      const accountId = input.moneyAccountId !== undefined ? input.moneyAccountId : null;
-      if (!accountId) {
-        throw refuse('tenders: wallet without a money account', 'A wallet tender needs the money account it pays into.');
-      }
-      if (accountId !== before.moneyAccountId) await assertStoreAccount(tx, actor.orgId, before.storeId, accountId);
-      patch.moneyAccountId = accountId;
+  if (input.moneyAccountId !== undefined) {
+    if (before.kind === 'cash') {
+      if (input.moneyAccountId) throw refuse('tenders: money account on a cash tender', 'A cash tender has no money account.');
+    } else {
+      if (!input.moneyAccountId) throw refuse('tenders: wallet without a money account', 'A wallet tender needs the money account it pays into.');
+      if (input.moneyAccountId !== before.moneyAccountId) await assertStoreAccount(tx, actor.orgId, before.storeId, input.moneyAccountId);
+      patch.moneyAccountId = input.moneyAccountId;
     }
-  } else if (kindChanged) {
-    // Wallet -> cash: the account is cleared (the shape CHECK holds). Naming one is refused.
-    if (input.moneyAccountId) throw refuse('tenders: money account on a cash tender', 'A cash tender has no money account.');
-    patch.moneyAccountId = null;
-  } else if (input.moneyAccountId !== undefined) {
-    throw refuse('tenders: money account on a cash tender', 'A cash tender has no money account.');
   }
-  if (kindChanged) patch.kind = kind;
   if (patch.posV1Alias !== undefined && before.isActive) {
     await assertAliasFree(tx, actor.orgId, before.storeId, patch.posV1Alias, before.id);
   }
@@ -211,7 +201,7 @@ export async function updateTender(tx: Tx, actor: Actor, input: UpdateTenderInpu
   try {
     changed = await posV1Repo.updateTenderRow(tx, actor.orgId, before.id, patch, input.expectedVersion);
   } catch (err) {
-    translate(err, patch.name ?? before.name, patch.posV1Alias ?? before.posV1Alias);
+    translate(err, before.name, patch.posV1Alias ?? before.posV1Alias);
   }
   if (changed === 0 && input.expectedVersion !== undefined) throw refuse(`tenders: ${before.id} version moved`, STALE_SENTENCE);
 
@@ -222,8 +212,8 @@ export async function updateTender(tx: Tx, actor: Actor, input: UpdateTenderInpu
     entityId: before.id,
     before: { name: before.name, kind: before.kind, moneyAccountId: before.moneyAccountId, posV1Alias: before.posV1Alias },
     after: {
-      name: patch.name ?? before.name,
-      kind,
+      name: before.name,
+      kind: before.kind,
       moneyAccountId: patch.moneyAccountId !== undefined ? patch.moneyAccountId : before.moneyAccountId,
       posV1Alias: patch.posV1Alias !== undefined ? patch.posV1Alias : before.posV1Alias,
     },
@@ -237,6 +227,11 @@ export async function setTenderActive(tx: Tx, actor: Actor, input: { tenderId: s
   if (before.isActive === input.isActive) return;
 
   if (input.isActive) {
+    // A retired option cannot be switched on again: the same sentence as switchOnPaymentOption, before the database trigger would refuse it in raw words.
+    const option = await posV1Repo.getPaymentOptionById(tx, actor.orgId, before.paymentOptionId);
+    if (option?.status === 'retired') {
+      throw refuse(`tenders: payment option ${option.id} is retired`, `${option.name} is retired. An admin brings it back under Settings > Payment options first.`);
+    }
     // Reactivating must not put two active tenders on one alias.
     await assertAliasFree(tx, actor.orgId, before.storeId, before.posV1Alias, before.id);
     if (before.moneyAccountId) await assertStoreAccount(tx, actor.orgId, before.storeId, before.moneyAccountId);

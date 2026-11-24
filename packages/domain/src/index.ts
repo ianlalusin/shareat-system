@@ -122,6 +122,7 @@ export * from './pos/v1-feed';
 export * from './pos/store-link';
 // T-424 S5 - register a POS v2 tablet as an ERP terminal person (the manager-approval bucket owner).
 export * from './pos/terminal-link';
+export * from './pos/payment-options';
 export * from './pos/tenders';
 export * from './pos/preflight';
 export * from './pos-soak/soak-checks';

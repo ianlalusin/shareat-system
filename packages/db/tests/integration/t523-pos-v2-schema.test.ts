@@ -24,6 +24,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { APP_ROLE } from '../../src/rls/registry';
 import { asApp, menuFixture, refusal, sql, uid, type PgErr } from './_fixtures/t401-menu';
+import { insertTenderRaw } from './_fixtures/t629-tender';
 
 afterAll(async () => {
   await sql.end({ timeout: 5 });
@@ -116,7 +117,7 @@ async function baseWorld(hint: string) {
   const person2 = await ins('persons', { org_id: f.orgId, display_name: 'Manager' });
   const pairingId = await ins('pos_tablet_pairings', { org_id: f.orgId, store_id: f.storeId, label: 'Tablet 1', cookie_digest: uid('dg'), paired_by: f.personId });
   const pairing2Id = await ins('pos_tablet_pairings', { org_id: f.orgId, store_id: f.store2Id, label: 'Tablet B', cookie_digest: uid('dg'), paired_by: f.personId });
-  const tenderId = await ins('tenders', { org_id: f.orgId, store_id: f.storeId, name: uid('Cash'), kind: 'cash' });
+  const tenderId = await insertTenderRaw(sql, { orgId: f.orgId, storeId: f.storeId, name: uid('Cash'), kind: 'cash' });
   return { ...f, person2, pairingId, pairing2Id, tenderId };
 }
 
@@ -1380,7 +1381,7 @@ describe('test 8 - RLS and the same-org FKs', () => {
     expectCode(await refusal(() => ins('pos_stands', { org_id: a.orgId, store_id: a.storeId, number: 5, created_by: b.personId, created_at: T() })), '23503');
     expectCode(await refusal(async () => line(a, await session(a), { menu_item_id: b.itemId })), '23503'); // menu item of another org
     expectCode(await refusal(() => ins('pos_sales_receipt_payments', paymentRow(a, '00000000-0000-0000-0000-000000000000'))), '23503');
-    const foreignTender = await ins('tenders', { org_id: b.orgId, store_id: b.storeId, name: uid('Cash'), kind: 'cash' });
+    const foreignTender = await insertTenderRaw(sql, { orgId: b.orgId, storeId: b.storeId, name: uid('Cash'), kind: 'cash' });
     await saleTx(a, async ({ tx, receiptId }) => {
       expectCode(await attempt(tx, (q) => insQ(q, 'pos_sales_receipt_payments', paymentRow(a, receiptId, { tender_id: foreignTender }))), '23503');
     });

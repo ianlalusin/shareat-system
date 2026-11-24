@@ -34,6 +34,7 @@ let n = 0;
 function tender(o: Partial<TenderAdminRow> & { name: string }): TenderAdminRow {
   return {
     id: `t-${++n}`,
+    paymentOptionId: 'opt-1',
     kind: 'wallet',
     moneyAccountId: null,
     moneyAccountName: null,

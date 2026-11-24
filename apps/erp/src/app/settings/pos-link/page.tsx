@@ -5,14 +5,34 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash, type FlashFields } from '../../../lib/flash';
 import { typedFor, type TypedView } from '../../../lib/keep-typing';
 import { listStores } from '../../expenses/lib';
-import { createTenderAction, linkStoreToPosAction, setTenderActiveAction, unlinkStoreFromPosAction, updateTenderAction } from './actions';
-import { POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
-import { canUnlink, posLinkRows, posStoreOptions, storeTenders, tenderMapping, type PosLinkStoreRow, type StoreTenders, type TenderAdminRow } from './lib';
+import {
+  createPaymentOptionAction,
+  linkStoreToPosAction,
+  setPaymentOptionStatusAction,
+  setTenderActiveAction,
+  switchOnPaymentOptionAction,
+  unlinkStoreFromPosAction,
+  updatePaymentOptionAction,
+  updateTenderAction,
+} from './actions';
+import { PAYMENT_OPTION_EDIT, POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
+import {
+  canUnlink,
+  paymentOptionRows,
+  posLinkRows,
+  posStoreOptions,
+  storeTenders,
+  tenderMapping,
+  type PaymentOptionAdminRow,
+  type PosLinkStoreRow,
+  type StoreTenders,
+  type TenderAdminRow,
+} from './lib';
 import { Page } from '@/components/shell/Page';
 import { ChevronIcon } from '@/components/shell/icons';
 import { CheckedForm, EditableRecord } from '@/components/forms';
-import { SETTINGS_POS_LINK_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_TENDER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select, Textarea } from '@/components/ui';
+import { SETTINGS_POS_LINK_RULES, SETTINGS_PAYMENT_OPTION_RULES, SETTINGS_POS_UNLINK_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th, NumTd, Textarea } from '@/components/ui';
 import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Link to POS store — Shareat System' };
@@ -39,7 +59,7 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
   const { actor, refusal } = await requirePageAccess('/settings/pos-link');
   if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
-  const [rows, options, mayUnlink] = await Promise.all([posLinkRows(actor, stores), posStoreOptions(), canUnlink(actor)]);
+  const [rows, options, mayUnlink, payOptions] = await Promise.all([posLinkRows(actor, stores), posStoreOptions(), canUnlink(actor), paymentOptionRows(actor)]);
 
   // R7: feedback shows on the card of the store it is about; the top banner only when no card matches.
   const cardShowsFeedback = !!sp.store && rows.some((r) => r.storeId === sp.store);
@@ -65,6 +85,8 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
         </Banner>
       )}
 
+      <PaymentOptionsSection options={payOptions} flash={sp} actorId={actor.personId} />
+
       {rows.length === 0 && (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">This organisation has no stores yet. Create one under Stores first.</p>
       )}
@@ -77,6 +99,7 @@ export default async function PosLinkSettingsPage({ searchParams }: { searchPara
             options={options}
             canUnlink={mayUnlink}
             tenders={await storeTenders(actor, r.storeId, r.link?.posStoreId ?? null)}
+            payOptions={payOptions}
             feedback={sp.store === r.storeId ? { error: sp.error, ok: sp.ok } : null}
             flash={sp}
             actorId={actor.personId}
@@ -91,6 +114,7 @@ function StoreCard({
   row,
   options,
   tenders,
+  payOptions,
   canUnlink,
   feedback,
   flash,
@@ -99,6 +123,7 @@ function StoreCard({
   row: PosLinkStoreRow;
   options: { id: string; name: string }[] | null;
   tenders: StoreTenders;
+  payOptions: readonly PaymentOptionAdminRow[];
   canUnlink: boolean;
   feedback: { error?: string; ok?: string } | null;
   /** T-389: the typed slot of the signed flash. `typedFor` picks the one record whose Save was refused. */
@@ -283,7 +308,7 @@ function StoreCard({
       {feedback && <FlashBanner flash={flash} />}
       {feedback?.ok && <Banner tone="success">{feedback.ok}</Banner>}
 
-      <TendersSection storeId={row.storeId} storeName={row.storeName} linked={!!link} t={tenders} flash={flash} actorId={actorId} />
+      <TendersSection storeId={row.storeId} storeName={row.storeName} linked={!!link} t={tenders} options={payOptions} flash={flash} actorId={actorId} />
       </div>
     </details>
   );
@@ -333,13 +358,167 @@ function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreNa
 const POS_NAME_HINT =
   'Exactly what POS shows for this payment method. Leave it blank if POS has no matching method: this tender then answers to no POS method.';
 const ACCOUNT_HINT =
-  'Leave it blank for cash. Two wallets may pay into the same account — for example Bank Transfer and QRPH into one bank account.';
+  'The bank or e-wallet account this store is paid into. Two options may pay into the same account, for example QRPH and a card machine into one bank account.';
 
+// T-631: the stored kind stays cash | wallet; people read "Cash" or "Paid to an account" (a card is paid to an account too).
+const KIND_TEXT = { cash: 'Cash', wallet: 'Paid to an account' } as const;
+
+function KindPill({ kind }: { kind: keyof typeof KIND_TEXT }) {
+  return <span className="inline-flex rounded-full border border-surface-border bg-canvas px-2 py-0.5 text-xs text-ink">{KIND_TEXT[kind]}</span>;
+}
+
+/**
+ * T-629: the org's MASTER LIST of payment options, above the store cards. One list for every store (a store switches an option on in its own card below);
+ * the option owns the name and the kind. Same page, same capability (`manage_chart_of_accounts`) as the store tenders, so no new route.
+ */
+function PaymentOptionsSection({ options, flash, actorId }: { options: readonly PaymentOptionAdminRow[]; flash: FlashFields; actorId: string }) {
+  const active = options.filter((o) => o.status === 'active');
+  const retired = options.filter((o) => o.status === 'retired');
+  const usedAtAStore = active.filter((o) => o.storesOn > 0).length;
+  return (
+    <details id="payment-options" open className="group scroll-mt-4 rounded-[20px] border border-surface-border bg-surface">
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+        <span className="font-medium">Payment options (all stores)</span>
+        <span className="flex items-center gap-2">
+          <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">{usedAtAStore} of {active.length} used at a store</span>
+          <ChevronIcon className="size-4 text-muted transition group-open:rotate-180" />
+        </span>
+      </summary>
+      <div className="space-y-3 border-t border-surface-border px-4 py-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="max-w-prose text-xs text-neutral-600 dark:text-neutral-400">
+            One list for the whole company, so &quot;GCash&quot; is the same payment option at every store. Each store switches the ones it takes below, in its own card.
+          </p>
+          <FormModal trigger="+ Add payment option" title="Add a payment option" size="md">
+            <CheckedForm rules={SETTINGS_PAYMENT_OPTION_RULES} action={createPaymentOptionAction} autoComplete="off" className="space-y-3">
+              <FormGrid>
+                <Field label="Name" rule={SETTINGS_PAYMENT_OPTION_RULES.name}>
+                  <Input {...nativeAttrs(SETTINGS_PAYMENT_OPTION_RULES.name)} placeholder="e.g. Maya" autoComplete="off" className="mt-1 w-full" />
+                </Field>
+                <Field label="Type" hint="Cash is money in the till (a store may also keep a second cash option, such as Collected). Paid to an account goes into a bank or e-wallet account, cards included." rule={SETTINGS_PAYMENT_OPTION_RULES.kind}>
+                  <Select {...nativeAttrs(SETTINGS_PAYMENT_OPTION_RULES.kind)} defaultValue="" className="mt-1 w-full">
+                    <option value="">Choose a type</option>
+                    <option value="cash">Cash (money in the till)</option>
+                    <option value="wallet">Paid to an account (e-wallet, bank, card)</option>
+                  </Select>
+                </Field>
+              </FormGrid>
+              <DialogActions>
+                <Button type="submit" variant="secondary">
+                  Save
+                </Button>
+              </DialogActions>
+            </CheckedForm>
+          </FormModal>
+        </div>
+
+        {active.length === 0 && <p className="text-xs text-neutral-500 dark:text-neutral-400">No payment options yet.</p>}
+
+        {active.length > 0 && (
+          <Table label="Payment options" card={{ title: 'Payment option', subtitle: 'Type', keys: ['Stores using'] }}>
+            <thead>
+              <tr>
+                <Th>Payment option</Th>
+                <Th>Type</Th>
+                <Th numeric>Stores using</Th>
+                <Th />
+              </tr>
+            </thead>
+            <tbody>
+              {active.map((o) => (
+                <tr key={o.id}>
+                  <Td className="font-medium">{o.name}</Td>
+                  <Td>
+                    <KindPill kind={o.kind} />
+                  </Td>
+                  <NumTd className={o.storesOn > 0 ? undefined : 'text-muted'}>{o.storesOn > 0 ? o.storesOn : 'Not used yet'}</NumTd>
+                  <Td className="text-right whitespace-nowrap">
+                    <div data-card-ignore className="flex items-center justify-end">
+                      <EditableRecord
+                        quiet
+                        action={updatePaymentOptionAction}
+                        label={o.name}
+                        hidden={{ paymentOptionId: o.id }}
+                        typed={typedFor(flash, PAYMENT_OPTION_EDIT, o.id, actorId)}
+                        rules={SETTINGS_PAYMENT_OPTION_RULES}
+                        extra={
+                          <form action={setPaymentOptionStatusAction} className="mt-2">
+                            <input type="hidden" name="paymentOptionId" value={o.id} />
+                            <input type="hidden" name="status" value="retired" />
+                            <ConfirmDestructive
+                              tier="confirm"
+                              quiet
+                              label="Retire payment option"
+                              consequence={
+                                o.storesOn > 0
+                                  ? `${o.name} is switched on at ${o.storesOn} ${o.storesOn === 1 ? 'store' : 'stores'}: switch it off there first, or this is refused.`
+                                  : `${o.name} can no longer be switched on at a store. You can bring it back later.`
+                              }
+                            />
+                          </form>
+                        }
+                      >
+                        <FormGrid>
+                          <Field label="Name" rule={SETTINGS_PAYMENT_OPTION_RULES.name}>
+                            <Input {...nativeAttrs(SETTINGS_PAYMENT_OPTION_RULES.name)} defaultValue={o.name} autoComplete="off" className="mt-1 w-full" />
+                          </Field>
+                          {o.storesTotal > 0 ? (
+                            <>
+                              <input type="hidden" name="kind" value={o.kind} />
+                              <p className="text-xs text-neutral-500 dark:text-neutral-400">A store uses this option, so it stays {KIND_TEXT[o.kind].toLowerCase()}.</p>
+                            </>
+                          ) : (
+                            <Field label="Type" rule={SETTINGS_PAYMENT_OPTION_RULES.kind}>
+                              <Select {...nativeAttrs(SETTINGS_PAYMENT_OPTION_RULES.kind)} defaultValue={o.kind} className="mt-1 w-full">
+                                <option value="cash">Cash (money in the till)</option>
+                                <option value="wallet">Paid to an account (e-wallet, bank, card)</option>
+                              </Select>
+                            </Field>
+                          )}
+                        </FormGrid>
+                      </EditableRecord>
+                    </div>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+
+        {retired.length > 0 && (
+          <details className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
+            <summary className="cursor-pointer py-1 text-neutral-700 dark:text-neutral-300">Retired payment options ({retired.length})</summary>
+            <div className="mt-3 space-y-2">
+              {retired.map((o) => (
+                <form key={o.id} action={setPaymentOptionStatusAction} className="flex flex-wrap items-center gap-3 opacity-70">
+                  <input type="hidden" name="paymentOptionId" value={o.id} />
+                  <input type="hidden" name="status" value="active" />
+                  <span>
+                    {o.name} ({KIND_TEXT[o.kind].toLowerCase()})
+                  </span>
+                  <Button type="submit" variant="secondary">
+                    Restore
+                  </Button>
+                </form>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/**
+ * T-629: a store's side of the master list. Every ACTIVE payment option is a row: ON (its tender, with the store's money account and POS name, editable,
+ * and a switch-off) or OFF (a Switch on button that asks for the money account when the option is a wallet).
+ */
 function TendersSection({
   storeId,
   storeName,
   linked,
   t,
+  options,
   flash,
   actorId,
 }: {
@@ -347,52 +526,17 @@ function TendersSection({
   storeName: string;
   linked: boolean;
   t: StoreTenders;
+  options: readonly PaymentOptionAdminRow[];
   flash: FlashFields;
   actorId: string;
 }) {
-  const active = t.tenders.filter((x) => x.isActive);
-  const retired = t.tenders.filter((x) => !x.isActive);
   const mapping = tenderMapping(t.methods, t.tenders, t.accounts);
+  const rows = options
+    .filter((o) => o.status === 'active')
+    .map((o) => ({ option: o, tender: t.tenders.find((x) => x.paymentOptionId === o.id) }));
   return (
     <div className="space-y-3 border-t border-neutral-200 pt-3 text-sm dark:border-neutral-800">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="font-medium">Tenders</h3>
-        <FormModal trigger="+ Add tender" title={`Add a tender — ${storeName}`} size="md">
-        <CheckedForm rules={SETTINGS_TENDER_RULES} action={createTenderAction} autoComplete="off" className="space-y-3">
-          <input type="hidden" name="storeId" value={storeId} />
-          <FormGrid>
-            <Field label="Name" rule={SETTINGS_TENDER_RULES.name}>
-              <Input {...nativeAttrs(SETTINGS_TENDER_RULES.name)} placeholder="e.g. GCash" autoComplete="off" className="mt-1 w-full" />
-            </Field>
-            <Field label="Kind" rule={SETTINGS_TENDER_RULES.kind}>
-              <Select {...nativeAttrs(SETTINGS_TENDER_RULES.kind)} defaultValue="" className="mt-1 w-full">
-                <option value="">Choose cash or wallet</option>
-                <option value="cash">Cash</option>
-                <option value="wallet">Wallet</option>
-              </Select>
-            </Field>
-            <Field label="Money account (wallets only)" hint={ACCOUNT_HINT}>
-              <Select name="moneyAccountId" defaultValue="" className="mt-1 w-full">
-                <option value="">None</option>
-                {t.accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="POS name" hint={POS_NAME_HINT}>
-              <Input name="posV1Alias" autoComplete="off" className="mt-1 w-full" />
-            </Field>
-          </FormGrid>
-          <DialogActions>
-            <Button type="submit" variant="secondary">
-              Save
-            </Button>
-          </DialogActions>
-        </CheckedForm>
-        </FormModal>
-      </div>
+      <h3 className="font-medium">Payment options at this store</h3>
 
       {t.accounts.length === 0 && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -400,7 +544,7 @@ function TendersSection({
           <a href="/money-accounts" className={NAV_LINK}>
             Money accounts
           </a>{' '}
-          first.
+          first. An option paid to an account can&apos;t be switched on without one.
         </p>
       )}
 
@@ -433,7 +577,7 @@ function TendersSection({
                   <tr key={`${m.posMethod ?? ''}:${m.tenderId ?? ''}:${i}`} className="border-b border-neutral-100 dark:border-neutral-900">
                     <td className="py-1 pr-3">{m.posMethod ?? '—'}</td>
                     <td className="py-1 pr-3">{m.tenderName ?? '—'}</td>
-                    <td className="py-1 pr-3">{m.kind === 'cash' ? 'Cash' : m.kind === 'wallet' ? 'Wallet' : '—'}</td>
+                    <td className="py-1 pr-3">{m.kind === 'cash' || m.kind === 'wallet' ? KIND_TEXT[m.kind] : '—'}</td>
                     <td className="py-1 pr-3">{m.moneyAccountName ?? '—'}</td>
                     <td className={m.status === 'mapped' ? 'py-1' : 'py-1 text-warning-ink'}>{m.statusText}</td>
                   </tr>
@@ -444,42 +588,64 @@ function TendersSection({
         )}
       </div>
 
-      {t.tenders.length === 0 && <p className="text-xs text-neutral-500 dark:text-neutral-400">No tenders yet.</p>}
+      {rows.length === 0 && <p className="text-xs text-neutral-500 dark:text-neutral-400">No payment options yet. Add them in the list above.</p>}
 
-      {active.map((x) => (
-        <TenderRecord key={`${x.id}:${x.version}`} storeId={storeId} x={x} t={t} typed={typedFor(flash, TENDER_EDIT, x.id, actorId)} />
-      ))}
-
-      {retired.length > 0 && (
-        <details className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
-          <summary className="cursor-pointer py-1 text-neutral-700 dark:text-neutral-300">Retired tenders ({retired.length})</summary>
-          <div className="mt-3 space-y-2">
-            {retired.map((x) => (
-              <form key={x.id} action={setTenderActiveAction} className="flex flex-wrap items-center gap-3 opacity-70">
-                <input type="hidden" name="storeId" value={storeId} />
-                <input type="hidden" name="tenderId" value={x.id} />
-                <input type="hidden" name="version" value={x.version} />
-                <input type="hidden" name="isActive" value="true" />
-                <span>
-                  {x.name} ({x.kind})
-                </span>
-                <Button type="submit" variant="secondary">
-                  Restore
-                </Button>
-              </form>
+      {rows.length > 0 && (
+        <Table label={`Payment options at ${storeName}`} card={{ title: 'Payment option', subtitle: 'Type', keys: ['Status'] }}>
+          <thead>
+            <tr>
+              <Th>Payment option</Th>
+              <Th>Type</Th>
+              <Th>Status</Th>
+              <Th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ option, tender }) => (
+              <tr key={option.id}>
+                <Td className="font-medium">{option.name}</Td>
+                <Td>
+                  <KindPill kind={option.kind} />
+                </Td>
+                <Td>
+                  {tender?.isActive ? (
+                    <>
+                      <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">On</span>
+                      {tender.kind === 'wallet' && <span className="mt-1 block text-xs text-muted">{tender.moneyAccountName ?? 'No account'}</span>}
+                    </>
+                  ) : (
+                    <span className="text-muted">Off</span>
+                  )}
+                </Td>
+                <Td className="text-right whitespace-nowrap">
+                  <div data-card-ignore className="flex items-center justify-end">
+                    {tender?.isActive ? (
+                      <TenderRecord key={`${tender.id}:${tender.version}`} storeId={storeId} x={tender} t={t} typed={typedFor(flash, TENDER_EDIT, tender.id, actorId)} />
+                    ) : (
+                      <SwitchOnForm
+                        storeId={storeId}
+                        storeName={storeName}
+                        option={option}
+                        accounts={t.accounts}
+                        defaultAccountId={tender?.moneyAccountId ?? ''}
+                        defaultAlias={tender?.posV1Alias ?? ''}
+                      />
+                    )}
+                  </div>
+                </Td>
+              </tr>
             ))}
-          </div>
-        </details>
+          </tbody>
+        </Table>
       )}
-
     </div>
   );
 }
 
 /**
- * One saved tender: a locked EditableRecord (A0). Retire is its `extra`, shown only while editing. After a refused Save
- * (`typed`), the record reopens in edit mode with the user's typing (DEF-617, T-389). The fields below always draw the
- * STORED values; the browser applies the typing, so Cancel restores what is saved.
+ * One switched-on payment option at this store: a locked EditableRecord (A0). Its name and kind are the option's (shown, never edited here); the store edits its money
+ * account (a wallet's) and its POS name. Switch off is its `extra`, shown only while editing. After a refused Save (`typed`), the record reopens in edit mode with the
+ * user's typing (DEF-617, T-389). The fields below always draw the STORED values; the browser applies the typing, so Cancel restores what is saved.
  */
 function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdminRow; t: StoreTenders; typed: TypedView | null }) {
   return (
@@ -488,7 +654,7 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
       label={x.name}
       hidden={{ storeId, tenderId: x.id, version: x.version }}
       typed={typed}
-      rules={SETTINGS_TENDER_RULES}
+      quiet
       extra={
         <form action={setTenderActiveAction} className="mt-2">
           <input type="hidden" name="storeId" value={storeId} />
@@ -497,40 +663,90 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
           <input type="hidden" name="isActive" value="false" />
           <ConfirmDestructive
             tier="retype"
-            label="Retire tender"
-            consequence="Retires this tender."
+            label="Switch off payment option"
+            consequence="Switches this payment option off at this store. Receipts already taken with it stay as they are."
             expectedName={x.name}
           />
         </form>
       }
     >
       <FormGrid>
-        <Field label="Name" rule={SETTINGS_TENDER_RULES.name}>
-          <Input {...nativeAttrs(SETTINGS_TENDER_RULES.name)} defaultValue={x.name} autoComplete="off" className="mt-1 w-full" />
-        </Field>
-        <Field label="Kind" rule={SETTINGS_TENDER_RULES.kind}>
-          <Select {...nativeAttrs(SETTINGS_TENDER_RULES.kind)} defaultValue={x.kind} className="mt-1 w-full">
-            <option value="cash">Cash</option>
-            <option value="wallet">Wallet</option>
-          </Select>
-        </Field>
-        <Field label="Money account (wallets only)" hint={ACCOUNT_HINT}>
-          <Select name="moneyAccountId" defaultValue={x.moneyAccountId ?? ''} className="mt-1 w-full">
-            <option value="">None</option>
-            {x.moneyAccountId && !t.accounts.some((a) => a.id === x.moneyAccountId) && (
-              <option value={x.moneyAccountId}>{x.moneyAccountName ?? 'Retired account'}</option>
-            )}
-            {t.accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {x.kind === 'wallet' && (
+          <Field label="Money account" hint={ACCOUNT_HINT}>
+            <Select name="moneyAccountId" defaultValue={x.moneyAccountId ?? ''} className="mt-1 w-full">
+              {x.moneyAccountId && !t.accounts.some((a) => a.id === x.moneyAccountId) && (
+                <option value={x.moneyAccountId}>{x.moneyAccountName ?? 'Retired account'}</option>
+              )}
+              {t.accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="POS name" hint={POS_NAME_HINT}>
           <Input name="posV1Alias" defaultValue={x.posV1Alias ?? ''} autoComplete="off" className="mt-1 w-full" />
         </Field>
       </FormGrid>
     </EditableRecord>
+  );
+}
+
+/**
+ * T-629: the dialog that switches an OFF payment option on. A wallet asks for the store's money account; a cash option asks only for the POS name.
+ * A wallet with no account chosen is refused by the domain in words (it lands on the store card). It is an add form, so it ends in Save (A0 L4). The defaults carry what a switched-off tender kept (its account and POS name), so switching back on is one click.
+ */
+function SwitchOnForm({
+  storeId,
+  storeName,
+  option,
+  accounts,
+  defaultAccountId,
+  defaultAlias,
+}: {
+  storeId: string;
+  storeName: string;
+  option: PaymentOptionAdminRow;
+  accounts: readonly { id: string; name: string }[];
+  defaultAccountId: string;
+  defaultAlias: string;
+}) {
+  const fields = (
+    <>
+      <input type="hidden" name="storeId" value={storeId} />
+      <input type="hidden" name="paymentOptionId" value={option.id} />
+      <FormGrid>
+        {option.kind === 'wallet' && (
+          <Field label="Money account" hint={ACCOUNT_HINT}>
+            <Select name="moneyAccountId" defaultValue={defaultAccountId} className="mt-1 w-full">
+              <option value="" disabled>
+                Choose the account it pays into
+              </option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        <Field label="POS name" hint={POS_NAME_HINT}>
+          <Input name="posV1Alias" defaultValue={defaultAlias} autoComplete="off" className="mt-1 w-full" />
+        </Field>
+      </FormGrid>
+    </>
+  );
+  return (
+    <FormModal trigger="Switch on" triggerVariant="secondary" triggerIcon={null} triggerLabel={`Switch on ${option.name}`} title={`Switch on ${option.name} — ${storeName}`} size="md">
+      <form action={switchOnPaymentOptionAction} autoComplete="off" className="space-y-3">
+        {fields}
+        <DialogActions>
+          <Button type="submit" variant="secondary">
+            Save
+          </Button>
+        </DialogActions>
+      </form>
+    </FormModal>
   );
 }

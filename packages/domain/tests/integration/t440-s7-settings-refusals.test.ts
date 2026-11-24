@@ -33,7 +33,7 @@ import { closeDb } from '@shareat/db';
 import { captureRedirect, outcomeOf, resetJar } from '../../../../tests/helpers/flash-jar';
 import { moneyFixture } from './_fixtures/t402-s3-money';
 import { testItemCode } from './_fixtures/item-code';
-import { SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES, SETTINGS_ORG_TOLERANCE_RULES, SETTINGS_ITEM_TOLERANCE_RULES, SETTINGS_ORGANIZATION_RULES, SETTINGS_EXPENSE_CATEGORY_RULES, SETTINGS_SALES_CHANNEL_RULES, SETTINGS_POS_LINK_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_TENDER_RULES } from '../../src/field-rules/settings';
+import { SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES, SETTINGS_ORG_TOLERANCE_RULES, SETTINGS_ITEM_TOLERANCE_RULES, SETTINGS_ORGANIZATION_RULES, SETTINGS_EXPENSE_CATEGORY_RULES, SETTINGS_SALES_CHANNEL_RULES, SETTINGS_POS_LINK_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_PAYMENT_OPTION_RULES } from '../../src/field-rules/settings';
 import { FINDINGS_MISSING_PERIOD_RULES, FINDINGS_MISSED_MONTH_RULES } from '../../src/field-rules/findings';
 import { REPORTS_DUAL_RUN_DISPOSITION_RULES } from '../../src/field-rules/reports';
 import { checkField } from '../../src/field-rules/check';
@@ -152,20 +152,20 @@ describe('T-440 S7: a bad value is refused with the rule sentence and nothing is
     expect(await count('sales_channels', f.orgId)).toBe(before);
   });
 
-  it('settings/pos-link createTenderAction: a blank kind is refused; no tender row (mutant: tender kind rule not applied)', async () => {
+  it('settings/pos-link createPaymentOptionAction: a blank kind is refused; no option row (mutant: payment option kind rule not applied)', async () => {
     const f = await fixture();
-    const before = await count('tenders', f.orgId);
-    const o = await run('settings/pos-link/actions', 'createTenderAction', { storeId: f.storeId, name: 'GCash', kind: '' });
-    expect(o.flash.error).toBe(sentence(SETTINGS_TENDER_RULES.kind, ''));
-    expect(await count('tenders', f.orgId)).toBe(before);
+    const before = await count('payment_options', f.orgId);
+    const o = await run('settings/pos-link/actions', 'createPaymentOptionAction', { name: 'GCash2', kind: '' });
+    expect(o.flash.error).toBe(sentence(SETTINGS_PAYMENT_OPTION_RULES.kind, ''));
+    expect(await count('payment_options', f.orgId)).toBe(before);
   });
 
-  it('settings/pos-link createTenderAction: a blank name is refused; no tender row (mutant: tender name rule not applied)', async () => {
+  it('settings/pos-link createPaymentOptionAction: a blank name is refused; no option row (mutant: payment option name rule not applied)', async () => {
     const f = await fixture();
-    const before = await count('tenders', f.orgId);
-    const o = await run('settings/pos-link/actions', 'createTenderAction', { storeId: f.storeId, name: '   ', kind: 'wallet' });
-    expect(o.flash.error).toBe(sentence(SETTINGS_TENDER_RULES.name, ''));
-    expect(await count('tenders', f.orgId)).toBe(before);
+    const before = await count('payment_options', f.orgId);
+    const o = await run('settings/pos-link/actions', 'createPaymentOptionAction', { name: '   ', kind: 'wallet' });
+    expect(o.flash.error).toBe(sentence(SETTINGS_PAYMENT_OPTION_RULES.name, ''));
+    expect(await count('payment_options', f.orgId)).toBe(before);
   });
 
   it('settings/pos-link unlinkStoreFromPosAction: a 501-character reason is refused after the retype passes; the store stays as it was (mutant: unlink reason max dropped)', async () => {
