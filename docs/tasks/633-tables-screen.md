@@ -39,4 +39,18 @@ to `C:\shareat\t633-report.txt`.
 
 ## As built
 
-(filled in by the builder)
+- Domain (`packages/domain/src/pos/store-setup.ts`): `parseTableNumbers` (pure; "5", "1-20", en dash and spaces fine; refuses bad shape,
+  a backwards range, outside 1-999, more than `TABLE_ADD_MAX` = 200), `addPosStands` (authorize first, then parse, then `upsertPosStand` per
+  number in the caller's one transaction; returns added / existed / retired counts) and `retirePosStand` (authorize first; refuses another
+  store's or a missing stand; refuses a stand with an OPEN `table_sessions` row, naming the table; audit `pos.stand_retired` with before/after;
+  bumps `state_version`; already retired = nothing written). `upsertPosStand` gained an optional `source` ('etl' default, so the v1 loader is
+  unchanged; 'web' from the screen).
+- DB: `posStoreSetupRepo.listStands`, `retireStand`, `standHasOpenSession`. Audit catalogue +1 (`pos.stand_retired`), ceiling 308 -> 309 in
+  t402-s1b and t453.
+- Screen: `TablesSection.tsx` on `/admin/pos-tablets` after Charges, before Tills. Active numbers as chips in numeric order with a count;
+  retired in a collapsed "Retired (n)" block. "+ Add tables" (field rule `POS_TABLE_ADD_RULES`) and "Retire a table" (a picker of active
+  numbers + confirm), drawn only with `manage_store_settings` at the store. The chips are not controls, so the only tap targets are the two
+  buttons and the Retired toggle (44px on touch). Actions `addTablesAction` / `retireTableAction` authorize first; the result is in words
+  ("Added 18 tables; 2 already existed.").
+- Known limit: the open-bill check and the retire run in one transaction, but a tablet opening a bill at that same instant is not locked out
+  (the stand row's key-share lock does not conflict with the status update). The window is milliseconds; noted for BOSS.
