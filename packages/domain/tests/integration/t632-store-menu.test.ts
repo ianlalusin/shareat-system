@@ -266,7 +266,8 @@ describe('T-632 audit fixes', () => {
   it('14: authorize is the FIRST gate: staff get the permission sentence, not "variant does not exist", for an id that is not there', async () => {
     const c = await cast('t632-14');
     const ghost = randomUUID();
-    for (const run of [() => on(c, c.staff, c.storeA, ghost, [{ amount: '1.00' }]), () => off(c, c.staff, c.storeA, ghost)]) {
+    const runs: (() => Promise<unknown>)[] = [() => on(c, c.staff, c.storeA, ghost, [{ amount: '1.00' }]), () => off(c, c.staff, c.storeA, ghost)];
+    for (const run of runs) {
       const r = await attempt(run);
       expectSentence(r, 'staff on a missing variant');
       expect(r.message).not.toMatch(/does not exist/i);
