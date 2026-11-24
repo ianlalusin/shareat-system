@@ -128,6 +128,11 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
           <Link href="/menu/prices" className={NAV_LINK}>
             Prices
           </Link>
+          {storeId && (
+            <Link href={`/menu/stores/${storeId}`} className={NAV_LINK}>
+              What a store sells
+            </Link>
+          )}
           {held.has('manage_store_settings') && (
             <Link href="/menu/hours" className={NAV_LINK}>
               Menu hours
