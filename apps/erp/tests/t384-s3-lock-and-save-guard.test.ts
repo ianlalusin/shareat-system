@@ -46,6 +46,8 @@ const EXEMPT: Record<string, string> = {
   // DEF-778: an add form whose only hidden *Id is the per-render request id; its date default is a prop, not a record.
   'money-transfers/RecordTransferForm.tsx': 'DEF-778: an add form with a hidden request id, not record-bound',
   // T-584 (NEEDS BOSS APPROVAL): the issue form. Its hidden template / employee / store ids say WHAT to draft; the textarea default is the server-filled draft (or what the issuer typed), not a stored record's value. The edit-in-place shape A0 outlaws is the revise form, which IS an EditableRecord.
+  // T-632 (NEEDS BOSS APPROVAL, same precedent as TillsSection): the flavour rows and the price dialog on "What this store sells". Each row or dialog saves one price and is audited; the prefilled price is the live one, shown so it can be changed, not an edit-in-place record.
+  'menu/stores/[storeId]/page.tsx': 'T-632: per-flavour and per-price saves, one at a time; not an edit-in-place record',
   'documents/new/page.tsx': 'T-584: an issue form whose default is a freshly filled draft, not a saved record',
 };
 
@@ -59,6 +61,7 @@ const EXEMPT: Record<string, string> = {
 // `<button>` labels written in app/ - they are the `label=` prop of <ConfirmDestructive>, whose own submit button is the one
 // control (apps/erp/tests/t412-destructive-census.test.ts is the guard for those). Their entries left this list with them.
 const COMMANDS: Record<string, string> = {
+  'Switch off': 'T-632 (NEEDS BOSS APPROVAL): withdraws every live price of one menu item at one store (a status change: history and past sales are kept; audited per row)',
   'Activate': 'T-612 (Ian, 19 Nov 2026): a manager or administrator switches a hired person account on (pending -> active) so they can sign in; audited account.activated; who may is decided in the domain',
   'Approve and book': 'T-511 S7b (BOSS approved): approves one settlement day and books its payout (money in the books); audited; the uploader rule and the blockers are re-checked in the domain',
   'Book this charge': 'T-511 S7b (BOSS approved): books one platform charge that belongs to no sales day (money out for good); audited; the uploader rule is applied in the domain',

@@ -17,14 +17,18 @@ import { isUuid, menuErrorMessage, opt, requireId, str, withOrgPrincipal } from 
 const CHOOSE_STORE = 'Choose a store.';
 const pathOf = (storeId: string): string => `/menu/stores/${storeId}`;
 
-/** The price rows of the dialog: one `slot` field per time of day (a daypart id, or `all`), each with `amount__<slot>` and optional bundle fields. */
+/**
+ * The price rows of the dialog: `slot` (a daypart id, or `all`), `amount`, `bundle` and `extra` repeat once per row, in the same order,
+ * so the Nth of each belongs to the Nth row. A blank is a blank (`amount` blank = not sold at that time).
+ */
 function pricesOf(fd: FormData): SwitchPrice[] {
-  return fd.getAll('slot').map((raw) => {
-    const slot = typeof raw === 'string' ? raw : '';
+  const text = (key: string): string[] => fd.getAll(key).map((v) => (typeof v === 'string' ? v.trim() : ''));
+  const [slots, amounts, bundles, extras] = [text('slot'), text('amount'), text('bundle'), text('extra')];
+  return slots.map((slot, i) => {
     if (slot !== 'all' && !isUuid(slot)) throw refuse('storeMenu: slot is not an id.', 'Reload the page and try again.');
-    const amount = opt(fd, `amount__${slot}`);
-    const heads = opt(fd, `bundle__${slot}`);
-    const extra = opt(fd, `extra__${slot}`);
+    const amount = amounts[i] || undefined;
+    const heads = bundles[i] || undefined;
+    const extra = extras[i] || undefined;
     return {
       daypartId: slot === 'all' ? null : slot,
       ...(amount !== undefined ? { amount } : {}),
