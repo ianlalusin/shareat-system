@@ -10,7 +10,6 @@ import {
 import { canEditPlatformCode, canMoveChannelReceivable, channelsForStore, moneyAccountNames, receivableOptions, type SalesChannelAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { NAV_LINK } from '@/components/action-link';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, ConfirmDestructive, EmptyState, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
@@ -38,15 +37,6 @@ interface SearchParams {
 }
 
 type Typed = Parameters<typeof typedFor>[0];
-
-const CRUMB = (
-  <>
-    <a href="/settings" className={NAV_LINK}>
-      Settings
-    </a>{' '}
-    / Sales channels (walk-in, Grab, Foodpanda)
-  </>
-);
 
 const DESCRIPTION = (
   <>
@@ -110,7 +100,7 @@ export default async function SalesChannelsSettingsPage({
 
   if (!storeId) {
     return (
-      <Page density="table" className="space-y-4" crumb={CRUMB} title="Sales channels (walk-in, Grab, Foodpanda)" description={DESCRIPTION}>
+      <Page density="table" className="space-y-4" title="Sales channels (walk-in, Grab, Foodpanda)" description={DESCRIPTION}>
         <EmptyState illustration="magnifier" title="No stores yet" body="Create a store under Stores first. Every channel belongs to a store." />
       </Page>
     );
@@ -130,7 +120,7 @@ export default async function SalesChannelsSettingsPage({
   const retired = channels.filter((c) => !c.isActive);
 
   return (
-    <Page density="table" crumb={CRUMB} title="Sales channels (walk-in, Grab, Foodpanda)" description={DESCRIPTION}>
+    <Page density="table" title="Sales channels (walk-in, Grab, Foodpanda)" description={DESCRIPTION}>
       <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>

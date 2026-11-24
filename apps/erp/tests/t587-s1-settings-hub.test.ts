@@ -33,6 +33,7 @@ vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unk
 vi.mock('@/components/shell/PageDescription', () => ({ PageDescription: ({ children }: { children: unknown }) => createElement('p', null, children as never) }));
 
 import SettingsPage from '../src/app/settings/page';
+import { crumbSteps } from '../src/components/nav-crumbs';
 
 const ROOT = join(__dirname, '..', '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
@@ -196,6 +197,7 @@ describe('T-587 S1 renames - the sidebar label and the screen title agree', () =
   });
 
   it('Attendance & payroll settings has a back link to /settings', () => {
-    expect(read('apps/erp/src/app/settings/attendance/page.tsx')).toContain('href="/settings"');
+    // T-630: the shared breadcrumb (mounted in AppShell) is the back link now; its first step links /settings.
+    expect(crumbSteps('/settings/attendance')[0]).toMatchObject({ label: 'Settings', href: '/settings' });
   });
 });

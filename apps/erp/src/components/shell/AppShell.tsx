@@ -27,6 +27,8 @@ import { KIOSK_HEADER } from './kiosk';
 import { SIDEBAR_COOKIE_NAME, parseSidebarState } from './sidebar-state';
 import { Sidebar, SidebarProvider } from './Sidebar';
 import { TopBar } from './TopBar';
+// T-630: the breadcrumb on every page, mounted here once so no page can opt out by forgetting it.
+import { Breadcrumbs } from './Breadcrumbs';
 import { PhoneTableCards } from './PhoneTableCards';
 import { ScreenState } from './ScreenState';
 
@@ -73,7 +75,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar allowedHrefs={allowedHrefs} signedInAs={signedInAs} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar signedInAs={signedInAs} />
-          <main className="erp-workspace min-w-0 flex-1"><PhoneTableCards><Suspense fallback={null}><ScreenState scope={`${session.actor.orgId}:${session.actor.personId}`} /></Suspense>{children}</PhoneTableCards></main>
+          <main className="erp-workspace min-w-0 flex-1"><PhoneTableCards><Suspense fallback={null}><ScreenState scope={`${session.actor.orgId}:${session.actor.personId}`} /></Suspense><Breadcrumbs held={[...held]} />{children}</PhoneTableCards></main>
         </div>
       </div>
     </SidebarProvider>

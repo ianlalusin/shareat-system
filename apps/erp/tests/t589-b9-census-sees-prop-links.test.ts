@@ -62,9 +62,7 @@ describe('T-589 B9 — links in Page props', () => {
       const exempt = real.filter((r) => r.file === file && r.status === 'inline-exempt');
       expect(exempt, file).toHaveLength(1);
     }
-    // and the Settings crumb links stay measured, not exempt
-    for (const file of ['app/settings/organization/page.tsx', 'app/settings/attendance/page.tsx']) {
-      expect(real.some((r) => r.file === file && r.tag === 'a' && r.status === 'pass' && r.px === 44), file).toBe(true);
-    }
+    // T-630: the Settings pages' hand-written crumbs moved into the one shell breadcrumb; its link stays measured, not exempt
+    expect(real.some((r) => r.file === 'components/shell/Breadcrumbs.tsx' && r.tag === 'Link' && r.status === 'pass' && r.px === 44)).toBe(true);
   });
 });

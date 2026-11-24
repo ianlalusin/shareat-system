@@ -10,7 +10,7 @@ import {
 } from './actions';
 import { categoriesForAdmin, mappableAccounts, subcategoriesForAdmin } from './lib';
 import { Page } from '@/components/shell/Page';
-import { ACTION_LINK, NAV_LINK } from '@/components/action-link';
+import { ACTION_LINK } from '@/components/action-link';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_EXPENSE_CATEGORY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Button, ConfirmDestructive, DialogActions, DisclosureCard, EmptyState, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
@@ -103,7 +103,6 @@ export default async function ExpenseCategoriesSettingsPage({
   return (
     <Page
       density="table"
-      crumb={<><a href="/settings" className={NAV_LINK}>Settings</a> / Expense categories</>}
       title="Expense categories"
       actions={
       <FormModal trigger="+ Add category" title="Add a category" size="md">

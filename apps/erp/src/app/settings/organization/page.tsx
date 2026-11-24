@@ -2,7 +2,6 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { setOrganizationIdentityAction } from './actions';
 import { identityView } from './lib';
 import { Page } from '@/components/shell/Page';
-import { NAV_LINK } from '@/components/action-link';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -63,7 +62,6 @@ export default async function OrganizationSettingsPage({
   return (
     <Page
       density="table"
-      crumb={<><a href="/settings" className={NAV_LINK}>Settings</a> / Organisation</>}
       title="Organisation"
       description={
         <>
