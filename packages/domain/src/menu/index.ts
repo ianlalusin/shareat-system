@@ -9,6 +9,8 @@ export * from './options';
 export * from './pricing';
 export * from './requests';
 export * from './resolve-price';
+export { loadStoreSells, switchOptionValue, switchVariantOff, switchVariantOn } from './store-menu';
+export type { SellsFlavour, SellsItem, SellsSlot, SellsVariant, StoreSells, SwitchPrice } from './store-menu';
 export { loadMenuForTerminal, loadStoreMenu } from './load-store-menu';
 export { loadLiveStoreOffers, resolveStoreOffers } from './live-offers';
 export type { LiveOfferFault, LiveStoreOffers, NotOfferedNow } from './live-offers';

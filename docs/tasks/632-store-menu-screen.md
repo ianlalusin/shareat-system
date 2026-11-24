@@ -53,3 +53,14 @@
 5. The POS snapshot for the store includes an item switched on here, and excludes one switched off (existing loadStoreMenu path).
 
 Run `npm run census:write` (t450 table inventory, touch targets, row links, action-link sweep, domain-actions-have-callers). Typecheck apps/erp, and package tests via a temp tsconfig. Invoke the `impeccable` skill. Check the page in a browser if RAM allows.
+
+
+## As built (builder, 24 Nov 2026) - NOT YET VERIFIED BY A RUN
+
+Free RAM stayed at about 2.3 GB for over 15 minutes (limits: 3 GB tsc, 2.5 GB vitest), so **no typecheck, test, census or browser check has been run**. Resume with test DB `t632_test` (already created and migrated) and a temp `.env.local` copied from the main tree.
+
+- `packages/db/src/repo/menu.ts`: `lastStorePrices` (the newest fixed store price per variant and daypart, for the prefill).
+- `packages/domain/src/menu/store-menu.ts`: `switchVariantOn` / `switchVariantOff` / `switchOptionValue` (authorize first, then the existing writers in one transaction, so each row audits as before and no new audit action exists) and `loadStoreSells` (the read model: on/off, form slots, prefill, no-station flag, flavours).
+- `apps/erp/src/app/menu/stores/[storeId]/{page.tsx,actions.ts,README.md}`; links from /menu and /menu/prices; crumbs added to `nav-crumbs.ts`.
+- Rules chosen: a store with active menu hours asks one price per hour (blank = not sold then); creating or removing an hour-based price needs `pair_menu_dayparts` (T-510 R8), so for a plain admin the switch buttons are hidden at such a store and the page says so; a price change is open to anyone with `set_menu_price`. An item is "on" if any live offer on any channel; the no-station chip needs a live STORE-channel offer.
+- Tests: `packages/domain/tests/integration/t632-store-menu.test.ts` (9 tests, spec tests 1-5).
