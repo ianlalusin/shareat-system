@@ -18,7 +18,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { DOCUMENT_REASON_RULES } from '../field-rules/documents';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { gone, refuse } from '../shared/refusal';
-import { fillDoc, legacyBodyToDoc, missingInDoc, plainTextOf, validateDoc, effectiveDoc, type DocJson, type DocPage } from './doc';
+import { fieldsInDoc, fillDoc, legacyBodyToDoc, missingInDoc, plainTextOf, validateDoc, effectiveDoc, type DocJson, type DocPage } from './doc';
 import { lengthOfService, longDate, type MergeValues } from './merge-fields';
 import { authorizeViewStoreless } from './access';
 import { assertBodyText } from './templates';
@@ -137,6 +137,12 @@ async function freezeLetterhead(tx: Tx, actor: Actor, storeId: string | null, te
   };
 }
 
+/** What the template editor's preview fills the fields with for one chosen employee: the same values issue would use (`[missing: x]` where a record has none). Writes nothing; admin only. */
+export async function documentPreviewValues(tx: Tx, actor: Actor, input: { employmentId?: string | null }): Promise<MergeValues> {
+  await authorize(tx, actor, 'manage_document_templates', {});
+  return mergeValuesFor(tx, actor, await resolveTarget(tx, actor, { employmentId: input.employmentId ?? null }));
+}
+
 /** The page a NEW document prints on: the template's margins, with its header and footer filled for THIS document (a missing value prints nothing, it never blocks issue). */
 function pageFor(version: { margins: DocPage['margins']; headerDoc: DocJson | null; footerDoc: DocJson | null }, values: MergeValues): DocPage {
   return {
@@ -209,6 +215,8 @@ function cleanIssuedDoc(input: { bodyDoc?: unknown; body?: string }): { doc: Doc
   } else {
     doc = legacyBodyToDoc(assertBodyText(String(input.body ?? ''), 'document'));
   }
+  // A document being issued holds filled text, never a fill-in tag: a tag here would print as a grey label instead of a value.
+  if (fieldsInDoc(doc).length > 0) throw refuse('documents: field tag in an issued body', 'This document still holds a fill-in field. Fields are filled in before issue; replace the field with the words it should say.');
   return { doc, body: assertBodyText(plainTextOf(doc), 'document') };
 }
 

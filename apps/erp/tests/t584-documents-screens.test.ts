@@ -51,8 +51,8 @@ describe('T-584 route gates (test 2: by URL, not only by a hidden link)', () => 
 });
 
 describe('T-584 templates screen - files and wiring', () => {
-  it('page, actions, typed-forms and lib exist', () => {
-    for (const f of ['templates/page.tsx', 'templates/actions.ts', 'templates/typed-forms.ts', 'lib.ts']) expect(existsSync(join(DOCS, f)), f).toBe(true);
+  it('page, actions, the two editor pages and lib exist', () => {
+    for (const f of ['templates/page.tsx', 'templates/actions.ts', 'templates/new/page.tsx', 'templates/[id]/page.tsx', 'lib.ts']) expect(existsSync(join(DOCS, f)), f).toBe(true);
   });
 
   it('the page is read-gated by requirePageAccess on its own literal path, and the actions by requireActor [kills: an ungated URL]', () => {
@@ -63,7 +63,10 @@ describe('T-584 templates screen - files and wiring', () => {
     expect(a).toMatch(/\bsaveDocumentTemplate\b/);
     expect(a).toMatch(/\bretireDocumentTemplate\b/);
     expect(a).toMatch(/errorMessage\(/);
-    expect(a).toMatch(/keepTyping\(/);
+    // T-637: the editor keeps what was typed itself (a refusal comes back as a sentence, never a redirect), so the save action returns the error.
+    expect(a).toMatch(/return \{ error: errorMessage\(err\) \}/);
+    expect(code('templates/new/page.tsx')).toMatch(/requirePageAccess\(\s*'\/documents\/templates\/new'/);
+    expect(code('templates/[id]/page.tsx')).toMatch(/requirePageAccess\(\s*`\/documents\/templates\/\$\{id\}`/);
   });
 
   it('the action re-implements no rule: no merge-field list, no length bound, no direct database import [kills: a second copy of the whitelist]', () => {

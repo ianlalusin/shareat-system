@@ -100,7 +100,8 @@ describe('T-450 entire ERP table rollout', () => {
     expect(actual).toEqual(saved);
     const unlabelled = actual.filter(row => row.headerless > 0);
     // The generic Table forwards the caller's headers; it does not own column labels.
-    expect(unlabelled.map(row => row.file)).toEqual(['apps/erp/src/components/ui/Table.tsx']);
+    // T-637: DocumentDoc draws the tables an author typed inside a document's wording (their own header cells), on an A4 page, not a data list.
+    expect(unlabelled.map(row => row.file)).toEqual(['apps/erp/src/components/documents/DocumentDoc.tsx', 'apps/erp/src/components/ui/Table.tsx']);
     // T-568: the same rollout now has some tables in the shared <Table> primitive. Count both so
     // moving a definition to the shared surface cannot look like deleting coverage.
     expect(actual.reduce((count, row) => count + row.tables + row.sharedTables, 0)).toBeGreaterThan(100);

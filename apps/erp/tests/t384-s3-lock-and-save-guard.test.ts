@@ -48,7 +48,6 @@ const EXEMPT: Record<string, string> = {
   // T-584 (NEEDS BOSS APPROVAL): the issue form. Its hidden template / employee / store ids say WHAT to draft; the textarea default is the server-filled draft (or what the issuer typed), not a stored record's value. The edit-in-place shape A0 outlaws is the revise form, which IS an EditableRecord.
   // T-632 (NEEDS BOSS APPROVAL, same precedent as TillsSection): the flavour rows and the price dialog on "What this store sells". Each row or dialog saves one price and is audited; the prefilled price is the live one, shown so it can be changed, not an edit-in-place record.
   'menu/stores/[storeId]/page.tsx': 'T-632: per-flavour and per-price saves, one at a time; not an edit-in-place record',
-  'documents/new/page.tsx': 'T-584: an issue form whose default is a freshly filled draft, not a saved record',
 };
 
 /**

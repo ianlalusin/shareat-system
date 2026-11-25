@@ -14,15 +14,13 @@ const modalWith = (src: string, needle: string): string => modals(src).find((m) 
 const names = (src: string): string[] => [...new Set([...src.matchAll(/\bname="(\w+)"/g)].map((m) => m[1]!))].sort();
 
 describe('T-589 B7 forms in modals', () => {
-  it('documents/templates: saveTemplateAction for a NEW template is in a modal that reopens on a refill', () => {
+  it('documents/templates: a NEW template is written in the editor screen (T-637), not in a modal; the list page only links to it', () => {
+    // The wording became a rich-text editor with a preview, which needs a whole screen: the modal and its refill moved to /documents/templates/new.
     const src = app('documents/templates/page.tsx');
-    const m = modalWith(src, 'action={saveTemplateAction}');
-    expect(m).toContain('trigger="+ New template"');
-    expect(m).toContain("defaultOpen={newTyped?.kind === 'typed'}");
-    expect(m).toContain('<TemplateFields typed={newTyped} />');
-    // the fields are unchanged (templateId belongs to the per-card edit form, not this one)
-    expect(names(src.slice(src.indexOf('function TemplateFields'), src.indexOf('function TemplateCard')))).toEqual(['body', 'kind', 'name', 'slot']);
-    expect(src).not.toContain('Write the first one above');
+    expect(modals(src)).toEqual([]);
+    expect(src).toContain('href="/documents/templates/new"');
+    expect(src).not.toContain('action={saveTemplateAction}');
+    expect(app('documents/templates/new/page.tsx')).toContain('TemplateEditorScreen');
   });
 
   it('expenses/recurring: the create TemplateForm is in a header modal, with no templateId (create branch)', () => {

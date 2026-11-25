@@ -8,7 +8,9 @@ import { DOCUMENT_ISSUE } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
-import { Banner, Button, EmptyState, Field, FlashBanner, Select, Textarea } from '@/components/ui';
+import { Banner, Button, EmptyState, Field, FlashBanner, Select } from '@/components/ui';
+import { WordingField } from '@/components/documents/WordingField';
+import { validateDoc, type DocJson } from '@shareat/domain/documents/doc';
 
 export const metadata = { title: 'Issue a document — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -42,7 +44,9 @@ export default async function NewDocumentPage({ searchParams }: { searchParams: 
     }
   });
   const typed = templateId ? typedFor(sp, DOCUMENT_ISSUE, templateId, actor.personId) : null;
-  const bodyText = typed?.kind === 'typed' && typeof typed.fields.body === 'string' ? typed.fields.body : (draft?.body ?? '');
+  // After a refused issue the editor opens with what was typed (if it was small enough to keep), else with the filled draft.
+  const typedDoc = typed?.kind === 'typed' && typeof typed.fields.bodyDoc === 'string' ? safeDoc(typed.fields.bodyDoc) : null;
+  const startDoc: DocJson | null = typedDoc ?? draft?.doc ?? null;
   const employee = options.employments.find((e) => e.id === (draft?.employmentId ?? employmentId));
 
   return (
@@ -118,8 +122,8 @@ export default async function NewDocumentPage({ searchParams }: { searchParams: 
             <input type="hidden" name="templateId" value={draft.template.id} />
             {draft.employmentId && <input type="hidden" name="employmentId" value={draft.employmentId} />}
             {draft.storeId && !draft.employmentId && <input type="hidden" name="storeId" value={draft.storeId} />}
-            <Field label="Wording" span="full" hint="Plain text. A blank line starts a paragraph; # at the start of a line is a heading; **double stars** make bold.">
-              <Textarea name="body" rows={18} defaultValue={bodyText} className="w-full font-mono" />
+            <Field label="Wording" span="full" hint="Change anything the document should say differently. Format it with the toolbar.">
+              {startDoc && <WordingField name="bodyDoc" label="Wording" initialDoc={startDoc} />}
             </Field>
             <Button type="submit" variant="primary">
               Issue
@@ -129,4 +133,13 @@ export default async function NewDocumentPage({ searchParams }: { searchParams: 
       )}
     </Page>
   );
+}
+
+function safeDoc(raw: string): DocJson | null {
+  try {
+    const c = validateDoc(JSON.parse(raw));
+    return c.ok ? c.doc : null;
+  } catch {
+    return null;
+  }
 }

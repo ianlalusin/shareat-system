@@ -1,27 +1,26 @@
-import { listDocumentKinds, listDocumentTemplateVersions, listDocumentTemplates, FIELD_DEFS, SLOT_WORDS, type DocumentKindItem, type TemplateListItem } from '@shareat/domain';
-import { SIGNATURE_SLOTS, type SignatureSlot } from '@shareat/db/schema';
+import { listDocumentKinds, listDocumentTemplateVersions, listDocumentTemplates, FIELD_DEFS, type TemplateListItem } from '@shareat/domain';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
-import { typedFor, type TypedView } from '../../../lib/keep-typing';
 import { withOrgPrincipal } from '../lib';
-import { retireTemplateAction, saveTemplateAction } from './actions';
-import { DOCUMENT_TEMPLATE_EDIT, NEW_TEMPLATE_RECORD } from './typed-forms';
+import { typedFor } from '../../../lib/keep-typing';
+import { DOCUMENT_KIND_EDIT } from './typed-forms';
+import { createKindAction, renameKindAction, retireTemplateAction, setKindStatusAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
-import { EditableRecord } from '@/components/forms';
-import { Badge, Button, Checkbox, EmptyState, Field, FlashBanner, FormGrid, FormModal, Input, Select, Textarea } from '@/components/ui';
+import { DOCUMENT_KIND_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { Badge, Button, EmptyState, Field, FlashBanner, Input } from '@/components/ui';
 
 export const metadata = { title: 'Document templates — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 /**
- * `/documents/templates`. T-584 S2.
+ * `/documents/templates`. T-584 S2, T-637.
  *
- * Where an administrator writes the wording of a certificate of employment, a memo, a notice to explain or a contract. The wording is plain text with a
- * few fields in double braces that the system fills in when a document is issued. Every save is a new version; documents already issued keep the version
- * they were written from. Admin only (`manage_document_templates`).
+ * The library: every template with its kind and version, a link to the editor, and the list of document KINDS (Certificate of employment, Memo, Explanation letter ...) that the
+ * administrator edits here: add, rename, retire. Writing a template happens in the editor (`/documents/templates/new` and `/documents/templates/[id]`). Admin only (`manage_document_templates`).
  */
 export default async function DocumentTemplatesPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
   const sp = await withFlash(searchParams);
@@ -37,52 +36,23 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
   });
   const active = templates.filter((t) => !t.retired);
   const retired = templates.filter((t) => t.retired);
-  const newTyped = typedFor(sp, DOCUMENT_TEMPLATE_EDIT, NEW_TEMPLATE_RECORD, actor.personId);
 
   return (
     <Page density="table" className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            <a href="/documents" className={ACTION_LINK}>
-              Documents
-            </a>{' '}
-            / Templates
-          </p>
           <h1 className="text-2xl font-semibold">Document templates</h1>
           <PageDescription>
-            The standard wording for a certificate of employment, memo, notice to explain or contract. Fields in double braces, like {'{{employee.full_name}}'}, are
-            filled in when a document is issued.
+            The standard wording and page for each kind of document. Fields like the employee&apos;s name are filled in when a document is issued; type {'{{'} in the editor to insert one.
           </PageDescription>
           <p className="mt-1 text-sm text-muted">Each save is a new version. Documents already issued keep the wording they were written from.</p>
         </div>
-        {/* T-589 B7: writing a new template is a header action; a refused save reopens it with the typing (defaultOpen). */}
-        <FormModal trigger="+ New template" title="New template" size="lg" defaultOpen={newTyped?.kind === 'typed'}>
-          <form action={saveTemplateAction} className="space-y-4 text-sm">
-            <TemplateFields typed={newTyped} kinds={kinds} />
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
-          </form>
-        </FormModal>
+        <a href="/documents/templates/new" className="inline-flex min-h-11 items-center rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-white">
+          + New template
+        </a>
       </div>
 
       <FlashBanner flash={sp} />
-
-      <details className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
-        <summary className="inline-flex min-h-8 cursor-pointer items-center font-medium">Fields you can use in the wording</summary>
-        <dl className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-2">
-          {FIELD_DEFS.map((f) => (
-            <div key={f.name} className="flex flex-wrap gap-x-2">
-              <dt className="font-mono text-xs">{`{{${f.name}}}`}</dt>
-              <dd className="text-muted">{f.label}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="mt-3 text-muted">
-          Formatting: a blank line starts a new paragraph, a line that starts with # is a heading, and **double stars** make bold. Nothing else is read as formatting.
-        </p>
-      </details>
 
       {active.length === 0 ? (
         <EmptyState illustration="magnifier" title="No templates yet" body="Press New template to write the first one. Nothing is pre-filled: the wording is yours." />
@@ -90,7 +60,7 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
         <section className="space-y-4">
           <h2 className="text-lg font-semibold">Templates</h2>
           {active.map((t) => (
-            <TemplateCard key={t.id} template={t} versions={history.get(t.id)} typed={typedFor(sp, DOCUMENT_TEMPLATE_EDIT, t.id, actor.personId)} kinds={kinds} />
+            <TemplateCard key={t.id} template={t} versions={history.get(t.id)} />
           ))}
         </section>
       )}
@@ -112,50 +82,68 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
           ))}
         </section>
       )}
+
+      <section className="space-y-3" aria-labelledby="kinds-h">
+        <h2 id="kinds-h" className="text-lg font-semibold">
+          Document kinds
+        </h2>
+        <p className="text-sm text-muted">
+          The kinds you can pick for a template, and filter the register by. Add your own, for example Warning letter. A kind cannot be retired while a template that is in use has it; documents already
+          issued keep the name they were issued with.
+        </p>
+        <div className="space-y-2">
+          {kinds.map((k) => (
+            <div key={k.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+              <EditableRecord
+                action={renameKindAction}
+                label={k.name}
+                hidden={{ kindId: k.id }}
+                rules={DOCUMENT_KIND_RULES}
+                typed={typedFor(sp, DOCUMENT_KIND_EDIT, k.id, actor.personId)}
+                extra={
+                  <form action={setKindStatusAction}>
+                    <input type="hidden" name="kindId" value={k.id} />
+                    <input type="hidden" name="status" value={k.active ? 'retired' : 'active'} />
+                    <Button type="submit" variant={k.active ? 'danger' : 'secondary'} icon={null}>
+                      {k.active ? 'Retire' : 'Restore'}
+                    </Button>
+                  </form>
+                }
+              >
+                <Field label="Kind name" rule={DOCUMENT_KIND_RULES.name}>
+                  <Input {...nativeAttrs(DOCUMENT_KIND_RULES.name)} defaultValue={k.name} className="w-full" />
+                </Field>
+              </EditableRecord>
+              {!k.active && <Badge tone="closed" label="Retired" />}
+            </div>
+          ))}
+        </div>
+        <CheckedForm rules={DOCUMENT_KIND_RULES} action={createKindAction} className="flex flex-wrap items-end gap-2">
+          <Field label="A new kind" rule={DOCUMENT_KIND_RULES.name}>
+            <Input {...nativeAttrs(DOCUMENT_KIND_RULES.name)} placeholder="Warning letter" className="w-full" />
+          </Field>
+          <Button type="submit" variant="secondary">
+            Save
+          </Button>
+        </CheckedForm>
+      </section>
+
+      <details className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+        <summary className="inline-flex min-h-8 cursor-pointer items-center font-medium">Fields you can use in the wording</summary>
+        <dl className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+          {FIELD_DEFS.map((f) => (
+            <div key={f.name} className="flex flex-wrap gap-x-2">
+              <dt className="font-medium">{f.label}</dt>
+              <dd className="text-muted">e.g. {f.sample}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
     </Page>
   );
 }
 
-function TemplateFields({ template, typed, kinds }: { template?: TemplateListItem; typed: TypedView | null; kinds: DocumentKindItem[] }) {
-  // The page draws the STORED values as defaults; EditableRecord puts the user's typing back over them. A plain add form has no such layer, so it reads the typing itself.
-  const t = typed?.kind === 'typed' ? typed.fields : null;
-  const one = (name: string, stored: string): string => {
-    const v = t?.[name];
-    return typeof v === 'string' ? v : stored;
-  };
-  const slots = (t?.slot ? (Array.isArray(t.slot) ? t.slot : [t.slot]) : template?.latest.signatureSlots ?? ['issuer', 'employee']) as readonly string[];
-  return (
-    <>
-      <FormGrid>
-        <Field label="Name">
-          <Input name="name" defaultValue={one('name', template?.name ?? '')} placeholder="Certificate of Employment" className="w-full" />
-        </Field>
-        <Field label="Kind">
-          <Select name="kindId" defaultValue={one('kindId', template?.kindId ?? kinds.find((k) => k.active)?.id ?? '')}>
-            {kinds
-              .filter((k) => k.active || k.id === template?.kindId)
-              .map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.name}
-                </option>
-              ))}
-          </Select>
-        </Field>
-      </FormGrid>
-      <Field label="Wording" span="full" hint="Plain text. Use the fields listed above. A blank line starts a paragraph; # at the start of a line is a heading.">
-        <Textarea name="body" rows={12} defaultValue={one('body', template?.latest.body ?? '')} className="w-full font-mono" />
-      </Field>
-      <fieldset className="flex flex-wrap items-center gap-x-6">
-        <legend className="text-sm font-medium">Signatures this document needs</legend>
-        {SIGNATURE_SLOTS.map((s: SignatureSlot) => (
-          <Checkbox key={s} name="slot" value={s} defaultChecked={slots.includes(s)} label={SLOT_WORDS[s]} />
-        ))}
-      </fieldset>
-    </>
-  );
-}
-
-function TemplateCard({ template, versions, typed, kinds }: { template: TemplateListItem; versions: Awaited<ReturnType<typeof listDocumentTemplateVersions>> | undefined; typed: TypedView | null; kinds: DocumentKindItem[] }) {
+function TemplateCard({ template, versions }: { template: TemplateListItem; versions: Awaited<ReturnType<typeof listDocumentTemplateVersions>> | undefined }) {
   const older = (versions ?? []).filter((v) => v.versionNo !== template.latest.versionNo);
   return (
     <article className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -166,25 +154,18 @@ function TemplateCard({ template, versions, typed, kinds }: { template: Template
           {template.kindName} · saved {formatBusinessDateTime(template.latest.createdAt, { dateStyle: 'medium' })} by {template.latest.createdByName}
         </span>
       </div>
-      <EditableRecord
-        action={saveTemplateAction}
-        label={template.name}
-        hidden={{ templateId: template.id }}
-        typed={typed}
-        extra={
-          <form action={retireTemplateAction}>
-            <input type="hidden" name="templateId" value={template.id} />
-            <Button type="submit">Retire</Button>
-          </form>
-        }
-      >
-        <TemplateFields template={template} typed={null} kinds={kinds} />
-      </EditableRecord>
+      <div className="flex flex-wrap items-center gap-3">
+        <a href={`/documents/templates/${template.id}`} className={ACTION_LINK}>
+          Edit and preview
+        </a>
+        <form action={retireTemplateAction}>
+          <input type="hidden" name="templateId" value={template.id} />
+          <Button type="submit">Retire</Button>
+        </form>
+      </div>
       {older.length > 0 && (
         <details className="text-sm">
-          <summary className="inline-flex min-h-8 cursor-pointer items-center text-neutral-600 dark:text-neutral-400">
-            Earlier versions ({older.length})
-          </summary>
+          <summary className="inline-flex min-h-8 cursor-pointer items-center text-neutral-600 dark:text-neutral-400">Earlier versions ({older.length})</summary>
           <ul className="mt-2 space-y-3">
             {older.map((v) => (
               <li key={v.id}>

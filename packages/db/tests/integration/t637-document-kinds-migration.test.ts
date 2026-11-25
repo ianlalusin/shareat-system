@@ -5,8 +5,8 @@
  * The backfill and the seed are SQL INSIDE the migration file; this test cuts them out of the file and runs them on old-shape rows inside a transaction that is always rolled back,
  * so what is proven is the migration's own text, not a copy. Raw SQL on the migration role; the constraint and grant checks run as the app role.
  *
- * Mutants (each proven red by hand, see docs/tasks/637 "As built"): map a kind to the wrong name (B1 red); skip the NULL guard (B2 red); seed only the old five (B3 red);
- * drop the case-insensitive unique index (C1 red); drop the same-org composite FK (C3 red); grant DELETE to the app role (C4 red).
+ * Mutants (each proven red by hand, 25 Nov 2026): map memo to the wrong name (B1 red); drop the NULL guard (B2 red); seed fewer than the seven (B3 red). The constraint, RLS and grant checks
+ * below read the live schema; a constraint or grant dropped from the migration goes red on a freshly migrated database.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

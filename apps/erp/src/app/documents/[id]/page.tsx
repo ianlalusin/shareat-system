@@ -8,6 +8,8 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { typedFor } from '../../../lib/keep-typing';
 import { DocumentBlock } from '@/components/documents/DocumentDoc';
+import { WordingField } from '@/components/documents/WordingField';
+import { validateDoc } from '@shareat/domain/documents/doc';
 import { reviseDocumentAction, signDocumentAction, voidDocumentAction } from '../actions';
 import { withOrgPrincipal } from '../lib';
 import { DOCUMENT_REVISE } from '../typed-forms';
@@ -52,6 +54,9 @@ export default async function DocumentPage({ params, searchParams }: { params: P
   const { got, canIssue } = loaded;
   const { document: doc, versions } = got;
   const current = versions[0]!;
+  // After a refused revision the editor reopens with what was typed (when it was small enough to keep).
+  const typedRevision = typedFor(sp, DOCUMENT_REVISE, doc.id, actor.personId);
+  const revisedDoc = typedRevision?.kind === 'typed' && typeof typedRevision.fields.bodyDoc === 'string' ? safeDoc(typedRevision.fields.bodyDoc) : null;
   const open = !doc.voided;
 
   return (
@@ -110,10 +115,10 @@ export default async function DocumentPage({ params, searchParams }: { params: P
             hidden={{ documentId: doc.id }}
             editText="Change the wording"
             rules={DOCUMENT_REASON_RULES}
-            typed={typedFor(sp, DOCUMENT_REVISE, doc.id, actor.personId)}
+            typed={typedRevision}
           >
             <Field label="Wording" span="full">
-              <Textarea name="body" rows={16} defaultValue={current.body} className="w-full font-mono" />
+              <WordingField name="bodyDoc" label="Wording" initialDoc={revisedDoc ?? current.doc} />
             </Field>
             <Field label="Why is it changing?" span="full" hint="Kept with the new version. At most 500 characters." rule={DOCUMENT_REASON_RULES.reason}>
               <Textarea {...nativeAttrs(DOCUMENT_REASON_RULES.reason)} rows={2} defaultValue="" className="w-full" />
@@ -210,4 +215,13 @@ function SignatureCard({ slot, documentId, version, open, waitingFor }: { slot: 
       )}
     </div>
   );
+}
+
+function safeDoc(raw: string) {
+  try {
+    const c = validateDoc(JSON.parse(raw));
+    return c.ok ? c.doc : null;
+  } catch {
+    return null;
+  }
 }

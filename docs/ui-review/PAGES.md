@@ -191,3 +191,5 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /wastage/[id] | apps/erp/src/app/wastage/[id]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c, #287 | not captured: no record in the synthetic data |
 | /pos/reservations | apps/erp/src/app/pos/reservations/page.tsx | - | not reviewed | - | - | new page, not reviewed |
 | /pos-reservations | apps/erp/src/app/pos-reservations/page.tsx | - | not reviewed | - | - | new page, not reviewed |
+| /documents/templates/new | apps/erp/src/app/documents/templates/new/page.tsx | - | not reviewed | - | - | new page, not reviewed |
+| /documents/templates/[id] | apps/erp/src/app/documents/templates/[id]/page.tsx | - | not reviewed | - | - | new page, not reviewed |

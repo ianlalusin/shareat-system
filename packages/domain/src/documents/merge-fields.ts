@@ -54,7 +54,6 @@ export function suggestFields(query: string, defs: readonly FieldDef[] = FIELD_D
 
 const KNOWN: ReadonlySet<string> = new Set(MERGE_FIELDS);
 const FIELD_RE = /\{\{\s*([^{}]*?)\s*\}\}/g;
-const MISSING_RE = /\[missing: ([a-z_.]+)\]/g;
 
 /** Every `{{name}}` in the text, in order of first appearance, without duplicates. */
 export function fieldsIn(body: string): string[] {
@@ -69,22 +68,6 @@ export function unknownFields(body: string): string[] {
 }
 
 export type MergeValues = Partial<Record<MergeField, string | null | undefined>>;
-
-/** Fills known fields. A null, undefined or blank value becomes `[missing: name]`. An unknown name is left exactly as typed (a saved template has none). */
-export function fillBody(body: string, values: MergeValues): string {
-  return body.replace(FIELD_RE, (whole, name: string) => {
-    if (!KNOWN.has(name)) return whole;
-    const v = values[name as MergeField];
-    return v === null || v === undefined || v.trim() === '' ? `[missing: ${name}]` : v;
-  });
-}
-
-/** The `[missing: …]` markers still in a text, in order, without duplicates. Issue is blocked while any remain. */
-export function missingIn(text: string): string[] {
-  const out: string[] = [];
-  for (const m of text.matchAll(MISSING_RE)) if (!out.includes(m[1]!)) out.push(m[1]!);
-  return out;
-}
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
 

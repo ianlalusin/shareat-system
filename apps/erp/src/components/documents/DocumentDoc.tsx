@@ -175,6 +175,9 @@ function sheetCss(margin: string, sheet: boolean): string {
 .doc-frame td { padding: 0; vertical-align: top; }
 .doc-sheet p { margin: 0 0 .6em; }
 .doc-sheet h1, .doc-sheet h2, .doc-sheet h3 { margin: .8em 0 .4em; font-weight: 700; line-height: 1.2; }
+.doc-sheet h1 { font-size: 20pt; }
+.doc-sheet h2 { font-size: 16pt; }
+.doc-sheet h3 { font-size: 13pt; }
 .doc-sheet ul { list-style: disc; padding-left: 1.6em; margin: 0 0 .6em; }
 .doc-sheet ol { list-style: decimal; padding-left: 1.6em; margin: 0 0 .6em; }
 .doc-sheet li > p { margin: 0 0 .2em; }
@@ -237,6 +240,11 @@ export function DocumentSheet({ page, legacyHeader, children, voided }: { page: 
       </div>
     </div>
   );
+}
+
+/** The document stylesheet alone, for the editor's writing surface (it draws the same elements ProseMirror makes). */
+export function DocumentStyles() {
+  return <style>{sheetCss(PAGE_MARGINS.normal, false)}</style>;
 }
 
 /** A document in a small panel (a version in the history list): the same elements and the same look, with no A4 width and no print rules. */

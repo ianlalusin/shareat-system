@@ -97,3 +97,23 @@ Today `DOCUMENT_KINDS = ['coe','memo','nte','contract','other']` is a hard-coded
 - The /documents filter and the template form read the list.
 - Tests (each with a mutant): backfill maps every old kind; a new kind is usable in a template; retire is refused while a template uses it; a cashier is refused editing kinds.
 - No hard-coded kind names may remain in code paths (STANDING: no hard-coded business settings).
+
+## As built (builder, 25 Nov 2026)
+
+**Slices.** S1 = kinds table, JSON model + strict server whitelist, converter, field maths, renderer, migration 0281 (commit f6119b8). S2 = editor UI, `{{` list, letterhead, preview and print, kinds screen.
+
+**Editor.** TipTap 3.33.1 (published 10 Nov), all MIT, pinned exactly: core, pm, react, starter-kit, extension-text-align, extension-text-style, extension-table, suggestion. Every package the install added is MIT. No Pro extension, no CDN. Starter-kit quote, code, code block, strike and link are switched off.
+
+**Stored content.** `body_doc jsonb` on template and issued versions; `body` keeps the plain text (`{{field}}` per tag). `validateDoc` (packages/domain/src/documents/doc.ts) is the whitelist and runs on every template save, every issue and every revision. The renderer (`apps/erp/src/components/documents/DocumentDoc.tsx`) draws React elements only; a test scans every documents file for raw-markup escape hatches.
+
+**Old rows are converted on read, not rewritten.** The migration touches no row of an append-only table. A version with `body_doc` NULL is converted in memory by `legacyBodyToDoc` (headings become level 2, as they were drawn); the first save writes a new version with `body_doc`. An old issued version keeps printing from its stored `body` with the old built-in company block (its letterhead snapshot has no `page`).
+
+**Letterhead.** Per version: margins narrow/normal/wide, optional header and footer documents (may hold fields). At issue the server fills them from the template's latest version (a missing value prints nothing and never blocks) and freezes them in `letterhead.page`; a revision carries that page over unchanged. A new template and a first edit of an old one start with company name, store name, address and phone as the header (the old print also showed the TIN: add `TIN {{org.tin}}` to the header to keep it).
+
+**Fields added (6 of the 17 asked), each with a stored source:** `employee.first_name`, `employee.last_name` (persons), `employee.email`, `employee.phone` (person_identities, primary = verified first, then oldest, then lowest id), `employee.length_of_service` (started_on to ended_on or today, whole calendar months), `store.phone` (stores.contact_number). **Left out, no stored source:** employee address, employee birth date, store email, store city, store province, org address, org email, org phone, issuer title (`issuer.position` already exists). **No org logo exists in the data**, so the letterhead logo is not built.
+
+**Kinds.** `document_kinds` (name 1-40 unique ignoring case, sort order, status). Seeded for every org (seven) and by `seedReferenceData` for new orgs. No numbering code column: the DOC-YYYY-NNNN number never uses the kind. Nothing else branches on the kind; the code holds no kind names. Retire is refused in the domain while an ACTIVE template uses the kind (kind row locked FOR UPDATE; a template save share-locks it); no database trigger, so the rule lives in one place. Issued documents print the kind name frozen on their version.
+
+**Screens.** `/documents/templates` (list, kinds section), `/documents/templates/new` and `/documents/templates/[id]` (editor with Write / Preview, sample values or a chosen employee, Print or save as PDF), issue and revise use the same editor without field tags. The hand-written crumb on /documents/new is gone. Preview and print are one component: `@page` A4 with the chosen margin, header and footer repeat on every sheet, a page-break node breaks the page, and only the sheet prints.
+
+**Not done / honest limits.** The on-screen preview is one A4-wide sheet, not split into pages (the browser paginates only when printing). Issued documents may not hold field tags (refused). Revise Cancel restores the stored wording via the form reset event.
