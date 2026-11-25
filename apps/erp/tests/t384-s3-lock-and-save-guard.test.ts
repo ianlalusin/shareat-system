@@ -498,8 +498,8 @@ describe('G8: submit labels are Save / Save draft / a COMMANDS verb / a toggle',
 /** Buttons whose text is not a literal (`{label}`), per file. Pinned so a new one is a decision, not silence. */
 const DYNAMIC_BUTTONS: Record<string, number> = {
   'expenses/recurring/page.tsx': 1,
-  // T-640 (BOSS approved 26 Nov 2026): the Move earlier / Move later buttons of the AI model order share one MoveForm that takes the label as a prop
-  'settings/ai-hub/page.tsx': 1,
+  // T-640 (BOSS approved 26 Nov 2026): the Move earlier / Move later buttons of the AI model order share one MoveForm that takes the label as a prop. T-642: MoveForm moved with the numbered cards into FallbackOrder.tsx.
+  'settings/ai-hub/FallbackOrder.tsx': 1,
 };
 describe('G8b: dynamic-label buttons are an explicit list', () => {
   it('equals DYNAMIC_BUTTONS', () => {
