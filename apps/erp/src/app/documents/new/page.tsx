@@ -1,4 +1,4 @@
-import { documentDraft, documentIssueOptions, documentKindLabel, SLOT_WORDS } from '@shareat/domain';
+import { documentDraft, documentIssueOptions, SLOT_WORDS } from '@shareat/domain';
 import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { typedFor } from '../../../lib/keep-typing';
@@ -8,7 +8,6 @@ import { DOCUMENT_ISSUE } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
-import { ACTION_LINK } from '@/components/action-link';
 import { Banner, Button, EmptyState, Field, FlashBanner, Select, Textarea } from '@/components/ui';
 
 export const metadata = { title: 'Issue a document — Shareat System' };
@@ -49,12 +48,6 @@ export default async function NewDocumentPage({ searchParams }: { searchParams: 
   return (
     <Page density="table" className="space-y-6">
       <div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          <a href="/documents" className={ACTION_LINK}>
-            Documents
-          </a>{' '}
-          / Issue
-        </p>
         <h1 className="text-2xl font-semibold">Issue a document</h1>
         <PageDescription>Pick the template and who it is for. The wording is filled in from the records and you can change it before it is issued.</PageDescription>
       </div>
@@ -72,7 +65,7 @@ export default async function NewDocumentPage({ searchParams }: { searchParams: 
               {templateId ? null : <option value="">Pick a template</option>}
               {options.templates.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} ({documentKindLabel(t.kind)})
+                  {t.name} ({t.kindName})
                 </option>
               ))}
             </Select>
@@ -108,7 +101,7 @@ export default async function NewDocumentPage({ searchParams }: { searchParams: 
           <div className="space-y-1 text-sm">
             <h2 className="text-lg font-semibold">{draft.template.name}</h2>
             <p className="text-muted">
-              {documentKindLabel(draft.template.kind)} · template version {draft.template.versionNo} · for {employee ? `${employee.displayName} (${employee.staffCode}, ${employee.storeName})` : 'no one in particular'}
+              {draft.template.kindName} · template version {draft.template.versionNo} · for {employee ? `${employee.displayName} (${employee.staffCode}, ${employee.storeName})` : 'no one in particular'}
             </p>
             <p className="text-muted">
               Signatures needed:{' '}

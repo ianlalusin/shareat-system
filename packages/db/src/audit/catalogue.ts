@@ -138,6 +138,11 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-584: HR documents (dotted: new). Payloads carry ids, a number, a kind and a reason, never the document text or a PIN. A document with no store (an org-wide memo) is scope 'either'.
   def('document_template.version_saved', 'settings', 'normal', 'org', 'document_templates', 'T-584'),
   def('document_template.retired', 'settings', 'normal', 'org', 'document_templates', 'T-584'),
+  // T-637: the org's own list of document kinds (entity = the document_kinds row). Org-level, no store.
+  def('document_kind.created', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
+  def('document_kind.renamed', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
+  def('document_kind.retired', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
+  def('document_kind.reactivated', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
   def('document.issued', 'staff', 'normal', 'either', 'issued_documents', 'T-584'),
   def('document.revised', 'staff', 'high', 'either', 'issued_documents', 'T-584'),
   def('document.signed', 'security', 'high', 'either', 'issued_documents', 'T-584'),

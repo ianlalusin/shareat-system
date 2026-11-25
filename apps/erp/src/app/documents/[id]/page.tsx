@@ -1,13 +1,13 @@
 import { notFound } from 'next/navigation';
 import { can } from '@shareat/auth';
-import { getIssuedDocument, documentKindLabel, SLOT_WORDS, type IssuedDocumentVersion } from '@shareat/domain';
+import { getIssuedDocument, SLOT_WORDS, type IssuedDocumentVersion } from '@shareat/domain';
 import { DOCUMENT_REASON_RULES, DOCUMENT_SIGN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import type { SignatureSlot } from '@shareat/db/schema';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { typedFor } from '../../../lib/keep-typing';
-import { DocumentBody } from '../DocumentBody';
+import { DocumentBlock } from '@/components/documents/DocumentDoc';
 import { reviseDocumentAction, signDocumentAction, voidDocumentAction } from '../actions';
 import { withOrgPrincipal } from '../lib';
 import { DOCUMENT_REVISE } from '../typed-forms';
@@ -68,7 +68,7 @@ export default async function DocumentPage({ params, searchParams }: { params: P
           {doc.voided && <Badge tone="danger" label="VOID" />}
         </div>
         <p className="mt-1 text-sm text-muted">
-          {doc.templateName} · {documentKindLabel(doc.kind)} · Version {current.versionNo} of {doc.number} · for {doc.employeeName ?? 'no one in particular'} · {doc.storeName ?? 'whole company'}
+          {doc.templateName} · {current.letterhead.kindName ?? doc.kindName} · Version {current.versionNo} of {doc.number} · for {doc.employeeName ?? 'no one in particular'} · {doc.storeName ?? 'whole company'}
         </p>
         <p className="text-sm text-muted">
           Issued {formatBusinessDateTime(doc.issuedAt)} by {doc.issuedByName}
@@ -84,7 +84,7 @@ export default async function DocumentPage({ params, searchParams }: { params: P
       <FlashBanner flash={sp} />
 
       <article className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
-        <DocumentBody body={current.body} />
+        <DocumentBlock doc={current.doc} />
       </article>
 
       {doc.signatureSlots.length > 0 && (
@@ -161,7 +161,7 @@ export default async function DocumentPage({ params, searchParams }: { params: P
               {v.versionNo !== current.versionNo && (
                 <details className="mt-2">
                   <summary className="inline-flex min-h-8 cursor-pointer items-center text-neutral-600 dark:text-neutral-400">Show the wording of version {v.versionNo}</summary>
-                  <DocumentBody body={v.body} className="mt-2 rounded-md bg-canvas p-3" />
+                  <DocumentBlock doc={v.doc} className="mt-2" />
                 </details>
               )}
             </li>

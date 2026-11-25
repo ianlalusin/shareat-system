@@ -1,10 +1,10 @@
-import { listDocumentTemplateVersions, listDocumentTemplates, documentKindLabel, SLOT_WORDS, type TemplateListItem } from '@shareat/domain';
-import { DOCUMENT_KINDS, SIGNATURE_SLOTS, type DocumentKind, type SignatureSlot } from '@shareat/db/schema';
+import { listDocumentKinds, listDocumentTemplateVersions, listDocumentTemplates, FIELD_DEFS, SLOT_WORDS, type DocumentKindItem, type TemplateListItem } from '@shareat/domain';
+import { SIGNATURE_SLOTS, type SignatureSlot } from '@shareat/db/schema';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { typedFor, type TypedView } from '../../../lib/keep-typing';
-import { FIELD_HELP, withOrgPrincipal } from '../lib';
+import { withOrgPrincipal } from '../lib';
 import { retireTemplateAction, saveTemplateAction } from './actions';
 import { DOCUMENT_TEMPLATE_EDIT, NEW_TEMPLATE_RECORD } from './typed-forms';
 import { Page } from '@/components/shell/Page';
@@ -28,11 +28,12 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
   const { actor, refusal } = await requirePageAccess('/documents/templates');
   if (refusal) return refusal;
 
-  const { templates, history } = await withOrgPrincipal(actor.orgId, async (tx) => {
+  const { templates, history, kinds } = await withOrgPrincipal(actor.orgId, async (tx) => {
+    const kinds = await listDocumentKinds(tx, actor);
     const templates = await listDocumentTemplates(tx, actor);
     const history = new Map<string, Awaited<ReturnType<typeof listDocumentTemplateVersions>>>();
     for (const t of templates) if (t.latest.versionNo > 1) history.set(t.id, await listDocumentTemplateVersions(tx, actor, t.id));
-    return { templates, history };
+    return { templates, history, kinds };
   });
   const active = templates.filter((t) => !t.retired);
   const retired = templates.filter((t) => t.retired);
@@ -58,7 +59,7 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
         {/* T-589 B7: writing a new template is a header action; a refused save reopens it with the typing (defaultOpen). */}
         <FormModal trigger="+ New template" title="New template" size="lg" defaultOpen={newTyped?.kind === 'typed'}>
           <form action={saveTemplateAction} className="space-y-4 text-sm">
-            <TemplateFields typed={newTyped} />
+            <TemplateFields typed={newTyped} kinds={kinds} />
             <Button type="submit" variant="primary">
               Save
             </Button>
@@ -71,10 +72,10 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
       <details className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
         <summary className="inline-flex min-h-8 cursor-pointer items-center font-medium">Fields you can use in the wording</summary>
         <dl className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-2">
-          {FIELD_HELP.map((f) => (
+          {FIELD_DEFS.map((f) => (
             <div key={f.name} className="flex flex-wrap gap-x-2">
               <dt className="font-mono text-xs">{`{{${f.name}}}`}</dt>
-              <dd className="text-muted">{f.says}</dd>
+              <dd className="text-muted">{f.label}</dd>
             </div>
           ))}
         </dl>
@@ -89,7 +90,7 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
         <section className="space-y-4">
           <h2 className="text-lg font-semibold">Templates</h2>
           {active.map((t) => (
-            <TemplateCard key={t.id} template={t} versions={history.get(t.id)} typed={typedFor(sp, DOCUMENT_TEMPLATE_EDIT, t.id, actor.personId)} />
+            <TemplateCard key={t.id} template={t} versions={history.get(t.id)} typed={typedFor(sp, DOCUMENT_TEMPLATE_EDIT, t.id, actor.personId)} kinds={kinds} />
           ))}
         </section>
       )}
@@ -104,7 +105,7 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
                 <h3 className="font-medium">{t.name}</h3>
                 <Badge tone="closed" label="Retired" />
                 <span className="text-muted">
-                  {documentKindLabel(t.kind)} · version {t.latest.versionNo}
+                  {t.kindName} · version {t.latest.versionNo}
                 </span>
               </div>
             </article>
@@ -115,7 +116,7 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
   );
 }
 
-function TemplateFields({ template, typed }: { template?: TemplateListItem; typed: TypedView | null }) {
+function TemplateFields({ template, typed, kinds }: { template?: TemplateListItem; typed: TypedView | null; kinds: DocumentKindItem[] }) {
   // The page draws the STORED values as defaults; EditableRecord puts the user's typing back over them. A plain add form has no such layer, so it reads the typing itself.
   const t = typed?.kind === 'typed' ? typed.fields : null;
   const one = (name: string, stored: string): string => {
@@ -130,12 +131,14 @@ function TemplateFields({ template, typed }: { template?: TemplateListItem; type
           <Input name="name" defaultValue={one('name', template?.name ?? '')} placeholder="Certificate of Employment" className="w-full" />
         </Field>
         <Field label="Kind">
-          <Select name="kind" defaultValue={one('kind', template?.kind ?? 'coe')}>
-            {DOCUMENT_KINDS.map((k: DocumentKind) => (
-              <option key={k} value={k}>
-                {documentKindLabel(k)}
-              </option>
-            ))}
+          <Select name="kindId" defaultValue={one('kindId', template?.kindId ?? kinds.find((k) => k.active)?.id ?? '')}>
+            {kinds
+              .filter((k) => k.active || k.id === template?.kindId)
+              .map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.name}
+                </option>
+              ))}
           </Select>
         </Field>
       </FormGrid>
@@ -152,7 +155,7 @@ function TemplateFields({ template, typed }: { template?: TemplateListItem; type
   );
 }
 
-function TemplateCard({ template, versions, typed }: { template: TemplateListItem; versions: Awaited<ReturnType<typeof listDocumentTemplateVersions>> | undefined; typed: TypedView | null }) {
+function TemplateCard({ template, versions, typed, kinds }: { template: TemplateListItem; versions: Awaited<ReturnType<typeof listDocumentTemplateVersions>> | undefined; typed: TypedView | null; kinds: DocumentKindItem[] }) {
   const older = (versions ?? []).filter((v) => v.versionNo !== template.latest.versionNo);
   return (
     <article className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -160,7 +163,7 @@ function TemplateCard({ template, versions, typed }: { template: TemplateListIte
         <h3 className="text-base font-medium">{template.name}</h3>
         <Badge tone="info" label={`Version ${template.latest.versionNo}`} />
         <span className="text-sm text-muted">
-          {documentKindLabel(template.kind)} · saved {formatBusinessDateTime(template.latest.createdAt, { dateStyle: 'medium' })} by {template.latest.createdByName}
+          {template.kindName} · saved {formatBusinessDateTime(template.latest.createdAt, { dateStyle: 'medium' })} by {template.latest.createdByName}
         </span>
       </div>
       <EditableRecord
@@ -175,7 +178,7 @@ function TemplateCard({ template, versions, typed }: { template: TemplateListIte
           </form>
         }
       >
-        <TemplateFields template={template} typed={null} />
+        <TemplateFields template={template} typed={null} kinds={kinds} />
       </EditableRecord>
       {older.length > 0 && (
         <details className="text-sm">

@@ -1,6 +1,5 @@
 import { heldCapabilities } from '@shareat/auth';
-import { listIssuedDocuments, documentKindLabel } from '@shareat/domain';
-import { DOCUMENT_KINDS, type DocumentKind } from '@shareat/db/schema';
+import { listIssuedDocuments, documentKindOptions } from '@shareat/domain';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../lib/page-access';
 import { withFlash } from '../../lib/flash';
@@ -30,12 +29,18 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
   if (refusal) return refusal;
 
   const storeFilter = sp.store && UUID.test(sp.store) ? sp.store : undefined;
-  const kindFilter = (DOCUMENT_KINDS as readonly string[]).includes(sp.kind ?? '') ? (sp.kind as DocumentKind) : undefined;
-  const { rows, stores, held } = await withOrgPrincipal(actor.orgId, async (tx) => ({
-    rows: await listIssuedDocuments(tx, actor, { ...(storeFilter ? { storeId: storeFilter } : {}), ...(kindFilter ? { kind: kindFilter } : {}) }),
-    stores: await heldStoresFor(tx, actor, ['view_documents']),
-    held: await heldCapabilities(tx, actor),
-  }));
+  const { rows, stores, held, kinds, kindFilter } = await withOrgPrincipal(actor.orgId, async (tx) => {
+    // The kinds are the organisation's own list (T-637); a filter value that is not one of them is ignored.
+    const kinds = await documentKindOptions(tx, actor);
+    const kindFilter = kinds.find((k) => k.id === sp.kind)?.id;
+    return {
+      kinds,
+      kindFilter,
+      rows: await listIssuedDocuments(tx, actor, { ...(storeFilter ? { storeId: storeFilter } : {}), ...(kindFilter ? { kindId: kindFilter } : {}) }),
+      stores: await heldStoresFor(tx, actor, ['view_documents']),
+      held: await heldCapabilities(tx, actor),
+    };
+  });
   const canIssue = held.has('issue_documents');
   const canTemplate = held.has('manage_document_templates');
 
@@ -44,7 +49,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
       <div>
         <h1 className="text-2xl font-semibold">Documents</h1>
         <PageDescription>
-          Certificates of employment, memos, notices to explain and contracts issued for staff. Each has a number, is kept, and can be printed again at any time.
+          Certificates, memos, notices, letters and contracts issued for staff. Each has a number, is kept, and can be printed again at any time.
         </PageDescription>
         <p className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
           {canIssue && (
@@ -78,9 +83,10 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
           <span className="text-muted">Kind</span>
           <Select name="kind" defaultValue={kindFilter ?? ''}>
             <option value="">All kinds</option>
-            {DOCUMENT_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {documentKindLabel(k)}
+            {kinds.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.name}
+                {k.active ? '' : ' (retired)'}
               </option>
             ))}
           </Select>
@@ -110,7 +116,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
                 </Td>
                 <Td>
                   {d.templateName}
-                  <div className="text-xs text-muted">{documentKindLabel(d.kind)}</div>
+                  <div className="text-xs text-muted">{d.kindName}</div>
                 </Td>
                 <Td>{d.employeeName ?? '—'}</Td>
                 <Td>{d.storeName ?? 'Whole company'}</Td>

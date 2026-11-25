@@ -6,7 +6,7 @@ import { defineTypedForm } from '@/lib/keep-typing';
 
 export const DOCUMENT_TEMPLATE_EDIT = defineTypedForm({
   form: 'documents.template',
-  fields: ['name', 'kind', 'body', 'slot'],
+  fields: ['name', 'kindId', 'body', 'slot'],
 });
 
 export const NEW_TEMPLATE_RECORD = 'new';

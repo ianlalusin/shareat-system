@@ -6,11 +6,12 @@ import { MERGE_FIELDS, fieldsIn, fillBody, longDate, missingIn, parseBody, unkno
  * Test 3 (unknown field refused, missing blocks issue) at the unit level, and test 8 (`<script>` stays literal text) at the parser level.
  */
 describe('T-584 merge fields', () => {
-  it('the whitelist is exactly the spec list, fifteen names [kills: a field added or dropped without a decision]', () => {
+  it('the whitelist is exactly the spec list, the fifteen of T-584 plus the six T-637 added whose data is really stored [kills: a field added or dropped without a decision]', () => {
     expect([...MERGE_FIELDS].sort()).toEqual(
       [
         'employee.full_name', 'employee.staff_code', 'employee.position', 'employee.status', 'employee.started_on', 'employee.ended_on',
         'store.name', 'store.address', 'store.tin_branch_code', 'org.legal_name', 'org.trading_name', 'org.tin', 'issuer.full_name', 'issuer.position', 'today',
+        'employee.first_name', 'employee.last_name', 'employee.email', 'employee.phone', 'employee.length_of_service', 'store.phone',
       ].sort(),
     );
   });

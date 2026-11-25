@@ -9,7 +9,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { retireDocumentTemplate, saveDocumentTemplate } from '@shareat/domain';
-import type { DocumentKind, SignatureSlot } from '@shareat/db/schema';
+import type { SignatureSlot } from '@shareat/db/schema';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '../../../lib/flash';
@@ -28,7 +28,7 @@ export async function saveTemplateAction(fd: FormData): Promise<void> {
   const input = {
     ...(templateId ? { templateId } : {}),
     name: str(fd, 'name'),
-    kind: str(fd, 'kind') as DocumentKind,
+    kindId: str(fd, 'kindId'),
     // The wording keeps its own blank lines and indentation; only the form's line endings are normalised by the domain.
     body: String(fd.get('body') ?? ''),
     signatureSlots: fd.getAll('slot').filter((s): s is string => typeof s === 'string') as SignatureSlot[],

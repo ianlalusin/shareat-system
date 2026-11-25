@@ -1,6 +1,6 @@
 /**
- * Merge fields and the tiny body markup. T-584 (docs/tasks/584-documents.md s5, s6). PURE: no imports from the database, so a unit test (and a
- * browser) can use it.
+ * Merge fields and the tiny body markup. T-584 (docs/tasks/584-documents.md s5, s6); the field list carries a label and a sample since T-637. PURE: no imports from the
+ * database, so a unit test (and a browser) can use it. The tiny markup is now only the OLD body format (read by `legacyBodyToDoc`); templates are JSON documents (doc.ts).
  *
  * ⛔ A fixed whitelist. An unknown `{{field}}` is refused when a template is saved, and the bad name is shown. A value that is missing renders as a
  * visible `[missing: employee.ended_on]`; the issuer must edit it out or fill it in before the document can be issued.
@@ -8,24 +8,49 @@
  * The body is PLAIN TEXT: blank line = paragraph, `# ` = heading, `**bold**`. `parseBody` returns data, never HTML; the screens render it as React
  * text nodes, so there is no markup an author can inject (no `dangerouslySetInnerHTML` anywhere in the documents screens).
  */
-export const MERGE_FIELDS = [
-  'employee.full_name',
-  'employee.staff_code',
-  'employee.position',
-  'employee.status',
-  'employee.started_on',
-  'employee.ended_on',
-  'store.name',
-  'store.address',
-  'store.tin_branch_code',
-  'org.legal_name',
-  'org.trading_name',
-  'org.tin',
-  'issuer.full_name',
-  'issuer.position',
-  'today',
-] as const;
-export type MergeField = (typeof MERGE_FIELDS)[number];
+export interface FieldDef {
+  readonly name: string;
+  /** The plain words the chip and the picker show ("Employee full name"). */
+  readonly label: string;
+  /** What the picker and the preview show before a real value exists. Invented, never real data. */
+  readonly sample: string;
+}
+
+/** T-637: every field a template may use, with its label and sample. A field is here only if its value is really stored (see the as-built note in the T-637 spec). */
+const DEFS = [
+  { name: 'employee.full_name', label: 'Employee full name', sample: 'Maria S. Santos' },
+  { name: 'employee.first_name', label: 'Employee first name', sample: 'Maria' },
+  { name: 'employee.last_name', label: 'Employee last name', sample: 'Santos' },
+  { name: 'employee.staff_code', label: 'Employee staff code', sample: 'SE-014' },
+  { name: 'employee.position', label: 'Employee position', sample: 'Server' },
+  { name: 'employee.status', label: 'Employment status', sample: 'Regular' },
+  { name: 'employee.started_on', label: 'Date started', sample: '6 January 2025' },
+  { name: 'employee.ended_on', label: 'Date left', sample: '30 June 2026' },
+  { name: 'employee.length_of_service', label: 'Length of service', sample: '1 year, 5 months' },
+  { name: 'employee.email', label: 'Employee email', sample: 'maria.santos@example.com' },
+  { name: 'employee.phone', label: 'Employee contact number', sample: '0917 000 0000' },
+  { name: 'store.name', label: 'Store name', sample: 'Shareat Sample Branch' },
+  { name: 'store.address', label: 'Store address', sample: '1 Sample Street, Sample City' },
+  { name: 'store.phone', label: 'Store contact number', sample: '(043) 000 0000' },
+  { name: 'store.tin_branch_code', label: 'Store branch code', sample: '00001' },
+  { name: 'org.legal_name', label: 'Company registered name', sample: 'Sample Foods Incorporated' },
+  { name: 'org.trading_name', label: 'Company trading name', sample: 'Shareat' },
+  { name: 'org.tin', label: 'Company TIN', sample: '000-000-000' },
+  { name: 'issuer.full_name', label: 'Issuer full name', sample: 'Juan D. Cruz' },
+  { name: 'issuer.position', label: 'Issuer position', sample: 'Manager' },
+  { name: 'today', label: "Today's date", sample: '25 November 2026' },
+] as const satisfies readonly FieldDef[];
+export type MergeField = (typeof DEFS)[number]['name'];
+export const FIELD_DEFS: readonly FieldDef[] = DEFS;
+export const MERGE_FIELDS: readonly MergeField[] = DEFS.map((d) => d.name);
+
+/** The fields to offer after `{{`: those whose name or label starts with, or has a word starting with, what was typed (case-insensitive). Empty query lists all. */
+export function suggestFields(query: string, defs: readonly FieldDef[] = FIELD_DEFS): FieldDef[] {
+  const q = query.trim().toLowerCase();
+  if (q === '') return [...defs];
+  const starts = (text: string): boolean => text.toLowerCase().split(/[\s._]+/).some((w) => w.startsWith(q)) || text.toLowerCase().startsWith(q);
+  return defs.filter((d) => starts(d.name) || starts(d.label));
+}
 
 const KNOWN: ReadonlySet<string> = new Set(MERGE_FIELDS);
 const FIELD_RE = /\{\{\s*([^{}]*?)\s*\}\}/g;
@@ -69,6 +94,27 @@ export function longDate(isoDate: string | null | undefined): string | null {
   if (!m) return null;
   const month = MONTHS[Number(m[2]) - 1];
   return month ? `${Number(m[3])} ${month} ${m[1]}` : null;
+}
+
+/**
+ * "2 years, 3 months": whole calendar months from `startedOn` to `endedOn` (or `asOf` while still employed), the part that is zero left out, "less than a month" under one.
+ * A day earlier in the month than the start does not complete the month. Null when either date is not `YYYY-MM-DD` or the end is before the start.
+ */
+export function lengthOfService(startedOn: string | null | undefined, endedOn: string | null | undefined, asOf: string): string | null {
+  const parse = (v: string | null | undefined): [number, number, number] | null => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v ?? '');
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  };
+  const a = parse(startedOn);
+  const b = parse(endedOn ?? asOf);
+  if (!a || !b) return null;
+  const months = (b[0] - a[0]) * 12 + (b[1] - a[1]) - (b[2] < a[2] ? 1 : 0);
+  if (months < 0) return null;
+  if (months === 0) return 'less than a month';
+  const y = Math.floor(months / 12);
+  const mo = months % 12;
+  const parts = [y > 0 ? `${y} ${y === 1 ? 'year' : 'years'}` : '', mo > 0 ? `${mo} ${mo === 1 ? 'month' : 'months'}` : ''].filter(Boolean);
+  return parts.join(', ');
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
