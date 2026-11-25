@@ -17,6 +17,9 @@ export const MAX_TOOL_ROUNDS = 6;
 /** The most characters of one tool result sent back to the model. A longer result is cut and says so, so a huge list can neither cost a fortune nor bury the question. */
 export const MAX_TOOL_RESULT_CHARS = 12_000;
 
+/** How many tool calls ONE round may make. A model that asks for dozens of lookups at once is cut off: the first four run, and every later call gets a plain sentence as its result. */
+export const MAX_TOOL_CALLS_PER_ROUND = 4;
+const TOO_MANY = 'Too many lookups at once; ask a narrower question.';
 const OUT_OF_ROUNDS = 'You have used all the tool calls you are allowed for this question. Do not call any tool. Answer now, in words, from what the tools already returned, and say what you could not find.';
 const GAVE_UP = 'I could not finish looking that up. Please ask a narrower question, for example one store and one period.';
 const TOOL_FAILED = 'That lookup failed and returned nothing. Say you could not get it; do not guess a figure.';
@@ -86,13 +89,18 @@ export async function callAiWithTools(run: TxRunner, actor: Actor, input: AiLoop
       break;
     }
     const results: ToolResult[] = [];
-    for (const call of out.toolCalls) {
+    for (const [n, call] of out.toolCalls.entries()) {
       let content: string;
-      try {
-        content = cut(await runTool(call));
-      } catch {
-        // never the error's own text: a thrown message could carry anything
-        content = TOOL_FAILED;
+      if (n >= MAX_TOOL_CALLS_PER_ROUND) {
+        // every call needs an answer (a provider refuses a conversation with a call left unanswered), but this one is not run
+        content = TOO_MANY;
+      } else {
+        try {
+          content = cut(await runTool(call));
+        } catch {
+          // never the error's own text: a thrown message could carry anything
+          content = TOOL_FAILED;
+        }
       }
       trace.push({ name: call.name, args: call.args, result: content });
       results.push({ id: call.id, name: call.name, content });

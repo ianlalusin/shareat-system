@@ -21,8 +21,8 @@ import { buildKit, type AskSource } from './tools';
 /** The question's length and the turns kept, as v1's Ask ERP had them (Ian, 25 Nov 2026). Technical input limits, not business settings: a longer question costs more and answers worse. */
 export const MAX_QUESTION_CHARS = 500; // = ASK_ERP_RULES.question.max (a unit test pins them together)
 export const MAX_HISTORY_TURNS = 10;
-/** One earlier answer is cut to this many characters when it is sent back as history. */
-const MAX_HISTORY_CHARS = 4000;
+/** An earlier ANSWER is cut to this many characters when it is sent back as history (an earlier QUESTION is cut to the question limit). */
+const MAX_HISTORY_ANSWER_CHARS = 2000;
 const MAX_ANSWER_TOKENS = 700;
 
 export interface AskErpTurn {
@@ -62,12 +62,20 @@ export function systemPrompt(today: string, storeNames: readonly string[]): stri
   ].join('\n');
 }
 
-/** The last ten turns, each cut to a sane length, starting with a person's turn (a provider refuses a conversation that opens with an answer). */
-function checkHistory(history: readonly AskErpTurn[] | undefined): ChatMessage[] {
-  const kept = (history ?? [])
-    .filter((t) => (t.role === 'user' || t.role === 'assistant') && typeof t.content === 'string' && t.content.trim() !== '')
-    .slice(-MAX_HISTORY_TURNS)
-    .map((t): ChatMessage => ({ role: t.role, content: t.content.slice(0, MAX_HISTORY_CHARS) }));
+/**
+ * The last ten turns, each cut to a sane length, starting with a person's turn (a provider refuses a conversation that opens with an answer). The history comes from the browser, so it is
+ * untrusted: a list entry that is null, not an object, has another role or has no text is skipped (never an exception), a person's turn is cut to the question limit and an answer to 2000.
+ */
+function checkHistory(history: unknown): ChatMessage[] {
+  const list: unknown[] = Array.isArray(history) ? history : [];
+  const kept = list
+    .flatMap((t): ChatMessage[] => {
+      if (t === null || typeof t !== 'object') return [];
+      const { role, content } = t as { role?: unknown; content?: unknown };
+      if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string' || content.trim() === '') return [];
+      return [{ role, content: content.slice(0, role === 'user' ? MAX_QUESTION_CHARS : MAX_HISTORY_ANSWER_CHARS) }];
+    })
+    .slice(-MAX_HISTORY_TURNS);
   while (kept[0]?.role === 'assistant') kept.shift();
   return kept;
 }

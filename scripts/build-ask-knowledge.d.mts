@@ -10,3 +10,4 @@ export interface KnowledgeRow {
 export const clean: (text: string) => string;
 export const buildKnowledge: () => KnowledgeRow[];
 export const render: (chunks: readonly KnowledgeRow[]) => string;
+export const DENY: RegExp[];

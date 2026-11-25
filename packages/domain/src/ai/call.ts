@@ -45,6 +45,7 @@ export interface AiCallInput {
   /**
    * T-641: true for the second and later model calls of ONE question (the tool loop). It is logged as `<feature>.step`, is not counted as another question against the person's
    * daily limit and is not refused by it (the first call of the question already passed it), but the monthly cap, the switches, the reservation and the log apply to it in full.
+   * ⛔ INTERNAL to the tool loop (loop.ts): a feature that set it would skip its own daily limit. The callers census (t640-callai-callers.test.ts) fails any file outside this folder that sets it.
    */
   continuation?: boolean;
 }

@@ -76,3 +76,23 @@ describe('T-640 every caller of callAi authorizes first', () => {
     expect(callersWithoutGate(other, 'z.ts')).toEqual(['z.ts:2']);
   });
 });
+
+/**
+ * T-641 (security audit): `continuation` on `AiCallInput` skips the person's daily limit for rounds 2 and later of ONE question. It is for the tool loop only (packages/domain/src/ai/loop.ts);
+ * a feature that set it on a first call would never be limited. So no source file outside packages/domain/src/ai may set it.
+ */
+const SETS_CONTINUATION = /\bcontinuation\s*:/;
+describe('T-641 only the tool loop may set `continuation`', () => {
+  it('no source file outside packages/domain/src/ai sets it [kills: a feature that opts itself out of the daily limit]', () => {
+    const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8' })
+      .split('\0')
+      .filter((f) => /^(apps\/[^/]+\/src|packages\/[^/]+\/src|scripts)\/.*\.tsx?$/.test(f) && !f.startsWith('packages/domain/src/ai/') && !f.includes('/tests/'));
+    const bad = files.filter((f) => SETS_CONTINUATION.test(readFileSync(join(ROOT, f), 'utf8')));
+    expect(bad).toEqual([]);
+  });
+  it('control: the loop itself does set it, so the pattern is not blind [kills: a pattern that matches nothing]', () => {
+    expect(SETS_CONTINUATION.test(readFileSync(join(ROOT, 'packages/domain/src/ai/loop.ts'), 'utf8'))).toBe(true);
+    expect(SETS_CONTINUATION.test('callAi(run, actor, { feature: x, continuation: true })')).toBe(true);
+    expect(SETS_CONTINUATION.test('callAi(run, actor, { feature: x })')).toBe(false);
+  });
+});

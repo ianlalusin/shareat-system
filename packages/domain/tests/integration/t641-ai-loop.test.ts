@@ -117,6 +117,21 @@ describe('T-641 the tool loop', () => {
     expect(toolTexts(s, 1)).toEqual(['r-a', 'r-b']);
   });
 
+  it('at most four tool calls run in one round; the rest are answered with a plain sentence and are NOT run [kills: a model that asks for dozens of lookups at once]', async () => {
+    const w = await world('percap');
+    const ran: string[] = [];
+    const six = Array.from({ length: 6 }, (_, i) => ({ tool: 'costDrivers', args: { period: `p${i}` } }));
+    const { s, run } = loop(w, w.manager, [{ calls: six }, { text: 'ok' }], async (c) => {
+      ran.push(String(c.args.period));
+      return `r-${String(c.args.period)}`;
+    });
+    const out = await run;
+    expect(ran).toEqual(['p0', 'p1', 'p2', 'p3']);
+    // every call is still answered, in order (a provider refuses a call left without a result)
+    expect(toolTexts(s, 1)).toEqual(['r-p0', 'r-p1', 'r-p2', 'r-p3', 'Too many lookups at once; ask a narrower question.', 'Too many lookups at once; ask a narrower question.']);
+    expect(out.trace.map((t) => t.result).slice(4)).toEqual(['Too many lookups at once; ask a narrower question.', 'Too many lookups at once; ask a narrower question.']);
+  });
+
   it('a result that is too long is cut and says so [kills: an uncapped result sent to the provider]', async () => {
     const w = await world('long');
     const { s, run } = loop(w, w.manager, [{ calls: [{ tool: 'costDrivers' }] }, { text: 'ok' }], async () => 'x '.repeat(20_000));

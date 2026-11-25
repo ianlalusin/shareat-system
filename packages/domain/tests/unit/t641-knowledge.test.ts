@@ -3,11 +3,12 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { buildKnowledge, clean, OUTPUT, render } from '../../../../scripts/build-ask-knowledge.mjs';
+import { scrubText } from '@shareat/ai';
 import { searchChunks, searchKnowledge, tokenize, type KnowledgeChunk } from '../../src/ask-erp/knowledge';
 
 /**
  * T-641 test 4: the knowledge search. The approved documents are built into one committed file (scripts/build-ask-knowledge.mjs); Ask ERP reaches it only through `searchKnowledge`.
- * ("Only approved notes" is true by construction today: the file holds the five approved sources and nothing else, and a person-written note table is deferred. When it lands, only its
+ * ("Only approved notes" is true by construction today: the file holds the four approved sources and nothing else (the engineering rulebook is NOT one of them), and a person-written note table is deferred. When it lands, only its
  * `approved` rows may be passed as `extra`; the audience filter below is what keeps "manager" text from a person who may not read the reports.)
  */
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', '..');
@@ -56,13 +57,12 @@ describe('T-641 the built knowledge file', () => {
     expect(have).toBe(render(buildKnowledge()));
   });
 
-  it('holds only the five approved sources, with the audience each is meant for [kills: a new source slipped in without a review]', () => {
+  it('holds only the four approved sources, with the audience each is meant for [kills: a new source slipped in without a review]', () => {
     const bySource = new Map<string, Set<string>>();
     for (const r of rows) (bySource.get(r.source) ?? bySource.set(r.source, new Set()).get(r.source)!).add(r.audience);
     expect(Object.fromEntries([...bySource].map(([k, v]) => [k, [...v]]))).toEqual({
       manual: ['everyone'],
       glossary: ['everyone'],
-      rules: ['manager'],
       'decision-log': ['manager'],
       'posting-patterns': ['manager'],
     });
@@ -92,7 +92,7 @@ describe('T-641 the built knowledge file', () => {
     const forAnyone = await searchKnowledge('dineInSales', { manager: false });
     expect(forAnyone[0]?.id).toBe('glossary:dineinsales');
     expect((await searchKnowledge('what does dineInSales mean', { manager: false })).slice(0, 2).map((h) => h.id)).toContain('glossary:dineinsales');
-    expect(forAnyone.every((h) => !h.id.startsWith('bible-13:') && !h.id.startsWith('rules:') && !h.id.startsWith('posting:'))).toBe(true);
+    expect(forAnyone.every((h) => !h.id.startsWith('bible-13:')  && !h.id.startsWith('posting:'))).toBe(true);
     const forManager = await searchKnowledge('why PostgreSQL system of record decision', { manager: true });
     expect(forManager.some((h) => h.id.startsWith('bible-13:'))).toBe(true);
     const staffView = await searchKnowledge('why PostgreSQL system of record decision', { manager: false });
@@ -108,5 +108,55 @@ describe('T-641 the built knowledge file', () => {
     const note: KnowledgeChunk = { id: 'note:1', source: 'note', audience: 'everyone', title: 'Wifi password policy', text: 'The staff wifi network is changed on the first of every month.' };
     expect((await searchKnowledge('staff wifi network changed', { manager: false }, [note]))[0]?.id).toBe('note:1');
     expect((await searchKnowledge('staff wifi network changed', { manager: false })).some((h) => h.id === 'note:1')).toBe(false);
+  });
+});
+
+/**
+ * BOSS ruling (26 Nov 2026): the knowledge base is for running the business, NOT for engineering or security internals. This list is written out here on its own (not imported from the
+ * build script), so removing or weakening the script's filter turns this red rather than moving the goalposts with it.
+ */
+const FORBIDDEN: readonly RegExp[] = [
+  /droplet/i, /\bssh\b/i, /server/i, /deploy/i, /build/i, /\bci\b/i, /secret/i, /password/i, /token/i, /key file/i, /hmac/i, /\bpins?\b/i, /rate limit/i, /credential/i, /firebase/i,
+  /migration/i, /\brls\b/i, /\bdef-/i, /vulnerab/i, /exploit/i, /ip address/i, /159\.223/, /\.env/i, /superuser/i, /bypassrls/i, /artifact/i,
+];
+const URLISH = /(?:https?|ftp):\/\/|\bwww\.|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|ai|io|ph|dev|app|co|gov)\b/i;
+const PH_MOBILE = /(?<![0-9])(?:\+?63[ -]?\(?|0\(?)?9[0-9]{2}\)?[ .-]?[0-9]{3}[ .-]?[0-9]{4}(?![0-9])/;
+const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/;
+/** Why a chunk may not be in the file, or null. Pure, so a control can prove the scan itself is not blind. */
+function whyForbidden(c: { id: string; title: string; text: string }): string | null {
+  const text = `${c.title}
+${c.text}`;
+  for (const f of FORBIDDEN) if (f.test(text)) return `${c.id}: denylisted word ${f.source}`;
+  if (URLISH.test(text)) return `${c.id}: a URL or host name`;
+  if (EMAIL.test(text)) return `${c.id}: an e-mail address`;
+  if (PH_MOBILE.test(text)) return `${c.id}: a Philippine mobile number`;
+  if (Object.keys(scrubText(text).redactions).length > 0) return `${c.id}: key-, ID- or card-shaped text (${Object.keys(scrubText(text).redactions).join(', ')})`;
+  return null;
+}
+
+describe('T-641 the knowledge file is business knowledge only (BOSS ruling)', () => {
+  const rows = JSON.parse(readFileSync(join(ROOT, OUTPUT), 'utf8')) as { id: string; title: string; text: string }[];
+
+  it('no chunk holds a URL, a denylisted engineering or security word, an e-mail, a Philippine mobile number or anything key-shaped [kills: removing the build filter or the URL stripper]', () => {
+    const bad = rows.map(whyForbidden).filter((x): x is string => x !== null);
+    expect(bad, bad.slice(0, 10).join('\n')).toEqual([]);
+  });
+
+  it('the scan itself is not blind: each kind of forbidden text is caught [kills: a scan that passes everything]', () => {
+    const c = (text: string) => ({ id: 'x', title: 't', text });
+    expect(whyForbidden(c('see https://claude.ai/code/abc'))).toMatch(/URL/);
+    expect(whyForbidden(c('open github.com/x/y'))).toMatch(/URL/);
+    expect(whyForbidden(c('the droplet was rebooted'))).toMatch(/denylisted/);
+    expect(whyForbidden(c('fixed in DEF-123'))).toMatch(/denylisted/);
+    expect(whyForbidden(c('mail me at a@b.example'))).not.toBeNull();
+    expect(whyForbidden(c('call 0917 123 4567'))).toMatch(/mobile|key-/);
+    expect(whyForbidden(c('key sk-abcdefghijklmnopqrstuvwx'))).toMatch(/key-/);
+    expect(whyForbidden(c('Sales are recorded each day and verified by the manager.'))).toBeNull();
+  });
+
+  it('the engineering rulebook and the build tooling are not sources, and business decisions are still there [kills: dropping everything; keeping RULES.md]', () => {
+    expect(rows.some((r) => r.id.startsWith('rules:'))).toBe(false);
+    expect(rows.filter((r) => r.id.startsWith('bible-13:')).length).toBeGreaterThan(100);
+    expect(rows.some((r) => r.id === 'bible-13:1')).toBe(true);
   });
 });

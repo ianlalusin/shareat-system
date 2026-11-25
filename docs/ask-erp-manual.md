@@ -1,10 +1,10 @@
 # Ask ERP manual
 
-Plain-words notes for people who use the ERP. Ask ERP reads this file, the glossary and the other approved documents when it answers. If an answer is wrong or missing, fix it here and rebuild the knowledge file (`node scripts/build-ask-knowledge.mjs`).
+Plain-words notes for people who use the ERP. Ask ERP reads this file, the glossary and the posting patterns when it answers. If an answer is wrong or missing, fix it in the document it came from.
 
 ## What Ask ERP is
 
-Ask ERP answers questions about how the ERP works and about the company's own figures. It answers only from the approved documents and from the screens you are allowed to see. It cannot change anything. It does not show pay, ID numbers, PINs or passwords. If it does not know, it says so. Ask one store and one period at a time for the best answers. Questions may be in English or Taglish.
+Ask ERP answers questions about how the ERP works and about the company's own figures. It answers only from the approved documents and from the screens you are allowed to see. It cannot change anything. It does not show pay, ID numbers or private logins. If it does not know, it says so. Ask one store and one period at a time for the best answers. Questions may be in English or Taglish.
 
 ## Who sees what
 

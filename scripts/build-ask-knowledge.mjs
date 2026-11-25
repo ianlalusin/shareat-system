@@ -8,9 +8,10 @@
  * WHAT GOES IN (a short, closed list; adding a source is a change to this file, reviewed):
  *   docs/ask-erp-manual.md      how-to, plain words                   -> audience "everyone"
  *   docs/GLOSSARY.md            what the words really mean            -> audience "everyone"
- *   docs/RULES.md               the operating rules, one page         -> audience "manager"
  *   PROJECT_BIBLE.md section 13 the decision log, one chunk per row   -> audience "manager"
  *   docs/POSTING-PATTERNS.md    how each business event posts         -> audience "manager"
+ * The knowledge base is for RUNNING THE BUSINESS, not for engineering or security internals (BOSS ruling, 26 Nov 2026). So docs/RULES.md (an engineering rulebook) is not a source, every
+ * URL is stripped, and any chunk or decision row that reads as engineering, deployment or security is dropped by DENY below (a dropped row is simply not searchable).
  * "manager" knowledge is searched only for a person who may read the financial reports; "everyone" for anyone who may use Ask ERP at all.
  *
  * The output is DETERMINISTIC (no dates, stable order), so a test can rebuild it and compare. Code blocks are dropped, link targets are dropped, and anything that looks like a
@@ -35,15 +36,33 @@ export function clean(text) {
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/[☀-➿⬀-⯿️\u{1F300}-\u{1FAFF}]/gu, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\bDEF-\d+\b,?/gi, '')
     .replace(/`/g, '')
     .replace(/\*\*|__/g, '')
-    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, '[address]')
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g, '[email]')
+    // every URL: a scheme, or a bare host name with a well-known ending (and its path); then anything shaped like a network address
+    .replace(/\b(?:https?|ftp):\/\/\S+/gi, ' ')
+    .replace(/\b(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|ai|io|ph|dev|app|co|gov)\b(?:\/\S*)?/gi, ' ')
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, '[address]')
     .replace(/\b(?:sk|rk|pk)[-_][A-Za-z0-9_-]{16,}/g, '[key]')
+    // file names and task slugs are not knowledge, and look like keys; account codes written "1340/1250/2150" look like an ID number
+    .replace(/[A-Za-z0-9_-]{32,}/g, '')
+    .replace(/\b(\d{4})\/(?=\d{4}\b)/g, '$1, ')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+/**
+ * Words that mark engineering, deployment or security internals. A chunk whose title or text matches any is dropped, in every source. Short words use word boundaries (so "decision" is not
+ * "ci"); the rest are substrings on purpose ("deploy" catches deployed and deployment).
+ */
+export const DENY = [
+  /droplet/i, /\bssh\b/i, /server/i, /deploy/i, /build/i, /\bci\b/i, /secret/i, /password/i, /token/i, /key file/i, /hmac/i, /\bpins?\b/i, /rate limit/i, /credential/i, /firebase/i,
+  /migration/i, /\brls\b/i, /\bdef-/i, /vulnerab/i, /exploit/i, /ip address/i, /159\.223/, /\.env/i, /superuser/i, /bypassrls/i, /artifact/i,
+];
+const allowed = (c) => !DENY.some((d) => d.test(`${c.title}
+${c.text}`));
 
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'section';
 
@@ -137,6 +156,8 @@ function decisions(md) {
     const m = /^\|\s*(\d+)\s*\|\s*([0-9-]+)\s*\|(.*)$/.exec(line);
     if (!m) continue;
     const cells = m[3].split('|').map((c) => c.trim());
+    // a business decision only: a row that reads as engineering, deployment or security (by the raw text, defect numbers included) is not kept
+    if (DENY.some((d) => d.test(line))) continue;
     const decision = clean(cells[0] ?? '');
     const why = clean(cells[1] ?? '');
     if (!decision) continue;
@@ -150,10 +171,9 @@ export function buildKnowledge() {
   const out = [
     ...fromMarkdown(read('docs/ask-erp-manual.md'), { source: 'manual', audience: 'everyone', prefix: 'manual' }),
     ...fromMarkdown(read('docs/GLOSSARY.md'), { source: 'glossary', audience: 'everyone', prefix: 'glossary' }),
-    ...fromMarkdown(read('docs/RULES.md'), { source: 'rules', audience: 'manager', prefix: 'rules' }),
     ...decisions(read('PROJECT_BIBLE.md')),
     ...fromMarkdown(read('docs/POSTING-PATTERNS.md'), { source: 'posting-patterns', audience: 'manager', prefix: 'posting', firstChunkOnly: true, skip: (h) => /^(How to read this|Posting patterns)/i.test(h) }),
-  ];
+  ].filter(allowed);
   const ids = new Set();
   for (const c of out) {
     if (ids.has(c.id)) throw new Error(`build-ask-knowledge: duplicate chunk id ${c.id}`);
