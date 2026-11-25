@@ -1501,7 +1501,7 @@ export async function setItemPricing(
   },
 ): Promise<void> {
   const run = async (trx: Tx) => {
-    await authorize(trx, actor, 'manage_items', {});
+    await authorize(trx, actor, 'manage_price_lists', {}); // admin-only, like customer price lists (Ian 25 Nov)
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error(`setItemPricing: item ${input.itemId} does not exist.`);
     if (item.status !== 'active') {
@@ -1547,6 +1547,8 @@ export async function setItemPricing(
         `${MODE_FIGURE[input.pricingMode]} — can't be left blank for this pricing mode. Enter a number.`,
       );
     }
+    // T-638: the price a commissary charges stores is a business value with a screen now, so a change is traceable.
+    const before = (await itemsRepo.getItemPricing(trx, actor.orgId, input.itemId)) ?? null;
     await itemsRepo.upsertItemPricing(trx, {
       orgId: actor.orgId,
       itemId: input.itemId,
@@ -1556,6 +1558,15 @@ export async function setItemPricing(
       fixedMarkupAmount,
       marginAlertThresholdPct,
       setBy: actor.personId,
+    });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'item_pricing.set',
+      storeId: null,
+      entityId: input.itemId,
+      before: before && { pricingMode: before.pricingMode, fixedAmount: before.fixedAmount, markupPercent: before.markupPercent, fixedMarkupAmount: before.fixedMarkupAmount, marginAlertThresholdPct: before.marginAlertThresholdPct },
+      after: { pricingMode: input.pricingMode, fixedAmount, markupPercent, fixedMarkupAmount, marginAlertThresholdPct },
+      source: 'web',
     });
   };
   return run(tx);

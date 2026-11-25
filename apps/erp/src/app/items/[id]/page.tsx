@@ -2,7 +2,7 @@ import { ITEMS_RENAME_RULES, ITEMS_UNIT_RULES, nativeAttrs } from '@shareat/doma
 import { notFound } from 'next/navigation';
 import { requirePageAccess } from '../../../lib/page-access';
 import { can } from '@shareat/auth';
-import { aliasesOf, expenseCategoryOptions, expenseSubcategoryOptions, getItem, itemPrices, mayDecideItemRequests, peso, retireReadout, sellabilityByStore, soldAsLabel, unitHistoryExists, variationParentOptions, variationsOf, withOrgPrincipal } from '../lib';
+import { aliasesOf, expenseCategoryOptions, expenseSubcategoryOptions, getItem, itemPrices, itemPriceToStores, mayDecideItemRequests, peso, retireReadout, sellabilityByStore, soldAsLabel, unitHistoryExists, variationParentOptions, variationsOf, withOrgPrincipal } from '../lib';
 import { whoSells } from '../../ap/lib';
 import {
   addItemAliasAction,
@@ -18,11 +18,13 @@ import {
   updateItemFlagsAction,
 } from '../actions';
 import { ItemCodeField } from '../ItemCodeField';
+import { ItemPricingFields } from '../ItemPricingFields';
+import { PriceToStoresText } from '../price-to-stores';
 import { SubcategorySelect } from '../SubcategorySelect';
 import { BASE_UNITS, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { ITEM_ALIAS, ITEM_CATEGORY, ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from '../typed-forms';
+import { ITEM_ALIAS, ITEM_CATEGORY, ITEM_FLAGS, ITEM_PRICING, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord, RecordSummary } from '@/components/forms';
 import { Badge, Banner, Button, Checkbox, ConfirmDestructive, DisclosureCard, Field, FlashBanner, FormGrid, HelpTip, Input, Select, SplitWorkspace, statusLabel } from '@/components/ui';
@@ -74,6 +76,13 @@ export default async function ItemDetailPage({
   // T-378 S4 (DEF-600). Presentation aid only: the same gate the action uses, asked here so the form is drawn only for
   // who may use it. `changeItemBaseUnit` stays the enforcement. Pattern: channel-settlements/page.tsx.
   const mayApproveItem = await withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'approve_item', {}));
+  // T-638. Same presentation-aid rule: `setItemPricing` (manage_price_lists, admin only) is the gate; the price is drawn for everyone who can open the page.
+  const [mayPrice, priceToStores] = await Promise.all([
+    withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'manage_price_lists', {})),
+    itemPriceToStores(actor.orgId, id),
+  ]);
+  const soldWholesale = item.sellableWholesale || byStore.some((s) => s.resolved.sellableWholesale);
+  const priceRule = priceToStores.base.rule;
   // T-502 S1/S2. An admin (not only a super-admin) keeps the item's expense category and other names; presentation aid, the domain is the gate.
   const mayKeepCatalogue = await mayDecideItemRequests(actor);
   const [aliases, categoryChoices, subcategoryChoices] = await Promise.all([aliasesOf(actor.orgId, id), expenseCategoryOptions(actor.orgId), expenseSubcategoryOptions(actor.orgId)]);
@@ -350,6 +359,48 @@ export default async function ItemDetailPage({
             ))}
           </div>
         </EditableRecord>
+
+        {/* T-638 (Ian, 25 Nov): the price a commissary charges stores lives here, on the Wholesale row; Commissary -> Catalogue only reads it. */}
+        <div id="price-to-stores" className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+          <h3 className="text-sm font-medium">Price to stores (wholesale)</h3>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            This is what a commissary charges a store. Diner (retail) prices are set under Menu → Prices.
+          </p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Franchise prices (e.g. Padre Garcia) come from their own price list under Customers → Price lists and don&apos;t follow this price.
+          </p>
+          {soldWholesale ? (
+            <>
+              <p className="text-sm">
+                <PriceToStoresText view={priceToStores.base} />
+              </p>
+              {priceToStores.viaManual.map((m) => (
+                <p key={m.storeName} className="text-sm text-neutral-600 dark:text-neutral-400">
+                  At {m.storeName}: <PriceToStoresText view={m.view} />
+                </p>
+              ))}
+              {mayPrice ? (
+                <ItemPricingFields
+                  itemId={item.id}
+                  itemName={item.name}
+                  typed={typedFor(sp, ITEM_PRICING, item.id, actor.personId)}
+                  mode={priceRule?.pricingMode ?? 'percent_markup'}
+                  fixedAmount={priceRule?.fixedAmount ?? ''}
+                  fixedMarkupAmount={priceRule?.fixedMarkupAmount ?? ''}
+                  markupPercent={priceRule?.markupPercent ?? ''}
+                  marginAlertThresholdPct={priceRule?.marginAlertThresholdPct ?? ''}
+                  basis={priceToStores.basis}
+                />
+              ) : (
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">Only an admin can change it.</p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              Applies once &ldquo;Sold to other stores or buyers (wholesale)&rdquo; is ticked above.
+            </p>
+          )}
+        </div>
 
         {byStore.length > 0 && (
           <div className="space-y-2">
