@@ -101,7 +101,8 @@ export function DocumentEditor({ initialDoc, onChange, fields = true, label, com
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,
     editorProps: { attributes: { 'aria-label': label, role: 'textbox', 'aria-multiline': 'true', class: 'outline-none' } },
-    onUpdate: ({ editor: e }) => onChangeRef.current(e.getJSON() as DocJson),
+    // ProseMirror's attrs objects have no prototype, which a server-action call cannot carry (it silently drops them): round-trip to plain JSON.
+    onUpdate: ({ editor: e }) => onChangeRef.current(JSON.parse(JSON.stringify(e.getJSON())) as DocJson),
   });
 
   // Cancel (a form reset) puts the stored wording back.
@@ -121,7 +122,7 @@ export function DocumentEditor({ initialDoc, onChange, fields = true, label, com
     <div ref={wrap} className="space-y-2">
       <DocumentStyles />
       <Toolbar editor={editor} fields={fields} />
-      <div className={compact ? 'doc-sheet doc-inline min-h-24 overflow-x-auto rounded-lg border border-field-border' : 'doc-sheet doc-inline min-h-80 overflow-x-auto rounded-lg border border-field-border'}>
+      <div className="doc-sheet doc-inline overflow-x-auto rounded-lg border border-field-border" style={{ minHeight: compact ? '6rem' : '20rem' }}>
         <EditorContent editor={editor} />
       </div>
       {pop && (

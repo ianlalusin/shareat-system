@@ -93,7 +93,9 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
         </p>
         <div className="space-y-2">
           {kinds.map((k) => (
-            <div key={k.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+            <div key={k.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+              <span className="min-w-0 flex-1 font-medium">{k.name}</span>
+              {!k.active && <Badge tone="closed" label="Retired" />}
               <EditableRecord
                 action={renameKindAction}
                 label={k.name}
@@ -114,7 +116,6 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
                   <Input {...nativeAttrs(DOCUMENT_KIND_RULES.name)} defaultValue={k.name} className="w-full" />
                 </Field>
               </EditableRecord>
-              {!k.active && <Badge tone="closed" label="Retired" />}
             </div>
           ))}
         </div>

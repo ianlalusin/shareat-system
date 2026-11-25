@@ -111,7 +111,7 @@ const MARK_RULES: Record<string, Record<string, AttrRule>> = {
   textStyle: { fontFamily: nullOr(...FONT_STACKS), fontSize: nullOr(...FONT_SIZES) },
 };
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v) && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
 
 export type DocCheck = { ok: true; doc: DocJson } | { ok: false; reason: string };
 

@@ -172,7 +172,8 @@ function sheetCss(margin: string, sheet: boolean): string {
 .doc-frame { width: 100%; border-collapse: collapse; border: 0; }
 .doc-frame > thead { display: table-header-group; }
 .doc-frame > tfoot { display: table-footer-group; }
-.doc-frame td { padding: 0; vertical-align: top; }
+.doc-frame > thead > tr > td, .doc-frame > tbody > tr > td, .doc-frame > tfoot > tr > td { padding: 0; border: 0; vertical-align: top; background: transparent; }
+.doc-frame > thead, .doc-frame > tbody, .doc-frame > tfoot, .doc-frame > thead > tr, .doc-frame > tbody > tr, .doc-frame > tfoot > tr { border: 0; background: transparent; }
 .doc-sheet p { margin: 0 0 .6em; }
 .doc-sheet h1, .doc-sheet h2, .doc-sheet h3 { margin: .8em 0 .4em; font-weight: 700; line-height: 1.2; }
 .doc-sheet h1 { font-size: 20pt; }
