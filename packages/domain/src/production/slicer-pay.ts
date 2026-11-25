@@ -41,6 +41,8 @@ const refusal = (reason: string): { ok: false; reason: string } => ({ ok: false,
 export interface SlicerPayPlanLine {
   readonly employmentId: string;
   readonly personId: string;
+  /** From `persons`, not the active roster: a late-confirmed record can belong to someone whose employment has since ended. */
+  readonly personName: string;
   readonly recordIds: string[];
   readonly slicerPay: Money;
   readonly slicerKg: Quantity;
@@ -73,7 +75,7 @@ export async function planSlicerPay(tx: Tx, orgId: string, input: { storeId: str
       seen.add(priced.reason);
       continue;
     }
-    const line = plan.byEmployment.get(r.employmentId) ?? { employmentId: r.employmentId, personId: r.personId, recordIds: [], slicerPay: ZERO, slicerKg: fromThousandths(0n), earlierRecords: 0 };
+    const line = plan.byEmployment.get(r.employmentId) ?? { employmentId: r.employmentId, personId: r.personId, personName: r.personName, recordIds: [], slicerPay: ZERO, slicerKg: fromThousandths(0n), earlierRecords: 0 };
     plan.byEmployment.set(r.employmentId, {
       ...line,
       recordIds: [...line.recordIds, r.recordId],

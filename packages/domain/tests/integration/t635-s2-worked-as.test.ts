@@ -1,6 +1,8 @@
 import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
@@ -254,6 +256,64 @@ describe('T-635 S2 a manager can correct it, and a recompute never loses it', ()
   });
 });
 
+describe('T-635 S2 rollout - the migration republishes every roster so existing documents gain isSlicer', () => {
+  it('the 0279 statement enqueues one roster row per LIVE employment in every store (none for an ended job or an inactive person), and a second run adds nothing', async () => {
+    const f = await fixture('r1');
+    const [st2] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, stock_model) values (${f.orgId}, ${uid('S2')}, 'Store 2', 'multi_room') returning id`;
+    const mk = async (name: string, storeId: string, code: string, o: { ended?: boolean; inactive?: boolean } = {}) => {
+      const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name, is_active) values (${f.orgId}, ${name}, ${!o.inactive}) returning id`;
+      const [e] = await sql<{ id: string }[]>`
+        insert into employments (org_id, person_id, store_id, staff_code, started_on, ended_on, employment_status, created_by)
+        values (${f.orgId}, ${p!.id}, ${storeId}, ${code}, '2025-01-05', ${o.ended ? '2025-06-30' : null}, ${o.ended ? 'resigned' : 'regular'}, ${f.adminId}) returning id`;
+      return e!.id;
+    };
+    const live2 = [await mk('Two A', st2!.id, 'SE-801'), await mk('Two B', st2!.id, 'SE-802')];
+    await mk('Gone', st2!.id, 'SE-803', { ended: true });
+    await mk('Dormant', st2!.id, 'SE-804', { inactive: true });
+    await sql`delete from mirror_outbox where org_id = ${f.orgId}`;
+
+    const text = readFileSync(resolve(__dirname, '../../../db/migrations/0279_t635_slicer_pay.sql'), 'utf8');
+    const block = text.slice(text.indexOf('-- ROSTER-REPUBLISH-BEGIN'), text.indexOf('-- ROSTER-REPUBLISH-END'));
+    const statements = block.split('--> statement-breakpoint').map((x) => x.replace(/^--.*$/gm, '').trim()).filter(Boolean);
+    expect(statements.length).toBeGreaterThanOrEqual(2);
+    const run = () => sql.begin(async (t) => { for (const st of statements) await t.unsafe(st); });
+    await run();
+    const rows = await sql<{ store_id: string; entity_id: string; entity: string; op: string }[]>`select store_id, entity_id, entity, op from mirror_outbox where org_id = ${f.orgId}`;
+    expect(rows.every((r) => r.entity === 'roster' && r.op === 'upsert')).toBe(true);
+    const byStore = (id: string) => rows.filter((r) => r.store_id === id).map((r) => r.entity_id).sort();
+    expect(byStore(st2!.id)).toEqual([...live2].sort());
+    expect(byStore(f.storeId)).toEqual([f.sam.employmentId, f.pat.employmentId].sort());
+    await run(); // an unpublished row already exists for each: nothing is added twice
+    expect(Number((await sql<{ n: string }[]>`select count(*)::text n from mirror_outbox where org_id = ${f.orgId}`)[0]!.n)).toBe(rows.length);
+  });
+});
+
+describe('T-635 S2 a FROZEN slicer day cannot be restated', () => {
+  it('a late punch and a worked_as correction on a day a pay run froze leave it unchanged (the punch is kept, the recompute is counted as failed; the adjustment is refused)', async () => {
+    const f = await fixture('z1');
+    const prev = toShiftDay(new Date(Date.now() - 48 * 3_600_000));
+    await addDay(f, f.sam, prev, 'regular'); // gives Sam a slip, so every one of his days in the run is frozen
+    await ingest(f, [event(f, f.sam, { workedAs: 'slicer', occurredAt: at(9) })]);
+    await ingest(f, [event(f, f.sam, { assertedIntent: 'out', occurredAt: at(18) })]);
+    const out = await asOrg(f.orgId, (tx) => postPayRun(tx, f.admin, { storeId: f.storeId, periodStart: prev, periodEnd: DAY, moneyAccountId: f.officeId }));
+    const frozen = await sql<{ id: string; worked_as: string }[]>`select id, worked_as from attendance_days where employment_id = ${f.sam.employmentId} and frozen_by_pay_run_id = ${out.runId} and shift_day = ${DAY}`;
+    expect(frozen).toHaveLength(1);
+    expect(frozen[0]!.worked_as).toBe('slicer');
+    const snapshot = JSON.stringify((await sql`select * from attendance_days where id = ${frozen[0]!.id}`)[0]);
+
+    // a late punch (a regular clock-in that would flip the day if it counted): recorded as evidence, never restating the frozen day
+    const late = await ingest(f, [event(f, f.sam, { workedAs: 'regular', occurredAt: at(8) })]);
+    expect(late.ingested).toBe(1);
+    expect(late.adjudicationFailed).toBe(1);
+    // a manager's correction is refused outright
+    const sessionId = await sessionFor(f);
+    await expect(
+      asOrg(f.orgId, (tx) => recordAdjustment(tx, f.mgr, { employmentId: f.sam.employmentId, shiftDay: DAY, kind: 'worked_as', workedAs: 'regular', sessionId })),
+    ).rejects.toThrow(/frozen/i);
+    expect(JSON.stringify((await sql`select * from attendance_days where id = ${frozen[0]!.id}`)[0])).toBe(snapshot);
+  });
+});
+
 // ---- payroll ---------------------------------------------------------------------------
 const period = { periodStart: '2026-01-01', periodEnd: '2026-01-15' };
 const addDay = (f: F, e: { employmentId: string; personId: string }, shiftDay: string, workedAs: 'regular' | 'slicer', minutes = 540) =>
@@ -328,6 +388,18 @@ describe('T-635 S2 who may confirm, and late confirmations', () => {
     expect(await asOrg(f.orgId, (tx) => confirmSlicing(tx, f.pat.actor, { recordId: id }))).toEqual({ ok: true });
   });
 
+  it('postPayRun returns the unpriceable-skip warnings (no rate for one record) while still paying the priced one', async () => {
+    const f = await fixture('e5');
+    await asOrg(f.orgId, (tx) => setSlicerPayRate(tx, f.admin, { storeId: f.storeId, itemId: null, ratePerKg: '5.00', effectiveFrom: '2026-01-10' })); // nothing in force on the 5th
+    await slice(f, '2026-01-05', f.pat.personId); // unpriceable
+    await slice(f, '2026-01-12', f.pat.personId); // priced
+    const out = await post(f);
+    expect(out.slicerSkipped).toHaveLength(1);
+    expect(out.slicerSkipped[0]).toMatch(/no slicer rate in force/);
+    const [slip] = await sql<{ slicer_records: number }[]>`select slicer_records from payslips where run_id = ${out.runId}`;
+    expect(slip!.slicer_records).toBe(1);
+  });
+
   it('a late-confirmed record from BEFORE the period is paid in the next run, flagged "from an earlier period", and paid exactly once', async () => {
     const f = await fixture('e2');
     await withRate(f);
@@ -347,6 +419,23 @@ describe('T-635 S2 who may confirm, and late confirmations', () => {
     // and voiding the run releases both
     await asOrg(f.orgId, (tx) => voidPayRun(tx, f.admin, { runId: out.runId, reason: 'test' }));
     expect(Number((await sql<{ n: string }[]>`select count(*)::text n from production_records where paid_by_pay_run_id is not null and org_id = ${f.orgId}`)[0]!.n)).toBe(0);
+  });
+
+  it('a late-confirmed record for a slicer whose employment has ENDED is still paid, on a slip that carries the real name (not unknown); statutory copes', async () => {
+    const f = await fixture('e4');
+    await withRate(f);
+    await sql`update employments set ended_on = '2025-12-31', employment_status = 'resigned' where id = ${f.sam.employmentId}`; // Sam's job ended after the slicing, before the run's period
+    await asOrg(f.orgId, (tx) => setSlicerPayRate(tx, f.admin, { storeId: f.storeId, itemId: null, ratePerKg: '5.00', effectiveFrom: '2025-01-01' }));
+    await slice(f, '2025-12-20', f.pat.personId);
+    const pv = await preview(f);
+    const slip = pv.slips.find((s) => s.personId === f.sam.personId)!;
+    expect(slip).toBeDefined();
+    expect(slip.personName).toBe('Sam Slicer');
+    expect(slip).toMatchObject({ slicerRecords: 1, slicerEarlierRecords: 1, slicerPay: '50.00', grossPay: '50.00' });
+    const out = await post(f);
+    const [row] = await sql<{ slicer_pay: string; gross_pay: string; net_pay: string }[]>`select slicer_pay, gross_pay, net_pay from payslips where run_id = ${out.runId} and person_id = ${f.sam.personId}`;
+    expect(row).toMatchObject({ slicer_pay: '50.00', gross_pay: '50.00' });
+    expect(Number(row!.net_pay)).toBeGreaterThan(0);
   });
 
   it("a record paid by the run for its own period is not paid again by the next period (carry-forward never double pays)", async () => {

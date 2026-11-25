@@ -419,7 +419,8 @@ async function buildPreview(
       bases.push({
         employmentId,
         personId,
-        personName: nameOf.get(employmentId) ?? 'unknown',
+        // T-635 S2: the roster only lists ACTIVE employments; a late-confirmed record can belong to someone whose job has ended, so fall back to the person's own name.
+        personName: nameOf.get(employmentId) ?? slicerLine?.personName ?? 'unknown',
         payRateId,
         dayIds: theirDays.map((d) => d.id),
         unapprovedOtMinutes,
@@ -679,7 +680,7 @@ export async function postPayRun(
     entryDate?: string;
     notes?: string | null;
   },
-): Promise<{ runId: string; payslips: number; totalNet: string; warning?: string }> {
+): Promise<{ runId: string; payslips: number; totalNet: string; warning?: string; slicerSkipped: string[] }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_payroll', { storeId: input.storeId });
 
@@ -871,6 +872,8 @@ export async function postPayRun(
       runId,
       payslips: preview.slips.length,
       totalNet: formatMoney(preview.totalNet),
+      // T-635 S2: slice records left out because they cannot be priced; they stay unpaid and unfrozen for a later run.
+      slicerSkipped: preview.slicerProblems,
       ...(warning ? { warning } : {}),
     };
   };

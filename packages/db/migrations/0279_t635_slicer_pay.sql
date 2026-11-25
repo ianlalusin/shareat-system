@@ -29,7 +29,10 @@
 --
 -- No existing data is read, moved or deleted. Nothing in this file can fail on production data: every new column is nullable or has a constant default, and every new CHECK is
 -- true of a row whose new columns are null / zero.
--- LOCK BUDGET. lock_timeout 5s first; ADD COLUMN with a constant default does not rewrite; the new CHECKs validate a small table.
+-- LOCK BUDGET. lock_timeout 5s first; ADD COLUMN with a constant default does not rewrite. The new CHECKs on production_records / payslips / the adjustment table validate small
+-- tables; the two on attendance_punches and attendance_days (big, a row per person per day) are added NOT VALID and then VALIDATEd, so the long scan holds only a SHARE UPDATE EXCLUSIVE lock.
+-- ROSTER REPUBLISH (S2 rollout): existing Firestore roster documents have no `isSlicer`, so after deploy a slicer would get no prompt, their day would be regular and they would be paid the
+-- daily rate PLUS slicer pay. One outbox row per live employment makes the first publisher pass after deploy rewrite every roster document with it (the same row the 0088 trigger enqueues).
 -- GRANTS (ADR-012 s5 4a). production_records, production_record_lines and payslips keep their existing grants (the new columns are covered). slicer_pay_rates: SELECT, INSERT only.
 
 SET LOCAL lock_timeout = '5s';
@@ -108,11 +111,15 @@ ALTER TABLE "payslips" ADD CONSTRAINT "payslips_gross_identity_check"
 -- ---- S2: worked as slicer or regular -----------------------------------------------------------
 ALTER TABLE "attendance_punches" ADD COLUMN "worked_as" text;
 --> statement-breakpoint
-ALTER TABLE "attendance_punches" ADD CONSTRAINT "attendance_punches_worked_as_check" CHECK ("worked_as" IS NULL OR "worked_as" IN ('regular','slicer'));
+ALTER TABLE "attendance_punches" ADD CONSTRAINT "attendance_punches_worked_as_check" CHECK ("worked_as" IS NULL OR "worked_as" IN ('regular','slicer')) NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "attendance_punches" VALIDATE CONSTRAINT "attendance_punches_worked_as_check";
 --> statement-breakpoint
 ALTER TABLE "attendance_days" ADD COLUMN "worked_as" text DEFAULT 'regular' NOT NULL;
 --> statement-breakpoint
-ALTER TABLE "attendance_days" ADD CONSTRAINT "attendance_days_worked_as_check" CHECK ("worked_as" IN ('regular','slicer'));
+ALTER TABLE "attendance_days" ADD CONSTRAINT "attendance_days_worked_as_check" CHECK ("worked_as" IN ('regular','slicer')) NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "attendance_days" VALIDATE CONSTRAINT "attendance_days_worked_as_check";
 --> statement-breakpoint
 ALTER TABLE "attendance_adjustments" ADD COLUMN "worked_as" text;
 --> statement-breakpoint
@@ -139,6 +146,20 @@ ALTER TABLE "attendance_adjustments" ADD CONSTRAINT "attendance_adjustments_payl
      AND "effective_out_minute" IS NULL AND "is_half_day" IS NULL AND "approved_ot_minutes" IS NULL AND "worked_as" IS NULL)
 );
 --> statement-breakpoint
+
+-- ROSTER-REPUBLISH-BEGIN (a test runs exactly this statement). RLS is FORCEd on mirror_outbox and a migration reads every organisation, so row_security is off for the statement (as 0241 did).
+SET LOCAL row_security = off;
+--> statement-breakpoint
+INSERT INTO "mirror_outbox" ("org_id", "store_id", "entity", "entity_id", "op", "src_version")
+SELECT e."org_id", e."store_id", 'roster', e."id", 'upsert', nextval('mirror_version_seq')
+  FROM "employments" e
+  JOIN "persons" p ON p."id" = e."person_id"
+ WHERE e."ended_on" IS NULL AND p."is_active"
+   AND NOT EXISTS (SELECT 1 FROM "mirror_outbox" o WHERE o."entity" = 'roster' AND o."entity_id" = e."id" AND o."published_at" IS NULL);
+--> statement-breakpoint
+SET LOCAL row_security = on;
+--> statement-breakpoint
+-- ROSTER-REPUBLISH-END
 
 -- ---- slicer_pay_rates ------------------------------------------------------------------------
 CREATE TABLE "slicer_pay_rates" (
