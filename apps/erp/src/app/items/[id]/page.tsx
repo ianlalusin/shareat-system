@@ -1,4 +1,4 @@
-import { ITEMS_PRICING_RULES, ITEMS_RENAME_RULES, ITEMS_UNIT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { ITEMS_RENAME_RULES, ITEMS_UNIT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { notFound } from 'next/navigation';
 import { requirePageAccess } from '../../../lib/page-access';
 import { can } from '@shareat/auth';
@@ -11,7 +11,6 @@ import {
   removeItemAliasAction,
   renameItemAction,
   setItemExpenseCategoryAction,
-  setItemPricingAction,
   setItemStatusAction,
   setItemVariantOfAction,
   setStoreSellabilityAction,
@@ -375,24 +374,17 @@ export default async function ItemDetailPage({
                 </p>
               ))}
               {mayPrice ? (
-                <EditableRecord
-                  action={setItemPricingAction}
-                  rules={ITEMS_PRICING_RULES}
-                  quiet
-                  label={`${item.name} price to stores`}
-                  hidden={{ itemId: item.id }}
+                <ItemPricingFields
+                  itemId={item.id}
+                  itemName={item.name}
                   typed={typedFor(sp, ITEM_PRICING, item.id, actor.personId)}
-                >
-                  <ItemPricingFields
-                    itemId={item.id}
-                    mode={priceRule?.pricingMode ?? 'percent_markup'}
-                    fixedAmount={priceRule?.fixedAmount ?? ''}
-                    fixedMarkupAmount={priceRule?.fixedMarkupAmount ?? ''}
-                    markupPercent={priceRule?.markupPercent ?? ''}
-                    marginAlertThresholdPct={priceRule?.marginAlertThresholdPct ?? ''}
-                    basis={priceToStores.basis}
-                  />
-                </EditableRecord>
+                  mode={priceRule?.pricingMode ?? 'percent_markup'}
+                  fixedAmount={priceRule?.fixedAmount ?? ''}
+                  fixedMarkupAmount={priceRule?.fixedMarkupAmount ?? ''}
+                  markupPercent={priceRule?.markupPercent ?? ''}
+                  marginAlertThresholdPct={priceRule?.marginAlertThresholdPct ?? ''}
+                  basis={priceToStores.basis}
+                />
               ) : (
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">Only a manager or admin can change it.</p>
               )}
