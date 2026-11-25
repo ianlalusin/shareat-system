@@ -8,7 +8,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
-import { Banner, Button, ConfirmDestructive, Field, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
+import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_PRODUCTION_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { NAV_LINK } from '@/components/action-link';
@@ -103,16 +103,11 @@ export default async function ProductionRecordPage({
                 {outputs
                   .filter((l) => !l.reversedAt)
                   .map((l) => (
-                    <label key={l.id} className="flex min-h-11 items-center gap-3 text-sm">
-                      <input type="checkbox" name="paidLineId" value={l.id} defaultChecked={l.isPaid} className="size-5" />
-                      <span>
-                        {l.itemName} — {l.quantity} {l.unit}
-                      </span>
-                    </label>
+                    <Checkbox key={l.id} name="paidLineId" value={l.id} defaultChecked={l.isPaid} label={`${l.itemName} — ${l.quantity} ${l.unit}`} />
                   ))}
               </fieldset>
               <Button type="submit" variant="secondary">
-                Save slicer and paid lines
+                Save
               </Button>
             </form>
           ) : (

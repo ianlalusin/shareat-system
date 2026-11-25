@@ -78,6 +78,9 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   'apps/erp/src/app/dashboard/lib.ts::resolveRange::dayCount(from, to) > MAX_RANGE_DAYS': 'not-a-column-value',
   'apps/erp/src/app/dashboard/lib.ts::resolveRange::prev.from < MIN_RANGE_START': 'not-a-column-value',
   'apps/erp/src/app/page.tsx::DashboardPage::days > 1': 'not-a-column-value',
+  // T-635 (slicer pay rate in force): ISO effective-date ordering (lexicographic by design), never a numeric(p,s) column value
+  'packages/domain/src/production/slicer-pay-math.ts::latest::r.effectiveFrom <= on': 'not-a-column-value',
+  'packages/domain/src/production/slicer-pay-math.ts::latest::r.effectiveFrom > a.effectiveFrom': 'not-a-column-value',
   // T-502 S5 (expense items report): ISO business-date ordering (lexicographic by design), never a money comparison
   'packages/domain/src/reports/expense-items.ts::attribute::r.businessDate > p.businessDate': 'not-a-column-value',
   'apps/erp/src/app/reports/expense-items/range.ts::resolveRange::from > to': 'not-a-column-value',

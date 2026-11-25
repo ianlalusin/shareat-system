@@ -214,9 +214,10 @@ describe('invariant 4 - the everyday slice still posts; a lineage mismatch still
 describe('invariant 3 - the rule is in the SHARED preparation, not only in createProductionDraft', () => {
   /** A slice draft written straight into the tables, as old data or another door could. */
   async function rawSliceDraft(inputItem: string, outputItem: string) {
+    const slicerId = await ensureSlicerPerson(sql, { orgId: orgA, storeId: storeA }); // T-635: a slice record needs a slicer to post at all
     const [rec] = await sql<{ id: string }[]>`
-      insert into production_records (org_id, store_id, location_id, kind, produced_on, created_by)
-      values (${orgA}, ${storeA}, ${kitchen}, 'slice', '2026-08-10', ${managerId}) returning id`;
+      insert into production_records (org_id, store_id, location_id, kind, produced_on, created_by, performed_by_person_id)
+      values (${orgA}, ${storeA}, ${kitchen}, 'slice', '2026-08-10', ${managerId}, ${slicerId}) returning id`;
     await sql`insert into production_record_lines (record_id, direction, item_id, quantity, unit, revision) values
       (${rec!.id}, 'out', ${inputItem}, 10, 'kg', 1), (${rec!.id}, 'in', ${outputItem}, 9, 'kg', 1)`;
     return rec!.id;

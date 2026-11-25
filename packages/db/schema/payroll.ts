@@ -426,7 +426,7 @@ export const slicerPayRates = pgTable(
   },
   (t) => [
     check('slicer_pay_rates_rate_positive_check', sql`${t.ratePerKg} > 0`),
-    check('slicer_pay_rates_rate_finite_check', sql`${t.ratePerKg} < 'Infinity'::numeric`),
+    check('slicer_pay_rates_rate_per_kg_finite_check', sql`${t.ratePerKg} > '-Infinity'::numeric and ${t.ratePerKg} < 'Infinity'::numeric`),
     index('slicer_pay_rates_org_idx').on(t.orgId, t.effectiveFrom),
     // NOTE: slicer_pay_rates_org_item_from_unique - UNIQUE (org_id, coalesce(item_id, nil uuid), effective_from) is an expression index, hand-added in migration 0279, no Drizzle mirror: one rate per scope per day it changes.
     foreignKey({

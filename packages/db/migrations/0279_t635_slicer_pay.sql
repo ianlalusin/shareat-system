@@ -105,7 +105,7 @@ CREATE TABLE "slicer_pay_rates" (
 	"created_by" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "slicer_pay_rates_rate_positive_check" CHECK ("rate_per_kg" > 0),
-	CONSTRAINT "slicer_pay_rates_rate_finite_check" CHECK ("rate_per_kg" < 'Infinity'::numeric)
+	CONSTRAINT "slicer_pay_rates_rate_per_kg_finite_check" CHECK ("rate_per_kg" > '-Infinity'::numeric AND "rate_per_kg" < 'Infinity'::numeric)
 );
 --> statement-breakpoint
 ALTER TABLE "slicer_pay_rates" ADD CONSTRAINT "slicer_pay_rates_org_id_organizations_id_fk"

@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
+import { SLICER_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { storePageScope } from '../../../../lib/store-scope';
 import { currentPeriod, periodsForMonth, peso, premiumSettingsFor } from '../../../payroll/lib';
 import { saveSlicerRateAction } from './actions';
 import { slicerPayData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, NumTd, Select, Table, Td, Th } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
 import { withFlash } from '@/lib/flash';
 import { NAV_LINK } from '@/components/action-link';
 
@@ -147,7 +149,7 @@ export default async function SlicerPayPage({ searchParams }: { searchParams: Pr
           <h2 className="text-sm font-medium">Slicer pay rates (per kg)</h2>
           {canSetRate && (
             <FormModal trigger="Set a rate" triggerVariant="secondary" title="Set a slicer rate" description="Takes effect from the date below. An earlier rate is never changed." size="sm">
-              <form action={saveSlicerRateAction}>
+              <CheckedForm rules={SLICER_RATE_RULES} action={saveSlicerRateAction}>
                 <input type="hidden" name="storeId" value={storeId} />
                 <FormGrid layout="fields">
                   <Field label="Applies to" width="name">
@@ -160,11 +162,11 @@ export default async function SlicerPayPage({ searchParams }: { searchParams: Pr
                       ))}
                     </Select>
                   </Field>
-                  <Field label="Rate per kg" width="short">
-                    <Input name="ratePerKg" inputMode="decimal" placeholder="0.00" required className="w-full" />
+                  <Field label="Rate per kg" width="short" rule={SLICER_RATE_RULES.ratePerKg}>
+                    <Input {...nativeAttrs(SLICER_RATE_RULES.ratePerKg)} placeholder="0.00" autoComplete="off" className="w-full" />
                   </Field>
-                  <Field label="From" width="date">
-                    <Input type="date" name="effectiveFrom" defaultValue={periodStart} required className="w-full" />
+                  <Field label="From" width="date" rule={SLICER_RATE_RULES.effectiveFrom}>
+                    <Input {...nativeAttrs(SLICER_RATE_RULES.effectiveFrom)} defaultValue={periodStart} className="w-full" />
                   </Field>
                 </FormGrid>
                 <DialogActions>
@@ -172,7 +174,7 @@ export default async function SlicerPayPage({ searchParams }: { searchParams: Pr
                     Save
                   </Button>
                 </DialogActions>
-              </form>
+              </CheckedForm>
             </FormModal>
           )}
         </div>

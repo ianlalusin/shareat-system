@@ -124,7 +124,9 @@ export async function confirmSlicing(tx: Tx, actor: Actor, input: { recordId: st
   if (record.confirmedAt) return refusal('This slicing record is already confirmed.');
   if (!(await productionRepo.confirmRecord(tx, record.id, actor.personId))) return refusal('This slicing record just changed. Reload and try again.');
   await auditLogRepo.append(tx, actor.orgId, {
-    actorPersonId: actor.personId, action: 'production.slicing_confirmed', storeId: record.storeId, entityId: record.id,
+    actorPersonId: actor.personId,
+    action: 'production.slicing_confirmed',
+    storeId: record.storeId, entityId: record.id,
     before: { confirmedBy: null }, after: { confirmedBy: actor.personId, slicer: record.performedByPersonId }, source: 'web',
   });
   return { ok: true };
@@ -139,7 +141,9 @@ export async function unconfirmSlicing(tx: Tx, actor: Actor, input: { recordId: 
   const before = { confirmedBy: record.confirmedByPersonId };
   if (!(await productionRepo.unconfirmRecord(tx, record.id))) return refusal('This slicing record just changed. Reload and try again.');
   await auditLogRepo.append(tx, actor.orgId, {
-    actorPersonId: actor.personId, action: 'production.slicing_unconfirmed', storeId: record.storeId, entityId: record.id,
+    actorPersonId: actor.personId,
+    action: 'production.slicing_unconfirmed',
+    storeId: record.storeId, entityId: record.id,
     before, after: { confirmedBy: null }, source: 'web',
   });
   return { ok: true };
@@ -199,7 +203,9 @@ export async function setSlicerPayRate(tx: Tx, actor: Actor, input: SetSlicerRat
     orgId: actor.orgId, itemId: input.itemId, ratePerKg: rate, effectiveFrom: input.effectiveFrom, note: input.note?.trim() || null, createdBy: actor.personId,
   });
   await auditLogRepo.append(tx, actor.orgId, {
-    actorPersonId: actor.personId, action: 'slicer_rate.set', storeId: null, entityId: id,
+    actorPersonId: actor.personId,
+    action: 'slicer_rate.set',
+    storeId: null, entityId: id,
     before: null, after: { itemId: input.itemId, ratePerKg: rate, effectiveFrom: input.effectiveFrom }, source: 'web',
   });
   return { ok: true, id };

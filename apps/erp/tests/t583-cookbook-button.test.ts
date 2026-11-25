@@ -51,6 +51,7 @@ vi.mock('../src/app/inventory/production/lib', () => ({
     inputItems: [],
     recipes: [{ id: 'r1', name: 'Broth', outputItemId: 'i1', outputQuantity: '4' }],
     records: [],
+    slicers: [],
   }),
 }));
 
