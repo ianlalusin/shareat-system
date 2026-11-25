@@ -35,7 +35,7 @@ export interface MonthDetailRow {
   er: string;
   ec: string;
   total: string;
-  /** The agency is in the payslip's `skipped_agencies`: the row stays, at 0.00. */
+  /** The agency is in the payslip's `skipped_agencies` (no number on file): the row stays, at 0.00. T-636: an UNTICKED agency has no row at all. */
   notDeducted: boolean;
 }
 
@@ -65,7 +65,7 @@ export interface StatutoryPaymentRow {
 
 /** One row per (payslip, agency) of a pay run: ee / er / ec as that agency defines them. The caller filters the run. */
 const owedSlips = sql`
-  select pr.id as run_id, pr.store_id, pr.period_end, ps.id as payslip_id, ps.person_id, ps.skipped_agencies, x.agency, x.ee, x.er, x.ec
+  select pr.id as run_id, pr.store_id, pr.period_end, ps.id as payslip_id, ps.person_id, ps.skipped_agencies, ps.unticked_agencies, x.agency, x.ee, x.er, x.ec
   from pay_runs pr
   join payslips ps on ps.run_id = pr.id and ps.org_id = pr.org_id
   cross join lateral (values
@@ -130,6 +130,8 @@ export async function monthDetail(
             and pr.period_end >= ${month}::date and pr.period_end < (${month}::date + interval '1 month')) o
     join persons p on p.id = o.person_id and p.org_id = ${orgId}
     where o.agency = ${agency}
+      -- T-636: an UNTICKED agency is a choice, not a missing number: that person is left out of this agency's detail (a missing number keeps its 0.00 row)
+      and not (${agency}::text = any(o.unticked_agencies))
     order by o.store_id, p.display_name, o.payslip_id`);
   return rows as unknown as MonthDetailRow[];
 }

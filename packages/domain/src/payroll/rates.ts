@@ -383,6 +383,40 @@ export function setGovernmentIds(
   });
 }
 
+/**
+ * T-636 (migration 0280): tick each government contribution on or off for one person. Ian, 25 Nov 2026: for staff who are not covered, such as on-call staff,
+ * after checking with the accountant (PH rules generally make these compulsory for employees; the app records the choice and who made it, it does not judge it).
+ * Same capability as the numbers (`enrol_staff` at the person's store), authorized FIRST. One audit row (`person.statutory_deduction_set`) carrying the before
+ * and after of each CHANGED tick; no change writes nothing. A posted payslip keeps its stored amounts; the next pay run reads the new ticks.
+ */
+export function setStatutoryDeductions(
+  tx: Tx,
+  actor: Actor,
+  input: { personId: string; storeId: string; deductSss: boolean; deductPhilhealth: boolean; deductPagibig: boolean },
+): Promise<{ changed: string[] }> {
+  return run(tx, async (trx) => {
+    await authorize(trx, actor, 'enrol_staff', { storeId: input.storeId });
+    const next = { deductSss: input.deductSss === true, deductPhilhealth: input.deductPhilhealth === true, deductPagibig: input.deductPagibig === true };
+    // The ticks decide which agencies a payslip deducts: lock the person like a post does, so a run cannot read half a change.
+    await statutoryRepo.lockPersons(trx, actor.orgId, [input.personId]);
+    const [current] = await statutoryRepo.governmentIdsFor(trx, actor.orgId, [input.personId]);
+    if (!current) throw gone('setStatutoryDeductions: no such person', 'That person');
+    const keys = ['deductSss', 'deductPhilhealth', 'deductPagibig'] as const;
+    const changed = keys.filter((k) => current[k] !== next[k]);
+    if (changed.length === 0) return { changed: [] };
+    await statutoryRepo.setStatutoryDeductions(trx, actor.orgId, input.personId, next);
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'person.statutory_deduction_set',
+      storeId: input.storeId,
+      entityId: input.personId,
+      before: Object.fromEntries(changed.map((k) => [k, current[k]])),
+      after: Object.fromEntries(changed.map((k) => [k, next[k]])),
+      source: 'web',
+    });
+    return { changed: [...changed] };
+  });
+}
 
 const EMPLOYER_AGENCIES = ['sss', 'philhealth', 'pagibig', 'bir'] as const;
 type EmployerAgency = (typeof EMPLOYER_AGENCIES)[number];

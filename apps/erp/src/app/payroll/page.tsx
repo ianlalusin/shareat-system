@@ -45,6 +45,11 @@ interface SearchParams {
  * ⭐ The point of this screen is that it produces a **payslip** — the thing v1's payroll never
  * managed once across seven stores, despite three shipped slices and a verified tax engine.
  */
+/** T-636: an agency in words. */
+function agencyLabel(a: string): string {
+  return a === 'sss' ? 'SSS' : a === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG';
+}
+
 export default async function PayrollPage({
   searchParams,
 }: {
@@ -285,7 +290,7 @@ export default async function PayrollPage({
             <Banner tone="warning">
               <strong>Missing government numbers — not deducted:</strong>{' '}
               {pv.missingGovernmentIds
-                .map((m) => `${m.personName} (${m.agency === 'sss' ? 'SSS' : m.agency === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG'})`)
+                .map((m) => `${m.personName} (${agencyLabel(m.agency)})`)
                 .join(', ')}
               . Nothing is deducted for an agency with no number on file, and it is not made up later. Add the number on the
               staff page.
@@ -327,9 +332,15 @@ export default async function PayrollPage({
                     <NumTd className="font-mono">{peso(Number(s.grossPay))}</NumTd>
                     <NumTd className="font-mono text-xs">
                       {peso(Number(s.sssEe))} / {peso(Number(s.philhealthEe))} / {peso(Number(s.pagibigEe))}
-                      {s.skippedAgencies.length > 0 && (
+                      {/* T-636: a missing number is a warning; an UNTICKED agency is a deliberate choice, shown as a quiet note */}
+                      {s.skippedAgencies.some((a) => !s.untickedAgencies.includes(a)) && (
                         <div className="font-sans text-warning-ink">
-                          not deducted: no {s.skippedAgencies.map((a) => (a === 'sss' ? 'SSS' : a === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.
+                          not deducted: no {s.skippedAgencies.filter((a) => !s.untickedAgencies.includes(a)).map(agencyLabel).join(', ')} no.
+                        </div>
+                      )}
+                      {s.untickedAgencies.length > 0 && (
+                        <div data-unticked className="font-sans text-muted">
+                          Not deducted (unticked): {s.untickedAgencies.map(agencyLabel).join(', ')}
                         </div>
                       )}
                     </NumTd>
@@ -405,8 +416,8 @@ export default async function PayrollPage({
                           .map((r) => ` · ${chargeRepaymentLabel(r.signedOn)} −${peso(Number(r.amount))}`)
                           .join('')}
                       {` · SSS ${peso(Number(s.sssEe))}, PhilHealth ${peso(Number(s.philhealthEe))}, Pag-IBIG ${peso(Number(s.pagibigEe))}, tax ${peso(Number(s.withholding))}`}
-                      {s.skippedAgencies.length > 0 &&
-                        ` · not deducted: no ${s.skippedAgencies.map((x) => (x === 'sss' ? 'SSS' : x === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.`}
+                      {/* T-636: a posted slip stores which agencies were skipped, not why (no number, or unticked), so this says only which */}
+                      {s.skippedAgencies.length > 0 && ` · not deducted: ${s.skippedAgencies.map(agencyLabel).join(', ')}`}
                     </li>
                   ))}
                 </ul>

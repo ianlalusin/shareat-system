@@ -27,7 +27,7 @@ import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { staffRoleTitle } from '../role-title';
 import { STAFF_END_RULES, STAFF_GOV_ID_RULES, STAFF_PIN_RULES, STAFF_RENAME_RULES, STAFF_SUSPEND_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Badge, Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input } from '@/components/ui';
+import { Badge, Banner, Button, Checkbox, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input } from '@/components/ui';
 import { ActionIcon } from '@/components/ui/action-icons';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -39,6 +39,12 @@ export const dynamic = 'force-dynamic';
 const INPUT =
   'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const CARD = 'space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800';
+
+/** T-636: the unticked agencies in words ("SSS, Pag-IBIG"), or null when every contribution is deducted. */
+function untickedText(g: { deductSss: boolean; deductPhilhealth: boolean; deductPagibig: boolean }): string | null {
+  const off = [!g.deductSss && 'SSS', !g.deductPhilhealth && 'PhilHealth', !g.deductPagibig && 'Pag-IBIG'].filter((x): x is string => !!x);
+  return off.length > 0 ? off.join(', ') : null;
+}
 const ACCESS_ROW = 'flex min-h-11 items-center justify-between gap-3 py-2';
 
 /** T-612: the account status as a badge and a sentence. `ended` has no button: it is the End employment action, undone by hiring again. */
@@ -330,7 +336,8 @@ export default async function EmploymentDetailPage({
                 Government numbers
                 <HelpTip label="Government numbers">
                   Payroll deducts SSS, PhilHealth and Pag-IBIG only for an agency whose number is filled in here. A blank box means that agency is
-                  not deducted from this person&rsquo;s payslips (and nothing is caught up later). Digits only; dashes and spaces are ignored.
+                  not deducted from this person&rsquo;s payslips (and nothing is caught up later). Digits only; dashes and spaces are ignored. An unticked
+                  &ldquo;Deduct&rdquo; box (T-636) also stops that agency, employee and employer share, even with a number on file.
                 </HelpTip>
               </h2>
               <EditableRecord action={setGovernmentIdsAction} label="government numbers"
@@ -340,6 +347,8 @@ export default async function EmploymentDetailPage({
                   { label: 'PhilHealth number', value: govIds.philhealthNo ? 'On file' : null },
                   { label: 'Pag-IBIG number', value: govIds.pagibigNo ? 'On file' : null },
                   { label: 'TIN', value: govIds.tin ? 'On file' : null },
+                  // T-636: say plainly when an agency is unticked (not deducted on purpose)
+                  { label: 'Not deducted (unticked)', value: untickedText(govIds) },
                 ]}
                 hidden={{ employmentId }} typed={null} rules={STAFF_GOV_ID_RULES}>
                 <FormGrid layout="pairs">
@@ -356,6 +365,15 @@ export default async function EmploymentDetailPage({
                     <Input {...nativeAttrs(STAFF_GOV_ID_RULES.tin)} defaultValue={govIds.tin ?? ''} className="w-full font-mono" />
                   </Field>
                 </FormGrid>
+                {/* T-636: tick each contribution on or off. Default ticked; unticked = that agency is not deducted (employee and employer share). */}
+                <fieldset className="mt-3 space-y-1">
+                  <legend className="text-sm font-medium">Deduct from this person&rsquo;s pay</legend>
+                  <input type="hidden" name="statutoryTicks" value="1" />
+                  <Checkbox name="deductSss" defaultChecked={govIds.deductSss} label="Deduct SSS" />
+                  <Checkbox name="deductPhilhealth" defaultChecked={govIds.deductPhilhealth} label="Deduct PhilHealth" />
+                  <Checkbox name="deductPagibig" defaultChecked={govIds.deductPagibig} label="Deduct Pag-IBIG" />
+                  <p className="text-xs text-muted">Untick only for staff who are not covered, such as on-call staff. Check with your accountant.</p>
+                </fieldset>
               </EditableRecord>
             </section>
           )}

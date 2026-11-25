@@ -230,6 +230,8 @@ export interface PayslipRow {
   taxablePay: string;
   isMwe: boolean;
   skippedAgencies: string[];
+  /** T-636: the skipped agencies that were unticked (a choice), not missing a number. */
+  untickedAgencies: string[];
   journalEntryId: string | null;
 }
 
@@ -274,6 +276,7 @@ export type PayslipInsert = Pick<
   taxablePay?: Money;
   isMwe?: boolean;
   skippedAgencies?: string[];
+  untickedAgencies?: string[];
   /** The rate rows used; null for an agency that was skipped. */
   sssRateId?: string | null;
   philhealthRateId?: string | null;
@@ -314,6 +317,7 @@ export async function insertPayslip(tx: Tx, input: PayslipInsert): Promise<{ id:
       taxablePay: input.taxablePay,
       isMwe: input.isMwe,
       skippedAgencies: input.skippedAgencies,
+      untickedAgencies: input.untickedAgencies,
       sssRateId: input.sssRateId ?? null,
       philhealthRateId: input.philhealthRateId ?? null,
       pagibigRateId: input.pagibigRateId ?? null,
@@ -357,6 +361,7 @@ export async function listPayslips(tx: Tx, runId: string): Promise<PayslipRow[]>
       taxablePay: payslips.taxablePay,
       isMwe: payslips.isMwe,
       skippedAgencies: payslips.skippedAgencies,
+      untickedAgencies: payslips.untickedAgencies,
       journalEntryId: payslips.journalEntryId,
     })
     .from(payslips)

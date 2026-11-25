@@ -285,6 +285,8 @@ export const payslips = pgTable(
     isMwe: boolean('is_mwe').notNull().default(false),
     /** Agencies NOT deducted because the person had no number on file when this slip was posted. */
     skippedAgencies: text('skipped_agencies').array().notNull().default(sql`'{}'::text[]`),
+    /** T-636 (0280): the skipped agencies that were UNTICKED on the staff page (a choice), not missing a number. Always a subset of skipped_agencies. */
+    untickedAgencies: text('unticked_agencies').array().notNull().default(sql`'{}'::text[]`),
     /** ⭐ The rate rows used (the "re-read March in June" rule, as `pay_rate_id`); null where the agency was skipped. */
     sssRateId: uuid('sss_rate_id').references(() => statutoryRates.id, { onDelete: 'restrict' }),
     philhealthRateId: uuid('philhealth_rate_id').references(() => statutoryRates.id, { onDelete: 'restrict' }),
@@ -332,6 +334,7 @@ export const payslips = pgTable(
       name: 'payslips_pagibig_rate_id_same_org_fk',
     }).onDelete('restrict'),
     check('payslips_skipped_agencies_check', sql`${t.skippedAgencies} <@ ARRAY['sss', 'philhealth', 'pagibig']::text[]`),
+    check('payslips_unticked_agencies_check', sql`${t.untickedAgencies} <@ ${t.skippedAgencies}`),
     check(
       'payslips_statutory_nonnegative_check',
       sql`${t.sssEe} >= 0 and ${t.philhealthEe} >= 0 and ${t.pagibigEe} >= 0 and ${t.withholding} >= 0 and ${t.sssEr} >= 0 and ${t.sssEc} >= 0 and ${t.philhealthEr} >= 0 and ${t.pagibigEr} >= 0 and ${t.taxablePay} >= 0`,
