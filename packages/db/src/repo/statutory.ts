@@ -415,7 +415,7 @@ export interface GovernmentIdsRow {
   philhealthNo: string | null;
   pagibigNo: string | null;
   tin: string | null;
-  /** T-636 (0280): deduct this agency at all (false = unticked on the staff page; the pay run skips it). */
+  /** T-636 (0283): deduct this agency at all (false = unticked on the staff page; the pay run skips it). */
   deductSss: boolean;
   deductPhilhealth: boolean;
   deductPagibig: boolean;
@@ -453,7 +453,7 @@ export async function setGovernmentIds(
   return rows.length > 0;
 }
 
-/** T-636 (0280): the three deduct-this-agency ticks. Returns false when no such person in the org. */
+/** T-636 (0283): the three deduct-this-agency ticks. Returns false when no such person in the org. */
 export async function setStatutoryDeductions(
   tx: Tx,
   orgId: string,

@@ -65,6 +65,7 @@ import {
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { testItemCode } from './_fixtures/item-code';
+import { ensureSlicerPerson } from './_fixtures/t635-slicer';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -220,9 +221,10 @@ async function receiveStock(f: Fixture, itemId: string, itemKind: string, qty: s
 // -----------------------------------------------------------------------------------------------
 
 async function draft(f: Fixture, producedOn: string): Promise<string> {
+  const slicerId = await ensureSlicerPerson(sql, { orgId: f.orgId, storeId: f.storeId });
   const d = await asOrg(f.orgId, (tx) =>
     createProductionDraft(tx, f.staff, {
-      orgId: f.orgId, storeId: f.storeId, locationId: f.locationId, kind: 'slice', producedOn, labourCost: '1000.00',
+      orgId: f.orgId, storeId: f.storeId, locationId: f.locationId, kind: 'slice', performedByPersonId: slicerId, producedOn, labourCost: '1000.00',
       inputs: [{ itemId: f.slabId, quantity: '50', unit: 'kg' }],
       outputs: [{ itemId: f.sliceA, quantity: '20', unit: 'kg' }, { itemId: f.sliceB, quantity: '17', unit: 'kg' }, { itemId: f.sliceC, quantity: '11', unit: 'kg' }],
     }),

@@ -143,6 +143,13 @@ describe('T-159 invariants 5 & 6 — the inbox is create-only, and speaks only f
     await assertFails(setDoc(doc(terminal(), 'inbox/p-5x'), event('p-5x', { employmentId: 'emp-1' })));
   });
 
+  it('T-635 S2: workedAs is optional, and when present is slicer or regular', async () => {
+    await assertSucceeds(setDoc(doc(terminal(), 'inbox/p-ws1'), event('p-ws1', { workedAs: 'slicer' })));
+    await assertSucceeds(setDoc(doc(terminal(), 'inbox/p-ws2'), event('p-ws2', { workedAs: 'regular' })));
+    await assertSucceeds(setDoc(doc(terminal(), 'inbox/p-ws3'), event('p-ws3')));
+    await assertFails(setDoc(doc(terminal(), 'inbox/p-ws4'), event('p-ws4', { workedAs: 'boss' })));
+  });
+
   it('6. update and delete are refused once created', async () => {
     await assertSucceeds(setDoc(doc(terminal(), 'inbox/p-6'), event('p-6')));
     await assertFails(updateDoc(doc(terminal(), 'inbox/p-6'), { assertedIntent: 'out' }));

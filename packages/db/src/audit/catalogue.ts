@@ -259,6 +259,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('pos.deposit_voided', 'money', 'high', 'store', 'pos_reservation_deposits', 'T-628'),
   def('pos.deposit_refunded', 'money', 'high', 'store', 'pos_reservation_deposits', 'T-628'),
   def('pos.deposit_kept', 'money', 'high', 'store', 'pos_reservation_deposits', 'T-628'),
+  // T-635: slicer pay. The confirm / un-confirm of a slice record (store-scoped, entity = the production record) and a per-kg rate being set (org-level; entity = the rate row).
+  def('production.slicing_confirmed', 'stock', 'normal', 'store', 'production_records', 'T-635'),
+  def('production.slicing_unconfirmed', 'stock', 'normal', 'store', 'production_records', 'T-635'),
+  def('slicer_rate.set', 'money', 'normal', 'org', 'slicer_pay_rates', 'T-635'),
   // T-629: the org's master list of payment options (entity = the payment_options row). Org-level (no store). A retire is the one that can stop a till taking a method, so it is high.
   def('payment_option.created', 'money', 'normal', 'org', 'payment_options', 'T-629'),
   def('payment_option.updated', 'money', 'normal', 'org', 'payment_options', 'T-629'),

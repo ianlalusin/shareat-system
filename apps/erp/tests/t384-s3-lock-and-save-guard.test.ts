@@ -41,6 +41,10 @@ const EXEMPT: Record<string, string> = {
   'admin/pos-tablets/DiscountsSection.tsx': 'T-622: the Change window is opened by its own button and saves one preset; not an edit-in-place record',
   // T-627 (NEEDS BOSS APPROVAL, same precedent as DiscountsSection): the Add / Change charge window. Change is behind its own button and modal, the name is locked, the only hidden id is the store; the prefilled amount is the one charge being changed.
   'admin/pos-tablets/ChargesSection.tsx': 'T-627: the Change window is opened by its own button and saves one charge; not an edit-in-place record',
+  // T-635 (BOSS approved 25 Nov 2026, same precedent as TillsSection): the Set a rate window. The only hidden id is the store; the date default is the period start the picker is on, not a stored record. Rates are append-only, so there is nothing to edit in place.
+  'inventory/production/slicer-pay/page.tsx': 'T-635: a rate window that adds an append-only row; the date default is the picked period, not a record',
+  // T-635 (BOSS approved 25 Nov 2026): the slicer pick and paid ticks on a DRAFT slice record, saved on their own with one click. A draft is still being composed, so the lock-then-Edit shape would add a tap to a two-control save.
+  'inventory/production/[id]/page.tsx': 'T-635: the draft slicer and paid-line ticks, saved separately on an unposted draft; not an edit-in-place stored record',
   // T-193 S5: an add form (hidden request id and hidden month/agency inputs), not a record-bound edit-in-place form.
   'payroll/statutory-payments/new/page.tsx': 'T-193 S5: an add form with hidden id inputs, not record-bound',
   // DEF-778: an add form whose only hidden *Id is the per-render request id; its date default is a prop, not a record.
@@ -69,6 +73,8 @@ const COMMANDS: Record<string, string> = {
   'Issue': 'T-584 (NEEDS BOSS APPROVAL): numbers a document and freezes its wording as version 1; audited; nothing can be edited in place afterwards',
   'Sign': 'T-584 (NEEDS BOSS APPROVAL): attaches the saved signature of the signer to a document version, only after that person types their own Employee ID and PIN; audited, wrong PINs capped',
   'Add cash register': 'T-546 (BOSS approved), T-582 rename: adds a cash register (a till in code; the receipt-number identity of a store); audited',
+  'Confirm this slicing': 'T-635 (BOSS approved 25 Nov 2026): a second staff member confirms a slice record, which releases it to be paid with payroll (money out later); audited production.slicing_confirmed; the not-the-slicer rule is applied in the domain',
+  'Take back confirmation': 'T-635 (BOSS approved 25 Nov 2026): withdraws that confirmation until the record is paid (a status change); audited production.slicing_unconfirmed',
   'Confirm and switch': 'T-533 S1, BOSS approved 15 Nov 2026: switches a store between the old and the new POS (decides where its sales days come from; admin or super-admin only; audited pos.store_mode_set)',
   'Set tablet': 'T-546 (BOSS approved): chooses which paired tablet acts as a till, or none; audited',
   'Save printer': "T-546 (BOSS approved): sets the till's receipt paper and copies, which the tablet then prints with; audited",

@@ -946,7 +946,7 @@ describe('T-190 audit gap 6 - discarding an unconfirmed table', () => {
 });
 
 // =====================================================================================================================
-// T-636 (migration 0280): tick each government contribution on or off, per person. docs/tasks/636-statutory-toggles.md. CI runs these (no database on the
+// T-636 (migration 0283): tick each government contribution on or off, per person. docs/tasks/636-statutory-toggles.md. CI runs these (no database on the
 // builder's PC). Mutants proven at unit level: packages/domain/tests/t636-statutory-toggles.test.ts.
 
 const untick = (f: Fixture, who: Actor, flags: { deductSss?: boolean; deductPhilhealth?: boolean; deductPagibig?: boolean }) =>
@@ -996,7 +996,7 @@ describe('T-636 - per-person tick boxes for SSS / PhilHealth / Pag-IBIG', () => 
     expect(p.slips[0]).toMatchObject({ sssEe: '0.00', pagibigEe: '0.00', pagibigEr: '0.00', philhealthEe: '260.00' });
   });
 
-  it('test 3: defaults - an existing person keeps every tick on and keeps deducting (the 0280 backfill is DEFAULT true)', async () => {
+  it('test 3: defaults - an existing person keeps every tick on and keeps deducting (the 0283 backfill is DEFAULT true)', async () => {
     const f = await ready('t636c');
     expect(await flagsOf(f.workerId)).toEqual({ deduct_sss: true, deduct_philhealth: true, deduct_pagibig: true });
     await addDays(f, dates('2026-01', 1, 13));

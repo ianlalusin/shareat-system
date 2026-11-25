@@ -4,6 +4,8 @@ The production document and posting layer (T-176) plus recipe administration (T-
 
 ## Interface
 - `index.ts`: `PROCESSING_LABOUR_ACCOUNT` (6100), `hasLiveSlicerPaymentCovering`, `createProductionDraft`, `scaleRecipeToTarget`, `postProduction`, `editPostedProduction`, `voidProduction`, types `DraftLineInput`, `CreateProductionDraftInput`, `ProductionDraftOutcome`, `ScaleRecipeInput`, `ScaleRecipeOutcome`, `PostEngineResult`, `PostEngineOutcome`, `ProductionPostOutcome`, `EditProductionInput`, `EditOutcome`, `VoidOutcome`; re-exports `recipes.ts`.
+- `slicer-pay.ts` (T-635): `SLICER_POSITION`, `planSlicerPay`, `applySlicerPayToRun`, `releaseSlicerPayOfRun`, `slicerRefusal`, `confirmSlicing`, `unconfirmSlicing`, `updateSliceDraft`, `setSlicerPayRate`, `slicerPayOverview`, `listSlicerPayRatesFor`, types `SlicerPayPlan`, `SlicerPayPlanLine`, `SlicingOutcome`, `SetSlicerRateInput`, `SlicerPayRow`, `SlicerPayOverview`.
+- `slicer-pay-math.ts` (T-635, pure): `slicerRateInForce`, `computeRecordPay`, types `SlicerRateLike`, `SlicerPayLine`, `RecordPay`.
 - `recipes.ts`: `createRecipe`, `editRecipe`, `retireRecipe`, `restoreRecipe`, types `RecipeLineInput`, `CreateRecipeInput`, `EditRecipeInput`, `RecipeOutcome`.
 - `recipe-shape.ts`: `MAX_RECIPE_QUANTITY_THOUSANDTHS`, `MAX_RECIPE_NAME_LENGTH`, `MAX_RECIPE_LINES`, `recipeQuantityRefusal`, `validateRecipeShape`.
 - `unit-conversion.ts`: `CONVERTIBLE_UNITS`, `divideRoundHalfUp`, `convertUnit`, `unitConversionFactor`, `isConvertibleUnit`.

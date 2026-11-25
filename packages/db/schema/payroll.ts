@@ -42,6 +42,7 @@ import { persons } from './persons';
 import { statutoryRates } from './statutory';
 import { stores } from './stores';
 import { journalEntries } from './journal';
+import { items } from './items';
 
 /**
  * ⚠️ Only `daily` has a compute path, and that is a measurement, not an oversight: of 126 live v1
@@ -245,9 +246,8 @@ export const payslips = pgTable(
     /** ⭐ The rate this was computed under. Same historical-integrity pattern as
      *  `attendance_days.attendanceConfigId` — re-reading a March payslip in June gives March's
      *  answer, even after a raise. */
-    payRateId: uuid('pay_rate_id')
-      .notNull()
-      .references(() => payRates.id, { onDelete: 'restrict' }),
+    payRateId: uuid('pay_rate_id').references(() => payRates.id, { onDelete: 'restrict' }),
+    // T-635 (0279): NULL only for a slip that pays slicer pay and nothing priced from a rate (a slicer paid per kg with no daily rate).
 
     daysWorked: numeric('days_worked', { precision: 6, scale: 2 }).notNull(),
     minutesWorked: integer('minutes_worked').notNull().default(0),
@@ -263,6 +263,14 @@ export const payslips = pgTable(
     leavePay: numeric('leave_pay', { precision: 14, scale: 2 }).notNull().default('0'),
     /** T-436. The year-end / final-pay cash payout of unused Service Incentive Leave. ⛔ Not in `basic_pay` either (PD 851). */
     silConversionPay: numeric('sil_conversion_pay', { precision: 14, scale: 2 }).notNull().default('0'),
+    /** T-635 (migration 0279). Per-kg pay for the slicer's confirmed slicing in the period. ⛔ NOT in `basic_pay`. Its own line on the slip, and in gross. */
+    slicerPay: numeric('slicer_pay', { precision: 14, scale: 2 }).notNull().default('0'),
+    /** T-635. The paid kilograms and the record count behind `slicer_pay`, shown on the payslip. */
+    slicerKg: numeric('slicer_kg', { precision: 14, scale: 3 }).notNull().default('0'),
+    slicerRecords: integer('slicer_records').notNull().default(0),
+    /** T-635 S2. Days in the period paid as SLICER days (the daily rate pays nothing for them; the slicer pay is the earnings) and how many of the paid records were confirmed late, from before the period. `daysWorked` is the REGULAR days. */
+    slicerDays: integer('slicer_days').notNull().default(0),
+    slicerEarlierRecords: integer('slicer_earlier_records').notNull().default(0),
 
     grossPay: numeric('gross_pay', { precision: 14, scale: 2 }).notNull(),
     /** ⛔ Capped at gross. Net may reach zero; it may never go below, and what is still owed stays
@@ -285,7 +293,7 @@ export const payslips = pgTable(
     isMwe: boolean('is_mwe').notNull().default(false),
     /** Agencies NOT deducted because the person had no number on file when this slip was posted. */
     skippedAgencies: text('skipped_agencies').array().notNull().default(sql`'{}'::text[]`),
-    /** T-636 (0280): the skipped agencies that were UNTICKED on the staff page (a choice), not missing a number. Always a subset of skipped_agencies. */
+    /** T-636 (0283): the skipped agencies that were UNTICKED on the staff page (a choice), not missing a number. Always a subset of skipped_agencies. */
     untickedAgencies: text('unticked_agencies').array().notNull().default(sql`'{}'::text[]`),
     /** ⭐ The rate rows used (the "re-read March in June" rule, as `pay_rate_id`); null where the agency was skipped. */
     sssRateId: uuid('sss_rate_id').references(() => statutoryRates.id, { onDelete: 'restrict' }),
@@ -304,9 +312,12 @@ export const payslips = pgTable(
     check('payslips_days_nonnegative_check', sql`${t.daysWorked} >= 0`),
     check(
       'payslips_gross_identity_check',
-      // T-436 (migration 0205) restated it with the two new legs, as this comment demanded of whoever adds one.
-      sql`${t.grossPay} = ${t.basicPay} + ${t.otPay} + ${t.nightDiffPay} + ${t.holidayPay} + ${t.leavePay} + ${t.silConversionPay}`,
+      // T-436 (migration 0205) restated it with the two new legs, as this comment demanded of whoever adds one; T-635 (0279) adds the slicer leg.
+      sql`${t.grossPay} = ${t.basicPay} + ${t.otPay} + ${t.nightDiffPay} + ${t.holidayPay} + ${t.leavePay} + ${t.silConversionPay} + ${t.slicerPay}`,
     ),
+    check('payslips_slicer_nonnegative_check', sql`${t.slicerPay} >= 0 and ${t.slicerKg} >= 0 and ${t.slicerRecords} >= 0 and ${t.slicerDays} >= 0 and ${t.slicerEarlierRecords} >= 0 and ${t.slicerEarlierRecords} <= ${t.slicerRecords}`),
+    check('payslips_slicer_pay_finite_check', sql`${t.slicerPay} > '-Infinity'::numeric and ${t.slicerPay} < 'Infinity'::numeric`),
+    check('payslips_slicer_kg_finite_check', sql`${t.slicerKg} > '-Infinity'::numeric and ${t.slicerKg} < 'Infinity'::numeric`),
     /** ⭐ Restated by migration 0206 (T-190): net = gross - the three employee shares - withholding - advance. */
     check(
       'payslips_net_identity_check',
@@ -391,6 +402,48 @@ export const payslips = pgTable(
       columns: [t.orgId, t.runId],
       foreignColumns: [payRuns.orgId, payRuns.id],
       name: 'payslips_run_id_same_org_fk',
+    }).onDelete('restrict'),
+  ],
+);
+
+/**
+ * T-635 (migration 0279). What a kilogram of paid slices pays the slicer, from a date.
+ *
+ * Same discipline as `pay_rates`: APPEND-ONLY (no UPDATE or DELETE grant to the app), no `effective_to`, and the rate in force on a
+ * date is the latest row whose `effective_from <= date`. `item_id` null = the org default; a row with an item = the override for that
+ * slice item, and an override in force beats the default. Edited on the "Slicer pay rates" section of the slicer pay screen.
+ */
+export const slicerPayRates = pgTable(
+  'slicer_pay_rates',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    /** Null = the org default for every slice item. */
+    itemId: uuid('item_id').references(() => items.id, { onDelete: 'restrict' }),
+    ratePerKg: numeric('rate_per_kg', { precision: 14, scale: 2 }).notNull(),
+    effectiveFrom: date('effective_from').notNull(),
+    note: text('note'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('slicer_pay_rates_rate_positive_check', sql`${t.ratePerKg} > 0`),
+    check('slicer_pay_rates_rate_per_kg_finite_check', sql`${t.ratePerKg} > '-Infinity'::numeric and ${t.ratePerKg} < 'Infinity'::numeric`),
+    index('slicer_pay_rates_org_idx').on(t.orgId, t.effectiveFrom),
+    // NOTE: slicer_pay_rates_org_item_from_unique - UNIQUE (org_id, coalesce(item_id, nil uuid), effective_from) is an expression index, hand-added in migration 0279, no Drizzle mirror: one rate per scope per day it changes.
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'slicer_pay_rates_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'slicer_pay_rates_created_by_same_org_fk',
     }).onDelete('restrict'),
   ],
 );
