@@ -362,7 +362,7 @@ export async function possibleDuplicateExpenses(tx: Tx, orgId: string, threshold
 
   const found: DetectedFinding[] = [];
   for (const list of clusters.values()) {
-    list.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : x.id < y.id ? -1 : 1));
+    list.sort((x, y) => x.date.localeCompare(y.date) || x.id.localeCompare(y.id));
     const first = list[0]!;
     const r = first.row;
     if (compare(money(r.amount), thresholdsFor(r.category_id).minAmount) < 0) continue;
