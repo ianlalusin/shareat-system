@@ -22,6 +22,7 @@ import { requestPersistentStorage, terminalFirebase } from '../../lib/terminal/f
 import {
   resolveScan,
   watchMirrors,
+  mustChooseWorkedAs,
   watchPending,
   writePunch,
   type MirroredConfig,
@@ -257,7 +258,7 @@ export default function ClockTerminalPage() {
 
     // T-635 S2: only a slicer clocking IN is asked. Everyone else, and every clock-out, goes straight through exactly as before.
     const who = rosterOf(credential.employmentId);
-    if (intent === 'in' && who?.isSlicer) {
+    if (who && mustChooseWorkedAs(intent, who)) {
       setAskWorkedAs({ credential, value, method, name: who.displayName });
       setMessage(null);
       setScan('');

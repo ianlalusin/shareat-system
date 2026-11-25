@@ -29,6 +29,14 @@ export interface MirroredCredential {
   templates?: string[];
 }
 
+/**
+ * T-635 S2: does this punch have to ask "Working today as: Slicer / Regular staff"? Only a CLOCK-IN by someone the roster mirror says is a slicer. Everyone else, and every
+ * clock-out, is recorded exactly as before. Decided on the device from the mirror (the device never computes a business outcome; the server decides what the choice means).
+ */
+export function mustChooseWorkedAs(intent: PunchIntent, who: { isSlicer?: boolean } | undefined): boolean {
+  return intent === 'in' && who?.isSlicer === true;
+}
+
 export interface MirroredRoster {
   employmentId: string;
   staffCode: string | null;

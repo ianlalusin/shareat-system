@@ -27,8 +27,8 @@ export async function saveSlicerRateAction(fd: FormData): Promise<void> {
       setSlicerPayRate(tx, actor, {
         storeId,
         itemId: str(fd, 'itemId') || null,
-        ratePerKg: checked.ratePerKg,
-        effectiveFrom: checked.effectiveFrom,
+        ratePerKg: checked.ratePerKg ?? '',
+        effectiveFrom: checked.effectiveFrom ?? '',
         note: str(fd, 'note') || null,
       }),
     );

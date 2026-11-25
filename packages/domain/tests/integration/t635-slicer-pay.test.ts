@@ -224,8 +224,9 @@ describe('T-635 pay run - what slicer pay adds to a payslip', () => {
     await posted(f, next, [{ item: f.sliceA, qty: '20' }]);
     const first = await preview(f, PERIOD[0]!.start, last);
     expect(first.slips[0]).toMatchObject({ slicerPay: '50.00', slicerRecords: 1 });
+    // S2: the 15th was not paid by any run (the first was only a preview), so the second period carries it forward: 50.00 + 100.00, one of the two "from an earlier period".
     const second = await preview(f, next, PERIOD[1]!.end);
-    expect(second.slips[0]).toMatchObject({ slicerPay: '100.00', slicerRecords: 1 });
+    expect(second.slips[0]).toMatchObject({ slicerPay: '150.00', slicerRecords: 2, slicerEarlierRecords: 1 });
     // and the first day of a period is in it too
     const f2 = await fixture('p3c');
     await posted(f2, '2026-01-01', [{ item: f2.sliceA, qty: '10' }]);
@@ -240,13 +241,19 @@ describe('T-635 pay run - what slicer pay adds to a payslip', () => {
     expect(pv.slips).toHaveLength(0);
   });
 
-  it('3d. slicing that cannot be priced (no rate in force) is reported and the run refuses to post; nothing is written', async () => {
+  it('3d. slicing that cannot be priced (no rate in force) is reported as a warning and SKIPPED: the run still posts, the record stays unpaid and unfrozen (S2)', async () => {
     const f = await fixture('p3e', { rates: false });
-    await posted(f, '2026-01-12', [{ item: f.sliceA, qty: '10' }]);
+    const unpriced = await posted(f, '2026-01-12', [{ item: f.sliceA, qty: '10' }]);
     const pv = await preview(f, '2026-01-01', '2026-01-15');
     expect(pv.slicerProblems[0]).toMatch(/no slicer rate in force for Slice A/);
-    await expect(post(f, '2026-01-01', '2026-01-15')).rejects.toThrow(/slicer pay cannot be priced/);
-    expect(Number((await sql<{ n: string }[]>`select count(*)::text n from pay_runs where org_id = ${f.orgId}`)[0]!.n)).toBe(0);
+    expect(pv.slips).toHaveLength(0);
+    // a priceable record by the same person in the same run is paid; the unpriceable one does not block it
+    await asOrg(f.orgId, (tx) => setSlicerPayRate(tx, f.admin, { storeId: f.storeId, itemId: f.sliceB, ratePerKg: '8.00', effectiveFrom: '2026-01-01' }));
+    await posted(f, '2026-01-13', [{ item: f.sliceB, qty: '5' }]);
+    const out = await post(f, '2026-01-01', '2026-01-15');
+    const [slip] = await sql<{ slicer_pay: string; slicer_records: number }[]>`select slicer_pay, slicer_records from payslips where run_id = ${out.runId}`;
+    expect(slip).toMatchObject({ slicer_pay: '40.00', slicer_records: 1 });
+    expect((await rowOf(unpriced)).paid_by_pay_run_id).toBeNull();
   });
 
   it('3e. a slicer paid ONLY per kg needs no daily rate: the slip is made, gross = the slicer pay, no pay rate on it, not a minimum-wage earner; someone with neither a rate nor slicer pay still gets no slip', async () => {
