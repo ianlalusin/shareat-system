@@ -909,9 +909,16 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
     tx, record.id, newRevision,
     editInputs.map((l) => ({ direction: 'out' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
   );
+  // T-635 (BOSS, 25 Nov): an edit keeps each output line's existing paid / unpaid unless the form sends a new value, so a quiet reset to "paid" can never overpay.
+  // A line is matched to the old output line of the same item (in order); a line for an item that had none is paid.
+  const oldPaid = new Map<string, boolean[]>();
+  for (const l of oldLines) if (l.direction === 'in') oldPaid.set(l.itemId, [...(oldPaid.get(l.itemId) ?? []), l.isPaid]);
   const newOutputRows = await productionRepo.insertProductionRecordLines(
     tx, record.id, newRevision,
-    editOutputs.map((l) => ({ direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit, isPaid: l.isPaid ?? true })),
+    editOutputs.map((l) => ({
+      direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit,
+      isPaid: l.isPaid ?? oldPaid.get(l.itemId)?.shift() ?? true,
+    })),
   );
 
   const inputs = editInputs.map((l, i) => ({ lineRowId: newInputRows[i]!.id, itemId: l.itemId, quantity: l.quantity, unit: l.unit }));

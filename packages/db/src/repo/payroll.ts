@@ -202,7 +202,8 @@ export interface PayslipRow {
   employmentId: string;
   personId: string;
   personName: string | null;
-  payRateId: string;
+  /** Null only for a slip that pays slicer pay alone and has no daily rate (T-635). */
+  payRateId: string | null;
   daysWorked: string;
   minutesWorked: number;
   otMinutes: number;
@@ -247,13 +248,14 @@ export type PayslipInsert = Pick<
   | 'runId'
   | 'employmentId'
   | 'personId'
-  | 'payRateId'
   | 'minutesWorked'
   | 'otMinutes'
   | 'nightDiffMinutes'
   | 'holidayMinutes'
   | 'journalEntryId'
 > & {
+  /** Null only for a slicer-pay-only slip with no daily rate (T-635). */
+  payRateId: string | null;
   daysWorked: Decimal<'6,2'>;
   basicPay: Money;
   /** NOT NULL DEFAULT 0 — omit to take the column default (R13). */
@@ -296,7 +298,7 @@ export async function insertPayslip(tx: Tx, input: PayslipInsert): Promise<{ id:
       runId: input.runId,
       employmentId: input.employmentId,
       personId: input.personId,
-      payRateId: input.payRateId,
+      payRateId: input.payRateId ?? null,
       daysWorked: input.daysWorked,
       minutesWorked: input.minutesWorked,
       otMinutes: input.otMinutes,

@@ -72,6 +72,10 @@ ALTER TABLE "production_record_lines" ADD COLUMN "is_paid" boolean DEFAULT true 
 --> statement-breakpoint
 
 -- ---- payslips --------------------------------------------------------------------------------
+-- A slicer paid ONLY per kg has no daily pay rate to price the slip under, so pay_rate_id may be null (BOSS ruling, 25 Nov). Every existing slip keeps its rate; the
+-- same-org composite FK is MATCH SIMPLE, so a null passes it.
+ALTER TABLE "payslips" ALTER COLUMN "pay_rate_id" DROP NOT NULL;
+--> statement-breakpoint
 ALTER TABLE "payslips" ADD COLUMN "slicer_pay" numeric(14,2) DEFAULT '0' NOT NULL;
 --> statement-breakpoint
 ALTER TABLE "payslips" ADD COLUMN "slicer_kg" numeric(14,3) DEFAULT '0' NOT NULL;

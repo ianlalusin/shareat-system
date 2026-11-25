@@ -246,9 +246,8 @@ export const payslips = pgTable(
     /** ⭐ The rate this was computed under. Same historical-integrity pattern as
      *  `attendance_days.attendanceConfigId` — re-reading a March payslip in June gives March's
      *  answer, even after a raise. */
-    payRateId: uuid('pay_rate_id')
-      .notNull()
-      .references(() => payRates.id, { onDelete: 'restrict' }),
+    payRateId: uuid('pay_rate_id').references(() => payRates.id, { onDelete: 'restrict' }),
+    // T-635 (0279): NULL only for a slip that pays slicer pay and nothing priced from a rate (a slicer paid per kg with no daily rate).
 
     daysWorked: numeric('days_worked', { precision: 6, scale: 2 }).notNull(),
     minutesWorked: integer('minutes_worked').notNull().default(0),

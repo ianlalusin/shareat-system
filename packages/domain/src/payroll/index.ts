@@ -136,7 +136,8 @@ export interface PayslipDraft {
   unapprovedOtMinutes: number;
   personId: string;
   personName: string;
-  payRateId: string;
+  /** Null only for a slip that pays slicer pay alone for someone with no daily rate (T-635). */
+  payRateId: string | null;
   dayIds: string[];
   daysWorked: number;
   minutesWorked: number;
@@ -291,7 +292,7 @@ async function buildPreview(
     const roster = await payrollRepo.employmentsForStore(trx, actor.orgId, input.storeId);
     const nameOf = new Map(roster.map((r) => [r.id, r.personName]));
 
-    type Base = Omit<PayslipDraft, StatutoryDraftKeys> & { dailyRate: Money };
+    type Base = Omit<PayslipDraft, StatutoryDraftKeys> & { dailyRate: Money | null };
     const bases: Base[] = [];
     const unratedEmployments: PayRunPreview['unratedEmployments'] = [];
 
@@ -368,17 +369,12 @@ async function buildPreview(
       }
       payRateId = payRateId ?? leaveLine?.payRateId ?? silPayouts[silPayouts.length - 1]?.payRateId ?? null;
       if (!payRateId && slicerLine) {
-        // T-635: a slicer paid only per kg still needs a pay rate on the payslip (it is the row the slip is priced under). Never paid without one.
+        // T-635 (BOSS, 25 Nov): a slicer paid ONLY per kg needs no daily rate. If one is in force it is recorded on the slip; if not, the slip has none and its gross is the slicer pay alone.
         const rate = await payrollRepo.rateInForceOn(trx, actor.orgId, employmentId, input.periodEnd);
-        if (!rate || rate.basis !== 'daily') {
-          slicerProblems.push(
-            `${nameOf.get(employmentId) ?? 'A slicer'} has slicer pay but no daily pay rate in force. Set their pay rate first; the payslip is made under it.`,
-          );
-          continue;
-        }
-        payRateId = rate.id;
+        if (rate && rate.basis === 'daily') payRateId = rate.id;
       }
-      if ((inputs.length === 0 && !leaveLine && silPayouts.length === 0 && !slicerLine) || !payRateId) continue;
+      // Someone with neither a rate-priced reason nor slicer pay still makes no slip, as before.
+      if ((inputs.length === 0 && !leaveLine && silPayouts.length === 0 && !slicerLine) || (!payRateId && !slicerLine)) continue;
       // T-190 audit gap 5: minimum-wage earner status is judged on the daily rate IN FORCE AT period_end, not on the last day worked.
       const rateAtEnd = await payrollRepo.rateInForceOn(trx, actor.orgId, employmentId, input.periodEnd);
       if (rateAtEnd && rateAtEnd.basis === 'daily') dailyRateAtEnd = money(rateAtEnd.amount);
@@ -434,7 +430,8 @@ async function buildPreview(
         // Placeholders: the statutory pass below sets the advance and the net AFTER the contributions and the withholding.
         advanceRecovered: ZERO,
         netPay: grossPay,
-        dailyRate: dailyRateAtEnd,
+        // No rate at all (slicer pay alone): there is no daily rate to judge minimum-wage-earner status on, so the person is not one.
+        dailyRate: payRateId ? dailyRateAtEnd : null,
       });
     }
     for (const u of leavePlan.unrated) {
@@ -490,7 +487,7 @@ async function applyStatutory(
   actor: Actor,
   input: { storeId: string; periodStart: string; periodEnd: string },
   frequency: 'monthly' | 'semi_monthly' | 'weekly',
-  bases: (Omit<PayslipDraft, StatutoryDraftKeys> & { dailyRate: Money })[],
+  bases: (Omit<PayslipDraft, StatutoryDraftKeys> & { dailyRate: Money | null })[],
   forPost: boolean,
 ): Promise<{ slips: PayslipDraft[]; unconfirmedRates: string[]; missingGovernmentIds: PayRunPreview['missingGovernmentIds'] }> {
   if (bases.length === 0) return { slips: [], unconfirmedRates: [], missingGovernmentIds: [] };
@@ -560,7 +557,7 @@ async function applyStatutory(
     if (!gid?.pagibigNo) skipped.push('pagibig');
     for (const agency of skipped) missingGovernmentIds.push({ personId: b.personId, personName: b.personName, agency });
 
-    const isMwe = compare(b.dailyRate, minimum) <= 0;
+    const isMwe = b.dailyRate !== null && compare(b.dailyRate, minimum) <= 0;
     const prior = priorOf.get(b.personId)!;
     const { dailyRate: _dailyRate, ...draft } = b;
     void _dailyRate;

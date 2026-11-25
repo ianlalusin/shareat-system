@@ -103,9 +103,9 @@ Migration 0279 is hand-authored (ADR-012 §5): classification + RLS registry + t
 **Decisions and limits (BOSS to check):**
 - No new capability. Confirm and un-confirm use `record_stock_movement` (position-grantable) at the record's store plus the rule that the confirmer is not the slicer. Rates use `set_pay_rate` (admin; a manager is refused). The Slicer pay view uses `run_payroll`. A slicer posts a slice record naming themselves with `record_stock_movement`; anyone else posts under `post_production`.
 - "Holds Slicer on that date": positions are not dated, so it is read as "has the Slicer position now and had an open job at the store on `produced_on`".
-- A slicer paid only per kg still needs a daily pay rate on file: the payslip row is made under it. Without one the run refuses in words naming the person (rather than inventing a rate row).
-- Slicer pay is in `gross_pay` but NOT in `basic_pay`, so the 13th-month read of `basic_pay` ignores it. Philippine piece-rate earnings usually count as basic salary for 13th month; Ian/the accountant should rule on this.
+- A slicer paid ONLY per kg needs no daily rate (BOSS, 25 Nov): `payslips.pay_rate_id` is now nullable (0279), the slip's gross is the slicer pay alone, statutory applies as for anyone else under their government numbers, and with no daily rate they are not judged a minimum-wage earner. Someone with neither a rate nor slicer pay still gets no slip.
+- Slicer pay is in `gross_pay` but NOT in `basic_pay`, so the 13th-month read of `basic_pay` ignores it. Philippine piece-rate earnings usually count as basic salary for 13th month; Ian/the accountant should rule on this. Stays as built; recorded as a question for the accountant (BOSS, 25 Nov).
 - Existing posted slice records have no slicer, so they are never paid. A manager names one by editing the record (which also clears any confirmation).
-- Editing a posted slice record resets its output lines to paid unless the edit form sends `outputPaid`.
+- Editing a posted slice record keeps each output line's existing paid / unpaid (matched to the old line of the same item) unless the form sends a new value (BOSS, 25 Nov), so an edit can never silently overpay.
 
 **Screens:** production form (who sliced, paid / not paid per output line on a slice), production record page (slicer, paid-line ticks on a draft, Confirm / Take back confirmation, checked-by), `/inventory/production/slicer-pay` (per slicer per period, rates section), payroll preview and run history show the Slicer pay column and line. Not yet seen in a browser.

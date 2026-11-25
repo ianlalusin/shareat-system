@@ -249,18 +249,30 @@ describe('T-635 pay run - what slicer pay adds to a payslip', () => {
     expect(Number((await sql<{ n: string }[]>`select count(*)::text n from pay_runs where org_id = ${f.orgId}`)[0]!.n)).toBe(0);
   });
 
-  it('3e. a slicer with no daily pay rate cannot be paid per-kg only: named in words, run refuses', async () => {
+  it('3e. a slicer paid ONLY per kg needs no daily rate: the slip is made, gross = the slicer pay, no pay rate on it, not a minimum-wage earner; someone with neither a rate nor slicer pay still gets no slip', async () => {
     const f = await fixture('p3f');
-    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Nora Norate') returning id`;
-    await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${f.storeId})`;
-    const [e] = await sql<{ id: string }[]>`
-      insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-      values (${f.orgId}, ${p!.id}, ${f.storeId}, 'SE-095', '2025-01-01', 'regular', ${f.adminId}) returning id`;
-    await grantSlicerPosition(sql, { orgId: f.orgId, employmentId: e!.id, primary: true });
-    await posted(f, '2026-01-12', [{ item: f.sliceA, qty: '10' }], { by: p!.id });
+    const mkNoRate = async (name: string, code: string, slicer: boolean) => {
+      const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, ${name}) returning id`;
+      await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${f.storeId})`;
+      const [e] = await sql<{ id: string }[]>`
+        insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
+        values (${f.orgId}, ${p!.id}, ${f.storeId}, ${code}, '2025-01-01', 'regular', ${f.adminId}) returning id`;
+      if (slicer) await grantSlicerPosition(sql, { orgId: f.orgId, employmentId: e!.id, primary: true });
+      return p!.id;
+    };
+    const noraId = await mkNoRate('Nora Norate', 'SE-095', true);
+    await mkNoRate('Olga Nothing', 'SE-096', false); // no rate, no slicer pay, no attendance
+    await posted(f, '2026-01-12', [{ item: f.sliceA, qty: '10' }], { by: noraId });
+
     const pv = await preview(f, '2026-01-01', '2026-01-15');
-    expect(pv.slicerProblems.join(' ')).toMatch(/Nora Norate has slicer pay but no daily pay rate/);
-    await expect(post(f, '2026-01-01', '2026-01-15')).rejects.toThrow(/slicer pay cannot be priced/);
+    expect(pv.slicerProblems).toEqual([]);
+    expect(pv.slips).toHaveLength(1); // Nora only; Olga (no rate, nothing to pay) makes no slip
+    expect(pv.slips[0]).toMatchObject({ personId: noraId, payRateId: null, slicerPay: '50.00', basicPay: '0.00', grossPay: '50.00', isMwe: false });
+
+    const out = await post(f, '2026-01-01', '2026-01-15');
+    const [slip] = await sql<{ pay_rate_id: string | null; slicer_pay: string; gross_pay: string; net_pay: string; is_mwe: boolean }[]>`
+      select pay_rate_id, slicer_pay, gross_pay, net_pay, is_mwe from payslips where run_id = ${out.runId}`;
+    expect(slip).toMatchObject({ pay_rate_id: null, slicer_pay: '50.00', gross_pay: '50.00', net_pay: '50.00', is_mwe: false });
   });
 });
 
@@ -350,6 +362,57 @@ describe('T-635 confirm', () => {
     expect(row.revision).toBe(2);
     // and the unconfirmed record is not paid
     expect((await preview(f, '2026-01-01', '2026-01-15')).slips).toHaveLength(0);
+  });
+});
+
+describe('T-635 edit keeps the paid / unpaid choice', () => {
+  it('2e. editing a posted slice record WITHOUT sending isPaid keeps an unpaid line unpaid (and a paid one paid); sending a value changes it', async () => {
+    const f = await fixture('e2e');
+    const [d0] = await sql<{ id: string }[]>`
+      insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by) values (${f.orgId}, ${f.storeId}, 'purchase', '2026-01-02', ${f.fileId}, ${f.adminId}) returning id`;
+    const r0 = await asOrg(f.orgId, (tx) =>
+      receiveDelivery(tx, {
+        orgId: f.orgId, storeId: f.storeId, deliveryId: d0!.id, deliveredOn: '2026-01-02', receivedBy: f.adminId,
+        locations: [{ id: f.locationId, role: 'operating', purpose: 'normal', isDefault: true, status: 'active' }],
+        lines: [{ lineId: '1', itemId: f.slab, itemKind: 'meat_slab', receivedQuantity: quantity('100'), conversionFactor: '1', unitCost: '300.0000', locationId: f.locationId }],
+      }),
+    );
+    if (!r0.ok) throw new Error(r0.reason);
+    const draft = await asOrg(f.orgId, (tx) =>
+      createProductionDraft(tx, f.sam, {
+        orgId: f.orgId, storeId: f.storeId, locationId: f.locationId, kind: 'slice', performedByPersonId: f.samId, producedOn: '2026-01-12',
+        inputs: [{ itemId: f.slab, quantity: '10', unit: 'kg' }],
+        outputs: [{ itemId: f.sliceA, quantity: '6', unit: 'kg' }, { itemId: f.sliceC, quantity: '3', unit: 'kg', isPaid: false }],
+      }),
+    );
+    if (!draft.ok) throw new Error(draft.reason);
+    const p = await asOrg(f.orgId, (tx) => postProduction(tx, f.sam, { recordId: draft.recordId }));
+    expect(p.ok, p.ok ? '' : p.reason).toBe(true);
+    const live = () =>
+      sql<{ item_id: string; is_paid: boolean }[]>`
+        select item_id, is_paid from production_record_lines
+        where record_id = ${draft.recordId} and direction = 'in' and reversed_at is null order by quantity desc`;
+    expect((await live()).map((l) => [l.item_id, l.is_paid])).toEqual([[f.sliceA, true], [f.sliceC, false]]);
+
+    // edit the quantities only: no isPaid is sent, so Slice C stays unpaid
+    const e1 = await asOrg(f.orgId, (tx) =>
+      editPostedProduction(tx, f.mgr, {
+        recordId: draft.recordId, inputs: [{ itemId: f.slab, quantity: '10', unit: 'kg' }],
+        outputs: [{ itemId: f.sliceA, quantity: '7', unit: 'kg' }, { itemId: f.sliceC, quantity: '2', unit: 'kg' }],
+      }),
+    );
+    expect(e1.ok, e1.ok ? '' : e1.reason).toBe(true);
+    expect((await live()).map((l) => [l.item_id, l.is_paid])).toEqual([[f.sliceA, true], [f.sliceC, false]]);
+
+    // an explicit value wins: Slice C is now paid
+    const e2 = await asOrg(f.orgId, (tx) =>
+      editPostedProduction(tx, f.mgr, {
+        recordId: draft.recordId, inputs: [{ itemId: f.slab, quantity: '10', unit: 'kg' }],
+        outputs: [{ itemId: f.sliceA, quantity: '7', unit: 'kg' }, { itemId: f.sliceC, quantity: '2', unit: 'kg', isPaid: true }],
+      }),
+    );
+    expect(e2.ok, e2.ok ? '' : e2.reason).toBe(true);
+    expect((await live()).map((l) => [l.item_id, l.is_paid])).toEqual([[f.sliceA, true], [f.sliceC, true]]);
   });
 });
 
