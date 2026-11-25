@@ -20,6 +20,7 @@ import { organizations } from '../../schema/organizations';
 import { personRoles } from '../../schema/access';
 import { seedChartOfAccounts } from '../../seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../seed/expense-categories';
+import { seedDocumentKinds } from '../../seed/document-kinds';
 import { seedPaymentOptions } from '../../seed/payment-options';
 
 export interface OrganizationRow {
@@ -130,6 +131,7 @@ export async function seedReferenceData(tx: Tx, orgId: string): Promise<Referenc
   const chart = await seedChartOfAccounts(sql, orgId);
   const categories = await seedExpenseCategories(sql, orgId);
   await seedPaymentOptions(sql, orgId); // T-629: the six payment options of Ian's list; a store switches them on
+  await seedDocumentKinds(sql, orgId); // T-637: the seven document kinds (Certificate of employment ... Incident report); Ian edits the list
   return {
     accountsSeeded: chart.headersInserted + chart.leavesInserted,
     categoriesSeeded: categories.categoriesInserted,

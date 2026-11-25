@@ -5,5 +5,5 @@
  */
 import { defineTypedForm } from '@/lib/keep-typing';
 
-export const DOCUMENT_ISSUE = defineTypedForm({ form: 'documents.issue', fields: ['body'] });
-export const DOCUMENT_REVISE = defineTypedForm({ form: 'documents.revise', fields: ['body', 'reason'] });
+export const DOCUMENT_ISSUE = defineTypedForm({ form: 'documents.issue', fields: ['bodyDoc'] });
+export const DOCUMENT_REVISE = defineTypedForm({ form: 'documents.revise', fields: ['bodyDoc', 'reason'] });

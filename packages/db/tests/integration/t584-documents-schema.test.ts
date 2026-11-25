@@ -66,7 +66,8 @@ async function fixture(hint: string) {
   const [file] = await sql<{ id: string }[]>`
     insert into stored_files (org_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by)
     values (${orgId}, 'staff_signature', ${`orgs/${orgId}/sig-${uid('f')}.png`}, 'image/png', 10, 'x', ${issuer}) returning id`;
-  const [t] = await sql<{ id: string }[]>`insert into document_templates (org_id, name, kind, created_by) values (${orgId}, 'Test COE', 'coe', ${issuer}) returning id`;
+  const [kind] = await sql<{ id: string }[]>`insert into document_kinds (org_id, name) values (${orgId}, 'Test kind') returning id`;
+  const [t] = await sql<{ id: string }[]>`insert into document_templates (org_id, name, kind_id, created_by) values (${orgId}, 'Test COE', ${kind!.id}, ${issuer}) returning id`;
   const [tv] = await sql<{ id: string }[]>`
     insert into document_template_versions (org_id, template_id, version_no, body, signature_slots, created_by)
     values (${orgId}, ${t!.id}, 1, 'Body {{employee.full_name}}', ${sql.array(['issuer', 'employee'])}, ${issuer}) returning id`;

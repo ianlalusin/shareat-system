@@ -1,4 +1,4 @@
-import { documentKindLabel, type IssuedDocumentSummary } from '@shareat/domain';
+import type { IssuedDocumentSummary } from '@shareat/domain';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { ACTION_LINK } from '@/components/action-link';
 import { Badge } from '@/components/ui';
@@ -22,7 +22,7 @@ export function DocumentsSection({ documents }: { documents: IssuedDocumentSumma
                 {d.number}
               </a>
               <span>
-                {d.templateName} · {documentKindLabel(d.kind)} · version {d.currentVersionNo}
+                {d.templateName} · {d.kindName} · version {d.currentVersionNo}
               </span>
               <span className="text-muted">{formatBusinessDateTime(d.issuedAt, { dateStyle: 'medium' })}</span>
               {d.voided && <Badge tone="danger" label="VOID" />}

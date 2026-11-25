@@ -65,6 +65,8 @@ const alias = {
   '@shareat/domain/business-rules': `${root}packages/domain/src/business-rules/index.ts`,
   // T-502 s12 - the batch-payment allocator is a client-safe leaf (the invoice page's live preview imports it); exact entry before the bare name.
   '@shareat/domain/expenses/allocate': `${root}packages/domain/src/expenses/allocate.ts`,
+  // T-637 - the document model (editor, renderer and server share it); db-free leaf, exact entry before the bare name.
+  '@shareat/domain/documents/doc': `${root}packages/domain/src/documents/doc.ts`,
   // T-528 — the pure pricing leaf the POS tablet runs on the device; exact match before the bare name.
   '@shareat/domain/pos/price': `${root}packages/domain/src/pos/price.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,

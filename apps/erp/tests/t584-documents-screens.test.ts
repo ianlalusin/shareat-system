@@ -3,7 +3,8 @@ import { join, relative } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { DocumentBody } from '../src/app/documents/DocumentBody';
+import { DocumentDoc } from '../src/components/documents/DocumentDoc';
+import { legacyBodyToDoc } from '@shareat/domain/documents/doc';
 import { capabilityForRoute, capabilitiesForRoute } from '../src/lib/route-capability';
 
 /**
@@ -50,8 +51,8 @@ describe('T-584 route gates (test 2: by URL, not only by a hidden link)', () => 
 });
 
 describe('T-584 templates screen - files and wiring', () => {
-  it('page, actions, typed-forms and lib exist', () => {
-    for (const f of ['templates/page.tsx', 'templates/actions.ts', 'templates/typed-forms.ts', 'lib.ts']) expect(existsSync(join(DOCS, f)), f).toBe(true);
+  it('page, actions, the two editor pages and lib exist', () => {
+    for (const f of ['templates/page.tsx', 'templates/actions.ts', 'templates/new/page.tsx', 'templates/[id]/page.tsx', 'lib.ts']) expect(existsSync(join(DOCS, f)), f).toBe(true);
   });
 
   it('the page is read-gated by requirePageAccess on its own literal path, and the actions by requireActor [kills: an ungated URL]', () => {
@@ -62,7 +63,10 @@ describe('T-584 templates screen - files and wiring', () => {
     expect(a).toMatch(/\bsaveDocumentTemplate\b/);
     expect(a).toMatch(/\bretireDocumentTemplate\b/);
     expect(a).toMatch(/errorMessage\(/);
-    expect(a).toMatch(/keepTyping\(/);
+    // T-637: the editor keeps what was typed itself (a refusal comes back as a sentence, never a redirect), so the save action returns the error.
+    expect(a).toMatch(/return \{ error: errorMessage\(err\) \}/);
+    expect(code('templates/new/page.tsx')).toMatch(/requirePageAccess\(\s*'\/documents\/templates\/new'/);
+    expect(code('templates/[id]/page.tsx')).toMatch(/requirePageAccess\(\s*`\/documents\/templates\/\$\{id\}`/);
   });
 
   it('the action re-implements no rule: no merge-field list, no length bound, no direct database import [kills: a second copy of the whitelist]', () => {
@@ -83,8 +87,9 @@ describe('T-584 rendering safety (s6, test 8)', () => {
   });
 
   it('<script> and an <img onerror> in a body print as literal text, escaped, with no tag in the output [kills: an XSS door]', () => {
+    // The old markup is converted to a document (T-637) and drawn by the one renderer.
     const body = ['# <b>Title</b>', '', '<script>alert(1)</script> and **<img src=x onerror=alert(1)>**'].join('\n');
-    const html = renderToStaticMarkup(createElement(DocumentBody, { body }));
+    const html = renderToStaticMarkup(createElement(DocumentDoc, { doc: legacyBodyToDoc(body) }));
     expect(html).not.toMatch(/<script|<img|<b>/);
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
@@ -93,10 +98,9 @@ describe('T-584 rendering safety (s6, test 8)', () => {
   });
 
   it('a newline inside a paragraph stays a line break and a blank line starts a new paragraph [kills: a letter that runs together]', () => {
-    const html = renderToStaticMarkup(createElement(DocumentBody, { body: ['Line one', 'Line two', '', 'Second paragraph'].join('\n') }));
-    expect(html.match(/<p /g)).toHaveLength(2);
-    expect(html).toContain('whitespace-pre-line');
-    expect(html).toContain('Line one\nLine two');
+    const html = renderToStaticMarkup(createElement(DocumentDoc, { doc: legacyBodyToDoc(['Line one', 'Line two', '', 'Second paragraph'].join('\n')) }));
+    expect(html.match(/<p/g)).toHaveLength(2);
+    expect(html).toContain('Line one<br/>Line two');
   });
 });
 
@@ -141,8 +145,9 @@ describe('T-584 issue, sign, revise, void screens - wiring', () => {
 
   it('the print page is A4, hides the navigation on paper, and prints VOID on a void document [kills: a print that looks live]', () => {
     const p = code('[id]/print/page.tsx');
-    expect(p).toMatch(/@page \{ size: A4/);
-    expect(p).toMatch(/\.no-print/);
+    // T-637: the A4 rule, the margins, the header/footer and the page breaks live in the shared sheet (DocumentDoc), which t637-document-render.test.ts reads.
+    expect(p).toMatch(/<DocumentSheet /);
+    expect(p).toMatch(/no-print/);
     expect(p).toMatch(/VOID/);
     expect(p).toMatch(/Version \{data\.versionNo\} of \{data\.number\}/);
   });
