@@ -29,6 +29,7 @@ import {
   uuid,
   foreignKey,
 } from 'drizzle-orm/pg-core';
+import { WORKED_AS } from './attendance-punches';
 import { employments } from './employment';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -65,6 +66,8 @@ export const ADJUSTMENT_KINDS = [
    * paid it unapproved — the exact thing the pending status exists to prevent (DEF-109).
    */
   'overtime_approved',
+  /** T-635 S2. A manager's correction of what the person worked as that day (slicer or regular). Overrides what the clock-in said. */
+  'worked_as',
 ] as const;
 export type AdjustmentKind = (typeof ADJUSTMENT_KINDS)[number];
 
@@ -102,6 +105,9 @@ export const attendanceAdjustments = pgTable(
      *  of it") and is not the same as never having decided. */
     approvedOtMinutes: integer('approved_ot_minutes'),
 
+    /** T-635 S2. `worked_as` only: 'regular' or 'slicer'. */
+    workedAs: text('worked_as', { enum: WORKED_AS }),
+
     reason: text('reason'),
 
     /**
@@ -131,7 +137,7 @@ export const attendanceAdjustments = pgTable(
     index('attendance_adjustments_employment_day_idx').on(t.employmentId, t.shiftDay),
     index('attendance_adjustments_store_day_idx').on(t.storeId, t.shiftDay),
 
-    check('attendance_adjustments_kind_check', sql`${t.kind} in ('start_anchor','early_out_approved','half_day_override','verify','void')`),
+    check('attendance_adjustments_kind_check', sql`${t.kind} in ('start_anchor','early_out_approved','half_day_override','verify','void','overtime_approved','worked_as')`),
     check(
       'attendance_adjustments_reason_required_check',
       sql`${t.kind} not in ('void','half_day_override') or ${t.reason} is not null`,
@@ -141,13 +147,17 @@ export const attendanceAdjustments = pgTable(
       'attendance_adjustments_payload_shape_check',
       sql`
         (${t.kind} = 'start_anchor' and ${t.chosenAnchorMinute} is not null
-           and ${t.effectiveOutMinute} is null and ${t.isHalfDay} is null)
+           and ${t.effectiveOutMinute} is null and ${t.isHalfDay} is null and ${t.approvedOtMinutes} is null and ${t.workedAs} is null)
         or (${t.kind} = 'early_out_approved' and ${t.effectiveOutMinute} is not null
-           and ${t.chosenAnchorMinute} is null and ${t.isHalfDay} is null)
+           and ${t.chosenAnchorMinute} is null and ${t.isHalfDay} is null and ${t.approvedOtMinutes} is null and ${t.workedAs} is null)
         or (${t.kind} = 'half_day_override' and ${t.isHalfDay} in ('true','false')
-           and ${t.chosenAnchorMinute} is null and ${t.effectiveOutMinute} is null)
+           and ${t.chosenAnchorMinute} is null and ${t.effectiveOutMinute} is null and ${t.approvedOtMinutes} is null and ${t.workedAs} is null)
+        or (${t.kind} = 'overtime_approved' and ${t.approvedOtMinutes} is not null and ${t.approvedOtMinutes} >= 0
+           and ${t.chosenAnchorMinute} is null and ${t.effectiveOutMinute} is null and ${t.isHalfDay} is null and ${t.workedAs} is null)
+        or (${t.kind} = 'worked_as' and ${t.workedAs} in ('regular','slicer')
+           and ${t.chosenAnchorMinute} is null and ${t.effectiveOutMinute} is null and ${t.isHalfDay} is null and ${t.approvedOtMinutes} is null)
         or (${t.kind} in ('verify','void') and ${t.chosenAnchorMinute} is null
-           and ${t.effectiveOutMinute} is null and ${t.isHalfDay} is null)
+           and ${t.effectiveOutMinute} is null and ${t.isHalfDay} is null and ${t.approvedOtMinutes} is null and ${t.workedAs} is null)
       `,
     ),
     check('attendance_adjustments_no_self_supersede_check', sql`${t.supersededByAdjustmentId} is null or ${t.supersededByAdjustmentId} <> ${t.id}`),

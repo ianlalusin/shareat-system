@@ -67,7 +67,9 @@ service cloud.firestore {
                     // DEF-863: and nothing else -- an extra or smuggled field is refused.
                     && request.resource.data.keys().hasOnly(
                          ['clientPunchId', 'occurredAt', 'deviceId', 'storeId', 'method', 'assertedIntent',
-                          'credentialKind', 'credentialRef'])
+                          'credentialKind', 'credentialRef', 'workedAs'])
+                    // T-635 S2: workedAs is OPTIONAL (an event without it means regular; an old queued punch still writes), and when present it is one of the two words.
+                    && (!('workedAs' in request.resource.data) || request.resource.data.workedAs in ['slicer', 'regular'])
                     && request.resource.data.clientPunchId is string
                     // The idempotency key IS the document id, so the SDK's own retry writes to the
                     // same path instead of creating a second event. Defence in depth, ahead of the

@@ -117,6 +117,8 @@ export interface DayAdjustments {
    * decisions are attributed inputs, never patches on an output.
    */
   managerDecision?: 'verified' | 'voided';
+  /** T-635 S2: a manager's `worked_as` correction. The pure computation ignores it; `adjudicateDay` stores it on the day, over what the clock-in said. */
+  workedAs?: 'regular' | 'slicer';
 }
 
 export interface DayComputation {

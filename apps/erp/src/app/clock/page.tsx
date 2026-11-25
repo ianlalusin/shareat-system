@@ -22,6 +22,7 @@ import { requestPersistentStorage, terminalFirebase } from '../../lib/terminal/f
 import {
   resolveScan,
   watchMirrors,
+  mustChooseWorkedAs,
   watchPending,
   writePunch,
   type MirroredConfig,
@@ -29,6 +30,7 @@ import {
   type MirroredDayFeed,
   type MirroredRoster,
   type PunchIntent,
+  type WorkedAs,
 } from '../../lib/terminal/lane';
 import { Badge, Banner, Button, Textarea } from '@/components/ui';
 
@@ -75,6 +77,12 @@ export default function ClockTerminalPage() {
   const [confirmed, setConfirmed] = useState<{ name: string; intent: PunchIntent; at: string } | null>(null);
   /** employmentId -> epoch ms until which that person's badge is ignored. §5.1. */
   const [cooldowns, setCooldowns] = useState<Record<string, number>>({});
+  /**
+   * T-635 S2: a slicer who is clocking IN is asked, once, "Working today as: Slicer / Regular staff" BEFORE the punch is written. The badge was already read, so what
+   * waits here is that scan; the punch is written when one of the two big buttons is pressed. Decided on the device from the mirrored roster (`isSlicer`), the
+   * choice rides on the punch event, and the server decides what it means (bible §5.1: a device never computes a business outcome).
+   */
+  const [askWorkedAs, setAskWorkedAs] = useState<{ credential: MirroredCredential; value: string; method: 'qr' | 'fingerprint'; name: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [pending, setPending] = useState<{ pending: number; fromCache: boolean } | null>(null);
   const [online, setOnline] = useState(true);
@@ -139,6 +147,17 @@ export default function ClockTerminalPage() {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  /** T-635 S2: a question nobody answers must not leave the terminal stuck, and must not record a guess: it times out and says nothing was recorded. */
+  useEffect(() => {
+    if (!askWorkedAs) return;
+    const t = setTimeout(() => {
+      setAskWorkedAs(null);
+      setMessage({ tone: 'bad', text: 'No choice was made, so nothing was recorded. Scan your badge again.' });
+      scanBox.current?.focus();
+    }, 30_000);
+    return () => clearTimeout(t);
+  }, [askWorkedAs]);
 
   useEffect(() => {
     if (!confirmed) return;
@@ -237,6 +256,25 @@ export default function ClockTerminalPage() {
     const mine = onShift.find((d) => d.staffCode && d.staffCode === rosterOf(credential.employmentId)?.staffCode);
     const intent: PunchIntent = mine ? 'out' : 'in';
 
+    // T-635 S2: only a slicer clocking IN is asked. Everyone else, and every clock-out, goes straight through exactly as before.
+    const who = rosterOf(credential.employmentId);
+    if (who && mustChooseWorkedAs(intent, who)) {
+      setAskWorkedAs({ credential, value, method, name: who.displayName });
+      setMessage(null);
+      setScan('');
+      return;
+    }
+    await recordNow(credential, value, method, intent);
+  }
+
+  async function recordNow(
+    credential: MirroredCredential,
+    value: string,
+    method: 'qr' | 'fingerprint',
+    intent: PunchIntent,
+    workedAs?: WorkedAs,
+  ) {
+    if (!claims) return;
     try {
       const { db } = terminalFirebase();
       const { acknowledged } = writePunch({
@@ -247,6 +285,7 @@ export default function ClockTerminalPage() {
         credentialRef: value,
         method,
         assertedIntent: intent,
+        workedAs,
       });
 
       /**
@@ -281,6 +320,13 @@ export default function ClockTerminalPage() {
     } finally {
       scanBox.current?.focus();
     }
+  }
+
+  async function chooseWorkedAs(workedAs: WorkedAs) {
+    const a = askWorkedAs;
+    if (!a) return;
+    setAskWorkedAs(null);
+    await recordNow(a.credential, a.value, a.method, 'in', workedAs);
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────────────
@@ -347,6 +393,20 @@ export default function ClockTerminalPage() {
             <p className="mt-1 text-sm uppercase tracking-widest text-neutral-500">
               clocked {confirmed.intent} · <span className="tabular-nums">{confirmed.at}</span>
             </p>
+          </div>
+        ) : askWorkedAs ? (
+          /* T-635 S2: two big buttons (at least 56px tall), the name large so the person sees it is theirs. Nothing is written until one is pressed. */
+          <div className="w-full space-y-3 text-center">
+            <p className="text-2xl font-semibold leading-tight">{askWorkedAs.name}</p>
+            <p className="text-sm uppercase tracking-widest text-neutral-500">Working today as</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Button type="button" variant="primary" onClick={() => void chooseWorkedAs('slicer')} className="min-h-[3.5rem] justify-center text-base">
+                Slicer
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => void chooseWorkedAs('regular')} className="min-h-[3.5rem] justify-center text-base">
+                Regular staff
+              </Button>
+            </div>
           </div>
         ) : (
           /* ⚠️ A plain text box on purpose: a USB badge reader and a QR scanner both TYPE. That is

@@ -322,6 +322,8 @@ const EXEMPT: Record<string, string> = {
   'store_item_thresholds.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
   'supplier_items.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
   'trade_order_lines.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'slicer_pay_rates.item_id': 'T-635 (0279): a per-kg rate row for a slice item, configuration only. No stock quantity rides on it; a unit that stops being kg leaves its records unpriceable (skipped with a warning), never mispriced',
+  'slicer_pay_rates.org_id': 'T-635 (0279): the org half of the composite same-org FK to items; not an item id',
   'menu_depletion_rules.org_id': 'the org half of the T-401 composite same-org FK; not an item id (its item_id leg is NOT exempt)',
 };
 

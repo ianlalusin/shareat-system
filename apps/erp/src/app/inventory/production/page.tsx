@@ -47,7 +47,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
   }
 
   const kind: Kind = KINDS.find((k) => k === sp.kind) ?? 'slice';
-  const [{ locations, items, inputItems, recipes, records }, shortcut] = await Promise.all([
+  const [{ locations, items, inputItems, recipes, records, slicers }, shortcut] = await Promise.all([
     productionScreenData(actor.orgId, storeId),
     kind === 'cook' ? cookbookShortcut(actor.orgId, actor) : Promise.resolve(null),
   ]);
@@ -77,6 +77,9 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <Link href={`/inventory?store=${storeId}`} className={NAV_LINK}>
             ← Stock on hand
+          </Link>
+          <Link href={`/inventory/production/slicer-pay?store=${storeId}`} className={NAV_LINK}>
+            Slicer pay
           </Link>
         </div>
       </div>
@@ -175,8 +178,26 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               </FormGrid>
             ) : (
               <>
+                {kind === 'slice' && (
+                  <FormGrid>
+                    <Field label={<span className="text-neutral-600 dark:text-neutral-400">Who sliced</span>} className="text-sm">
+                      <Select name="performedByPersonId" defaultValue={slicers.some((p) => p.personId === actor.personId) ? actor.personId : ''} className="w-full">
+                        <option value="">— pick the slicer —</option>
+                        {slicers.map((p) => (
+                          <option key={p.personId} value={p.personId}>
+                            {p.personName}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                      The slicer is paid per kg of the paid output lines, once another staff member confirms the record. It must be filled in before the record can be posted.
+                      {slicers.length === 0 && ' Nobody holds the Slicer position at this store yet. Give someone that position on their staff page.'}
+                    </p>
+                  </FormGrid>
+                )}
                 <LineRows label="Inputs (what goes out)" prefix="input" items={kind === 'slice' ? slabInputs : slicedInputs} />
-                <LineRows label="Outputs (what comes in)" prefix="output" items={slicedOutputs} />
+                <LineRows label="Outputs (what comes in)" prefix="output" items={slicedOutputs} paidChoice={kind === 'slice'} />
               </>
             )}
 
@@ -237,17 +258,20 @@ function LineRows({
   label,
   prefix,
   items,
+  paidChoice = false,
 }: {
   label: string;
   prefix: 'input' | 'output';
   items: { id: string; code: string; name: string; baseUnit: string }[];
+  /** T-635: a slice's output line says whether the slicer is paid for it (a re-cut or trimming is not). */
+  paidChoice?: boolean;
 }) {
   return (
     <div>
       <span className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">{label}</span>
       <div className="mt-2 space-y-2">
         {Array.from({ length: LINE_ROWS }).map((_, i) => (
-          <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div key={i} className={paidChoice ? 'grid grid-cols-1 gap-2 sm:grid-cols-4' : 'grid grid-cols-1 gap-2 sm:grid-cols-3'}>
             <Select name={`${prefix}ItemId`} defaultValue="" className="w-full">
               <option value="">— item —</option>
               {items.map((it) => (
@@ -258,6 +282,12 @@ function LineRows({
             </Select>
             <Input name={`${prefix}Quantity`} inputMode="decimal" placeholder="quantity" className="w-full" />
             <Input name={`${prefix}Unit`} placeholder="unit (kg, g, ...)" className="w-full" />
+            {paidChoice && (
+              <Select name={`${prefix}Paid`} defaultValue="yes" className="w-full" aria-label="Paid to the slicer">
+                <option value="yes">Paid</option>
+                <option value="no">Not paid</option>
+              </Select>
+            )}
           </div>
         ))}
       </div>

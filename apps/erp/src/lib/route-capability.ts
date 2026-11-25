@@ -175,6 +175,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // T-583 S2 (Ian, 2026-11-15, revised 16 Nov: "cooks can read recipes"): the cookbook is READ by whoever may record a cook run
   // (`record_stock_movement`: managers and admins by role, cooks by position); staff with no cook role are refused. /[id] inherits.
   // The longer /new key wins over the prefix and needs `manage_recipes`. Recipe writes keep their own `manage_recipes` check.
+  // T-635: the slicer pay view shows what people are owed, so it is read by whoever runs payroll. Rates are set under `set_pay_rate` inside the domain.
+  '/inventory/production/slicer-pay': 'run_payroll',
   '/inventory/production/recipes': 'record_stock_movement',
   '/inventory/production/recipes/new': 'manage_recipes',
   // T-398 S6d: the franchisor looks at a franchisee's sales and stock (each press is logged by the database); the franchisee's owner reads who looked.

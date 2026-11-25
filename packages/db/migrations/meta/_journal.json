@@ -1709,6 +1709,13 @@
       "when": 1810006307084,
       "tag": "0277_t629_payment_options",
       "breakpoints": true
+    },
+    {
+      "idx": 279,
+      "version": "7",
+      "when": 1810179107084,
+      "tag": "0279_t635_slicer_pay",
+      "breakpoints": true
     }
   ]
 }

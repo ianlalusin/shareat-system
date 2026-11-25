@@ -2,6 +2,7 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { attendanceAdjustments, type AdjustmentKind } from '../../schema/attendance-adjustments';
+import type { WorkedAs } from '../../schema/attendance-punches';
 
 export interface AttendanceAdjustmentRow {
   id: string;
@@ -18,14 +19,16 @@ export interface AttendanceAdjustmentRow {
   decidedByPersonId: string;
   /** ⭐ T-189e. `overtime_approved` only — the minutes a manager accepted for pay. */
   approvedOtMinutes: number | null;
+  /** T-635 S2. `worked_as` only. */
+  workedAs: WorkedAs | null;
   supersededByAdjustmentId: string | null;
   createdAt: Date;
 }
 
-export type InsertAdjustmentInput = Omit<
-  AttendanceAdjustmentRow,
-  'createdAt' | 'supersededByAdjustmentId'
->;
+export type InsertAdjustmentInput = Omit<AttendanceAdjustmentRow, 'createdAt' | 'supersededByAdjustmentId' | 'workedAs'> & {
+  /** T-635 S2: only a `worked_as` adjustment carries it. */
+  workedAs?: WorkedAs | null;
+};
 
 /**
  * Mint the id the new row WILL have, before inserting it.

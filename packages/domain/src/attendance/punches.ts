@@ -14,7 +14,7 @@
  * is what lets T-182 be a thin adapter and lets this be tested without one.
  */
 import { attendancePunchesRepo, employmentRepo, type AttendancePunchRow, type Tx } from '@shareat/db';
-import type { PunchIntent, PunchMethod, PunchSource } from '@shareat/db/schema';
+import type { PunchIntent, PunchMethod, PunchSource, WorkedAs } from '@shareat/db/schema';
 import { toShiftDay } from './shift-day';
 
 export class PunchError extends Error {
@@ -46,6 +46,8 @@ export interface RecordPunchInput {
   method: PunchMethod;
   /** What the device asserts. T-157 may disagree, and records that it did. */
   assertedIntent: PunchIntent;
+  /** T-635 S2: what the person clocked in as (a slicer or regular staff). Absent = the event carried no choice = regular. Only an `in` punch's value is read. */
+  workedAs?: WorkedAs | null;
   source: PunchSource;
   deviceId?: string | null;
   /** From `resolveActor` — the verified session, never a client-named person (§7.1). */
@@ -105,6 +107,7 @@ export async function recordPunch(tx: Tx, input: RecordPunchInput): Promise<Reco
     shiftDay: toShiftDay(input.occurredAt),
     method: input.method,
     assertedIntent: input.assertedIntent,
+    workedAs: input.workedAs ?? null,
     deviceId: input.deviceId ?? null,
     source: input.source,
     capturedBySessionId: input.capturedBySessionId ?? null,
