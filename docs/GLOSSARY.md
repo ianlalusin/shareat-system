@@ -211,6 +211,16 @@ DEF-002.
 > of something older. A cold agent reasonably reads that folder name as *this* project and
 > starts editing a live production system. **It is read-only, like the other three.**
 
+## Slicer pay (T-635)
+
+| Word | Means |
+|---|---|
+| `performed_by_person_id` | who sliced a slice record; NOT `created_by` (whoever typed it) or `posted_by` |
+| `confirmed_by_person_id` / `confirmed_at` | another staff member checked the slicing; never the slicer; cleared by an edit |
+| `is_paid` (production line) | an OUTPUT line the slicer is paid per kg for; false = re-cut or trimming |
+| `paid_by_pay_run_id` (production record) | the posted pay run that paid it; set on post, cleared on void; while set the record cannot be edited or voided |
+| `slicer_pay` (payslip) | per-kg pay in gross, NOT in `basic_pay` |
+
 ## Words we deliberately avoid
 
 | Don't say | Say | Why |

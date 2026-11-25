@@ -87,3 +87,25 @@ Live data: 237 of 241 production records are Lipa's; 3 payments in about 5 month
 6. authorize first on every new action; a refusal is tested for each capability ✅.
 
 Migration 0279 is hand-authored (ADR-012 §5): classification + RLS registry + trigger registry + audit catalogue + journal. The full CI suite is required. census:write. Typecheck as in shareat-builder.md.
+
+## As built (builder, 25 Nov 2026)
+
+**MIGRATION 0279** (`0279_t635_slicer_pay.sql`, journal idx 279; 0278 stays T-634's). Hand-authored; no trigger, so no trigger-registry pin moves.
+- `production_records`: `performed_by_person_id`, `confirmed_by_person_id`, `confirmed_at`, `paid_by_pay_run_id`, with same-org FKs and three CHECKs (confirmation is a pair; the confirmer is never the slicer; a paid record is confirmed and still posted).
+- `production_record_lines.is_paid` (default true). `payslips.slicer_pay / slicer_kg / slicer_records` (zero defaults, so every raw `insert into payslips` fixture still holds) and the gross identity restated with the slicer leg.
+- `slicer_pay_rates`: append-only by grants (SELECT + INSERT only), effective-dated, `item_id` null = org default. Classified `keep`; RLS registered.
+- Audit catalogue +3 (`production.slicing_confirmed`, `production.slicing_unconfirmed`, `slicer_rate.set`), ceilings 308 -> 311.
+
+**Labour is booked once (POSTING-PATTERNS: `production.conversion.slice` + the payslip entry; no new pattern).** The slicer pay is added to the payslip's gross, so the payslip's own entry (Dr 6100 gross) is the only place it is expensed. The pay run posts nothing against a production record and only freezes it. `labour_cost` stays the capitalisation credit to 6100 at post. The test asserts the run writes exactly one entry, 6100 is debited the gross once, and the entry balances.
+
+**Rulings applied:** the date rule is exactly the attendance rule (BOSS/Ian, 25 Nov): `produced_on between periodStart and periodEnd`, inclusive, the same `between` as `payrollRepo.payableDays`; the period itself comes from `payroll/periods.ts` on the new screen (same picker as payroll). Tested: a record on the period's last day is paid, the day after is not.
+
+**Decisions and limits (BOSS to check):**
+- No new capability. Confirm and un-confirm use `record_stock_movement` (position-grantable) at the record's store plus the rule that the confirmer is not the slicer. Rates use `set_pay_rate` (admin; a manager is refused). The Slicer pay view uses `run_payroll`. A slicer posts a slice record naming themselves with `record_stock_movement`; anyone else posts under `post_production`.
+- "Holds Slicer on that date": positions are not dated, so it is read as "has the Slicer position now and had an open job at the store on `produced_on`".
+- A slicer paid only per kg still needs a daily pay rate on file: the payslip row is made under it. Without one the run refuses in words naming the person (rather than inventing a rate row).
+- Slicer pay is in `gross_pay` but NOT in `basic_pay`, so the 13th-month read of `basic_pay` ignores it. Philippine piece-rate earnings usually count as basic salary for 13th month; Ian/the accountant should rule on this.
+- Existing posted slice records have no slicer, so they are never paid. A manager names one by editing the record (which also clears any confirmation).
+- Editing a posted slice record resets its output lines to paid unless the edit form sends `outputPaid`.
+
+**Screens:** production form (who sliced, paid / not paid per output line on a slice), production record page (slicer, paid-line ticks on a draft, Confirm / Take back confirmation, checked-by), `/inventory/production/slicer-pay` (per slicer per period, rates section), payroll preview and run history show the Slicer pay column and line. Not yet seen in a browser.
