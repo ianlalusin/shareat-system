@@ -20,7 +20,7 @@ vi.mock('../src/lib/page-access', () => ({ requirePageAccess: vi.fn(async () => 
 vi.mock('../src/app/staff/lib', async () => ({ staffStoresFor: vi.fn(async () => [STORE]) }));
 vi.mock('../src/app/admin/pos-tablets/actions', () => ({
   registerTabletAction: vi.fn(), revokeTabletAction: vi.fn(), clearLockAction: vi.fn(), createTillAction: vi.fn(), linkTillAction: vi.fn(), setTillPrinterAction: vi.fn(),
-  savePresetAction: vi.fn(), retirePresetAction: vi.fn(), saveChargeAction: vi.fn(), retireChargeAction: vi.fn(),
+  savePresetAction: vi.fn(), retirePresetAction: vi.fn(), saveChargeAction: vi.fn(), retireChargeAction: vi.fn(), addTablesAction: vi.fn(), retireTableAction: vi.fn(),
 }));
 vi.mock('../src/app/copy-from-store/actions', () => ({ copyFromStoreAction: vi.fn(), previewCopyAction: vi.fn() }));
 vi.mock('../src/app/admin/pos-tablets/lib', async (orig) => {
@@ -32,6 +32,7 @@ vi.mock('../src/app/admin/pos-tablets/lib', async (orig) => {
     loadCopyStores: vi.fn(async () => H.copy),
     loadDiscounts: vi.fn(async () => ({ presets: [], canManage: false })),
     loadCharges: vi.fn(async () => H.charges),
+    loadTables: vi.fn(async () => ({ active: [], retired: [], canManage: false })), // T-633
   };
 });
 
