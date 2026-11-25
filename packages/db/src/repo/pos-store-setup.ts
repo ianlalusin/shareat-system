@@ -4,7 +4,7 @@
  * Every function takes the caller's transaction first and filters by org AND store; RLS is the backstop.
  */
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { posChargePresets, posDiscountPresets, posStands, type PosChargePresetRow, type PosDiscountPresetRow, type PosStandRow } from '../../schema/pos-v2';
+import { posChargePresets, posDiscountPresets, posStands, tableSessions, type PosChargePresetRow, type PosDiscountPresetRow, type PosStandRow } from '../../schema/pos-v2';
 import { posV1StoreLinks } from '../../schema/pos-v1';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
@@ -20,6 +20,35 @@ export async function getStandByNumber(tx: Tx, orgId: string, storeId: string, n
 export async function insertStand(tx: Tx, input: { orgId: string; storeId: string; number: number; createdBy: string }): Promise<PosStandRow> {
   const [row] = await tx.insert(posStands).values({ ...input, status: 'active' }).returning();
   return row!;
+}
+
+/** T-633: every stand of the store, active and retired, in number order (the Tables section lists both). */
+export async function listStands(tx: Tx, orgId: string, storeId: string): Promise<PosStandRow[]> {
+  return tx
+    .select()
+    .from(posStands)
+    .where(and(eq(posStands.orgId, orgId), eq(posStands.storeId, storeId)))
+    .orderBy(posStands.number);
+}
+
+/** T-633: retire an ACTIVE stand. False when it was already retired (nothing written). The number is never reused (the unique key covers retired rows). */
+export async function retireStand(tx: Tx, orgId: string, storeId: string, standId: string): Promise<boolean> {
+  const rows = await tx
+    .update(posStands)
+    .set({ status: 'retired', updatedAt: new Date() })
+    .where(and(eq(posStands.id, standId), eq(posStands.orgId, orgId), eq(posStands.storeId, storeId), eq(posStands.status, 'active')))
+    .returning({ id: posStands.id });
+  return rows.length > 0;
+}
+
+/** T-633: does a table session at this stand still have an open bill? */
+export async function standHasOpenSession(tx: Tx, orgId: string, storeId: string, standId: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: tableSessions.id })
+    .from(tableSessions)
+    .where(and(eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId), eq(tableSessions.standId, standId), eq(tableSessions.status, 'open')))
+    .limit(1);
+  return rows.length > 0;
 }
 
 /** The ACTIVE preset of this name (case-insensitive, the same key the unique index uses), or undefined. */

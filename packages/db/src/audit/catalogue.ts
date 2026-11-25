@@ -245,6 +245,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-627: a store charge (leftover, an extra griller) set from the ERP screen (entity = the pos_charge_presets row; created, or its amount / per-unit changed) or retired (the row is kept: past sales name it).
   def('pos.charge_preset_set', 'settings', 'normal', 'store', 'pos_charge_presets', 'T-627'),
   def('pos.charge_preset_retired', 'settings', 'normal', 'store', 'pos_charge_presets', 'T-627'),
+  // T-633: a table number retired from the ERP Tables section (entity = the pos_stands row; before/after = number and status). The row is kept and the number is never reused.
+  def('pos.stand_retired', 'settings', 'normal', 'store', 'pos_stands', 'T-633'),
   // T-627: a charge put on / taken off a table at the till (entity = the table_session_charges row). Money: it changes what the table owes. Payloads carry the name, unit amount and quantity.
   def('pos.charge_added', 'money', 'normal', 'store', 'table_session_charges', 'T-627'),
   def('pos.charge_removed', 'money', 'normal', 'store', 'table_session_charges', 'T-627'),

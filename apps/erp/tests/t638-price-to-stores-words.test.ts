@@ -70,7 +70,9 @@ describe('T-638 T1c/T1d - where it is edited', () => {
   });
   it('the item page edits it on the Wholesale row, gated on wholesale, with the hint otherwise', () => {
     const page = read('items/[id]/page.tsx');
-    expect(page).toContain('setItemPricingAction');
+    // The form (and its action) now lives in ItemPricingFields so its fields sit inside their own EditableRecord (T-440 S2 G2).
+    expect(page).toContain('ItemPricingFields');
+    expect(read('items/ItemPricingFields.tsx')).toContain('setItemPricingAction');
     expect(page).toContain('soldWholesale ?');
     expect(page).toContain('Applies once');
     expect(page).toContain('Diner (retail) prices are set under Menu');
