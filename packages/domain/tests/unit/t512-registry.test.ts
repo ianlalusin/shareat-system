@@ -20,13 +20,15 @@ const KEYS = [
   'tax.vat_percent',
 ] as const;
 
+const EXPENSE_ALERT_KEYS = ['expenses.alert_frequency_min_count', 'expenses.alert_frequency_multiplier', 'expenses.alert_min_amount', 'expenses.alert_outlier_multiplier', 'expenses.alert_spike_multiplier']; // T-639
+
 const entries = Object.entries(RULE_REGISTRY) as [string, Record<string, unknown>][];
 
 describe('T-512 registry - closed set', () => {
   it('holds the five T-512 keys, unchanged in name (T-539 adds the POS keys on top, pinned in t539-pos-rule-keys; T-519 adds its own later) [kills: a missing or renamed T-512 key]', () => {
     const have = Object.keys(RULE_REGISTRY);
     for (const k of KEYS) expect(have, k).toContain(k);
-    expect(have.filter((k) => !(KEYS as readonly string[]).includes(k)).sort()).toEqual(['pos.business_day_start_hour', 'pos.offline_unsent_warn_amount', 'pos.offline_xslip_hours', 'pos.receipt_lookup_days', 'pos.require_pin_line_actions', 'pos.sale_variance_tolerance', 'pos.senior_id_repeat_days', 'pos.senior_pwd_discount_percent', 'pos.table_warn_minutes']); // T-575 added pos.senior_id_repeat_days; T-576 added pos.require_pin_line_actions; T-621 added the two pos.offline_* keys
+    expect(have.filter((k) => !(KEYS as readonly string[]).includes(k)).sort()).toEqual(['pos.business_day_start_hour', 'pos.offline_unsent_warn_amount', 'pos.offline_xslip_hours', 'pos.receipt_lookup_days', 'pos.require_pin_line_actions', 'pos.sale_variance_tolerance', 'pos.senior_id_repeat_days', 'pos.senior_pwd_discount_percent', 'pos.table_warn_minutes', ...EXPENSE_ALERT_KEYS].sort()); // T-639 added the five expenses.alert_* keys; T-575 added pos.senior_id_repeat_days; T-576 added pos.require_pin_line_actions; T-621 added the two pos.offline_* keys
   });
 
   it('every entry carries label, help, unit, default, min, max, capability and namespace', () => {
@@ -64,7 +66,7 @@ describe('T-512 registry - closed set', () => {
       const min = Number(e.min);
       const max = Number(e.max);
       const def = Number(e.default);
-      expect(min, `${key} min`).toBe(key === 'pos.offline_unsent_warn_amount' ? 1000 : key === 'pos.table_warn_minutes' || key === 'pos.senior_id_repeat_days' || key === 'pos.receipt_lookup_days' || key === 'pos.offline_xslip_hours' ? 1 : 0); // T-621: a warning below PHP 1,000 would fire all day; an X-slip every 0 hours is not a period // T-539 S3: a warning after 0 minutes would be red at once; T-575: a repeat window of 0 days would never warn
+      expect(min, `${key} min`).toBe(key === 'pos.offline_unsent_warn_amount' ? 1000 : key === 'pos.table_warn_minutes' || (key.startsWith('expenses.') && key !== 'expenses.alert_min_amount') || key === 'pos.senior_id_repeat_days' || key === 'pos.receipt_lookup_days' || key === 'pos.offline_xslip_hours' ? 1 : 0); // T-621: a warning below PHP 1,000 would fire all day; an X-slip every 0 hours is not a period // T-539 S3: a warning after 0 minutes would be red at once; T-575: a repeat window of 0 days would never warn
       expect(Number.isFinite(max), `${key} max finite`).toBe(true);
       expect(def, `${key} default >= min`).toBeGreaterThanOrEqual(min);
       expect(def, `${key} default <= max`).toBeLessThanOrEqual(max);
@@ -109,7 +111,7 @@ describe('T-512 registry - closed set', () => {
     // The five T-512 keys sit in Settlement or Tax; the POS namespace is T-539's keys only.
     const ns = (keys: readonly string[]) => new Set(entries.filter(([k]) => keys.includes(k)).map(([, e]) => String(e.namespace).toLowerCase()));
     expect(ns(KEYS)).toEqual(new Set(['settlement', 'tax']));
-    expect(new Set(entries.map(([, e]) => String(e.namespace).toLowerCase()))).toEqual(new Set(['settlement', 'tax', 'pos']));
+    expect(new Set(entries.map(([, e]) => String(e.namespace).toLowerCase()))).toEqual(new Set(['settlement', 'tax', 'pos', 'expenses']));
   });
 });
 
