@@ -35,7 +35,7 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-type Kind = 'start_anchor' | 'early_out_approved' | 'half_day_override' | 'overtime_approved' | 'verify' | 'void';
+type Kind = 'start_anchor' | 'early_out_approved' | 'half_day_override' | 'overtime_approved' | 'worked_as' | 'verify' | 'void';
 
 /**
  * ⚠️ Returns the service's own message. These refusals are written to be read by a manager —
@@ -118,6 +118,15 @@ export async function overrideHalfDayAction(formData: FormData): Promise<void> {
     }),
   );
   return await redirectWithFlash(`/attendance/${r.dayId}`, {}, r.error ? { error: r.error } : { ok: 'Half-day status set by override.' });
+}
+
+/** T-635 S2: a manager corrects what the person worked as that day. Audited as an adjustment (who, when, superseding the last); the day recomputes. */
+export async function setWorkedAsAction(formData: FormData): Promise<void> {
+  const r = await decide(
+    formData,
+    (fd) => ({ kind: 'worked_as', workedAs: str(fd, 'workedAs'), reason: str(fd, 'reason') || undefined }),
+  );
+  return await redirectWithFlash(`/attendance/${r.dayId}`, {}, r.error ? { error: r.error } : { ok: 'Saved. A slicer day pays nothing from the daily rate (the slicer pay is the earnings); a regular day pays the rate.' });
 }
 
 export async function verifyDayAction(formData: FormData): Promise<void> {

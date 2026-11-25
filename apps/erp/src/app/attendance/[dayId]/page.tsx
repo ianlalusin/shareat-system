@@ -9,6 +9,7 @@ import {
   approveOvertimeAction,
   overrideHalfDayAction,
   setStartAnchorAction,
+  setWorkedAsAction,
   verifyDayAction,
   voidDayAction,
 } from './actions';
@@ -112,6 +113,7 @@ export default async function AttendanceDayPage({
           <StartAnchor day={day} locked={locked} />
           <EarlyOut day={day} locked={locked} />
           <HalfDay day={day} locked={locked} />
+          <WorkedAs day={day} locked={locked} />
           <VerifyVoid day={day} locked={locked} />
         </div>
       </div>
@@ -307,6 +309,39 @@ function EarlyOut({ day, locked }: { day: Day; locked: boolean }) {
         </Button>
       </div>
     </CheckedForm>
+  );
+}
+
+/** T-635 S2: slicer or regular for the day. Set from the clock-in; a manager can correct it here. */
+function WorkedAs({ day, locked }: { day: Day; locked: boolean }) {
+  return (
+    <form action={setWorkedAsAction} className={`${CARD} space-y-2`}>
+      <Ident day={day} />
+      <h3 className="text-sm font-medium">
+        Worked as
+        {day.hasWorkedAs && <span className="ml-2 text-xs font-normal text-success">corrected</span>}
+      </h3>
+      <p className="text-xs text-neutral-500">
+        Currently <strong>{day.workedAs === 'slicer' ? 'slicer' : 'regular staff'}</strong>. A slicer day pays nothing from the daily rate; the pay is the slicing, per kg.
+        A regular day pays the daily rate.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
+          Set to
+          <Select name="workedAs" defaultValue={day.workedAs} className="w-full">
+            <option value="regular">Regular staff</option>
+            <option value="slicer">Slicer</option>
+          </Select>
+        </label>
+        <label className="flex flex-1 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
+          Reason
+          <Input name="reason" className="w-full" placeholder="Optional" />
+        </label>
+        <Button type="submit" variant="secondary" disabled={locked}>
+          Save
+        </Button>
+      </div>
+    </form>
   );
 }
 
