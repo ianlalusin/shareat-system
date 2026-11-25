@@ -249,7 +249,7 @@ describe('T-640 priority and fallback (test 4)', () => {
   it('a timeout, a rate limit and a refused key each move on; the order set on screen is the order tried [kills: a walk that stops on the first failure, a priority that is ignored]', async () => {
     const f = await fixture('walk-kinds');
     const n = net();
-    await ready(f, n, [['openai', 'gpt-4o-mini'], ['google', 'gemini-2.5-flash'], ['anthropic', 'claude-haiku-4-5']]);
+    await ready(f, n, [['openai', 'gpt-4o-mini'], ['google', 'gemini-2.5-flash'], ['anthropic', 'claude-haiku-5-5']]);
     n.script.openai = () => 'timeout';
     n.script.google = () => ({ status: 429 });
     const r = await ask(f, n, f.manager);
@@ -258,8 +258,8 @@ describe('T-640 priority and fallback (test 4)', () => {
     n.script.google = () => ({ status: 401 });
     n.script.openai = () => 'ok';
     // put anthropic first: the walk starts there and never reaches the others
-    await asOrg(f.orgId, (tx) => moveAiModel(tx, f.sup, { provider: 'anthropic', model: 'claude-haiku-4-5', direction: 'up' }));
-    await asOrg(f.orgId, (tx) => moveAiModel(tx, f.sup, { provider: 'anthropic', model: 'claude-haiku-4-5', direction: 'up' }));
+    await asOrg(f.orgId, (tx) => moveAiModel(tx, f.sup, { provider: 'anthropic', model: 'claude-haiku-5-5', direction: 'up' }));
+    await asOrg(f.orgId, (tx) => moveAiModel(tx, f.sup, { provider: 'anthropic', model: 'claude-haiku-5-5', direction: 'up' }));
     const before = { openai: n.calls('openai'), google: n.calls('google') };
     const r2 = await ask(f, n, f.manager);
     expect(r2.provider).toBe('anthropic');

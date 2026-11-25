@@ -16,8 +16,9 @@ export interface CatalogueModel {
 }
 
 export const MODEL_CATALOGUE: readonly CatalogueModel[] = [
-  { provider: 'anthropic', model: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fast, low cost)', centsPerMillionIn: 100, centsPerMillionOut: 500 },
-  { provider: 'anthropic', model: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5 (stronger)', centsPerMillionIn: 300, centsPerMillionOut: 1500 },
+  // Claude prices: Anthropic first-party rates as of Nov 2026 (Haiku 5.5: $0.10/$0.50 per MTok up to 100K-token prompts; Sonnet 5.5: $2/$10).
+  { provider: 'anthropic', model: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (fast, lowest cost)', centsPerMillionIn: 10, centsPerMillionOut: 50 },
+  { provider: 'anthropic', model: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (stronger)', centsPerMillionIn: 200, centsPerMillionOut: 1000 },
   { provider: 'google', model: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite (lowest cost)', centsPerMillionIn: 10, centsPerMillionOut: 40 },
   { provider: 'google', model: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (fast, low cost)', centsPerMillionIn: 30, centsPerMillionOut: 250 },
   { provider: 'google', model: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (stronger)', centsPerMillionIn: 125, centsPerMillionOut: 1000 },

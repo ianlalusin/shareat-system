@@ -163,7 +163,7 @@ describe('T-640 prices and the test call', () => {
     }
     expect(new Set(MODEL_CATALOGUE.map((m) => m.provider))).toEqual(new Set(['anthropic', 'google', 'openai']));
     expect(catalogueModel('openai', 'gpt-made-up')).toBeUndefined();
-    expect(catalogueModel('openai', 'claude-haiku-4-5')).toBeUndefined();
+    expect(catalogueModel('openai', 'claude-haiku-5-5')).toBeUndefined();
   });
 
   it('the test reply passes with words or a tool call, and records whether the tool was called [kills: tool_calling decided by anything but the reply]', () => {
