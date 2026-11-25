@@ -33,6 +33,7 @@ vi.mock('next/navigation', () => ({
   },
   // FormModal (catalogue page) reads the path to close itself on navigation.
   usePathname: () => '/commissary/catalogue',
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const ACTOR_HOLDER: { actor: { orgId: string; personId: string } | null } = { actor: null };
