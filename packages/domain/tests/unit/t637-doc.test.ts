@@ -41,7 +41,11 @@ describe('T-637 test 1 - the server whitelist refuses what is not on the list', 
       { type: 'horizontalRule' },
       { type: 'pageBreak' },
     );
-    expect(validateDoc(good)).toEqual({ ok: true, doc: good });
+    const checked = validateDoc(good);
+    expect(checked).toEqual({ ok: true, doc: good });
+    // the result is REBUILT from whitelisted keys, never the raw input object
+    expect(checked.ok && checked.doc).not.toBe(good);
+    expect(checked.ok && checked.doc.content[0]).not.toBe(good.content[0]);
     expect(validateDoc(legacyBodyToDoc('# T\n\nBody **b** {{today}}')).ok).toBe(true);
     expect(validateDoc(defaultLetterheadDoc()).ok).toBe(true);
   });
@@ -69,6 +73,28 @@ describe('T-637 test 1 - the server whitelist refuses what is not on the list', 
     expect(refusal(doc({ type: 'paragraph', attrs: { textAlign: 'start' }, content: [t('x')] }))).toMatch(/textAlign/);
     expect(refusal(doc({ type: 'heading', attrs: { level: 4 }, content: [t('x')] }))).toMatch(/level/);
     expect(refusal(doc({ type: 'paragraph', attrs: { lineHeight: '3' }, content: [t('x')] }))).toMatch(/lineHeight/);
+  });
+
+  it('a name that only exists on every object (constructor, toString, __proto__) is not an attribute, a mark or a node [kills: a plain-object lookup that lets Object.prototype through]', () => {
+    expect(refusal(doc({ type: 'paragraph', attrs: { constructor: 'x' }, content: [t('x')] }))).toMatch(/"constructor"/);
+    expect(refusal(doc({ type: 'paragraph', attrs: { toString: 'x' }, content: [t('x')] }))).toMatch(/"toString"/);
+    expect(refusal(doc(p(t('x', [{ type: 'textStyle', attrs: { constructor: 'x' } }]))))).toMatch(/"constructor"/);
+    expect(refusal(doc(p(t('x', [{ type: 'constructor' }]))))).toMatch(/not allowed/);
+    expect(refusal(doc({ type: 'constructor' } as DocNode))).toMatch(/not allowed/);
+    // JSON.parse makes a real own property called __proto__: a sentence, not a thrown error
+    const viaJson = JSON.parse('{"type":"doc","content":[{"type":"paragraph","attrs":{"__proto__":{"x":1}},"content":[{"type":"text","text":"x"}]}]}');
+    expect(() => validateDoc(viaJson)).not.toThrow();
+    expect(refusal(viaJson)).toMatch(/__proto__/);
+    const markJson = JSON.parse('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"textStyle","attrs":{"__proto__":{"a":1}}}]}]}]}');
+    expect(refusal(markJson)).toMatch(/__proto__/);
+  });
+
+  it('a field tag must have a string name from the field list: no attrs, a number, or a name off the list is refused [kills: a nameless field stored]', () => {
+    expect(refusal(doc(p({ type: 'field' })))).toMatch(/not a known field/);
+    expect(refusal(doc(p({ type: 'field', attrs: {} })))).toMatch(/not a known field/);
+    expect(refusal(doc(p({ type: 'field', attrs: { name: 5 } })))).toMatch(/not a known field/);
+    expect(refusal(doc(p({ type: 'field', attrs: { name: 'constructor' } })))).toMatch(/not a known field/);
+    expect(validateDoc(doc(p(f('today')))).ok).toBe(true);
   });
 
   it('refuses merged table cells, an unknown field (naming it), a stray key, a non-object and a tree that is far too big [kills: merged cells, a typo field or a giant document saved]', () => {
@@ -112,9 +138,18 @@ describe('T-637 test 3 - the old markup becomes a document and keeps its wording
   it('an empty body is one empty paragraph, and effectiveDoc converts an old row but prefers a stored document [kills: a crash on an old template]', () => {
     expect(legacyBodyToDoc('  ').content).toEqual([{ type: 'paragraph' }]);
     const stored = doc(p(t('stored')));
-    expect(effectiveDoc(stored, 'old **body**')).toBe(stored);
+    expect(effectiveDoc(stored, 'old **body**')).toEqual(stored);
     expect(plainTextOf(effectiveDoc(null, 'old **body**'))).toBe('old body');
     expect(plainTextOf(effectiveDoc({ type: 'bad' }, 'fallback wording'))).toBe('fallback wording');
+  });
+
+  it('an OLD ISSUED body converts without field parsing: a typed {{today}} stays text, bold and headings still convert [kills: a typed placeholder turned into a chip]', () => {
+    const d = effectiveDoc(null, '# Head\n\nPay **{{employee.salary}}** on {{today}}', false);
+    expect(fieldsInDoc(d)).toEqual([]);
+    expect(plainTextOf(d)).toBe('Head\n\nPay {{employee.salary}} on {{today}}');
+    expect(d.content[0]).toMatchObject({ type: 'heading' });
+    expect(JSON.stringify(d)).toContain('"bold"');
+    expect(fieldsInDoc(effectiveDoc(null, 'on {{today}}'))).toEqual(['today']); // a template body still parses its tags
   });
 });
 
@@ -158,6 +193,12 @@ describe('T-637 test 5 - the new field maths', () => {
     expect(lengthOfService('2026-10-25', null, '2026-11-25')).toBe('1 month');
     expect(lengthOfService('2026-11-01', null, '2026-11-25')).toBe('less than a month');
     expect(lengthOfService('2025-12-31', null, '2026-01-30')).toBe('less than a month');
+    // end-of-month rule: the last day of a short month completes a month whose start day is past it
+    expect(lengthOfService('2026-01-31', '2026-02-28', '2026-11-25')).toBe('1 month');
+    expect(lengthOfService('2026-01-30', '2026-02-28', '2026-11-25')).toBe('1 month');
+    expect(lengthOfService('2026-01-31', '2026-02-27', '2026-11-25')).toBe('less than a month');
+    expect(lengthOfService('2024-01-31', '2024-02-29', '2026-11-25')).toBe('1 month'); // leap year
+    expect(lengthOfService('2024-01-31', '2024-02-28', '2026-11-25')).toBe('less than a month');
     expect(lengthOfService('2026-12-01', null, '2026-11-25')).toBeNull();
     expect(lengthOfService('junk', null, '2026-11-25')).toBeNull();
   });

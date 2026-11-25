@@ -40,6 +40,14 @@ ALTER TABLE "document_kinds" ADD CONSTRAINT "document_kinds_org_id_organizations
 --> statement-breakpoint
 CREATE UNIQUE INDEX "document_kinds_org_name_unique" ON "document_kinds" ("org_id", lower("name"));
 --> statement-breakpoint
+-- the seed: this list is also packages/db/seed/document-kinds.ts (a unit test keeps the two equal)
+INSERT INTO "document_kinds" ("org_id", "name", "sort_order")
+SELECT o."id", v."name", v."sort_order"
+FROM "organizations" o
+CROSS JOIN (VALUES
+	('Certificate of employment', 10), ('Memo', 20), ('Notice to explain', 30), ('Contract', 40), ('Other', 50), ('Explanation letter', 60), ('Incident report', 70)
+) AS v("name", "sort_order");
+--> statement-breakpoint
 ALTER TABLE "document_kinds" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE "document_kinds" FORCE ROW LEVEL SECURITY;
@@ -49,14 +57,6 @@ CREATE POLICY "document_kinds_org_isolation" ON "document_kinds" FOR ALL USING (
 GRANT SELECT, INSERT ON "document_kinds" TO "shareat_app";
 --> statement-breakpoint
 GRANT UPDATE ("name", "sort_order", "status", "updated_at") ON "document_kinds" TO "shareat_app";
---> statement-breakpoint
--- the seed: this list is also packages/db/seed/document-kinds.ts (a unit test keeps the two equal)
-INSERT INTO "document_kinds" ("org_id", "name", "sort_order")
-SELECT o."id", v."name", v."sort_order"
-FROM "organizations" o
-CROSS JOIN (VALUES
-	('Certificate of employment', 10), ('Memo', 20), ('Notice to explain', 30), ('Contract', 40), ('Other', 50), ('Explanation letter', 60), ('Incident report', 70)
-) AS v("name", "sort_order");
 --> statement-breakpoint
 ALTER TABLE "document_templates" ADD COLUMN "kind_id" uuid;
 --> statement-breakpoint

@@ -220,7 +220,13 @@ function Toolbar({ editor, fields }: { editor: Editor; fields: boolean }) {
       <Btn label="Horizontal rule" onClick={() => c().setHorizontalRule().run()}>
         —
       </Btn>
-      <Btn label="Page break" onClick={() => c().insertContent({ type: 'pageBreak' }).run()}>
+      <Btn label="Page break" onClick={() => c().splitBlock().command(({ tr, state }) => {
+          // `insertContent` cannot put a block inside a paragraph; split the paragraph and put the break between the halves (top level only: a break inside a list or a cell is not allowed).
+          const at = state.selection.$from;
+          if (at.depth !== 1) return false;
+          tr.insert(at.before(), state.schema.nodes.pageBreak!.create());
+          return true;
+        }).run()}>
         Break
       </Btn>
       <Btn label="Undo" disabled={!editor.can().undo()} onClick={() => c().undo().run()}>

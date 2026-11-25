@@ -118,20 +118,24 @@ export type DocCheck = { ok: true; doc: DocJson } | { ok: false; reason: string 
 /** The plain sentence for the author. `what` is where it was found ("the wording", "the header"). */
 const no = (reason: string): DocCheck => ({ ok: false, reason });
 
-function checkAttrs(where: string, attrs: unknown, rules: Record<string, AttrRule>): string | null {
-  if (attrs === undefined) return null;
+/** The attributes that passed, copied into a fresh object (only listed keys, only listed values), or the sentence that says what is wrong. `Object.hasOwn`: `constructor` and `toString` are not attributes. */
+function cleanAttrs(where: string, attrs: unknown, rules: Record<string, AttrRule>): string | Record<string, unknown> | undefined {
+  if (attrs === undefined) return undefined;
   if (!isRecord(attrs)) return `${where} has attributes that are not allowed.`;
-  for (const [k, v] of Object.entries(attrs)) {
-    const rule = rules[k];
-    if (!rule) return `${where} has an attribute "${k}" that is not allowed.`;
-    if (!rule(v)) return `${where} has a value for "${k}" that is not allowed.`;
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(attrs)) {
+    if (!Object.hasOwn(rules, k)) return `${where} has an attribute "${k.slice(0, 40)}" that is not allowed.`;
+    const v = attrs[k];
+    if (!rules[k]!(v)) return `${where} has a value for "${k}" that is not allowed.`;
+    out[k] = v;
   }
-  return null;
+  return out;
 }
 
 /**
- * Judges a stored document. Returns the same object when it passes, or the sentence that says what is wrong. Refuses: any node or mark not on the list (`script`,
- * `iframe`, `image`, a link, a colour), any attribute or value not on the list, a merge field that is not on the whitelist, a tree that is too deep or too big.
+ * Judges a stored document. Returns a REBUILT copy that holds only whitelisted keys and values (never the raw input), or the sentence that says what is wrong. Refuses: any node or
+ * mark not on the list (`script`, `iframe`, `image`, a link, a colour), any attribute or value not on the list (`constructor`, `__proto__` and the like included), a field tag without a
+ * name from the merge-field list, a tree that is too deep or too big.
  */
 export function validateDoc(raw: unknown): DocCheck {
   if (!isRecord(raw) || raw.type !== 'doc' || !Array.isArray(raw.content)) return no('The document is not in a form that can be kept.');
@@ -146,60 +150,74 @@ export function validateDoc(raw: unknown): DocCheck {
   let nodes = 0;
   let textLen = 0;
 
-  const walk = (n: unknown, parent: readonly string[], depth: number): string | null => {
+  const walk = (n: unknown, parent: readonly string[], depth: number): DocNode | string => {
     if (!isRecord(n)) return 'The document holds something that is not a normal part of a page.';
     if (++nodes > MAX_NODES) return 'The document has too many parts. Shorten it.';
     if (depth > MAX_DEPTH) return 'The document is nested too deeply.';
     const type = n.type;
     if (typeof type !== 'string') return 'The document holds a part with no type.';
     const rule = Object.hasOwn(NODE_RULES, type) ? NODE_RULES[type] : undefined;
-    if (!rule) return `The document holds a "${type}", which is not allowed. Only the formatting in the toolbar can be saved.`;
+    if (!rule) return `The document holds a "${type.slice(0, 40)}", which is not allowed. Only the formatting in the toolbar can be saved.`;
     if (!parent.includes(type)) return `A "${type}" is not allowed in that place.`;
-    for (const k of Object.keys(n)) if (!['type', 'attrs', 'content', 'marks', 'text'].includes(k)) return `The "${type}" has a part "${k}" that is not allowed.`;
-    if (type === 'field' && isRecord(n.attrs)) {
-      const asked = n.attrs.name;
-      if (!FIELD_DEFS.some((f) => f.name === asked)) return `The field "{{${String(asked).slice(0, 60)}}}" is not a known field. Type {{ and pick one from the list.`;
+    for (const k of Object.keys(n)) if (!['type', 'attrs', 'content', 'marks', 'text'].includes(k)) return `The "${type}" has a part "${k.slice(0, 40)}" that is not allowed.`;
+    if (type === 'field') {
+      // A field tag always names a field from the list: no name, or a name that is not listed, is refused.
+      const asked = isRecord(n.attrs) ? n.attrs.name : undefined;
+      if (typeof asked !== 'string' || !FIELD_DEFS.some((f) => f.name === asked)) {
+        return `The field "{{${typeof asked === 'string' ? asked.slice(0, 60) : ''}}}" is not a known field. Type {{ and pick one from the list.`;
+      }
     }
-    const a = checkAttrs(`The "${type}"`, n.attrs, rule.attrs);
-    if (a) return a;
+    const out: DocNode = { type };
+    const attrs = cleanAttrs(`The "${type}"`, n.attrs, rule.attrs);
+    if (typeof attrs === 'string') return attrs;
+    if (attrs !== undefined) out.attrs = attrs;
     if (type === 'text') {
       if (typeof n.text !== 'string' || n.text === '') return 'The document holds an empty piece of text.';
       textLen += n.text.length;
       if (n.content !== undefined) return 'A piece of text cannot hold other parts.';
+      out.text = n.text;
     } else if (n.text !== undefined) return `The "${type}" cannot carry text.`;
     if (n.marks !== undefined) {
       if (!rule.marks) return `The "${type}" cannot be formatted.`;
       if (!Array.isArray(n.marks)) return 'The formatting is not in a form that can be kept.';
       const seen = new Set<string>();
+      const marks: DocMark[] = [];
       for (const m of n.marks) {
         if (!isRecord(m) || typeof m.type !== 'string') return 'The formatting is not in a form that can be kept.';
-        for (const k of Object.keys(m)) if (k !== 'type' && k !== 'attrs') return `The formatting "${m.type}" has a part that is not allowed.`;
+        for (const k of Object.keys(m)) if (k !== 'type' && k !== 'attrs') return `The formatting "${m.type.slice(0, 40)}" has a part that is not allowed.`;
         const mr = Object.hasOwn(MARK_RULES, m.type) ? MARK_RULES[m.type] : undefined;
-        if (!mr) return `The formatting "${m.type}" is not allowed (only bold, italic, underline, font and size).`;
-        const ma = checkAttrs(`The formatting "${m.type}"`, m.attrs, mr);
-        if (ma) return ma;
+        if (!mr) return `The formatting "${m.type.slice(0, 40)}" is not allowed (only bold, italic, underline, font and size).`;
+        const ma = cleanAttrs(`The formatting "${m.type}"`, m.attrs, mr);
+        if (typeof ma === 'string') return ma;
         if (seen.has(m.type)) return `The formatting "${m.type}" is applied twice.`;
         seen.add(m.type);
+        marks.push({ type: m.type, ...(ma !== undefined ? { attrs: ma } : {}) });
       }
+      out.marks = marks;
     }
     if (rule.content) {
       if (n.content !== undefined && !Array.isArray(n.content)) return `The "${type}" has contents that are not allowed.`;
       const kids = (n.content ?? []) as unknown[];
       if (rule.required && kids.length === 0) return `A "${type}" cannot be empty.`;
+      const content: DocNode[] = [];
       for (const c of kids) {
-        const e = walk(c, rule.content, depth + 1);
-        if (e) return e;
+        const w = walk(c, rule.content, depth + 1);
+        if (typeof w === 'string') return w;
+        content.push(w);
       }
+      if (n.content !== undefined) out.content = content;
     } else if (n.content !== undefined) return `The "${type}" cannot hold other parts.`;
-    return null;
+    return out;
   };
 
+  const content: DocNode[] = [];
   for (const c of raw.content) {
-    const e = walk(c, BLOCKS, 1);
-    if (e) return no(e);
+    const w = walk(c, BLOCKS, 1);
+    if (typeof w === 'string') return no(w);
+    content.push(w);
   }
   if (textLen > MAX_DOC_TEXT) return no(`The wording is too long. The limit is 50,000 characters; this has ${textLen.toLocaleString('en-US')}.`);
-  return { ok: true, doc: raw as unknown as DocJson };
+  return { ok: true, doc: { type: 'doc', content } };
 }
 
 export const emptyDoc = (): DocJson => ({ type: 'doc', content: [{ type: 'paragraph' }] });
@@ -305,7 +323,7 @@ export function missingInDoc(doc: DocJson): string[] {
 // ---------------------------------------------------------------------------------------------------------------------
 // The old plain markup -> a document (T-584 bodies; the original `body` text stays in the table)
 // ---------------------------------------------------------------------------------------------------------------------
-function textWithFields(text: string, marks: DocMark[] | undefined): DocNode[] {
+function textWithFields(text: string, marks: DocMark[] | undefined, parseFields: boolean): DocNode[] {
   const out: DocNode[] = [];
   const known = new Set(FIELD_DEFS.map((f) => f.name));
   const push = (t: string) => {
@@ -316,7 +334,7 @@ function textWithFields(text: string, marks: DocMark[] | undefined): DocNode[] {
     });
   };
   let last = 0;
-  for (const m of text.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)) {
+  for (const m of parseFields ? text.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g) : []) {
     const name = m[1]!;
     if (!known.has(name as MergeField)) continue; // an unknown name stays as the literal text it was
     push(text.slice(last, m.index));
@@ -328,13 +346,13 @@ function textWithFields(text: string, marks: DocMark[] | undefined): DocNode[] {
 }
 
 /** Converts a T-584 plain body to a document: blank line = paragraph, `# ` = heading (level 2, as it was drawn), `**bold**` = bold, `{{x}}` = a field tag. Wording is kept exactly. */
-export function legacyBodyToDoc(body: string): DocJson {
+export function legacyBodyToDoc(body: string, parseFields = true): DocJson {
   const content: DocNode[] = parseBody(body).map((b): DocNode => {
     if (b.type === 'heading') {
-      const inline = textWithFields(b.text, undefined);
+      const inline = textWithFields(b.text, undefined, parseFields);
       return { type: 'heading', attrs: { level: 2 }, ...(inline.length > 0 ? { content: inline } : {}) };
     }
-    const inline = b.runs.flatMap((r) => textWithFields(r.text, r.bold ? [{ type: 'bold' }] : undefined));
+    const inline = b.runs.flatMap((r) => textWithFields(r.text, r.bold ? [{ type: 'bold' }] : undefined, parseFields));
     return { type: 'paragraph', ...(inline.length > 0 ? { content: inline } : {}) };
   });
   return { type: 'doc', content: content.length > 0 ? content : [{ type: 'paragraph' }] };
@@ -357,12 +375,12 @@ export function sampleValues(): MergeValues {
   return Object.fromEntries(FIELD_DEFS.map((f) => [f.name, f.sample])) as MergeValues;
 }
 
-/** The doc a template version holds: its stored document, or the old body converted. */
-export function effectiveDoc(stored: unknown, body: string): DocJson {
+/** The doc a version holds: its stored document, or the old body converted. An OLD ISSUED body is converted with `parseFields = false`: its `{{x}}` text was typed, not a tag, and prints as typed. */
+export function effectiveDoc(stored: unknown, body: string, parseFields = true): DocJson {
   if (stored !== null && stored !== undefined) {
     const c = validateDoc(stored);
     if (c.ok) return c.doc;
   }
-  return legacyBodyToDoc(body);
+  return legacyBodyToDoc(body, parseFields);
 }
 

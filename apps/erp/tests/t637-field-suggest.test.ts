@@ -43,6 +43,8 @@ describe('T-637 test 6 - the {{ suggestion list', () => {
     expect(src).toMatch(/items: \(\{ query \}\) => suggestFields\(query\)/);
     expect(src).toMatch(/insertContentAt\(range, \[\{ type: 'field', attrs: \{ name: f\.name \} \}/);
     expect(src).toMatch(/fields\s*\?\s*fieldNode\(/); // `fields={false}` (an issued document) builds no field node and no list
+    // a page break goes between two halves of a split paragraph (insertContent cannot put a block inside a paragraph: found in the browser)
+    expect(src).toMatch(/splitBlock\(\)\.command\([\s\S]*?nodes\.pageBreak!\.create\(\)/);
     const wording = readFileSync(join(__dirname, '..', 'src', 'components', 'documents', 'WordingField.tsx'), 'utf8');
     expect(wording).toContain('fields={false}');
     const ext = readFileSync(join(__dirname, '..', 'src', 'components', 'documents', 'editor-extensions.ts'), 'utf8');

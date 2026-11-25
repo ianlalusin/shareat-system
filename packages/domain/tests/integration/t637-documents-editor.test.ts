@@ -317,14 +317,15 @@ describe('T-637 page - header and footer are filled at issue and frozen; a versi
       values (${f.orgId}, ${f.storeA}, ${`DOC-2026-${String(9000 + seq++)}`}, ${tv!.id}, ${f.employee.employmentId}, ${f.admin.personId}) returning id`;
     await sql`
       insert into issued_document_versions (org_id, issued_document_id, version_no, body, letterhead, created_by)
-      values (${f.orgId}, ${d!.id}, 1, ${'# Old heading\n\nOld **bold** wording.'},
+      values (${f.orgId}, ${d!.id}, 1, ${'# Old heading\n\nOld **bold** wording with a typed {{today}}.'},
         ${sql.json({ orgLegalName: 'Old Corp', orgTradingName: 'Old', orgTin: '1', tinBranchCode: '00001', storeName: 'S', storeAddress: 'A', storeContact: null, templateName: 'COE', templateKind: 'coe' })},
         ${f.admin.personId})`;
     const old = await asOrg(f.orgId, (tx) => documentPrintData(tx, f.admin.actor, d!.id));
     expect(old.page).toBeNull(); // the page draws the old built-in company block
     expect(old.kind).toBeTruthy();
     expect(old.letterhead.legalName).toBe('Old Corp');
-    expect(old.body).toBe('# Old heading\n\nOld **bold** wording.'); // the stored text is untouched
+    expect(old.body).toBe('# Old heading\n\nOld **bold** wording with a typed {{today}}.'); // the stored text is untouched
+    expect(JSON.stringify(old.doc)).not.toContain('"field"'); // a typed {{today}} in an old issued body prints as typed, not as a chip
     expect(old.doc.content[0]).toMatchObject({ type: 'heading', attrs: { level: 2 } });
     expect(JSON.stringify(old.doc)).toContain('"bold"');
     const got = await asOrg(f.orgId, (tx) => getIssuedDocument(tx, f.admin.actor, d!.id));

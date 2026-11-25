@@ -342,7 +342,7 @@ export async function getIssuedDocument(tx: Tx, actor: Actor, documentId: string
     document: summarise(row),
     versions: versions.map(({ bodyDoc, ...v }) => ({
       ...v,
-      doc: effectiveDoc(bodyDoc, v.body),
+      doc: effectiveDoc(bodyDoc, v.body, false),
       legacy: bodyDoc === null || bodyDoc === undefined,
       page: v.letterhead.page ? toPage(v.letterhead.page) : null,
       signatures: signatures.filter((s) => s.versionId === v.id).map((s) => ({ id: s.id, slot: s.slot, personId: s.personId, personName: s.personName, signedAt: s.signedAt })),

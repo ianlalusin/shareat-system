@@ -81,7 +81,7 @@ export function longDate(isoDate: string | null | undefined): string | null {
 
 /**
  * "2 years, 3 months": whole calendar months from `startedOn` to `endedOn` (or `asOf` while still employed), the part that is zero left out, "less than a month" under one.
- * A day earlier in the month than the start does not complete the month. Null when either date is not `YYYY-MM-DD` or the end is before the start.
+ * A day earlier in the month than the start does not complete the month, except at the end of a short month. Null when either date is not `YYYY-MM-DD` or the end is before the start.
  */
 export function lengthOfService(startedOn: string | null | undefined, endedOn: string | null | undefined, asOf: string): string | null {
   const parse = (v: string | null | undefined): [number, number, number] | null => {
@@ -91,7 +91,10 @@ export function lengthOfService(startedOn: string | null | undefined, endedOn: s
   const a = parse(startedOn);
   const b = parse(endedOn ?? asOf);
   if (!a || !b) return null;
-  const months = (b[0] - a[0]) * 12 + (b[1] - a[1]) - (b[2] < a[2] ? 1 : 0);
+  // A month is complete when the end day reaches the start day, or the end is the LAST day of its month and the start day is past that month's length (31 Jan to 28 Feb is 1 month).
+  const dim = new Date(Date.UTC(b[0], b[1], 0)).getUTCDate();
+  const complete = b[2] >= a[2] || (b[2] === dim && a[2] > dim);
+  const months = (b[0] - a[0]) * 12 + (b[1] - a[1]) - (complete ? 0 : 1);
   if (months < 0) return null;
   if (months === 0) return 'less than a month';
   const y = Math.floor(months / 12);
