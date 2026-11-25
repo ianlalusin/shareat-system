@@ -16,6 +16,7 @@ import {
   type ProductionRecipeStatus,
   type ProductionStatus,
 } from '../../schema/production';
+import { slicerPayRates } from '../../schema/payroll';
 
 // ---------------------------------------------------------------------------------------------
 // Items — a narrow, production-specific projection. `items.ts`'s own `ItemRow`/`getItemById`
@@ -320,6 +321,11 @@ export interface ProductionRecordRow {
   readonly labourCost: string;
   readonly journalEntryId: string | null;
   readonly createdBy: string;
+  /** T-635 (migration 0279). */
+  readonly performedByPersonId: string | null;
+  readonly confirmedByPersonId: string | null;
+  readonly confirmedAt: Date | null;
+  readonly paidByPayRunId: string | null;
 }
 
 /**
@@ -335,6 +341,8 @@ export type InsertProductionRecordInput = Required<
   recipeId: string | null;
   /** Omit for the column default ('0'). */
   labourCost?: Money;
+  /** T-635. Who sliced it (slice records); null otherwise. */
+  performedByPersonId?: string | null;
 };
 
 export async function insertProductionRecord(tx: Tx, input: InsertProductionRecordInput): Promise<{ id: string }> {
@@ -350,6 +358,7 @@ export async function insertProductionRecord(tx: Tx, input: InsertProductionReco
       // ✎R13 `undefined` is skipped by Drizzle, so the column default applies.
       labourCost: input.labourCost,
       createdBy: input.createdBy,
+      performedByPersonId: input.performedByPersonId ?? null,
     })
     .returning({ id: productionRecords.id });
   return row!;
@@ -371,6 +380,10 @@ export async function getProductionRecord(tx: Tx, id: string): Promise<Productio
       labourCost: productionRecords.labourCost,
       journalEntryId: productionRecords.journalEntryId,
       createdBy: productionRecords.createdBy,
+      performedByPersonId: productionRecords.performedByPersonId,
+      confirmedByPersonId: productionRecords.confirmedByPersonId,
+      confirmedAt: productionRecords.confirmedAt,
+      paidByPayRunId: productionRecords.paidByPayRunId,
     })
     .from(productionRecords)
     .where(eq(productionRecords.id, id));
@@ -399,6 +412,10 @@ export async function listProductionRecords(
       labourCost: productionRecords.labourCost,
       journalEntryId: productionRecords.journalEntryId,
       createdBy: productionRecords.createdBy,
+      performedByPersonId: productionRecords.performedByPersonId,
+      confirmedByPersonId: productionRecords.confirmedByPersonId,
+      confirmedAt: productionRecords.confirmedAt,
+      paidByPayRunId: productionRecords.paidByPayRunId,
     })
     .from(productionRecords)
     .where(and(...conditions))
@@ -442,7 +459,8 @@ export async function bumpProductionRevision(
 ): Promise<void> {
   await tx
     .update(productionRecords)
-    .set({ revision: newRevision, journalEntryId })
+    // T-635: an edit changes what was checked, so the confirmation goes (the domain refuses an edit of a PAID record before it gets here).
+    .set({ revision: newRevision, journalEntryId, confirmedByPersonId: null, confirmedAt: null })
     .where(eq(productionRecords.id, id));
 }
 
@@ -459,12 +477,14 @@ export interface ProductionRecordLineRow {
   readonly movementId: string | null;
   readonly revision: number;
   readonly reversedAt: Date | null;
+  /** T-635. */
+  readonly isPaid: boolean;
 }
 
 /** T-371 C2 — one record line; `quantity` is a `Decimal<'14,3'>`. */
 export type InsertProductionRecordLineInput = Required<
   Pick<SafeInsert<typeof productionRecordLines>, 'itemId' | 'unit'>
-> & { direction: ProductionLineDirection; quantity: Quantity };
+> & { direction: ProductionLineDirection; quantity: Quantity; /** T-635: default true. */ isPaid?: boolean };
 
 export async function insertProductionRecordLines(
   tx: Tx,
@@ -480,6 +500,7 @@ export async function insertProductionRecordLines(
     quantity: l.quantity,
     unit: l.unit,
     revision,
+    isPaid: l.isPaid ?? true,
   }));
   const rows = await tx.insert(productionRecordLines).values(values).returning();
   return rows as ProductionRecordLineRow[];
@@ -602,4 +623,219 @@ export async function cookedByItemForDay(
      group by l.item_id
   `)) as unknown as { item_id: string; qty: string }[];
   return new Map(rows.map((x) => [x.item_id, x.qty]));
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-635 - slicer pay. Who sliced, who confirmed, what a kg pays, and the pay-run freeze.
+// ---------------------------------------------------------------------------------------------
+
+/** The employment of `personId` at the store that is open on `on` and holds the canonical Slicer position, or null. Positions are not dated, so "holds Slicer" is read as of today. */
+export async function slicerEmploymentOn(tx: Tx, orgId: string, personId: string, storeId: string, on: string): Promise<string | null> {
+  const rows = (await tx.execute(sql`
+    select e.id::text as id
+      from employments e
+      join employment_positions ep on ep.employment_id = e.id
+      join positions p on p.id = ep.position_id
+     where e.org_id = ${orgId} and e.person_id = ${personId} and e.store_id = ${storeId}
+       and e.started_on <= ${on}::date and (e.ended_on is null or e.ended_on >= ${on}::date)
+       and p.org_id = ${orgId} and p.name = 'Slicer' and p.is_canonical and p.is_active
+     order by e.started_on, e.id
+     limit 1
+  `)) as unknown as { id: string }[];
+  return rows[0]?.id ?? null;
+}
+
+/** Confirms a posted, unpaid, unconfirmed slice record. False when nothing matched (someone else got there first). */
+export async function confirmRecord(tx: Tx, id: string, confirmedBy: string): Promise<boolean> {
+  const rows = await tx
+    .update(productionRecords)
+    .set({ confirmedByPersonId: confirmedBy, confirmedAt: new Date() })
+    .where(and(eq(productionRecords.id, id), sql`${productionRecords.confirmedAt} is null and ${productionRecords.paidByPayRunId} is null`))
+    .returning({ id: productionRecords.id });
+  return rows.length > 0;
+}
+
+/** Takes the confirmation back. False when the record is not confirmed or is already paid. */
+export async function unconfirmRecord(tx: Tx, id: string): Promise<boolean> {
+  const rows = await tx
+    .update(productionRecords)
+    .set({ confirmedByPersonId: null, confirmedAt: null })
+    .where(and(eq(productionRecords.id, id), sql`${productionRecords.confirmedAt} is not null and ${productionRecords.paidByPayRunId} is null`))
+    .returning({ id: productionRecords.id });
+  return rows.length > 0;
+}
+
+export interface SlicerPayRateRow {
+  readonly id: string;
+  readonly itemId: string | null;
+  readonly itemName: string | null;
+  readonly ratePerKg: string;
+  readonly effectiveFrom: string;
+  readonly note: string | null;
+  readonly createdAt: Date;
+}
+
+export async function insertSlicerPayRate(
+  tx: Tx,
+  input: { orgId: string; itemId: string | null; ratePerKg: Money; effectiveFrom: string; note: string | null; createdBy: string },
+): Promise<{ id: string }> {
+  const [row] = await tx
+    .insert(slicerPayRates)
+    .values({
+      orgId: input.orgId,
+      itemId: input.itemId,
+      ratePerKg: input.ratePerKg,
+      effectiveFrom: input.effectiveFrom,
+      note: input.note,
+      createdBy: input.createdBy,
+    })
+    .returning({ id: slicerPayRates.id });
+  return row!;
+}
+
+/** Every rate row the org has (newest first), with the item's name. The rate in force is picked by the domain from this list, so the rule lives in one place. */
+export async function listSlicerPayRates(tx: Tx, orgId: string): Promise<SlicerPayRateRow[]> {
+  const rows = (await tx.execute(sql`
+    select r.id::text as id, r.item_id::text as "itemId", i.name as "itemName", r.rate_per_kg::text as "ratePerKg",
+           r.effective_from::text as "effectiveFrom", r.note, r.created_at as "createdAt"
+      from slicer_pay_rates r
+      left join items i on i.id = r.item_id
+     where r.org_id = ${orgId}
+     order by r.effective_from desc, r.created_at desc, r.id
+  `)) as unknown as SlicerPayRateRow[];
+  return rows;
+}
+
+/** A slice record that may be paid (posted, confirmed, unpaid), in a period. `producedOn` is compared with the SAME inclusive `between from and to` the attendance days use. */
+export interface PayableSlicerRecord {
+  readonly recordId: string;
+  readonly personId: string;
+  readonly producedOn: string;
+  /** The employment of that person at the store on that day; null when none (then no slip can carry the pay). */
+  readonly employmentId: string | null;
+  readonly paidByPayRunId: string | null;
+}
+
+export interface SlicerOutputLine {
+  readonly recordId: string;
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly quantity: string;
+  readonly unit: string;
+}
+
+export async function payableSlicerRecords(
+  tx: Tx,
+  orgId: string,
+  input: { storeId: string; from: string; to: string; /** The slicer pay screen also wants the records already paid; a pay run never does. */ includePaid?: boolean },
+): Promise<{ records: PayableSlicerRecord[]; lines: SlicerOutputLine[] }> {
+  const paidFilter = input.includePaid ? sql`` : sql`and r.paid_by_pay_run_id is null`;
+  const records = (await tx.execute(sql`
+    select r.id::text as "recordId", r.performed_by_person_id::text as "personId", r.produced_on::text as "producedOn", r.paid_by_pay_run_id::text as "paidByPayRunId",
+           (select e.id::text from employments e
+             where e.org_id = r.org_id and e.person_id = r.performed_by_person_id and e.store_id = r.store_id
+               and e.started_on <= r.produced_on and (e.ended_on is null or e.ended_on >= r.produced_on)
+             order by e.started_on, e.id limit 1) as "employmentId"
+      from production_records r
+     where r.org_id = ${orgId} and r.store_id = ${input.storeId}
+       and r.kind = 'slice' and r.status = 'posted'
+       and r.confirmed_at is not null ${paidFilter}
+       and r.performed_by_person_id is not null
+       and r.produced_on between ${input.from} and ${input.to}
+     order by r.produced_on, r.id
+  `)) as unknown as PayableSlicerRecord[];
+  if (records.length === 0) return { records, lines: [] };
+  const lines = (await tx.execute(sql`
+    select l.record_id::text as "recordId", l.item_id::text as "itemId", i.name as "itemName", l.quantity::text as quantity, l.unit
+      from production_record_lines l
+      join production_records r on r.id = l.record_id and l.revision = r.revision
+      join items i on i.id = l.item_id
+     where l.record_id in (${sql.join(records.map((x) => sql`${x.recordId}::uuid`), sql`, `)})
+       and l.direction = 'in' and l.is_paid and l.reversed_at is null
+     order by l.record_id, l.created_at, l.id
+  `)) as unknown as SlicerOutputLine[];
+  return { records, lines };
+}
+
+/** Freezes the records a pay run paid, and returns how many it froze (a record another run already paid is not touched, so the caller can refuse a short count). */
+export async function freezeSlicerRecords(tx: Tx, recordIds: readonly string[], runId: string): Promise<number> {
+  if (recordIds.length === 0) return 0;
+  const rows = await tx
+    .update(productionRecords)
+    .set({ paidByPayRunId: runId })
+    .where(and(inArray(productionRecords.id, [...recordIds]), sql`${productionRecords.paidByPayRunId} is null`))
+    .returning({ id: productionRecords.id });
+  return rows.length;
+}
+
+/** The ONLY place the slicer freeze is lifted: a voided run did not pay, so its records are payable again. */
+export async function unfreezeSlicerRecordsOfRun(tx: Tx, runId: string): Promise<number> {
+  const rows = await tx
+    .update(productionRecords)
+    .set({ paidByPayRunId: null })
+    .where(eq(productionRecords.paidByPayRunId, runId))
+    .returning({ id: productionRecords.id });
+  return rows.length;
+}
+
+export interface SlicerPayViewRow {
+  readonly recordId: string;
+  readonly producedOn: string;
+  readonly personId: string;
+  readonly personName: string;
+  readonly confirmedAt: Date | null;
+  readonly paidByPayRunId: string | null;
+}
+
+/** Every posted slice record of the store in a period that names a slicer, paid or not, for the slicer pay screen. Same inclusive `between` as the pay run. */
+export async function slicerRecordsInPeriod(tx: Tx, orgId: string, input: { storeId: string; from: string; to: string }): Promise<SlicerPayViewRow[]> {
+  return (await tx.execute(sql`
+    select r.id::text as "recordId", r.produced_on::text as "producedOn", r.performed_by_person_id::text as "personId",
+           p.display_name as "personName", r.confirmed_at as "confirmedAt", r.paid_by_pay_run_id::text as "paidByPayRunId"
+      from production_records r
+      join persons p on p.id = r.performed_by_person_id
+     where r.org_id = ${orgId} and r.store_id = ${input.storeId}
+       and r.kind = 'slice' and r.status = 'posted' and r.performed_by_person_id is not null
+       and r.produced_on between ${input.from} and ${input.to}
+     order by p.display_name, r.produced_on, r.id
+  `)) as unknown as SlicerPayViewRow[];
+}
+
+/** The people who hold the canonical Slicer position at the store today (open employments), for the "who sliced" picker. */
+export async function listSlicersAtStore(tx: Tx, orgId: string, storeId: string): Promise<{ personId: string; personName: string }[]> {
+  return (await tx.execute(sql`
+    select distinct e.person_id::text as "personId", pe.display_name as "personName"
+      from employments e
+      join persons pe on pe.id = e.person_id
+      join employment_positions ep on ep.employment_id = e.id
+      join positions p on p.id = ep.position_id
+     where e.org_id = ${orgId} and e.store_id = ${storeId} and e.ended_on is null
+       and p.org_id = ${orgId} and p.name = 'Slicer' and p.is_canonical and p.is_active
+     order by pe.display_name
+  `)) as unknown as { personId: string; personName: string }[];
+}
+
+/** Names the slicer of a slice record (an edit of a posted record, after its confirmation was cleared). */
+export async function setPerformedBy(tx: Tx, id: string, personId: string | null): Promise<void> {
+  await tx.update(productionRecords).set({ performedByPersonId: personId }).where(eq(productionRecords.id, id));
+}
+
+/** A draft's paid / unpaid choice: every OUTPUT line of the record is paid when its id is in `paidLineIds`, unpaid otherwise. */
+export async function setOutputLinesPaid(tx: Tx, recordId: string, paidLineIds: readonly string[]): Promise<void> {
+  const paid = paidLineIds.length > 0 ? sql`${productionRecordLines.id} in (${sql.join(paidLineIds.map((id) => sql`${id}::uuid`), sql`, `)})` : sql`false`;
+  await tx
+    .update(productionRecordLines)
+    .set({ isPaid: paid })
+    .where(and(eq(productionRecordLines.recordId, recordId), eq(productionRecordLines.direction, 'in'), sql`${productionRecordLines.reversedAt} is null`));
+}
+
+/** Display names for a handful of persons (the slicer, the confirmer). */
+export async function personNames(tx: Tx, orgId: string, ids: readonly string[]): Promise<Map<string, string>> {
+  const want = [...new Set(ids)];
+  if (want.length === 0) return new Map();
+  const rows = (await tx.execute(sql`
+    select id::text as id, display_name as name from persons
+     where org_id = ${orgId} and id in (${sql.join(want.map((id) => sql`${id}::uuid`), sql`, `)})
+  `)) as unknown as { id: string; name: string }[];
+  return new Map(rows.map((r) => [r.id, r.name]));
 }

@@ -10,6 +10,7 @@ import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { testItemCode } from './_fixtures/item-code';
+import { ensureSlicerPerson } from './_fixtures/t635-slicer';
 
 /**
  * T-409 S1 (integration half) - invariants 3, 5, 6, 7, 8, 9 (+ 1, 2, 4 reaching the real draft / post / edit doors).
@@ -126,15 +127,17 @@ const counts = async () => [
   Number((await sql<{ n: string }[]>`select count(*)::text as n from production_record_lines l join production_records r on r.id = l.record_id where r.org_id = ${orgA}`)[0]!.n),
 ];
 
-const draft = (over: Record<string, unknown> = {}) =>
-  asOrg(orgA, (tx) =>
+const draft = async (over: Record<string, unknown> = {}) => {
+  const slicerId = await ensureSlicerPerson(sql, { orgId: orgA, storeId: storeA });
+  return asOrg(orgA, (tx) =>
     createProductionDraft(tx, manager, {
-      orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10', labourCost: '0',
+      orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10', labourCost: '0',
       inputs: [{ itemId: slab, quantity: '10', unit: 'kg' }],
       outputs: [{ itemId: sliced, quantity: '9', unit: 'kg' }],
       ...over,
     } as Parameters<typeof createProductionDraft>[2]),
   );
+};
 const cookDraft = (over: Record<string, unknown> = {}) =>
   draft({ kind: 'cook', recipeId, inputs: [], outputs: [{ itemId: soup, quantity: '4', unit: 'kg' }], ...over });
 const post = (recordId: string) => asOrg(orgA, (tx) => postProduction(tx, manager, { recordId }));

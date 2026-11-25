@@ -109,6 +109,9 @@ export default async function PayrollPage({
           <a href="/payroll/separations" className={SECONDARY_LINK}>
             Separations
           </a>
+          <a href={`/inventory/production/slicer-pay?store=${storeId}`} className={SECONDARY_LINK}>
+            Slicer pay
+          </a>
         </>
       }
     >
@@ -273,6 +276,12 @@ export default async function PayrollPage({
             </Banner>
           )}
 
+          {pv.slicerProblems.length > 0 && (
+            <Banner tone="error">
+              <strong>Slicer pay cannot be worked out:</strong> {pv.slicerProblems.join(' ')} The run cannot be posted until this is fixed.
+            </Banner>
+          )}
+
           {pv.unconfirmedRates.length > 0 && (
             <Banner tone="warning">
               <strong>Rates not confirmed:</strong> {pv.unconfirmedRates.join('; ')}. The figures below use them, but the run
@@ -305,6 +314,7 @@ export default async function PayrollPage({
                   <Th numeric>Basic</Th>
                   <Th numeric>OT + ND + Hol</Th>
                   <Th numeric>Leave + SIL payout</Th>
+                  <Th numeric>Slicer pay</Th>
                   <Th numeric>Gross</Th>
                   <Th numeric>SSS / PhilHealth / Pag-IBIG</Th>
                   <Th numeric>Tax</Th>
@@ -323,6 +333,18 @@ export default async function PayrollPage({
                     </NumTd>
                     <NumTd className="font-mono text-muted">
                       {peso(Number(s.leavePay) + Number(s.silConversionPay))}
+                    </NumTd>
+                    <NumTd className="font-mono text-muted">
+                      {s.slicerRecords > 0 ? (
+                        <>
+                          {peso(Number(s.slicerPay))}
+                          <div className="font-sans text-xs">
+                            {s.slicerKg} kg · {s.slicerRecords} {s.slicerRecords === 1 ? 'record' : 'records'}
+                          </div>
+                        </>
+                      ) : (
+                        '—'
+                      )}
                     </NumTd>
                     <NumTd className="font-mono">{peso(Number(s.grossPay))}</NumTd>
                     <NumTd className="font-mono text-xs">
@@ -346,7 +368,7 @@ export default async function PayrollPage({
             </Table>
           )}
 
-          {pv.slips.length > 0 && pv.unratedEmployments.length === 0 && (
+          {pv.slips.length > 0 && pv.unratedEmployments.length === 0 && pv.slicerProblems.length === 0 && (
             <form
               action={postPayRunAction}
               className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800"
@@ -400,6 +422,7 @@ export default async function PayrollPage({
                     <li key={s.id}>
                       {s.personName} — {s.daysWorked} {Number(s.daysWorked) === 1 ? 'day' : 'days'}, net{' '}
                       <span className="font-mono">{peso(Number(s.netPay))}</span>
+                      {s.slicerRecords > 0 && ` · slicer pay ${peso(Number(s.slicerPay))} (${s.slicerKg} kg, ${s.slicerRecords} ${s.slicerRecords === 1 ? 'record' : 'records'})`}
                       {compare(money(s.advanceRecovered), ZERO) > 0 &&
                         (repayments[s.journalEntryId ?? ''] ?? [{ amount: s.advanceRecovered, signedOn: '' }])
                           .map((r) => ` · ${chargeRepaymentLabel(r.signedOn)} −${peso(Number(r.amount))}`)

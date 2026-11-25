@@ -18,6 +18,7 @@ import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { testItemCode } from './_fixtures/item-code';
+import { seedSlicerPerson } from './_fixtures/t635-slicer';
 
 /**
  * T-176 — production: slab -> slice, recipe -> batch, and the payroll lock.
@@ -59,6 +60,7 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 
 let orgA: string, storeA: string, staffId: string, managerId: string, fileA: string;
 let kitchen: string;
+let slicerId: string;
 let staffActor: Actor, managerActor: Actor;
 let slabItem: string, sliceA: string, sliceB: string, sliceC: string, otherSlab: string, otherSlice: string;
 
@@ -164,6 +166,8 @@ beforeEach(async () => {
   await grantEverydayPositionAccess(sql, {
     orgId: orgA, storeId: storeA, employmentId: staffEmployment!.id, personId: staffId, setBy: managerId,
   });
+  // T-635: a slice record names a person who holds the Slicer position at the store.
+  slicerId = (await seedSlicerPerson(sql, { orgId: orgA, storeId: storeA })).personId;
 });
 
 afterAll(async () => {
@@ -174,7 +178,7 @@ afterAll(async () => {
 async function draftAndPost(over: Record<string, unknown> = {}) {
   const draft = await asOrg(orgA, (tx) =>
     createProductionDraft(tx, staffActor, {
-      orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+      orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
       labourCost: '1000.00',
       inputs: [{ itemId: slabItem, quantity: '100', unit: 'kg' }],
       outputs: [
@@ -238,7 +242,7 @@ describe('T-176 test 2 — output exceeding input is a HARD block', () => {
     await stockUpSlab();
     const draft = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
         inputs: [{ itemId: slabItem, quantity: '10', unit: 'kg' }],
         outputs: [{ itemId: sliceA, quantity: '15', unit: 'kg' }],
       }),
@@ -257,7 +261,7 @@ describe('T-176 test 3 / test 19 — a lineage mismatch SOFT warns and posts', (
     // otherSlice's parent is otherSlab, not slabItem — a lineage mismatch against THIS run's input.
     const draft = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
         inputs: [{ itemId: slabItem, quantity: '10', unit: 'kg' }],
         outputs: [{ itemId: sliceA, quantity: '5', unit: 'kg' }],
       }),
@@ -271,7 +275,7 @@ describe('T-176 test 3 / test 19 — a lineage mismatch SOFT warns and posts', (
     // mismatch warns by posting otherSlice as an output of a slabItem-input run.
     const draft2 = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
         inputs: [{ itemId: slabItem, quantity: '5', unit: 'kg' }],
         outputs: [{ itemId: otherSlice, quantity: '2', unit: 'kg' }],
       }),
@@ -289,7 +293,7 @@ describe('T-176 test 4 — unit conversion', () => {
     await stockUpSlab();
     const draft = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
         inputs: [{ itemId: slabItem, quantity: '10', unit: 'kg' }],
         outputs: [{ itemId: sliceA, quantity: '9500', unit: 'g' }],
       }),
@@ -442,7 +446,7 @@ describe('T-176 test 10 — void tolerates a missing ledger leg', () => {
     await stockUpSlab('50', '300.0000');
     const draft2 = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
         inputs: [{ itemId: slabItem, quantity: '20', unit: 'kg' }],
         outputs: [{ itemId: sliceC, quantity: '18', unit: 'kg' }],
       }),
@@ -488,7 +492,7 @@ describe('T-176 test 11 — concurrency: two posts against the same slab, one co
     const draftBig = async () =>
       asOrg(orgA, (tx) =>
         createProductionDraft(tx, staffActor, {
-          orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+          orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
           inputs: [{ itemId: slabItem, quantity: '8', unit: 'kg' }],
           outputs: [{ itemId: sliceA, quantity: '8', unit: 'kg' }],
         }),
@@ -527,7 +531,7 @@ describe('T-176 test 13 — period lock and frozen location', () => {
     await sql`update fiscal_periods set status = 'closed' where org_id = ${orgA}`;
     const draft = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
         inputs: [{ itemId: slabItem, quantity: '10', unit: 'kg' }],
         outputs: [{ itemId: sliceA, quantity: '9', unit: 'kg' }],
       }),
@@ -561,7 +565,7 @@ describe('T-176 test 15 — a run with zero outputs is refused', () => {
     await stockUpSlab();
     const draft = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
         inputs: [{ itemId: slabItem, quantity: '10', unit: 'kg' }], outputs: [],
       }),
     );
@@ -604,7 +608,7 @@ describe('T-176 test 17 — an unresolvable product id is a HARD reject', () => 
 
     await stockUpSlab();
     const draftInput = (outputItemId: string) => ({
-      orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice' as const, producedOn: '2026-08-10',
+      orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice' as const, performedByPersonId: slicerId, producedOn: '2026-08-10',
       inputs: [{ itemId: slabItem, quantity: '10', unit: 'kg' }],
       outputs: [{ itemId: outputItemId, quantity: '5', unit: 'kg' }],
     });
@@ -641,7 +645,7 @@ describe('T-176 test 18 — the SCALE tolerance holds both ways', () => {
     await stockUpSlab('10.000', '300.0000');
     const draft = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
         inputs: [{ itemId: slabItem, quantity: '10.005', unit: 'kg' }],
         outputs: [{ itemId: sliceA, quantity: '9.5', unit: 'kg' }],
       }),
@@ -656,7 +660,7 @@ describe('T-176 test 18 — the SCALE tolerance holds both ways', () => {
     await stockUpSlab('10.000', '300.0000');
     const draft = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
         inputs: [{ itemId: slabItem, quantity: '10.02', unit: 'kg' }],
         outputs: [{ itemId: sliceA, quantity: '9.5', unit: 'kg' }],
       }),
@@ -672,7 +676,7 @@ describe('capability gates — post_production / edit_posted_production / void_p
     await stockUpSlab();
     const draft = await asOrg(orgA, (tx) =>
       createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
+        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10',
         inputs: [{ itemId: slabItem, quantity: '10', unit: 'kg' }],
         outputs: [{ itemId: sliceA, quantity: '9', unit: 'kg' }],
       }),

@@ -11,8 +11,11 @@ import { revalidatePath } from 'next/cache';
 import {
   assertFieldRules,
   createProductionDraft,
+  confirmSlicing,
   editPostedProduction,
   postProduction,
+  unconfirmSlicing,
+  updateSliceDraft,
   voidProduction,
 } from '@shareat/domain';
 import { productionRepo } from '@shareat/db';
@@ -45,12 +48,14 @@ function errorMessage(err: unknown): string {
   return sharedErrorMessage(err);
 }
 
-function parseLines(fd: FormData, prefix: 'input' | 'output'): { itemId: string; quantity: string; unit: string }[] {
+function parseLines(fd: FormData, prefix: 'input' | 'output'): { itemId: string; quantity: string; unit: string; isPaid?: boolean }[] {
   const itemIds = strs(fd, `${prefix}ItemId`);
   const quantities = strs(fd, `${prefix}Quantity`);
   const units = strs(fd, `${prefix}Unit`);
+  // T-635: an output line may be marked unpaid ("no"); every row sends its choice, so the lists line up. A form that sends none leaves every line paid.
+  const paid = strs(fd, `${prefix}Paid`);
   return itemIds
-    .map((itemId, i) => ({ itemId, quantity: quantities[i] ?? '', unit: units[i] ?? '' }))
+    .map((itemId, i) => ({ itemId, quantity: quantities[i] ?? '', unit: units[i] ?? '', ...(paid[i] === 'no' ? { isPaid: false } : {}) }))
     .filter((l) => l.itemId && l.quantity && l.unit);
 }
 
@@ -91,6 +96,7 @@ export async function saveProductionDraftAction(fd: FormData): Promise<void> {
       }
       return createProductionDraft(tx, actor, {
         orgId: actor.orgId, storeId, locationId, kind, recipeId: recipeId || null, producedOn, labourCost, inputs, outputs,
+        performedByPersonId: kind === 'slice' ? str(fd, 'performedByPersonId') || null : null,
       });
     });
   } catch (err) {
@@ -140,6 +146,52 @@ export async function editPostedProductionAction(fd: FormData): Promise<void> {
   revalidatePath('/inventory/production');
   revalidatePath(`/inventory/production/${recordId}`);
   return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { ok: `Edited — now revision ${result.revision}.` });
+}
+
+/** T-635: the draft's slicer and which output lines are paid (a checkbox per output line, `paidLineId`). */
+export async function updateSliceDraftAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/production');
+  const recordId = str(fd, 'recordId');
+  let result: Awaited<ReturnType<typeof updateSliceDraft>> | undefined;
+  try {
+    result = await withOrgPrincipal(actor.orgId, (tx) =>
+      updateSliceDraft(tx, actor, { recordId, performedByPersonId: str(fd, 'performedByPersonId') || null, paidLineIds: strs(fd, 'paidLineId').filter(Boolean) }),
+    );
+  } catch (err) {
+    return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: errorMessage(err) });
+  }
+  if (!result.ok) return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: result.reason });
+  revalidatePath(`/inventory/production/${recordId}`);
+  return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { ok: 'Saved. The slicer and the paid lines are updated.' });
+}
+
+/** T-635: another staff member checks the slicing and confirms it, so it counts for the slicer's pay. */
+export async function confirmSlicingAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/production');
+  const recordId = str(fd, 'recordId');
+  let result: Awaited<ReturnType<typeof confirmSlicing>> | undefined;
+  try {
+    result = await withOrgPrincipal(actor.orgId, (tx) => confirmSlicing(tx, actor, { recordId }));
+  } catch (err) {
+    return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: errorMessage(err) });
+  }
+  if (!result.ok) return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: result.reason });
+  revalidatePath(`/inventory/production/${recordId}`);
+  return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { ok: 'Confirmed. The next pay run will pay the slicer for this.' });
+}
+
+export async function unconfirmSlicingAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/production');
+  const recordId = str(fd, 'recordId');
+  let result: Awaited<ReturnType<typeof unconfirmSlicing>> | undefined;
+  try {
+    result = await withOrgPrincipal(actor.orgId, (tx) => unconfirmSlicing(tx, actor, { recordId }));
+  } catch (err) {
+    return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: errorMessage(err) });
+  }
+  if (!result.ok) return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { error: result.reason });
+  revalidatePath(`/inventory/production/${recordId}`);
+  return await redirectWithFlash(`/inventory/production/${recordId}`, {}, { ok: 'Confirmation taken back. It will not be paid until it is confirmed again.' });
 }
 
 export async function voidProductionAction(fd: FormData): Promise<void> {

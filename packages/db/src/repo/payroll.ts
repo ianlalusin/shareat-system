@@ -215,6 +215,10 @@ export interface PayslipRow {
   /** T-436: paid leave days, and the year-end / final-pay SIL cash payout. Neither is part of `basicPay`. */
   leavePay: string;
   silConversionPay: string;
+  /** T-635 (migration 0279): per-kg slicer pay, the paid kilograms and the record count behind it. Not part of `basicPay`. */
+  slicerPay: string;
+  slicerKg: string;
+  slicerRecords: number;
   grossPay: string;
   advanceRecovered: string;
   netPay: string;
@@ -259,6 +263,10 @@ export type PayslipInsert = Pick<
   /** T-436 (migration 0205). NOT NULL DEFAULT 0 - omit to take the column default. */
   leavePay?: Money;
   silConversionPay?: Money;
+  /** T-635 (migration 0279). NOT NULL DEFAULT 0 / 0 / 0 - omit for a payslip with no slicer pay. */
+  slicerPay?: Money;
+  slicerKg?: Decimal<'14,3'>;
+  slicerRecords?: number;
   grossPay: Money;
   advanceRecovered?: Money;
   netPay: Money;
@@ -300,6 +308,9 @@ export async function insertPayslip(tx: Tx, input: PayslipInsert): Promise<{ id:
       holidayPay: input.holidayPay,
       leavePay: input.leavePay,
       silConversionPay: input.silConversionPay,
+      slicerPay: input.slicerPay,
+      slicerKg: input.slicerKg,
+      slicerRecords: input.slicerRecords,
       grossPay: input.grossPay,
       advanceRecovered: input.advanceRecovered,
       netPay: input.netPay,
@@ -343,6 +354,9 @@ export async function listPayslips(tx: Tx, runId: string): Promise<PayslipRow[]>
       holidayPay: payslips.holidayPay,
       leavePay: payslips.leavePay,
       silConversionPay: payslips.silConversionPay,
+      slicerPay: payslips.slicerPay,
+      slicerKg: payslips.slicerKg,
+      slicerRecords: payslips.slicerRecords,
       grossPay: payslips.grossPay,
       advanceRecovered: payslips.advanceRecovered,
       netPay: payslips.netPay,

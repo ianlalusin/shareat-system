@@ -27,7 +27,7 @@
  * that has to balance to what they computed — never to recompute the arithmetic itself.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { productionRepo, stockLayersRepo, stockLedgerRepo, journalRepo, type Tx } from '@shareat/db';
+import { payrollRepo, productionRepo, stockLayersRepo, stockLedgerRepo, journalRepo, type Tx } from '@shareat/db';
 import { stockLayers as stockLayersTable } from '@shareat/db/schema';
 import { eq, sql as drizzleSql } from 'drizzle-orm';
 import { add, compare, decimal, money, subtract, toCentavos, ZERO, type Decimal, type Money } from '@shareat/core/money';
@@ -52,6 +52,7 @@ import {
   type Quantity,
 } from '../stock/quantity';
 import { convertUnit, divideRoundHalfUp, unitConversionFactor } from './unit-conversion';
+import { slicerRefusal } from './slicer-pay';
 import {
   computeValueIdentity,
   PRODUCTION_QTY_EPS,
@@ -71,24 +72,27 @@ export const PROCESSING_LABOUR_ACCOUNT = '6100';
 // redeclared — one account router, never a second copy under a different name.
 
 // -----------------------------------------------------------------------------------------
-// §7 — the slicer-payment lock, as a derived query. Phase 5's own table does not exist yet;
-// this predicate is the coupling point, written now so Phase 5 inherits a query to replace, not
-// a design problem. ⛔ NOT a column on production_records (DEF-075's pattern) and ⛔ NOT a call
-// Phase 5 makes into inventory — this file calls OUT to what will be Phase 5's table, never the
-// other direction.
+// §7 — the slicer-payment lock. T-635 made it real: a slice record is paid when a POSTED pay run froze it
+// (`production_records.paid_by_pay_run_id`); voiding that run lifts it. While it holds, the record cannot be
+// edited or voided (the table's own paid-shape CHECK is the backstop), because the slicer was paid for exactly
+// what the record said.
 // -----------------------------------------------------------------------------------------
 export interface SlicerPaymentLockInput {
   readonly orgId: string;
-  readonly storeId: string;
-  readonly producedOn: string;
+  readonly recordId: string;
 }
 
-export async function hasLiveSlicerPaymentCovering(_tx: Tx, _input: SlicerPaymentLockInput): Promise<boolean> {
-  // STUB (§7). Until Phase 5's payment table exists, every production record is editable —
-  // replace this body with a real query (WHERE status <> 'void' AND date range covers
-  // producedOn) once that table lands. Never inline a call into this module from Phase 5 itself.
-  return false;
+export async function hasLiveSlicerPaymentCovering(tx: Tx, input: SlicerPaymentLockInput): Promise<boolean> {
+  const record = await productionRepo.getProductionRecord(tx, input.recordId);
+  if (!record?.paidByPayRunId) return false;
+  const run = await payrollRepo.getPayRun(tx, input.orgId, record.paidByPayRunId);
+  return run?.status === 'posted';
 }
+
+const slicerPaidSentence = (doing: string) =>
+  `This slicing record was already paid to the slicer in a pay run, so it cannot be ${doing}. Void that pay run first, then ${doing === 'voided' ? 'void' : 'change'} it.`;
+
+export * from './slicer-pay';
 
 // Recipes (create / edit / retire / restore) live in `recipes.ts` (T-413), re-exported here.
 export * from './recipes';
@@ -101,6 +105,8 @@ export interface DraftLineInput {
   readonly itemId: string;
   readonly quantity: string;
   readonly unit: string;
+  /** T-635. An OUTPUT line of a slice record: false = a re-cut or trimming the slicer is not paid for. Default true. */
+  readonly isPaid?: boolean;
 }
 
 export interface CreateProductionDraftInput {
@@ -111,6 +117,8 @@ export interface CreateProductionDraftInput {
   readonly recipeId?: string | null;
   readonly producedOn: string;
   readonly labourCost?: string;
+  /** T-635. Who sliced it (a slice record). Required to POST a slice record; must hold the Slicer position at the store on `producedOn`. */
+  readonly performedByPersonId?: string | null;
   readonly inputs: readonly DraftLineInput[];
   readonly outputs: readonly DraftLineInput[];
 }
@@ -156,6 +164,15 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
     inputs = [...derived.inputs];
   }
 
+  // T-635: who sliced, and which output lines are paid. Refused before the first write.
+  if (input.kind === 'slice' && input.performedByPersonId) {
+    const notSlicer = await slicerRefusal(tx, input.orgId, input.performedByPersonId, input.storeId, input.producedOn);
+    if (notSlicer) return { ok: false, reason: notSlicer };
+  }
+  if (input.kind !== 'slice' && input.outputs.some((l) => l.isPaid === false)) {
+    return { ok: false, reason: 'Only a slicing record has paid and unpaid lines.' };
+  }
+
   const { id: recordId } = await productionRepo.insertProductionRecord(tx, {
     orgId: input.orgId,
     storeId: input.storeId,
@@ -166,11 +183,12 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
     // T-371 R13: a blank labour cost is OMITTED, so the column's own DEFAULT applies.
     labourCost: parsedLabour,
     createdBy: actor.personId,
+    performedByPersonId: input.kind === 'slice' ? (input.performedByPersonId ?? null) : null,
   });
 
   await productionRepo.insertProductionRecordLines(tx, recordId, 1, [
     ...inputs.map((l) => ({ direction: 'out' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
-    ...outputs.map((l) => ({ direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
+    ...outputs.map((l) => ({ direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit, isPaid: l.isPaid ?? true })),
   ]);
 
   return { ok: true, recordId };
@@ -274,11 +292,12 @@ function parseDraftLines(
   lines: readonly DraftLineInput[],
   rawPath: string,
   humanNoun: string,
-): { itemId: string; quantity: Quantity; unit: string }[] {
+): { itemId: string; quantity: Quantity; unit: string; isPaid?: boolean }[] {
   return lines.map((l, i) => ({
     itemId: l.itemId,
     quantity: parseDecimalInput(l.quantity, '14,3', `${rawPath}[${i}].quantity`, `${humanNoun} ${i + 1} quantity`, { blank: 'refuse' }),
     unit: l.unit,
+    ...(l.isPaid === undefined ? {} : { isPaid: l.isPaid }),
   }));
 }
 
@@ -706,15 +725,23 @@ export type ProductionPostOutcome =
 export async function postProduction(tx: Tx, actor: Actor, input: { recordId: string }): Promise<ProductionPostOutcome> {
   const record = await productionRepo.getProductionRecord(tx, input.recordId);
   if (!record) return { ok: false, reason: `production record ${input.recordId} does not exist` };
-  await authorize(tx, actor, 'post_production', { storeId: record.storeId, orgId: record.orgId });
+  // T-635: a slicer posts a slice record that names themselves with the same capability that let them record it; the check on their work is
+  // the confirmation by someone else. Anyone else posts under `post_production`, as before.
+  if (record.kind === 'slice' && record.performedByPersonId === actor.personId) {
+    await authorize(tx, actor, 'record_stock_movement', { storeId: record.storeId });
+  } else {
+    await authorize(tx, actor, 'post_production', { storeId: record.storeId, orgId: record.orgId });
+  }
   const closedPost = await closedStockPeriodSentence(tx, record.orgId, record.producedOn, 'produced');
   if (closedPost) return { ok: false, reason: closedPost };
 
   if (record.status !== 'draft') return { ok: false, reason: `production record ${input.recordId} is ${record.status}, not draft` };
 
-  const locked = await hasLiveSlicerPaymentCovering(tx, { orgId: record.orgId, storeId: record.storeId, producedOn: record.producedOn });
-  if (locked) {
-    return { ok: false, reason: 'a live slicer payment covers this date — editing or voiding it now would leave labour expensed against output that no longer exists' };
+  // T-635: a slice record has to say who sliced it, and that person has to hold Slicer at this store on the day.
+  if (record.kind === 'slice') {
+    if (!record.performedByPersonId) return { ok: false, reason: 'Say who sliced this before posting it. Pick the slicer on the record and save.' };
+    const notSlicer = await slicerRefusal(tx, record.orgId, record.performedByPersonId, record.storeId, record.producedOn);
+    if (notSlicer) return { ok: false, reason: notSlicer };
   }
 
   const rows = await productionRepo.listProductionRecordLines(tx, record.id, { revision: 1 });
@@ -764,6 +791,8 @@ export async function postProduction(tx: Tx, actor: Actor, input: { recordId: st
 // -----------------------------------------------------------------------------------------
 export interface EditProductionInput {
   readonly recordId: string;
+  /** T-635. Names (or changes) the slicer of a slice record, e.g. one posted before slicer pay existed. Omit to leave it. An edit clears the confirmation either way. */
+  readonly performedByPersonId?: string | null;
   readonly inputs: readonly DraftLineInput[];
   readonly outputs: readonly DraftLineInput[];
   readonly labourCost?: string;
@@ -785,9 +814,8 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
     return { ok: false, reason: 'a convert record cannot be edited — void it and record a new one' };
   }
 
-  const locked = await hasLiveSlicerPaymentCovering(tx, { orgId: record.orgId, storeId: record.storeId, producedOn: record.producedOn });
-  if (locked) {
-    return { ok: false, reason: 'a live slicer payment covers this date — editing it now would leave labour expensed against output that no longer exists' };
+  if (await hasLiveSlicerPaymentCovering(tx, { orgId: record.orgId, recordId: record.id })) {
+    return { ok: false, reason: slicerPaidSentence('edited') };
   }
 
   // T-371 R5/R6: parsed AFTER authorize() and BEFORE any leg is reversed or written. A blank labour cost leaves it
@@ -801,6 +829,10 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
   if (record.kind === 'slice') {
     const refusal = await sliceCategoryRefusal(tx, record.orgId, editInputs, editOutputs);
     if (refusal) return { ok: false, reason: refusal };
+    if (input.performedByPersonId) {
+      const notSlicer = await slicerRefusal(tx, record.orgId, input.performedByPersonId, record.storeId, record.producedOn);
+      if (notSlicer) return { ok: false, reason: notSlicer };
+    }
   } else if (record.kind === 'cook') {
     const found = await cookRecipeOrRefusal(tx, record);
     if (!found.ok) return found;
@@ -879,7 +911,7 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
   );
   const newOutputRows = await productionRepo.insertProductionRecordLines(
     tx, record.id, newRevision,
-    editOutputs.map((l) => ({ direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
+    editOutputs.map((l) => ({ direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit, isPaid: l.isPaid ?? true })),
   );
 
   const inputs = editInputs.map((l, i) => ({ lineRowId: newInputRows[i]!.id, itemId: l.itemId, quantity: l.quantity, unit: l.unit }));
@@ -900,6 +932,7 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
   }
 
   await productionRepo.bumpProductionRevision(tx, record.id, newRevision, result.journalEntryId);
+  if (record.kind === 'slice' && input.performedByPersonId) await productionRepo.setPerformedBy(tx, record.id, input.performedByPersonId);
 
   return { ok: true, revision: newRevision, journalEntryId: result.journalEntryId };
 }
@@ -964,9 +997,8 @@ export async function voidProduction(tx: Tx, actor: Actor, input: { recordId: st
   const reason = input.reason.trim();
   if (!reason) return { ok: false, reason: 'a void needs a reason' };
 
-  const locked = await hasLiveSlicerPaymentCovering(tx, { orgId: record.orgId, storeId: record.storeId, producedOn: record.producedOn });
-  if (locked) {
-    return { ok: false, reason: 'a live slicer payment covers this date — voiding it now would leave labour expensed against output that no longer exists' };
+  if (await hasLiveSlicerPaymentCovering(tx, { orgId: record.orgId, recordId: record.id })) {
+    return { ok: false, reason: slicerPaidSentence('voided') };
   }
 
   const lines = await productionRepo.listProductionRecordLines(tx, record.id, { revision: record.revision, unreversedOnly: true });
