@@ -6,7 +6,7 @@ import { withFlash } from '../../../lib/flash';
 import { typedFor } from '../../../lib/keep-typing';
 import { peso } from '../../../lib/format';
 import { withOrgPrincipal } from '../../expenses/lib';
-import { activateModelAction, removeKeyAction, saveKeyAction, saveSettingsAction, storeSwitchAction, testModelAction } from './actions';
+import { activateModelAction, removeKeyAction, saveSettingsAction, storeSwitchAction, testModelAction } from './actions';
 import { FallbackOrder } from './FallbackOrder';
 import { KeyEditor } from './KeyEditor';
 import { TestBadge } from './model-bits';
@@ -208,7 +208,7 @@ function ProviderCard({ p }: { p: AiProviderView }) {
           Saved by {p.setByName} on {when(p.updatedAt)}.
         </p>
       )}
-      <KeyEditor provider={p.provider} providerLabel={p.label} hasKey={p.hasKey} last4={p.last4} action={saveKeyAction} />
+      <KeyEditor provider={p.provider} providerLabel={p.label} hasKey={p.hasKey} last4={p.last4} />
       {p.hasKey && (
         <details className="text-sm">
           <summary className="inline-flex min-h-11 cursor-pointer items-center text-muted">Remove this key</summary>

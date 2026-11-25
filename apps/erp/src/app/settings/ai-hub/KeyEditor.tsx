@@ -11,8 +11,9 @@ import { AI_KEY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { Button, Field, Input } from '@/components/ui';
+import { saveKeyAction } from './actions';
 
-export function KeyEditor({ provider, providerLabel, hasKey, last4, action }: { provider: string; providerLabel: string; hasKey: boolean; last4: string | null; action: (fd: FormData) => void | Promise<void> }) {
+export function KeyEditor({ provider, providerLabel, hasKey, last4 }: { provider: string; providerLabel: string; hasKey: boolean; last4: string | null }) {
   const [editing, setEditing] = useState(!hasKey);
   if (hasKey && !editing) {
     return (
@@ -27,7 +28,7 @@ export function KeyEditor({ provider, providerLabel, hasKey, last4, action }: { 
     );
   }
   return (
-    <CheckedForm rules={AI_KEY_RULES} action={action} quietSummary className="space-y-3" autoComplete="off">
+    <CheckedForm rules={AI_KEY_RULES} action={saveKeyAction} quietSummary className="space-y-3" autoComplete="off">
       <input type="hidden" name="provider" value={provider} />
       <Field label={hasKey ? 'New key' : 'Paste the key'} rule={AI_KEY_RULES.key}>
         <Input {...nativeAttrs(AI_KEY_RULES.key)} type="password" autoComplete="off" spellCheck={false} autoFocus={hasKey} className="w-full" />
