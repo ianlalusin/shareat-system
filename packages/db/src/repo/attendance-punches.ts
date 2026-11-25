@@ -12,6 +12,7 @@ import {
   type PunchIntent,
   type PunchMethod,
   type PunchSource,
+  type WorkedAs,
 } from '../../schema/attendance-punches';
 
 export interface AttendancePunchRow {
@@ -25,6 +26,8 @@ export interface AttendancePunchRow {
   shiftDay: string;
   method: PunchMethod;
   assertedIntent: PunchIntent;
+  /** T-635 S2: what the person clocked in as; null = the event carried no choice = regular. */
+  workedAs: WorkedAs | null;
   deviceId: string | null;
   source: PunchSource;
   capturedBySessionId: string | null;
@@ -43,6 +46,7 @@ export interface InsertPunchInput {
   shiftDay: string;
   method: PunchMethod;
   assertedIntent: PunchIntent;
+  workedAs?: WorkedAs | null;
   deviceId?: string | null;
   source: PunchSource;
   capturedBySessionId?: string | null;

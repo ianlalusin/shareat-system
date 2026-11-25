@@ -9,11 +9,12 @@ import {
   attendanceAdjustmentsRepo,
   attendanceDaysRepo,
   employmentRepo,
+  productionRepo,
   type AttendanceAdjustmentRow,
   type AttendanceDayRow,
   type Tx,
 } from '@shareat/db';
-import type { AdjustmentKind } from '@shareat/db/schema';
+import type { AdjustmentKind, WorkedAs } from '@shareat/db/schema';
 import { refuse } from '../shared/refusal';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
@@ -38,6 +39,8 @@ export interface RecordAdjustmentInput {
   isHalfDay?: boolean;
   /** ⭐ `overtime_approved` only — how many of the day's PENDING minutes are accepted. */
   approvedOtMinutes?: number | string;
+  /** T-635 S2: `worked_as` only. What the person worked as that day; overrides what the clock-in said. */
+  workedAs?: WorkedAs | string;
   reason?: string;
   /** The verified session the decision was made under. From `resolveActor` (§7.1). */
   sessionId: string;
@@ -202,6 +205,17 @@ export async function recordAdjustment(
     }
   }
 
+  // T-635 S2: the worked-as correction. Only the two words; and 'slicer' only for someone who holds the Slicer position at the store that day (a day marked
+  // slicer pays nothing from the daily rate, so it must not be applied to a person who cannot earn slicer pay).
+  if (input.kind === 'worked_as') {
+    if (input.workedAs !== 'regular' && input.workedAs !== 'slicer') {
+      throw new AdjustmentError('Say whether the person worked that day as a slicer or as regular staff.');
+    }
+    if (input.workedAs === 'slicer' && !(await productionRepo.slicerEmploymentOn(tx, employment.orgId, employment.personId, employment.storeId, shiftDay))) {
+      throw new AdjustmentError('That person does not hold the Slicer position at this store on that day, so the day cannot be marked as a slicer day. Give them the position first.');
+    }
+  }
+
   const live = await attendanceAdjustmentsRepo.listLive(tx, {
     employmentId: input.employmentId,
     shiftDay,
@@ -231,6 +245,7 @@ export async function recordAdjustment(
     effectiveOutMinute: parsed.effectiveOutMinute ?? null,
     isHalfDay: input.isHalfDay === undefined ? null : String(input.isHalfDay),
     approvedOtMinutes: parsed.approvedOtMinutes ?? null,
+    workedAs: input.kind === 'worked_as' ? (input.workedAs as WorkedAs) : null,
     reason: input.reason ?? null,
     decidedBySessionId: input.sessionId,
     decidedByPersonId: actor.personId,

@@ -15,6 +15,7 @@
  * retries forever.
  */
 import { toBusinessDate } from '@shareat/core/datetime';
+import { logger } from '@shareat/core/logger';
 import { humanDate } from '../shared/refusal';
 import { sql } from 'drizzle-orm';
 import {
@@ -23,6 +24,7 @@ import {
   clockTerminalsRepo,
   employmentRepo,
   inboxQuarantineRepo,
+  productionRepo,
   type Tx,
 } from '@shareat/db';
 import type {
@@ -91,6 +93,11 @@ export interface InboxEvent {
   credentialRef: string;
   method: string;
   assertedIntent: string;
+  /**
+   * T-635 S2. What a slicer chose at clock-in: `slicer` or `regular`. OPTIONAL: an event without it (an old terminal, a queued punch, a person who is not a
+   * slicer) means regular, and still ingests.
+   */
+  workedAs?: string;
   [key: string]: unknown;
 }
 
@@ -332,6 +339,14 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
       terminal.storeId, terminal.id);
   }
 
+  // ---- 4b. T-635 S2: a slicer tap from someone who is not a slicer is stored as REGULAR (BOSS, 25 Nov) ------
+  // A wrong tap must never zero a regular staff member's daily pay. The person has to hold the Slicer position at this store on the punch's own shift day.
+  let workedAs: 'slicer' | 'regular' | null = event.workedAs === 'slicer' || event.workedAs === 'regular' ? event.workedAs : null;
+  if (workedAs === 'slicer' && !(await productionRepo.slicerEmploymentOn(tx, employment.orgId, employment.personId, employment.storeId, shiftDay))) {
+    logger.warn({ clientPunchId, employmentId: employment.id, shiftDay }, 'ingest: a slicer clock-in from someone without the Slicer position was stored as regular');
+    workedAs = 'regular';
+  }
+
   // ---- 5. Record ---------------------------------------------------------------------
   const { punch, alreadyProcessed } = await recordPunch(tx, {
     clientPunchId,
@@ -339,6 +354,7 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
     occurredAt,
     method,
     assertedIntent: event.assertedIntent as PunchIntent,
+    workedAs,
     source: 'offline_replay',
     deviceId: terminal.id,
   });
@@ -413,6 +429,10 @@ function shapeErrors(event: Partial<InboxEvent>): string | null {
   }
   if (!PUNCH_INTENTS.includes(event.assertedIntent as PunchIntent)) {
     problems.push(`assertedIntent "${String(event.assertedIntent)}" is not recognised`);
+  }
+  // T-635 S2: absent (or null) is fine and means regular; a value that is neither word is a malformed event, quarantined like any other.
+  if (event.workedAs !== undefined && event.workedAs !== null && event.workedAs !== 'slicer' && event.workedAs !== 'regular') {
+    problems.push(`workedAs "${String(event.workedAs)}" is not recognised`);
   }
   return problems.length ? problems.join('; ') : null;
 }

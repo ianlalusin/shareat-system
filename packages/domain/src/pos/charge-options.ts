@@ -1,7 +1,7 @@
 /**
- * T-634 (migration 0278) - the org's MASTER LIST of charges (Leftover, Extra griller...), and each store's switch for one. `docs/tasks/634-central-charges.md`.
+ * T-634 (migration 0282) - the org's MASTER LIST of charges (Leftover, Extra griller...), and each store's switch for one. `docs/tasks/634-central-charges.md`.
  * The shape is T-629's payment options (`payment-options.ts`): one list per org; a store switches an option on by holding an ACTIVE `pos_charge_presets` row; the
- * option owns the NAME, the AMOUNT and PER UNIT of every store row (a 0278 trigger mirrors them), so the snapshot, the tablet and the sale read the store row unchanged.
+ * option owns the NAME, the AMOUNT and PER UNIT of every store row (a 0282 trigger mirrors them), so the snapshot, the tablet and the sale read the store row unchanged.
  *
  * Capabilities, `authorize()` the first statement of every write, every write audited:
  * - the master list: `manage_menu`, ORG scope (admin and super admin; a store manager and a cashier are refused). A charge is part of what the brand sells and at
@@ -11,7 +11,7 @@
  *
  * A changed amount reaches the next charge added at every store. A charge already on a table, or on a receipt, keeps the amount it was added at: `charges.ts`
  * copies the name and unit amount into `table_session_charges` when it is added, and `sale.ts` copies those rows onto the receipt.
- * A rename is retire + add (the 0278 guard freezes the name), as T-627 had it.
+ * A rename is retire + add (the 0282 guard freezes the name), as T-627 had it.
  */
 import { auditLogRepo, posStoreSetupRepo, posV2Repo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
@@ -74,7 +74,7 @@ async function loadLocked(tx: Tx, actor: Actor, raw: unknown) {
   return row;
 }
 
-/** Change the amount (and per unit) for EVERY store from now on: the 0278 trigger copies it onto each store row; each store that has it on gets a new snapshot. */
+/** Change the amount (and per unit) for EVERY store from now on: the 0282 trigger copies it onto each store row; each store that has it on gets a new snapshot. */
 export async function updateChargeOption(
   tx: Tx,
   actor: Actor,

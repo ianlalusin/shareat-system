@@ -135,7 +135,7 @@ export async function retirePosDiscountPreset(tx: Tx, actor: Actor, input: { sto
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// T-627 (docs/tasks/627-pos-charges.md): the rules of a named charge (leftover, an extra griller). Since T-634 (0278) the org owns the list
+// T-627 (docs/tasks/627-pos-charges.md): the rules of a named charge (leftover, an extra griller). Since T-634 (0282) the org owns the list
 // (`charge-options.ts`); a store only switches a charge on or off.
 // ---------------------------------------------------------------------------------------------------------------------
 export interface CheckedChargePreset {
@@ -160,5 +160,5 @@ export function checkChargePreset(raw: { name: unknown; amount: unknown; perUnit
   return { name, amount, perUnit: raw.perUnit === true || raw.perUnit === 'true' || raw.perUnit === 'on' };
 }
 
-// T-634 (0278): a store no longer adds or prices its own charges. The org master list and the store switch are in charge-options.ts; checkChargePreset above
+// T-634 (0282): a store no longer adds or prices its own charges. The org master list and the store switch are in charge-options.ts; checkChargePreset above
 // is still the one rule set of a charge (the master list uses it).

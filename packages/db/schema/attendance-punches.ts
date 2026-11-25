@@ -67,6 +67,10 @@ export type PunchMethod = (typeof PUNCH_METHODS)[number];
 export const PUNCH_INTENTS = ['in', 'out', 'break_start', 'break_end'] as const;
 export type PunchIntent = (typeof PUNCH_INTENTS)[number];
 
+/** T-635 S2: what a person clocked in as. */
+export const WORKED_AS = ['regular', 'slicer'] as const;
+export type WorkedAs = (typeof WORKED_AS)[number];
+
 export const PUNCH_SOURCES = ['online', 'offline_replay', 'manual_entry', 'import'] as const;
 export type PunchSource = (typeof PUNCH_SOURCES)[number];
 
@@ -136,6 +140,13 @@ export const attendancePunches = pgTable(
      */
     assertedIntent: text('asserted_intent', { enum: PUNCH_INTENTS }).notNull(),
 
+    /**
+     * T-635 S2 (migration 0279). What the person said they were working as when they clocked IN: a slicer (paid per kg, no daily rate) or regular
+     * staff (paid the daily rate). NULL = the event carried no choice (an old terminal, a queued punch, a person who is not a slicer) = regular.
+     * Only the day's first clock-in decides (`adjudicateDay`); a manager can correct it through a `worked_as` adjustment.
+     */
+    workedAs: text('worked_as', { enum: WORKED_AS }),
+
     /** The provisioned terminal. NULL for a back-office manual entry. */
     deviceId: text('device_id'),
     source: text('source', { enum: PUNCH_SOURCES }).notNull(),
@@ -171,6 +182,7 @@ export const attendancePunches = pgTable(
     index('attendance_punches_store_received_idx').on(t.storeId, t.receivedAt),
 
     check('attendance_punches_method_check', sql`${t.method} in ('nfc','qr','fingerprint','face','manual')`),
+    check('attendance_punches_worked_as_check', sql`${t.workedAs} is null or ${t.workedAs} in ('regular','slicer')`),
     check('attendance_punches_intent_check', sql`${t.assertedIntent} in ('in','out','break_start','break_end')`),
     check('attendance_punches_source_check', sql`${t.source} in ('online','offline_replay','manual_entry','import')`),
 

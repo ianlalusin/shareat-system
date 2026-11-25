@@ -72,8 +72,8 @@ export async function retirePreset(tx: Tx, orgId: string, storeId: string, prese
   return rows.length > 0;
 }
 
-// ---- T-634 (0278): the org's master list of charges, and each store's switch for one -----------------------------------
-// A store's `pos_charge_presets` row IS its switch (status active = on); its name, amount and per_unit are a mirror the 0278 trigger sets from the option.
+// ---- T-634 (0282): the org's master list of charges, and each store's switch for one -----------------------------------
+// A store's `pos_charge_presets` row IS its switch (status active = on); its name, amount and per_unit are a mirror the 0282 trigger sets from the option.
 
 /** Every option of the org, active and retired, in sort order then name. */
 export async function listChargeOptions(tx: Tx, orgId: string): Promise<ChargeOptionRow[]> {
@@ -101,7 +101,7 @@ export async function insertChargeOption(tx: Tx, input: { orgId: string; name: s
   return row!;
 }
 
-/** The name is never changed (the 0278 guard refuses it): a rename is retire + add. */
+/** The name is never changed (the 0282 guard refuses it): a rename is retire + add. */
 export async function updateChargeOptionRow(tx: Tx, orgId: string, id: string, set: { amount?: Money; perUnit?: boolean; status?: 'active' | 'retired' }): Promise<void> {
   await tx
     .update(chargeOptions)
@@ -130,7 +130,7 @@ export async function latestChargeSwitch(tx: Tx, orgId: string, storeId: string,
   return row;
 }
 
-/** A first switch-on at this store. name / amount / per_unit are passed for the column types; the 0278 trigger overwrites them from the option. */
+/** A first switch-on at this store. name / amount / per_unit are passed for the column types; the 0282 trigger overwrites them from the option. */
 export async function insertChargeSwitch(
   tx: Tx,
   input: { orgId: string; storeId: string; chargeOptionId: string; name: string; amount: Money; perUnit: boolean; createdBy: string },

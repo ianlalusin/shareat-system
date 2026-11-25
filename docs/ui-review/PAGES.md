@@ -99,6 +99,7 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /inventory/production/recipes | apps/erp/src/app/inventory/production/recipes/page.tsx | 2026-11-15 | OK | G2 |  | good: Empty state, tabs and "New recipe" button are clear at both widths. |
 | /inventory/production/recipes/[id] | apps/erp/src/app/inventory/production/recipes/[id]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c, #287 | not captured: no record in the synthetic data |
 | /inventory/production/recipes/new | apps/erp/src/app/inventory/production/recipes/new/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c, #287 | good: Form is long on phone but labelled clearly; Save is easy to reach. |
+| /inventory/production/slicer-pay | apps/erp/src/app/inventory/production/slicer-pay/page.tsx | 2026-11-25 | not captured | G2 | T-635 | not captured: new page, not yet seen in a browser |
 | /inventory/returns | apps/erp/src/app/inventory/returns/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c, #287, T-589 B4b, #294 | good: Clean at both widths; empty states explain themselves. |
 | /inventory/transfers | apps/erp/src/app/inventory/transfers/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c, #287, T-589 B4b, #294 | good: Clear empty-state message at both widths; nothing cut off. |
 | /inventory/usage | apps/erp/src/app/inventory/usage/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c, #289, #287, T-589 B4b, #294 | good: Clean layout; empty records state and New record button are obvious. |
@@ -117,6 +118,7 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /menu/items/[id] | apps/erp/src/app/menu/items/[id]/page.tsx | 2026-11-15 | fix | G2 | #278, T-589 B3c, #287, #279, T-589 B4b, #294, T-599 S5 | could improve: Long stacked page; the variant save icon is disabled with little explanation. |
 | /menu/prices | apps/erp/src/app/menu/prices/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c, #287, T-589 B4b, #294 | good: Clear at both widths; each price slot and Set price button is obvious. |
 | /menu/requests | apps/erp/src/app/menu/requests/page.tsx | 2026-11-15 | minor | G2 | T-589 B3c, #287, T-589 B4b, #294 | good: Clean at both widths; empty states read clearly. |
+| /menu/stores/[storeId] | apps/erp/src/app/menu/stores/[storeId]/page.tsx |  | not reviewed | T-632 |  | not captured: new page, not yet seen in a browser |
 | /menu/usage-source | apps/erp/src/app/menu/usage-source/page.tsx | 2026-11-15 | fix | G2 | T-589 B3c, #287, T-589 B4b, #294, T-589 B7, #299 | could improve: Long inline link form crowds the page, especially on phone. |
 | /money-accounts | apps/erp/src/app/money-accounts/page.tsx | 2026-11-15 | fix | G4 | T-589 B3d, #289, #288 | could improve: Desktop tables are dense; phone needs chevron taps to see details. |
 | /money-transfers | apps/erp/src/app/money-transfers/page.tsx | 2026-11-15 | minor | G4 | T-589 B3d, #289, #288, T-589 B4b, #294 | good: Clear table on desktop; readable stacked cards on phone. |

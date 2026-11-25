@@ -1,4 +1,4 @@
-# T-634 — Central charges (MIGRATION 0278)
+# T-634 — Central charges (MIGRATION 0282)
 
 Status: building on `feat/t634-central-charges` (from origin/main 450c6fd).
 
@@ -23,7 +23,7 @@ migration 0277): an org master list, the store row is the switch, and a trigger 
    status active means switched on.
 3. Changing an option's amount changes it for every store from now on. Charges already on open tables and receipts keep their snapshots;
    check that the code really snapshots at add time.
-4. Backfill in 0278: group existing presets by the normalised name within the org into one option. If the same name has a DIFFERENT amount
+4. Backfill in 0282: group existing presets by the normalised name within the org into one option. If the same name has a DIFFERENT amount
    or per_unit at two stores, RAISE (the deploy stops). Add a read-only pre-check query in "As built" for Ian to run before deploy. Never
    merge two presets of one store.
 5. ERP:
@@ -51,7 +51,7 @@ locally, do not push. Report (≤20 lines) to `C:\shareat\t634-report.txt`.
 
 ## As built
 
-- **Migration 0278** (`packages/db/migrations/0278_t634_charge_options.sql`): `charge_options` (org, name 1-40 unique per org on the a-z0-9 key, amount
+- **Migration 0282** (`packages/db/migrations/0282_t634_charge_options.sql`): `charge_options` (org, name 1-40 unique per org on the a-z0-9 key, amount
   > 0 and ≤ 100,000, per_unit, sort_order, status), RLS + FORCE, grants SELECT/INSERT and UPDATE (amount, per_unit, sort_order, status, updated_at): never
   name, never DELETE. `pos_charge_presets.charge_option_id` NOT NULL with a same-org composite FK. Three origin triggers: `pos_charge_presets_mirror_option`
   (name/amount/per_unit come from the option; the option cannot change; a retired option cannot be switched on), `charge_options_guard` (org and name

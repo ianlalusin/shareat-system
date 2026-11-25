@@ -9,7 +9,7 @@
  * out and exactly what would trigger porting the rest.
  */
 import { sql } from 'drizzle-orm';
-import { ZERO, add, compare, decimal, divideMoney, formatMoney, money, subtract, type Money } from '@shareat/core/money';
+import { ZERO, add, compare, decimal, divideMoney, formatMoney, money, subtract, type Money, type Quantity } from '@shareat/core/money';
 import { attendanceConfigRepo, moneyAccountsRepo, payrollRepo, statutoryPaymentsRepo, statutoryRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { parseMoneyInput } from '../shared/money-input';
@@ -32,6 +32,8 @@ import {
 } from './statutory';
 // T-436: leave pay + the year-end SIL payout. The computation lives in `leave/payroll.ts`; this file only adds its two figures to a slip.
 import { applyLeaveToRun, planLeavePayroll, releaseLeaveOfRun, sumMoney, type SilPayoutPlan } from '../leave/payroll';
+// T-635: per-kg slicer pay. Planned read-only for the preview, frozen on post, released on void. It is part of the payslip's gross and posts nothing of its own.
+import { applySlicerPayToRun, planSlicerPay, releaseSlicerPayOfRun } from '../production/slicer-pay';
 
 export * from './compute';
 export * from './periods';
@@ -134,7 +136,8 @@ export interface PayslipDraft {
   unapprovedOtMinutes: number;
   personId: string;
   personName: string;
-  payRateId: string;
+  /** Null only for a slip that pays slicer pay alone for someone with no daily rate (T-635). */
+  payRateId: string | null;
   dayIds: string[];
   daysWorked: number;
   minutesWorked: number;
@@ -152,6 +155,15 @@ export interface PayslipDraft {
   /** T-436. The leave days this slip pays (frozen to the run on post) and the payout rows it takes. */
   leaveDayIds: string[];
   silPayouts: SilPayoutPlan[];
+  /** T-635. Per-kg pay for this person's confirmed, posted, unpaid slicing in the period. ⛔ Not part of `basicPay`. It is its own line on the slip and in the gross. */
+  slicerPay: Money;
+  slicerKg: Quantity;
+  slicerRecords: number;
+  /** The slice records this slip pays (frozen to the run on post). */
+  slicerRecordIds: string[];
+  /** T-635 S2. Days in the period paid as slicer days (no daily rate; `daysWorked` is the REGULAR days), and how many paid records were confirmed late (produced before the period). */
+  slicerDays: number;
+  slicerEarlierRecords: number;
   grossPay: Money;
   advanceRecovered: Money;
   netPay: Money;
@@ -181,6 +193,8 @@ export interface PayRunPreview {
   /** T-190. Every person and agency with no number on file: that agency is not deducted for them. */
   missingGovernmentIds: { personId: string; personName: string; agency: Agency }[];
   slips: PayslipDraft[];
+  /** T-635. Slice records that cannot be priced (no rate in force, a unit that is not kg or g, no job that day). Shown as warnings: such a record is skipped and stays unpaid, and never blocks the run. */
+  slicerProblems: string[];
   totalGross: Money;
   totalNet: Money;
   totalAdvanceRecovered: Money;
@@ -281,7 +295,7 @@ async function buildPreview(
     const roster = await payrollRepo.employmentsForStore(trx, actor.orgId, input.storeId);
     const nameOf = new Map(roster.map((r) => [r.id, r.personName]));
 
-    type Base = Omit<PayslipDraft, StatutoryDraftKeys> & { dailyRate: Money };
+    type Base = Omit<PayslipDraft, StatutoryDraftKeys> & { dailyRate: Money | null };
     const bases: Base[] = [];
     const unratedEmployments: PayRunPreview['unratedEmployments'] = [];
 
@@ -291,16 +305,25 @@ async function buildPreview(
       from: input.periodStart,
       to: input.periodEnd,
     });
+    // ⭐ T-635: confirmed slicing, the same inclusive period as the attendance days. A slicer with no attendance still gets a slip.
+    const slicerPlan = await planSlicerPay(trx, actor.orgId, { storeId: input.storeId, from: input.periodStart, to: input.periodEnd });
+    const slicerProblems = [...slicerPlan.problems];
     const employmentIds = new Set<string>([
       ...byEmployment.keys(),
       ...leavePlan.leaveByEmployment.keys(),
       ...leavePlan.payoutsByEmployment.keys(),
+      ...slicerPlan.byEmployment.keys(),
     ]);
 
     for (const employmentId of employmentIds) {
       const theirDays = byEmployment.get(employmentId) ?? [];
+      // ⭐ T-635 S2: a SLICER day pays nothing from the daily rate (the slicer pay is the earnings), so it never needs a rate: only the regular days are priced.
+      // Every day, slicer or regular, is still frozen to the run that paid the person (`dayIds`).
+      const regularDays = theirDays.filter((d) => d.workedAs !== 'slicer');
+      const slicerDayCount = theirDays.length - regularDays.length;
       const leaveLine = leavePlan.leaveByEmployment.get(employmentId);
       const silPayouts = leavePlan.payoutsByEmployment.get(employmentId) ?? [];
+      const slicerLine = slicerPlan.byEmployment.get(employmentId);
       // ⭐ Per-day rate resolution. The LAST day's rate row is the one recorded on the payslip,
       // because that is the rate in force at the end of the period the slip covers.
       const inputs: DayInput[] = [];
@@ -308,7 +331,7 @@ async function buildPreview(
       let dailyRateAtEnd: Money = ZERO;
       let missingRate = 0;
 
-      for (const d of theirDays) {
+      for (const d of regularDays) {
         const rate = await payrollRepo.rateInForceOn(trx, actor.orgId, employmentId, d.shiftDay);
         if (!rate) {
           missingRate++;
@@ -352,7 +375,13 @@ async function buildPreview(
         });
       }
       payRateId = payRateId ?? leaveLine?.payRateId ?? silPayouts[silPayouts.length - 1]?.payRateId ?? null;
-      if ((inputs.length === 0 && !leaveLine && silPayouts.length === 0) || !payRateId) continue;
+      if (!payRateId && slicerLine) {
+        // T-635 (BOSS, 25 Nov): a slicer paid ONLY per kg needs no daily rate. If one is in force it is recorded on the slip; if not, the slip has none and its gross is the slicer pay alone.
+        const rate = await payrollRepo.rateInForceOn(trx, actor.orgId, employmentId, input.periodEnd);
+        if (rate && rate.basis === 'daily') payRateId = rate.id;
+      }
+      // Someone with neither a rate-priced reason nor slicer pay still makes no slip, as before.
+      if ((inputs.length === 0 && !leaveLine && silPayouts.length === 0 && !slicerLine) || (!payRateId && !slicerLine)) continue;
       // T-190 audit gap 5: minimum-wage earner status is judged on the daily rate IN FORCE AT period_end, not on the last day worked.
       const rateAtEnd = await payrollRepo.rateInForceOn(trx, actor.orgId, employmentId, input.periodEnd);
       if (rateAtEnd && rateAtEnd.basis === 'daily') dailyRateAtEnd = money(rateAtEnd.amount);
@@ -377,19 +406,21 @@ async function buildPreview(
       });
 
       // ⚠️ What the days recorded but nobody approved. Shown, never paid.
-      const unapprovedOtMinutes = theirDays.reduce(
+      const unapprovedOtMinutes = regularDays.reduce(
         (n, d) => n + Math.max(0, d.pendingOtMinutes - (d.approvedOtMinutes ?? 0)),
         0,
       );
 
-      const personId = theirDays[0]?.personId ?? leaveLine?.personId ?? silPayouts[0]!.personId;
+      const personId = theirDays[0]?.personId ?? leaveLine?.personId ?? silPayouts[0]?.personId ?? slicerLine!.personId;
       const leavePay = leaveLine?.leavePay ?? ZERO;
       const silConversionPay = sumMoney(silPayouts.map((p) => p.amount));
-      const grossPay = add(pay.grossPay, leavePay, silConversionPay);
+      const slicerPay = slicerLine?.slicerPay ?? ZERO;
+      const grossPay = add(pay.grossPay, leavePay, silConversionPay, slicerPay);
       bases.push({
         employmentId,
         personId,
-        personName: nameOf.get(employmentId) ?? 'unknown',
+        // T-635 S2: the roster only lists ACTIVE employments; a late-confirmed record can belong to someone whose job has ended, so fall back to the person's own name.
+        personName: nameOf.get(employmentId) ?? slicerLine?.personName ?? 'unknown',
         payRateId,
         dayIds: theirDays.map((d) => d.id),
         unapprovedOtMinutes,
@@ -398,12 +429,19 @@ async function buildPreview(
         silConversionPay,
         leaveDayIds: leaveLine?.dayIds ?? [],
         silPayouts,
+        slicerPay,
+        slicerKg: slicerLine?.slicerKg ?? decimal('0.000', '14,3'),
+        slicerRecords: slicerLine?.recordIds.length ?? 0,
+        slicerRecordIds: slicerLine?.recordIds ?? [],
+        slicerDays: slicerDayCount,
+        slicerEarlierRecords: slicerLine?.earlierRecords ?? 0,
         // T-436 leave + SIL are compensation: they are in the gross BEFORE the statutory pass reads it.
         grossPay,
         // Placeholders: the statutory pass below sets the advance and the net AFTER the contributions and the withholding.
         advanceRecovered: ZERO,
         netPay: grossPay,
-        dailyRate: dailyRateAtEnd,
+        // No rate at all (slicer pay alone): there is no daily rate to judge minimum-wage-earner status on, so the person is not one.
+        dailyRate: payRateId ? dailyRateAtEnd : null,
       });
     }
     for (const u of leavePlan.unrated) {
@@ -419,6 +457,7 @@ async function buildPreview(
       unconfirmedRates,
       missingGovernmentIds,
       slips,
+      slicerProblems,
       totalGross: add(ZERO, ...slips.map((s) => s.grossPay)),
       totalNet: add(ZERO, ...slips.map((s) => s.netPay)),
       totalAdvanceRecovered: add(ZERO, ...slips.map((s) => s.advanceRecovered)),
@@ -458,7 +497,7 @@ async function applyStatutory(
   actor: Actor,
   input: { storeId: string; periodStart: string; periodEnd: string },
   frequency: 'monthly' | 'semi_monthly' | 'weekly',
-  bases: (Omit<PayslipDraft, StatutoryDraftKeys> & { dailyRate: Money })[],
+  bases: (Omit<PayslipDraft, StatutoryDraftKeys> & { dailyRate: Money | null })[],
   forPost: boolean,
 ): Promise<{ slips: PayslipDraft[]; unconfirmedRates: string[]; missingGovernmentIds: PayRunPreview['missingGovernmentIds'] }> {
   if (bases.length === 0) return { slips: [], unconfirmedRates: [], missingGovernmentIds: [] };
@@ -528,7 +567,7 @@ async function applyStatutory(
     if (!gid?.pagibigNo) skipped.push('pagibig');
     for (const agency of skipped) missingGovernmentIds.push({ personId: b.personId, personName: b.personName, agency });
 
-    const isMwe = compare(b.dailyRate, minimum) <= 0;
+    const isMwe = b.dailyRate !== null && compare(b.dailyRate, minimum) <= 0;
     const prior = priorOf.get(b.personId)!;
     const { dailyRate: _dailyRate, ...draft } = b;
     void _dailyRate;
@@ -641,7 +680,7 @@ export async function postPayRun(
     entryDate?: string;
     notes?: string | null;
   },
-): Promise<{ runId: string; payslips: number; totalNet: string; warning?: string }> {
+): Promise<{ runId: string; payslips: number; totalNet: string; warning?: string; slicerSkipped: string[] }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_payroll', { storeId: input.storeId });
 
@@ -730,6 +769,11 @@ export async function postPayRun(
           holidayPay: slip.holidayPay,
           leavePay: slip.leavePay,
           silConversionPay: slip.silConversionPay,
+          slicerPay: slip.slicerPay,
+          slicerKg: slip.slicerKg,
+          slicerRecords: slip.slicerRecords,
+          slicerDays: slip.slicerDays,
+          slicerEarlierRecords: slip.slicerEarlierRecords,
           grossPay: slip.grossPay,
           advanceRecovered: slip.advanceRecovered,
           netPay: slip.netPay,
@@ -817,6 +861,8 @@ export async function postPayRun(
       await payrollRepo.freezeDays(trx, slip.dayIds, runId);
       // ⭐ T-436: the same freeze for the leave days this slip paid, and the year-end payout rows it took.
       await applyLeaveToRun(trx, actor, { runId, storeId: input.storeId, leaveDayIds: slip.leaveDayIds, payouts: slip.silPayouts });
+      // ⭐ T-635: and the slice records this slip paid. Edit and void of those records are refused until this run is voided.
+      await applySlicerPayToRun(trx, { runId, recordIds: slip.slicerRecordIds });
     }
 
     const ok = await payrollRepo.markPayRunPosted(trx, actor.orgId, runId, actor.personId);
@@ -826,6 +872,8 @@ export async function postPayRun(
       runId,
       payslips: preview.slips.length,
       totalNet: formatMoney(preview.totalNet),
+      // T-635 S2: slice records left out because they cannot be priced; they stay unpaid and unfrozen for a later run.
+      slicerSkipped: preview.slicerProblems,
       ...(warning ? { warning } : {}),
     };
   };
@@ -843,7 +891,7 @@ export async function voidPayRun(
   tx: Tx,
   actor: Actor,
   input: { runId: string; reason: string; on?: string },
-): Promise<{ reversed: number; unfrozenDays: number }> {
+): Promise<{ reversed: number; unfrozenDays: number; unfrozenSlicerRecords: number }> {
   const run = async (trx: Tx) => {
     const found = await payrollRepo.getPayRun(trx, actor.orgId, input.runId);
     if (!found) throw new Error('voidPayRun: that run does not exist.');
@@ -889,13 +937,15 @@ export async function voidPayRun(
     const unfrozenDays = await payrollRepo.unfreezeDaysOfRun(trx, input.runId);
     // ⭐ T-436: a voided run did not pay its leave days or its year-end payout, so both are payable again.
     await releaseLeaveOfRun(trx, input.runId);
+    // ⭐ T-635: and so are its slice records.
+    const unfrozenSlicerRecords = await releaseSlicerPayOfRun(trx, input.runId);
     const ok = await payrollRepo.markPayRunVoided(trx, actor.orgId, input.runId, {
       voidedBy: actor.personId,
       reason,
     });
     if (!ok) throw new Error('voidPayRun: the run was voided by someone else first.');
 
-    return { reversed, unfrozenDays };
+    return { reversed, unfrozenDays, unfrozenSlicerRecords };
   };
   return run(tx);
 }

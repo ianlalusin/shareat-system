@@ -398,13 +398,13 @@ export const tableSessionLineDiscounts = pgTable(
 );
 
 // ---------------------------------------------------------------------------------------------------------------------
-// T-634 (migration 0278) charge_options - the ORG's one master list of charges (leftover, an extra griller...). keep.
+// T-634 (migration 0282) charge_options - the ORG's one master list of charges (leftover, an extra griller...). keep.
 // ---------------------------------------------------------------------------------------------------------------------
 export const CHARGE_OPTION_STATUSES = ['active', 'retired'] as const;
 export type ChargeOptionStatus = (typeof CHARGE_OPTION_STATUSES)[number];
 
 /**
- * T-634 (0278): one brand-wide name, amount and per-unit per charge. A store switches a charge on by holding an ACTIVE `pos_charge_presets` row for it; the
+ * T-634 (0282): one brand-wide name, amount and per-unit per charge. A store switches a charge on by holding an ACTIVE `pos_charge_presets` row for it; the
  * option owns the name, amount and per_unit (the preset's own columns are a mirror the `pos_charge_presets_mirror_option` trigger keeps equal).
  * `docs/tasks/634-central-charges.md`.
  */
@@ -431,14 +431,14 @@ export const chargeOptions = pgTable(
     check('charge_options_name_check', sql`char_length(btrim(${t.name})) between 1 and 40`),
     check('charge_options_amount_check', sql`${t.amount} > 0 and ${t.amount} <= 100000`),
     check('charge_options_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
-    // NOTE: charge_options_org_name_unique UNIQUE (org_id, the a-z0-9 key of name) (expression index, as payment_options) is hand-added in migration 0278.
-    // NOTE: the charge_options_guard (org and name frozen; retire refused while any store has it on) and charge_options_mirror_presets triggers are hand-added in 0278.
+    // NOTE: charge_options_org_name_unique UNIQUE (org_id, the a-z0-9 key of name) (expression index, as payment_options) is hand-added in migration 0282.
+    // NOTE: the charge_options_guard (org and name frozen; retire refused while any store has it on) and charge_options_mirror_presets triggers are hand-added in 0282.
   ],
 );
 
 // ---------------------------------------------------------------------------------------------------------------------
 // T-627 (migration 0275) pos_charge_presets - a store's named charges (leftover, an extra griller...). keep.
-// T-634 (0278): the store's SWITCH for a charge option (status active = on); name, amount and per_unit mirror the option.
+// T-634 (0282): the store's SWITCH for a charge option (status active = on); name, amount and per_unit mirror the option.
 // ---------------------------------------------------------------------------------------------------------------------
 export const posChargePresets = pgTable(
   'pos_charge_presets',
@@ -446,9 +446,9 @@ export const posChargePresets = pgTable(
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     orgId: orgIdCol(),
     storeId: storeIdCol(),
-    /** T-634 (0278): the master charge this row switches on at the store. NOT NULL, same org by the composite FK, one ACTIVE row per (store, option). */
+    /** T-634 (0282): the master charge this row switches on at the store. NOT NULL, same org by the composite FK, one ACTIVE row per (store, option). */
     chargeOptionId: uuid('charge_option_id').notNull(),
-    /** A MIRROR of the option's name (the `pos_charge_presets_mirror_option` trigger, 0278): the option is the one source, readers keep reading this. */
+    /** A MIRROR of the option's name (the `pos_charge_presets_mirror_option` trigger, 0282): the option is the one source, readers keep reading this. */
     name: text('name').notNull(),
     /** Pesos, for one unit (or once per bill when per_unit is false). A mirror of the option's amount. */
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
@@ -474,12 +474,12 @@ export const posChargePresets = pgTable(
     foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_charge_presets_store_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.orgId, t.createdBy], foreignColumns: [persons.orgId, persons.id], name: 'pos_charge_presets_created_by_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.orgId, t.chargeOptionId], foreignColumns: [chargeOptions.orgId, chargeOptions.id], name: 'pos_charge_presets_charge_option_same_org_fk' }).onDelete('restrict'),
-    // T-634 (0278): one ACTIVE row per (store, option); older retired rows of the same option are history past bills point at (not a full UNIQUE on purpose).
+    // T-634 (0282): one ACTIVE row per (store, option); older retired rows of the same option are history past bills point at (not a full UNIQUE on purpose).
     uniqueIndex('pos_charge_presets_store_option_active_key')
       .on(t.storeId, t.chargeOptionId)
       .where(sql`${t.status} = 'active'`),
     index('pos_charge_presets_option_idx').on(t.chargeOptionId),
-    // NOTE: the pos_charge_presets_mirror_option trigger (name, amount, per_unit come from the option; the option cannot change; a retired option cannot be switched on) is hand-added in 0278.
+    // NOTE: the pos_charge_presets_mirror_option trigger (name, amount, per_unit come from the option; the option cannot change; a retired option cannot be switched on) is hand-added in 0282.
   ],
 );
 

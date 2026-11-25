@@ -252,6 +252,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/inventory/production/slicer-pay/page.tsx",
+    "tables": 0,
+    "sharedTables": 2,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/inventory/returns/page.tsx",
     "tables": 2,
     "sharedTables": 0,
