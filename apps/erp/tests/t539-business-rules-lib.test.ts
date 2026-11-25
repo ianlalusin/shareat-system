@@ -70,10 +70,10 @@ describe('T-539 S3 minutes unit - display and box', () => {
   });
 });
 
-describe('T-539 RULE_GROUPS - POS is a group, last, after Tax', () => {
+describe('T-539 RULE_GROUPS - POS is a group, after Tax (T-639 adds Expense alerts after it)', () => {
   it('the headings in order are Settlement, Tax, POS [kills: POS rules missing from the screen, or shown first]', () => {
-    expect(RULE_GROUPS.map((g) => g.heading)).toEqual(['Settlement', 'Tax', 'POS']);
-    expect(RULE_GROUPS.map((g) => g.namespace)).toEqual(['settlement', 'tax', 'pos']);
-    expect(RULE_GROUPS[RULE_GROUPS.length - 1]).toEqual({ namespace: 'pos', heading: 'POS' });
+    expect(RULE_GROUPS.map((g) => g.heading)).toEqual(['Settlement', 'Tax', 'POS', 'Expense alerts']); // T-639 added the last group
+    expect(RULE_GROUPS.map((g) => g.namespace)).toEqual(['settlement', 'tax', 'pos', 'expenses']);
+    expect(RULE_GROUPS[2]).toEqual({ namespace: 'pos', heading: 'POS' });
   });
 });

@@ -69,7 +69,7 @@ export interface BudgetWithConsumption extends ExpenseBudgetRow {
  * could never remember when its window began. Deriving consumption is what makes the window a
  * fact instead of a side effect.
  */
-function consumptionWindow(b = 'b', e = 'e'): ReturnType<typeof sql> {
+export function consumptionWindow(b = 'b', e = 'e'): ReturnType<typeof sql> {
   return sql.raw(
     `((${b}.last_reset_at is null and to_char(${e}.business_date, 'YYYYMM') = ${b}.period_key)` +
       ` or (${b}.last_reset_at is not null and ${e}.business_date >= ${b}.last_reset_at::date))`,

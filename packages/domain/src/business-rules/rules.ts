@@ -49,6 +49,7 @@ function checkedBounds(def: RuleDefinition, key: string, value: string): void {
   if (def.unit === 'minutes' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole number of minutes`, `${def.label} must be a whole number of minutes.`);
   if (def.unit === 'hours' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole number of hours`, `${def.label} must be a whole number of hours.`);
   if (def.unit === 'days' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole number of days`, `${def.label} must be a whole number of days.`);
+  if (def.unit === 'count' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole number`, `${def.label} must be a whole number.`);
   if (def.unit === 'flag' && n !== 0n && n !== 100n) throw refuse(`business rule ${key}: not 0 or 1`, `${def.label} must be On or Off.`);
   if (n < hundredths(def.min) || n > hundredths(def.max)) {
     throw refuse(`business rule ${key}: out of bounds`, `${def.label} must be between ${def.min} and ${def.max}.`);
@@ -117,7 +118,7 @@ export interface BusinessRuleItem {
   readonly label: string;
   readonly help: string;
   readonly unit: RuleUnit;
-  readonly namespace: 'settlement' | 'tax' | 'pos';
+  readonly namespace: 'settlement' | 'tax' | 'pos' | 'expenses';
   readonly min: string;
   readonly max: string;
   /** The value in force today (Manila), as text. A rule with no row shows its starting value. */

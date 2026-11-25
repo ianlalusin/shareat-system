@@ -18,6 +18,7 @@ export const RULE_GROUPS = [
   { namespace: 'settlement', heading: 'Settlement' },
   { namespace: 'tax', heading: 'Tax' },
   { namespace: 'pos', heading: 'POS' },
+  { namespace: 'expenses', heading: 'Expense alerts' },
 ] as const;
 
 export interface RulesView {
@@ -46,7 +47,7 @@ export const FLAG_OPTIONS = [
   { value: '0', label: 'Off' },
 ] as const;
 
-/** '70.000000' -> '₱70.00' for money, '0.500000' -> '0.5%' for a percent, '16.000000' -> '4:00 p.m.' for an hour, '90.000000' -> '90 min' for minutes, '4.000000' -> '4 hours' (T-621), '7.000000' -> '7 days', '1.000000' -> 'On' for a flag. Exact: text surgery, no floats. */
+/** '70.000000' -> '₱70.00' for money, '0.500000' -> '0.5%' for a percent, '16.000000' -> '4:00 p.m.' for an hour, '90.000000' -> '90 min' for minutes, '4.000000' -> '4 hours' (T-621), '7.000000' -> '7 days', '1.000000' -> 'On' for a flag, '1.500000' -> '1.5×' for a multiplier (T-639), '4.000000' -> '4' for a count. Exact: text surgery, no floats. */
 export function showValue(unit: RuleUnit, text: string): string {
   if (unit === 'money') return peso(inputValue('money', text));
   if (unit === 'hour') {
@@ -63,14 +64,16 @@ export function showValue(unit: RuleUnit, text: string): string {
     return `${d} ${d === '1' ? 'day' : 'days'}`;
   }
   if (unit === 'flag') return inputValue('flag', text) === '0' ? 'Off' : 'On';
+  if (unit === 'times') return `${inputValue('times', text)}×`;
+  if (unit === 'count') return inputValue('count', text);
   return `${inputValue('percent', text)}%`;
 }
 
-/** What goes in the box: money at two places ('70.00'), a percent without trailing zeros ('0.5'), an hour, minutes, hours or days as a whole number ('4', '90', '7'), a flag as '1' or '0'. */
+/** What goes in the box: money at two places ('70.00'), a percent without trailing zeros ('0.5'), an hour, minutes, hours or days as a whole number ('4', '90', '7'), a flag as '1' or '0', a multiplier like a percent ('1.5'), a count as a whole number. */
 export function inputValue(unit: RuleUnit, text: string): string {
   const [whole = '0', frac = ''] = text.split('.');
   if (unit === 'money') return `${whole}.${frac.padEnd(2, '0').slice(0, 2)}`;
-  if (unit === 'hour' || unit === 'minutes' || unit === 'hours' || unit === 'days') return whole;
+  if (unit === 'hour' || unit === 'minutes' || unit === 'hours' || unit === 'days' || unit === 'count') return whole;
   if (unit === 'flag') return whole === '0' ? '0' : '1';
   const trimmed = frac.replace(/0+$/, '');
   return trimmed ? `${whole}.${trimmed}` : whole;

@@ -39,6 +39,10 @@ export interface RuleValue {
   hours(): number;
   /** Days only: a whole number of days. Throws for any other unit or a stored figure that is not a whole number. */
   days(): number;
+  /** Times only (T-639): the multiplier in hundredths (1.5 -> 150n). Throws for any other unit or a stored figure finer than a hundredth. */
+  times(): bigint;
+  /** Count only (T-639): a whole number. Throws for any other unit or a stored figure that is not a whole number. */
+  count(): number;
   /** Flag only: true for 1, false for 0. Throws for any other unit or a stored figure that is neither. */
   flag(): boolean;
 }
@@ -66,7 +70,7 @@ function hundredths(text: string, what: string): bigint {
   return n / 10_000n;
 }
 
-const KIND_WORD: Record<RuleUnit, string> = { money: 'money', percent: 'a percent', hour: 'an hour', minutes: 'minutes', hours: 'hours', days: 'days', flag: 'a flag' };
+const KIND_WORD: Record<RuleUnit, string> = { money: 'money', percent: 'a percent', hour: 'an hour', minutes: 'minutes', hours: 'hours', days: 'days', flag: 'a flag', times: 'a multiplier', count: 'a count' };
 
 function valueOf(key: BusinessRuleKey, text: string): RuleValue {
   const unit = RULE_REGISTRY[key].unit as RuleUnit; // widened: no `flag` key exists yet (T-576 adds the first)
@@ -104,6 +108,16 @@ function valueOf(key: BusinessRuleKey, text: string): RuleValue {
       if (unit !== 'days') throw internalFault(`business rule ${key} is ${unit}, not days`);
       const n = scaled(text, key);
       if (n % 1_000_000n !== 0n) throw internalFault(`business rule ${key}: ${text} is not a whole number of days`);
+      return Number(n / 1_000_000n);
+    },
+    times() {
+      if (unit !== 'times') throw internalFault(`business rule ${key} is ${unit}, not a multiplier`);
+      return hundredths(text, key);
+    },
+    count() {
+      if (unit !== 'count') throw internalFault(`business rule ${key} is ${unit}, not a count`);
+      const n = scaled(text, key);
+      if (n % 1_000_000n !== 0n) throw internalFault(`business rule ${key}: ${text} is not a whole number`);
       return Number(n / 1_000_000n);
     },
     flag() {
