@@ -31,6 +31,8 @@ vi.mock('next/navigation', () => ({
   notFound: () => {
     throw new Error('notFound');
   },
+  // FormModal (catalogue page) reads the path to close itself on navigation.
+  usePathname: () => '/commissary/catalogue',
 }));
 
 const ACTOR_HOLDER: { actor: { orgId: string; personId: string } | null } = { actor: null };
