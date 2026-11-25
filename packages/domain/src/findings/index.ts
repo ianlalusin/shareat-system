@@ -10,8 +10,11 @@
  *
  * ⛔ **This module never writes to the ledger.** Every detector is a question, not a correction.
  */
-import { findingsRepo, fiscalPeriodsRepo, type Tx } from '@shareat/db';
+import { expenseAlertsRepo, findingsRepo, fiscalPeriodsRepo, manilaToday, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { fromCentavos } from '@shareat/core/money';
+// T-639 - the expense-alert thresholds are business rules (`expenses.alert_*`), read here because a repo may not import this package (ADR-004).
+import { loadRuleBook } from '../business-rules/rules';
 // ⭐ Reused, not redefined. T-140 already owns "the last COMPLETED month" and the scorecard must
 // observe exactly the month the screen shows, or the two disagree about what was ever asked.
 import { lastCompletedPeriod } from '../scheduler';
@@ -165,6 +168,47 @@ async function interEntityFindings(tx: Tx, orgId: string): Promise<findingsRepo.
   ];
 }
 
+const EXPENSE_ALERT_KEYS = [
+  'expenses.alert_spike_multiplier',
+  'expenses.alert_min_amount',
+  'expenses.alert_outlier_multiplier',
+  'expenses.alert_frequency_multiplier',
+  'expenses.alert_frequency_min_count',
+] as const;
+
+/** T-639 - the expense-alert thresholds in force on `onDate`: the organisation's business rules, or the registry defaults until an admin sets them. */
+export async function expenseAlertThresholds(tx: Tx, orgId: string, onDate: string): Promise<expenseAlertsRepo.ExpenseAlertThresholds> {
+  const book = await loadRuleBook(tx, orgId, EXPENSE_ALERT_KEYS);
+  return {
+    spikeX100: book.valueOn('expenses.alert_spike_multiplier', onDate).times(),
+    minAmount: fromCentavos(book.valueOn('expenses.alert_min_amount', onDate).centavos()),
+    outlierX100: book.valueOn('expenses.alert_outlier_multiplier', onDate).times(),
+    frequencyX100: book.valueOn('expenses.alert_frequency_multiplier', onDate).times(),
+    frequencyMinCount: book.valueOn('expenses.alert_frequency_min_count', onDate).count(),
+  };
+}
+
+/**
+ * T-639 - the unusual-spending findings: a category's week against its usual week, one expense far above usual, a jump in how many expenses,
+ * a possible duplicate, an expense approved by its own recorder, and a budget cap exceeded. All soft: they nag, they never block an expense or a close.
+ * `asOf` (a Manila business date) pins today for a test; production passes nothing and the database clock is used.
+ *
+ * shortcut: one organisation default applies to every category (the resolver ignores the category); a per-category override needs a table
+ * to hold it and is the same resolver returning a different object, upgrade when that table exists.
+ */
+async function expenseAlertFindings(tx: Tx, orgId: string, asOf?: string): Promise<findingsRepo.DetectedFinding[]> {
+  const today = asOf ?? (await manilaToday(tx));
+  const t = await expenseAlertThresholds(tx, orgId, today);
+  const thresholdsFor = () => t;
+  return [
+    ...(await expenseAlertsRepo.categorySpendAlerts(tx, orgId, thresholdsFor, today)),
+    ...(await expenseAlertsRepo.singleExpenseOutliers(tx, orgId, thresholdsFor, today)),
+    ...(await expenseAlertsRepo.possibleDuplicateExpenses(tx, orgId, thresholdsFor, today)),
+    ...(await expenseAlertsRepo.selfApprovedExpenses(tx, orgId, thresholdsFor, today)),
+    ...(await expenseAlertsRepo.expenseOverBudget(tx, orgId, today)),
+  ];
+}
+
 /**
  * Every condition that currently holds, with its acknowledgement if it has a live one.
  *
@@ -176,7 +220,7 @@ async function interEntityFindings(tx: Tx, orgId: string): Promise<findingsRepo.
 export async function listFindings(
   tx: Tx,
   orgId: string,
-  options: { period: string },
+  options: { period: string; asOf?: string },
 ): Promise<FindingsFeed> {
   const detected = [
     ...(await findingsRepo.trialBalanceDrift(tx, orgId)),
@@ -283,6 +327,8 @@ export async function listFindings(
     ...(await findingsRepo.pinSignInStopped(tx, orgId)),
     // T-398 S5e - the commissary's books against a linked franchise's (and the franchise's against the commissary's), in each side's own words.
     ...(await interEntityFindings(tx, orgId)),
+    // T-639 - unusual spending, per store, soft.
+    ...(await expenseAlertFindings(tx, orgId, options.asOf)),
   ];
 
   return decorateFindings(tx, orgId, detected);

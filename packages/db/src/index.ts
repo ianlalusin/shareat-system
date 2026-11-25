@@ -225,6 +225,8 @@ export type { AuditCategory, AuditRetention, AuditSensitivity, CatalogueEntry as
 export { isSecretKey, keyTokens, redactPayload } from './audit/redact';
 export { canonicalJson } from './audit/canonical-json';
 export * as findingsRepo from './repo/findings';
+// T-639 - expense alerts: the spend-pattern detectors (spike, outlier, frequency, duplicate, self-approved, over budget), thresholds passed in by the domain.
+export * as expenseAlertsRepo from './repo/expense-alerts';
 // T-245 — the prerequisite-refusal counter. docs/tasks/245-prerequisite-refusal-counter.md.
 export * as prerequisiteRefusalsRepo from './repo/prerequisite-refusals';
 export type { RefusalCount } from './repo/prerequisite-refusals';
