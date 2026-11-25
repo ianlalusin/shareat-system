@@ -120,7 +120,9 @@ describe('T-640 privacy guard - pictures and personal fields', () => {
     });
     const all = JSON.stringify(g);
     for (const leak of ['123-456-789', '33-1234567-8', 'Maria Santos', '4821', 'a.b@example.com']) expect(all, leak).not.toContain(leak);
-    expect(JSON.parse(g.messages[1]!.content)).toEqual({ sales: 100, fullName: '[REMOVED]', pin: '[REMOVED]' });
+    const second = g.messages[1]!;
+    if (second.role !== 'assistant') throw new Error('expected the assistant turn');
+    expect(JSON.parse(second.content)).toEqual({ sales: 100, fullName: '[REMOVED]', pin: '[REMOVED]' });
     expect(g.redactions).toEqual({ government_id: 2, personal_field: 2, contact: 1 });
     expect(g.tools![0]!.parameters).toEqual({ type: 'object' });
   });

@@ -248,7 +248,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // `edit_loan_repayment_amount` both store, super/admin yes, manager/staff no). RED until the builder adds the rows + the capabilities.
     // T-510 S2 (2026-11-05): 123 -> 124 (`pair_menu_dayparts`, org, super_admin only). Re-measured: the parsed matrix has 124 rows.
     // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (`manage_business_rules`).
-    expect(rows.length).toBe(132); // T-640 (25 Nov 2026): 131 -> 132 (+manage_ai_hub, org, super_admin only), re-measured on main 83f8faa. Before: T-584: 128 -> 131 (+manage_document_templates, issue_documents, view_documents), 15 Nov 2026, re-measured on main 140d31a
+    expect(rows.length).toBe(133); // T-641 (25 Nov 2026): 132 -> 133 (+use_ask_erp, org, manager yes, staff no). Before: T-640: 131 -> 132 (+manage_ai_hub, org, super_admin only), re-measured on main 83f8faa. Before: T-584: 128 -> 131 (+manage_document_templates, issue_documents, view_documents), 15 Nov 2026, re-measured on main 140d31a
     // T-524: 125 -> 128 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
     // ⭐ 109 -> 111 (T-402 S1b): `view_activity_log` (store) and `view_activity_log_restricted` (org).
     // ⭐ 108 -> 109 (T-403): `manage_recipes` (org, admin-only).
@@ -330,9 +330,9 @@ describe('invariant 1 — every capability has an explicit decision for all four
     // T-511 S2a: 120 -> 123 (upload_settlement_files, edit_platform_store_code, edit_loan_repayment_amount).
     // T-510 S2: 123 -> 124 (pair_menu_dayparts).
     // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (`manage_business_rules`).
-    expect(CAPABILITIES.length).toBe(132); // T-640 (25 Nov 2026): 131 -> 132 (+manage_ai_hub, org, super_admin only), re-measured on main 83f8faa. Before: T-584: 128 -> 131
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(132);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(132);
+    expect(CAPABILITIES.length).toBe(133); // T-641 (25 Nov 2026): 132 -> 133 (+use_ask_erp). Before: T-640: 131 -> 132 (+manage_ai_hub, org, super_admin only), re-measured on main 83f8faa. Before: T-584: 128 -> 131
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(133);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(133);
     // T-524: 125 -> 128 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
     // ⭐ 108 -> 109 (T-403): `manage_recipes`.
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));

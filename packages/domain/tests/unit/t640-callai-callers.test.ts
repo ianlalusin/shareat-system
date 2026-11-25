@@ -7,10 +7,12 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * T-640 (security audit): `callAi` enforces switches, caps and limits but does NOT authorize the feature that calls it ("who may ask Ask ERP" is the feature's own `authorize()`).
- * So every caller of `callAi` outside packages/domain/src/ai must authorize in the same function, BEFORE the call. Today there is no caller, so the census over the real tree is
- * empty; the fixtures below prove it would catch one, and it starts guarding the day T-641 adds the first.
+ * So every caller of `callAi` outside packages/domain/src/ai must authorize in the same function, BEFORE the call.
+ * T-641 added `callAiWithTools` (the tool loop, which calls `callAi` from inside packages/domain/src/ai) and the first real caller, Ask ERP; the census now watches BOTH names, and the
+ * real-tree test below proves it sees at least that one caller (a scan that finds nothing must not read as "no ungated caller").
  */
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', '..');
+const ENTRY_POINTS = new Set(['callAi', 'callAiWithTools']);
 const GATES = new Set(['authorize', 'authorizeHub', 'authorizeOrgLevel', 'loadAndAuthorize', 'requirePageAccess']);
 
 function callersWithoutGate(source: string, file: string): string[] {
@@ -23,7 +25,7 @@ function callersWithoutGate(source: string, file: string): string[] {
     return cur;
   };
   const visit = (n: ts.Node): void => {
-    if (ts.isCallExpression(n) && name(n) === 'callAi') {
+    if (ts.isCallExpression(n) && ENTRY_POINTS.has(name(n) ?? '')) {
       const fn = topLevel(n);
       let gated = false;
       const scan = (m: ts.Node): void => {
@@ -40,14 +42,13 @@ function callersWithoutGate(source: string, file: string): string[] {
 }
 
 describe('T-640 every caller of callAi authorizes first', () => {
-  it('the real tree: no caller outside packages/domain/src/ai is ungated (empty until T-641 adds the first) [kills: an AI feature that asks the model before checking who may]', () => {
+  it('the real tree: no caller outside packages/domain/src/ai is ungated, and the scan really finds the Ask ERP caller [kills: an AI feature that asks the model before checking who may; a blind scan]', () => {
     const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8' })
       .split('\0')
       .filter((f) => /^(apps\/[^/]+\/src|packages\/domain\/src|scripts)\/.*\.tsx?$/.test(f) && !f.startsWith('packages/domain/src/ai/') && !f.includes('/tests/'));
-    const bad = files.flatMap((f) => {
-      const text = readFileSync(join(ROOT, f), 'utf8');
-      return text.includes('callAi(') ? callersWithoutGate(text, f) : [];
-    });
+    const callers = files.filter((f) => /callAi(?:WithTools)?\(/.test(readFileSync(join(ROOT, f), 'utf8')));
+    expect(callers.length, 'the census found no caller of callAi or callAiWithTools at all: it is blind, or Ask ERP was removed').toBeGreaterThan(0);
+    const bad = callers.flatMap((f) => callersWithoutGate(readFileSync(join(ROOT, f), 'utf8'), f));
     expect(bad).toEqual([]);
   });
 
@@ -61,10 +62,37 @@ describe('T-640 every caller of callAi authorizes first', () => {
     expect(callersWithoutGate(bad, 'x.ts')).toEqual(['x.ts:1']);
   });
 
+  it('control: the tool loop entry point is watched too [kills: a census that only knows the old name]', () => {
+    const ok = `export async function a(tx: Tx, actor: Actor) { await authorize(tx, actor, 'use_ask_erp', {}); return callAiWithTools(run, actor, {}); }`;
+    expect(callersWithoutGate(ok, 'w.ts')).toEqual([]);
+    const bad = `export async function b(tx: Tx, actor: Actor) { return callAiWithTools(run, actor, {}); }`;
+    expect(callersWithoutGate(bad, 'v.ts')).toEqual(['v.ts:1']);
+  });
+
   it('control: authorizing AFTER the call, or in another function, does not count [kills: a gate in the wrong place]', () => {
     const after = `export async function a(tx: Tx, actor: Actor) { const r = await callAi(run, actor, {}); await authorize(tx, actor, 'x', {}); return r; }`;
     expect(callersWithoutGate(after, 'y.ts')).toEqual(['y.ts:1']);
     const other = `async function gate(tx: Tx, actor: Actor) { await authorize(tx, actor, 'x', {}); }\nexport async function b(tx: Tx, actor: Actor) { return callAi(run, actor, {}); }`;
     expect(callersWithoutGate(other, 'z.ts')).toEqual(['z.ts:2']);
+  });
+});
+
+/**
+ * T-641 (security audit): `continuation` on `AiCallInput` skips the person's daily limit for rounds 2 and later of ONE question. It is for the tool loop only (packages/domain/src/ai/loop.ts);
+ * a feature that set it on a first call would never be limited. So no source file outside packages/domain/src/ai may set it.
+ */
+const SETS_CONTINUATION = /\bcontinuation\s*:/;
+describe('T-641 only the tool loop may set `continuation`', () => {
+  it('no source file outside packages/domain/src/ai sets it [kills: a feature that opts itself out of the daily limit]', () => {
+    const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8' })
+      .split('\0')
+      .filter((f) => /^(apps\/[^/]+\/src|packages\/[^/]+\/src|scripts)\/.*\.tsx?$/.test(f) && !f.startsWith('packages/domain/src/ai/') && !f.includes('/tests/'));
+    const bad = files.filter((f) => SETS_CONTINUATION.test(readFileSync(join(ROOT, f), 'utf8')));
+    expect(bad).toEqual([]);
+  });
+  it('control: the loop itself does set it, so the pattern is not blind [kills: a pattern that matches nothing]', () => {
+    expect(SETS_CONTINUATION.test(readFileSync(join(ROOT, 'packages/domain/src/ai/loop.ts'), 'utf8'))).toBe(true);
+    expect(SETS_CONTINUATION.test('callAi(run, actor, { feature: x, continuation: true })')).toBe(true);
+    expect(SETS_CONTINUATION.test('callAi(run, actor, { feature: x })')).toBe(false);
   });
 });

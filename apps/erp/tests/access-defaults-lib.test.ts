@@ -116,12 +116,12 @@ describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/1
   // SUPER_ADMIN_ONLY_CAPABILITIES and never offerable (asserted below).
   // ⭐ 107 -> 110 (T-511 S2a, 2026-11-03): `upload_settlement_files`, `edit_platform_store_code`, `edit_loan_repayment_amount`: all three store-scoped, offerable to a position
   // (none is role-only or super-admin-only). RED until the builder adds them.
-  it('the 117 offerable capabilities each appear exactly once across every area of every scope', () => {
+  it('the 118 offerable capabilities each appear exactly once across every area of every scope', () => {
     const rendered = groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities.map((c) => c.capability)));
     // T-512 (T-511 S5c, 6 Nov 2026): 110 -> 111 (manage_business_rules, org, offerable to a position), re-measured.
     // T-524: 111 -> 114 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads, store), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
-    expect(rendered.length).toBe(117); // T-524: +3 store; T-511 S2a: +3 store; T-193 S3: +remit_statutory (org); T-464: +pair_pos_tablet; T-424: +approve_pos_correction; T-434: +view_staff_signature; T-436: +view_leave_document; T-190: +manage_payroll_rates (org) // T-584: +3 (manage_document_templates org; issue_documents, view_documents store).
-    expect(new Set(rendered).size, 'no capability appears twice').toBe(117);
+    expect(rendered.length).toBe(118); // T-641: +use_ask_erp (org, books, offerable to a position); T-524: +3 store; T-511 S2a: +3 store; T-193 S3: +remit_statutory (org); T-464: +pair_pos_tablet; T-424: +approve_pos_correction; T-434: +view_staff_signature; T-436: +view_leave_document; T-190: +manage_payroll_rates (org) // T-584: +3 (manage_document_templates org; issue_documents, view_documents store).
+    expect(new Set(rendered).size, 'no capability appears twice').toBe(118);
     expect(rendered).not.toContain('add_menu_item');
   });
 
@@ -133,7 +133,7 @@ describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/1
     // T-524: store 88 -> 91 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
     expect(countFor('store')).toBe(93); // T-524: +3; T-511 S2a: +3; T-464: +pair_pos_tablet; T-402 S1b: +view_activity_log; T-424: +approve_pos_correction; T-434: +view_staff_signature; T-436: +view_leave_document
     // T-512 (6 Nov 2026): org 22 -> 23 (manage_business_rules), re-measured.
-    expect(countFor('org')).toBe(24); // T-193 S3: +remit_statutory; T-402 S1b: +view_activity_log_restricted; T-190: +manage_payroll_rates
+    expect(countFor('org')).toBe(25); // T-641: +use_ask_erp; T-193 S3: +remit_statutory; T-402 S1b: +view_activity_log_restricted; T-190: +manage_payroll_rates
   });
 
   it('NEGATIVE: no area group is ever empty — gridCapabilityGroups filters them out', () => {
