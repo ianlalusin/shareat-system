@@ -37,3 +37,11 @@ export async function askErpAction(formData: FormData): Promise<AskReply> {
     return { ok: false, error: errorMessage(err) };
   }
 }
+
+/**
+ * The form's own action (T-440 S2 G3b traces it to the rules check in `askErp`). The panel normally takes a valid submit over on the client and calls
+ * `askErpAction` for the reply; this runs only if the browser submits the form itself, and then the answer is simply not shown (the panel needs JavaScript).
+ */
+export async function askErpFormAction(formData: FormData): Promise<void> {
+  await askErpAction(formData);
+}

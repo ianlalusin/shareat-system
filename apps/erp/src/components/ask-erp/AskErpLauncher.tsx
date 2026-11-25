@@ -17,7 +17,7 @@ import { ASK_ERP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, Field, Textarea } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { NAV_LINK } from '@/components/action-link';
-import { askErpAction, type AskReply } from '../../app/ask-erp/actions';
+import { askErpAction, askErpFormAction, type AskReply } from '../../app/ask-erp/actions';
 
 /** The turns sent back with a question (the server keeps the last ten too; a test pins both to the domain's number). */
 const KEEP_TURNS = 10;
@@ -160,7 +160,7 @@ export function AskErpLauncher() {
 
       <CheckedForm
         rules={ASK_ERP_RULES}
-        action={askErpAction as unknown as (formData: FormData) => Promise<void>}
+        action={askErpFormAction}
         className="shrink-0 space-y-2 border-t border-surface-border px-4 py-3"
         onSubmitCapture={(e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
