@@ -114,15 +114,35 @@ function cleanContent(text: string, redactions: RedactionCounts): string {
   return s.text;
 }
 
+/** The turns the guard cleans: text, an assistant turn with its tool calls, and the tool results (T-641). Structurally the same as `ChatMessage`, kept here so this file imports nothing. */
+export type GuardedMessage =
+  | { readonly role: 'user'; readonly content: string }
+  | { readonly role: 'assistant'; readonly content: string; readonly toolCalls?: readonly { readonly id: string; readonly name: string; readonly args: Readonly<Record<string, unknown>>; readonly thoughtSignature?: string }[] }
+  | { readonly role: 'tool'; readonly results: readonly { readonly id: string; readonly name: string; readonly content: string }[] };
+
+/** The arguments of a tool call the model made, cleaned the way a JSON message is: personal fields stripped, then every string scrubbed. */
+function cleanArgs(args: Readonly<Record<string, unknown>>, redactions: RedactionCounts): Record<string, unknown> {
+  const removed = { count: 0 };
+  const stripped = stripPersonalFields(args, removed);
+  if (removed.count > 0) redactions.personal_field = (redactions.personal_field ?? 0) + removed.count;
+  const scrub = (v: unknown): unknown => {
+    if (typeof v === 'string') return cleanContent(v, redactions);
+    if (Array.isArray(v)) return v.map(scrub);
+    if (v !== null && typeof v === 'object') return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, scrub(x)]));
+    return v;
+  };
+  return scrub(stripped) as Record<string, unknown>;
+}
+
 export interface GuardedRequest {
   readonly system?: string;
-  readonly messages: readonly { readonly role: 'user' | 'assistant'; readonly content: string }[];
+  readonly messages: readonly GuardedMessage[];
   readonly tools?: readonly { readonly name: string; readonly description: string; readonly parameters: Readonly<Record<string, unknown>> }[];
 }
 
 export interface GuardedResult {
   readonly system: string | undefined;
-  readonly messages: { role: 'user' | 'assistant'; content: string }[];
+  readonly messages: GuardedMessage[];
   readonly tools: { name: string; description: string; parameters: Readonly<Record<string, unknown>> }[] | undefined;
   /** How many of each kind were replaced. Counts only: never the text that was removed. */
   readonly redactions: RedactionCounts;
@@ -132,7 +152,15 @@ export interface GuardedResult {
 export function guardChatRequest(req: GuardedRequest): GuardedResult {
   const redactions: RedactionCounts = {};
   const system = req.system === undefined ? undefined : cleanContent(req.system, redactions);
-  const messages = req.messages.map((m) => ({ role: m.role, content: cleanContent(m.content, redactions) }));
+  // a tool RESULT is text our own code wrote from the database, and goes through exactly the same cleaning as a typed question: stripped of personal fields, then scrubbed.
+  // A tool CALL's arguments are what the model chose to ask for, so they are scrubbed too (a model can be talked into echoing an ID number into an argument).
+  const messages: GuardedMessage[] = req.messages.map((m): GuardedMessage => {
+    if (m.role === 'tool') return { role: 'tool', results: m.results.map((r) => ({ id: r.id, name: r.name, content: cleanContent(r.content, redactions) })) };
+    if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
+      return { role: 'assistant', content: cleanContent(m.content, redactions), toolCalls: m.toolCalls.map((c) => ({ ...c, args: cleanArgs(c.args, redactions) })) };
+    }
+    return { role: m.role, content: cleanContent(m.content, redactions) };
+  });
   // tool names and descriptions are written by our own code, but are scrubbed all the same
   const tools = req.tools?.map((t) => ({ name: t.name, description: cleanContent(t.description, redactions), parameters: t.parameters }));
   return { system, messages, tools, redactions };

@@ -61,9 +61,9 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 112 capabilities; every
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day` joins CAPABILITY_AREA.
     // ⭐ T-511 S2a (2026-11-03): 120 -> 123 (+ upload_settlement_files in sales, edit_platform_store_code and edit_loan_repayment_amount in admin). RED until built.
     // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (manage_business_rules in admin).
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 132 keys').toBe(132); // T-640: 131 -> 132 (+manage_ai_hub)
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(131);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(133);
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 133 keys').toBe(133); // T-641: 132 -> 133 (+use_ask_erp). T-640: 131 -> 132 (+manage_ai_hub)
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(132);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(134);
     // T-524: 125 -> 128 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
   });
 });
@@ -142,6 +142,8 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     'manage_prepaid_items', 'run_amortisation', 'manage_chart_of_accounts', 'create_missing_period',
     // ⛔ T-345 RED — not in CAPABILITY_AREA until the builder lands `book_missed_month`.
     'book_missed_month',
+    // T-641 (Ian, 25 Nov 2026): Ask ERP, area books (Books & reporting).
+    'use_ask_erp',
   ],
   admin: [
     'manage_users', 'manage_stores', 'grant_capability', 'manage_store_settings', 'set_cash_policy',
@@ -178,7 +180,7 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities, area sales.
     // T-193 S3: `remit_statutory` joins staff. Merge of main + T-193: re-measured.
     // ⭐ T-511 S2a (2026-11-03): 120 -> 123. T-510 S2: 123 -> 124. T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (manage_business_rules in admin).
-    expect(total).toBe(132); // T-640: 131 -> 132 (+manage_ai_hub, area admin). Before: T-584: 128 -> 131 (+3 document capabilities, area staff)
+    expect(total).toBe(133); // T-641: 132 -> 133 (+use_ask_erp, area books). T-640: 131 -> 132 (+manage_ai_hub, area admin). Before: T-584: 128 -> 131 (+3 document capabilities, area staff)
     // T-524: 125 -> 128 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
     // ⭐ 108 -> 109 (T-403): `manage_recipes` joins production.
   });

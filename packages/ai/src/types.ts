@@ -14,10 +14,20 @@ export function isAiProvider(value: string): value is AiProvider {
   return (AI_PROVIDERS as readonly string[]).includes(value);
 }
 
-export interface ChatMessage {
-  readonly role: 'user' | 'assistant';
+/** One tool's answer, handed back to the model. `id` is the call's id (Gemini ignores it and matches on `name`); `content` is text our own code wrote, scrubbed by the privacy guard like everything else. */
+export interface ToolResult {
+  readonly id: string;
+  readonly name: string;
   readonly content: string;
 }
+/**
+ * One turn. T-641 added the tool loop: an assistant turn may carry the calls it made, and a `tool` turn carries our answers to them (one result per call, in the order called).
+ * A provider that cannot take a tool turn in the middle of a conversation is not on the model list.
+ */
+export type ChatMessage =
+  | { readonly role: 'user'; readonly content: string }
+  | { readonly role: 'assistant'; readonly content: string; readonly toolCalls?: readonly ToolCall[] }
+  | { readonly role: 'tool'; readonly results: readonly ToolResult[] };
 export interface ToolDef {
   readonly name: string;
   readonly description: string;
@@ -28,6 +38,8 @@ export interface ToolCall {
   readonly id: string;
   readonly name: string;
   readonly args: Readonly<Record<string, unknown>>;
+  /** Gemini 3 models return an opaque signature with a function call and refuse the next turn unless it is sent back unchanged. Kept only to be echoed. */
+  readonly thoughtSignature?: string;
 }
 export interface ChatRequest {
   readonly model: string;
