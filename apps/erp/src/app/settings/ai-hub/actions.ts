@@ -12,7 +12,7 @@
  * Each action does its work inside the `try`, and redirects AFTER it: a redirect throws, and inside the `try` it would be shown as an error.
  */
 import { revalidatePath } from 'next/cache';
-import { activateAiModel, deactivateAiModel, moveAiModel, removeProviderKey, saveAiSettings, saveProviderKey, setAiStoreSwitch, testAiModel, type TxRunner } from '@shareat/domain';
+import { activateAiModel, deactivateAiModel, moveAiModel, setAiModelOrder, removeProviderKey, saveAiSettings, saveProviderKey, setAiStoreSwitch, testAiModel, type TxRunner } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '../../../lib/flash';
@@ -102,6 +102,26 @@ export async function moveModelAction(fd: FormData): Promise<void> {
   }
   revalidatePath(ROUTE);
   return await redirectWithFlash(ROUTE, {}, { ok: 'The order is changed. The first model is tried first; the next is used only when the one before it fails.' });
+}
+
+export async function setModelOrderAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(ROUTE);
+  // the drag sends the whole order as a JSON list of "provider/model"; anything else becomes an empty list, which the domain refuses as "not the active set"
+  let order: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(String(fd.get('order') ?? ''));
+    if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) order = parsed;
+  } catch {
+    order = [];
+  }
+  let changed: boolean;
+  try {
+    ({ changed } = await withOrgPrincipal(actor.orgId, (tx) => setAiModelOrder(tx, actor, { order })));
+  } catch (err) {
+    return await redirectWithFlash(ROUTE, {}, { error: errorMessage(err) });
+  }
+  revalidatePath(ROUTE);
+  return await redirectWithFlash(ROUTE, {}, { ok: changed ? 'The order is saved. Number 1 is tried first; the next is used only when the one before it fails.' : 'The order is the same, so nothing was changed.' });
 }
 
 export async function saveSettingsAction(fd: FormData): Promise<void> {

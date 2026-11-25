@@ -20,7 +20,7 @@ if (!isTestDatabaseUrl(url)) {
 
 import { APP_ROLE, aiHubRepo, closeDb, transaction, RefusalError, type Tx } from '@shareat/db';
 import { AuthorizationError, SUPER_ADMIN_ONLY_CAPABILITIES, type Actor } from '@shareat/auth';
-import { activateAiModel, deactivateAiModel, getAiHubView, moveAiModel, removeProviderKey, saveAiSettings, saveProviderKey, setAiStoreSwitch, testAiModel, type TxRunner } from '@shareat/domain';
+import { activateAiModel, deactivateAiModel, getAiHubView, moveAiModel, removeProviderKey, saveAiSettings, saveProviderKey, setAiModelOrder, setAiStoreSwitch, testAiModel, type TxRunner } from '@shareat/domain';
 import { AI_DEFAULTS } from '../../src/ai/shared';
 
 const sql = postgres(url, { max: 6 });
@@ -125,6 +125,7 @@ describe('T-640 who may use the hub (test 2: authorize first, for every function
       await denied(run((tx) => activateAiModel(tx, who, { provider: 'openai', model: 'gpt-4o-mini' })));
       await denied(run((tx) => deactivateAiModel(tx, who, { provider: 'openai', model: 'gpt-4o-mini' })));
       await denied(run((tx) => moveAiModel(tx, who, { provider: 'openai', model: 'gpt-4o-mini', direction: 'up' })));
+      await denied(run((tx) => setAiModelOrder(tx, who, { order: ['bogus'] }))); // bad list on purpose: the refusal is "you may not", never "the list changed"
       await denied(run((tx) => saveAiSettings(tx, who, { enabled: 'x', monthlyCapPesos: '', dailyLimitPerPerson: '', pesosPerUsd: '', warnAtPercent: '' })));
       await denied(run((tx) => setAiStoreSwitch(tx, who, { storeId: f.storeA, enabled: false })));
       await denied(testAiModel(runnerFor(f.orgId), who, { provider: 'openai', model: 'gpt-4o-mini' }, MASTER));
@@ -322,6 +323,47 @@ describe('T-640 models (test 3: on only after a passing test; a failing test kee
     expect(await sentenceOf(asOrg(f.orgId, (tx) => moveAiModel(tx, f.sup, { provider: 'openai', model: 'gpt-4.1', direction: 'sideways' })))).toMatch(/earlier or later/);
     const audit = await auditText(f.orgId);
     for (const a of ['ai_model.activated', 'ai_model.deactivated', 'ai_model.order_set']) expect(audit).toContain(a);
+  });
+
+  it('T-642 setAiModelOrder: saves the whole order in one go, refuses anything but exactly the active set, audits before and after, and writes nothing for the same order [kills: authorize removed, a list that drops or invents a place, a partial renumber, no audit row, an audit row for a no-op]', async () => {
+    const f = await withKey('model-set-order');
+    for (const m of ['gpt-4o-mini', 'gpt-4.1-mini']) {
+      await pass(f, m);
+      await on(f, m);
+    }
+    await pass(f, 'gpt-4.1'); // tested but left off: it is not part of the active set
+    const order = async () => (await asOrg(f.orgId, (tx) => getAiHubView(tx, f.sup, MASTER))).order.map((o) => `${o.priority}:${o.model}`);
+    const key = (m: string) => `openai/${m}`;
+    const set = (who: Actor, list: string[]) => asOrg(f.orgId, (tx) => setAiModelOrder(tx, who, { order: list }));
+    const audits = async () => sql<{ before: { order: string[] }; after: { order: string[] } }[]>`select before, after from audit_log where org_id = ${f.orgId} and action = 'ai_model.order_set'`;
+
+    // the person-level refusal: only a super admin (or an owner) may; nothing moves
+    for (const who of [f.admin, f.manager, f.staff, f.strayManager]) await denied(set(who, [key('gpt-4.1-mini'), key('gpt-4o-mini')]));
+    expect(await order()).toEqual(['1:gpt-4o-mini', '2:gpt-4.1-mini']);
+
+    // a list that is not exactly the active set is refused with a plain sentence and changes nothing: one missing, one extra (tested but off), a repeat, an unknown name, an empty list
+    const same = [key('gpt-4o-mini'), key('gpt-4.1-mini')];
+    for (const bad of [same.slice(1), [...same, key('gpt-4.1')], [same[0]!, same[0]!], [same[0]!, 'openai/not-a-model'], []]) {
+      expect(await sentenceOf(set(f.sup, bad))).toMatch(/Reload the page/);
+    }
+    expect(await order()).toEqual(['1:gpt-4o-mini', '2:gpt-4.1-mini']);
+    expect(await audits()).toHaveLength(0);
+
+    // the whole order is saved at once (a full reversal), numbered 1..n with no gap
+    const reversed = [...same].reverse();
+    expect((await set(f.sup, reversed)).changed).toBe(true);
+    expect(await order()).toEqual(['1:gpt-4.1-mini', '2:gpt-4o-mini']);
+    const rows = await audits();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.before.order).toEqual(same);
+    expect(rows[0]!.after.order).toEqual(reversed);
+
+    // the same order again: nothing changes and no second audit row
+    expect((await set(f.sup, reversed)).changed).toBe(false);
+    expect(await audits()).toHaveLength(1);
+    // an owner may
+    expect((await set(f.owner, same)).changed).toBe(true);
+    expect(await order()).toEqual(['1:gpt-4o-mini', '2:gpt-4.1-mini']);
   });
 });
 

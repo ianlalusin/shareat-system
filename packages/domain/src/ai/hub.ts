@@ -310,6 +310,35 @@ export async function moveAiModel(tx: Tx, actor: Actor, input: { provider: strin
   });
 }
 
+/**
+ * Saves the whole order in one go (a drag on the screen): `order` holds `provider/model` for EVERY active model, first choice first.
+ * Refused unless it is exactly the active set, so a list that went stale (another admin switched one on or off) never drops or invents a place.
+ * One transaction, one audit row with the whole before and after. Nothing is written, and nothing audited, when the order did not change.
+ */
+export async function setAiModelOrder(tx: Tx, actor: Actor, input: { order: string[] }): Promise<{ changed: boolean }> {
+  await authorizeHub(tx, actor);
+  const keyOf = (m: { provider: string; model: string }) => `${m.provider}/${m.model}`;
+  const active = (await aiHubRepo.listActiveModels(tx, actor.orgId)).map((m) => ({ id: m.id, provider: m.provider as AiProvider, model: m.model }));
+  const byKey = new Map(active.map((m) => [keyOf(m), m]));
+  const wanted = input.order;
+  if (wanted.length !== byKey.size || new Set(wanted).size !== wanted.length || wanted.some((k) => !byKey.has(k))) {
+    throw refuse('ai hub: the order is not exactly the active models', 'The list of switched-on models changed while this page was open. Reload the page, then set the order again.');
+  }
+  const before = active.map(keyOf);
+  if (before.every((k, i) => k === wanted[i])) return { changed: false };
+  await renumber(tx, actor.orgId, wanted.map((k) => byKey.get(k)!));
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'ai_model.order_set',
+    storeId: null,
+    entityId: byKey.get(wanted[0]!)!.id,
+    before: { order: before },
+    after: { order: wanted },
+    source: 'web',
+  });
+  return { changed: true };
+}
+
 // -------------------------------------------------------------------------------------------------------------------
 // Caps and switches
 // -------------------------------------------------------------------------------------------------------------------
