@@ -51,7 +51,7 @@ afterAll(async () => {
 const COE = '# Certificate of Employment\n\nThis certifies that **{{employee.full_name}}** ({{employee.staff_code}}) has worked at {{store.name}} as {{employee.position}} since {{employee.started_on}}.\n\nIssued {{today}} by {{issuer.full_name}}.';
 const save = (f: DocFixture, who: 'admin' | 'managerA', input: Partial<Parameters<typeof saveDocumentTemplate>[2]> = {}) =>
   asOrg(f.orgId, (tx) =>
-    saveDocumentTemplate(tx, f[who].actor, { name: 'Certificate of Employment', kind: 'coe', body: COE, signatureSlots: ['issuer', 'employee'], ...input }),
+    saveDocumentTemplate(tx, f[who].actor, { name: 'Certificate of Employment', kindId: f.kind.coe, body: COE, signatureSlots: ['issuer', 'employee'], ...input }),
   );
 
 describe('T-584 S2 - who may write templates', () => {
@@ -61,8 +61,11 @@ describe('T-584 S2 - who may write templates', () => {
     expect(r.versionNo).toBe(1);
     const list = await asOrg(f.orgId, (tx) => listDocumentTemplates(tx, f.admin.actor));
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ id: r.templateId, name: 'Certificate of Employment', kind: 'coe', retired: false });
-    expect(list[0]!.latest).toMatchObject({ versionNo: 1, body: COE, signatureSlots: ['issuer', 'employee'] });
+    expect(list[0]).toMatchObject({ id: r.templateId, name: 'Certificate of Employment', kindName: 'Certificate of employment', kindId: f.kind.coe, retired: false });
+    // T-637: an old-markup save is converted to a document; `body` keeps its plain text (heading words and field tags, no markup).
+    expect(list[0]!.latest).toMatchObject({ versionNo: 1, signatureSlots: ['issuer', 'employee'], legacy: false });
+    expect(list[0]!.latest.body).toContain('This certifies that Employee full name'.replace('Employee full name', '{{employee.full_name}}'));
+    expect(list[0]!.latest.doc.content[0]).toMatchObject({ type: 'heading' });
   });
 
   it('a manager in scope of the store is refused to save, list or retire templates [kills: manager true on manage_document_templates]', async () => {
@@ -71,7 +74,7 @@ describe('T-584 S2 - who may write templates', () => {
     expect(await sentenceOf(save(f, 'managerA'))).toMatch(/can.t|not allowed|may not|cannot/i);
     await sentenceOf(asOrg(f.orgId, (tx) => listDocumentTemplates(tx, f.managerA.actor)));
     await sentenceOf(asOrg(f.orgId, (tx) => retireDocumentTemplate(tx, f.managerA.actor, made.templateId)));
-    await sentenceOf(asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.staff.actor, { name: 'X', kind: 'memo', body: 'x', signatureSlots: [] })));
+    await sentenceOf(asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.staff.actor, { name: 'X', kindId: f.kind.memo, body: 'x', signatureSlots: [] })));
   });
 
   it('another organisation cannot see or change this template [kills: a missing org filter]', async () => {
@@ -79,7 +82,7 @@ describe('T-584 S2 - who may write templates', () => {
     const b = await documentFixture(sql, 'tpl-orgB');
     const made = await save(a, 'admin');
     expect(await asOrg(b.orgId, (tx) => listDocumentTemplates(tx, b.admin.actor))).toHaveLength(0);
-    expect(await sentenceOf(asOrg(b.orgId, (tx) => saveDocumentTemplate(tx, b.admin.actor, { templateId: made.templateId, name: 'Hijack', kind: 'memo', body: 'x', signatureSlots: [] })))).toMatch(/does not exist/i);
+    expect(await sentenceOf(asOrg(b.orgId, (tx) => saveDocumentTemplate(tx, b.admin.actor, { templateId: made.templateId, name: 'Hijack', kindId: b.kind.memo, body: 'x', signatureSlots: [] })))).toMatch(/does not exist/i);
   });
 });
 
@@ -93,7 +96,9 @@ describe('T-584 S2 - versions: every save is a new version, the old one stays (t
     expect(v2.versionId).not.toBe(v1.versionId);
     const versions = await asOrg(f.orgId, (tx) => listDocumentTemplateVersions(tx, f.admin.actor, v1.templateId));
     expect(versions.map((v) => v.versionNo)).toEqual([2, 1]);
-    expect(versions.find((v) => v.versionNo === 1)).toMatchObject({ id: v1.versionId, body: COE });
+    expect(versions.find((v) => v.versionNo === 1)).toMatchObject({ id: v1.versionId });
+    expect(versions.find((v) => v.versionNo === 1)!.body).toContain('has worked at {{store.name}} as {{employee.position}}'); // plain text of the document (T-637)
+    expect(versions.find((v) => v.versionNo === 1)!.body).not.toContain('Second edition');
     expect(versions.find((v) => v.versionNo === 2)!.body).toContain('Second edition.');
     const list = await asOrg(f.orgId, (tx) => listDocumentTemplates(tx, f.admin.actor));
     expect(list[0]!.latest.versionNo).toBe(2);
@@ -102,10 +107,10 @@ describe('T-584 S2 - versions: every save is a new version, the old one stays (t
   it('renaming or changing the kind is still a new version, and the head follows [kills: a silent head change with no version]', async () => {
     const f = await documentFixture(sql, 'tpl-head');
     const v1 = await save(f, 'admin');
-    const v2 = await save(f, 'admin', { templateId: v1.templateId, name: 'Employment Certificate', kind: 'other' });
+    const v2 = await save(f, 'admin', { templateId: v1.templateId, name: 'Employment Certificate', kindId: f.kind.other });
     expect(v2.versionNo).toBe(2);
     const list = await asOrg(f.orgId, (tx) => listDocumentTemplates(tx, f.admin.actor));
-    expect(list[0]).toMatchObject({ name: 'Employment Certificate', kind: 'other' });
+    expect(list[0]).toMatchObject({ name: 'Employment Certificate', kindName: 'Other', kindId: f.kind.other });
   });
 
   it('two saves of one template at once get versions 2 and 3, never the same number [kills: a duplicate version number]', async () => {
@@ -133,15 +138,16 @@ describe('T-584 S2 - what a template may say (test 3)', () => {
     const f = await documentFixture(sql, 'tpl-fields');
     expect(await sentenceOf(save(f, 'admin', { name: '   ' }))).toMatch(/name/i);
     expect(await sentenceOf(save(f, 'admin', { body: '  \n ' }))).toMatch(/wording|body|text/i);
-    expect(await sentenceOf(save(f, 'admin', { kind: 'waiver' as never }))).toMatch(/kind/i);
+    expect(await sentenceOf(save(f, 'admin', { kindId: 'waiver' }))).toMatch(/kind/i);
     expect(await sentenceOf(save(f, 'admin', { signatureSlots: ['witness'] as never }))).toMatch(/signature/i);
     expect(await sentenceOf(save(f, 'admin', { body: 'x'.repeat(50001) }))).toMatch(/too long|50,000|50000/i);
   });
 
   it('a waiver or quitclaim kind is not on offer (R6) [kills: offering a template a lawyer has not reviewed]', async () => {
     const f = await documentFixture(sql, 'tpl-waiver');
-    for (const kind of ['waiver', 'quitclaim']) {
-      await sentenceOf(save(f, 'admin', { kind: kind as never }));
+    // A kind exists only if Ian adds it: the seeded list has neither, and an id that is not on the list is refused.
+    for (const kindId of ['waiver', 'quitclaim', '0198a8f0-0000-7000-8000-000000000000']) {
+      await sentenceOf(save(f, 'admin', { kindId }));
     }
   });
 });
@@ -164,7 +170,7 @@ describe('T-584 S2 - retire and audit', () => {
     const rows = await sql<{ action: string; after: Record<string, unknown> }[]>`
       select action, after from audit_log where org_id = ${f.orgId} and action like 'document_template.%' order by id`;
     expect(rows.map((r) => r.action)).toEqual(['document_template.version_saved', 'document_template.version_saved', 'document_template.retired']);
-    expect(rows[1]!.after).toMatchObject({ templateId: v1.templateId, versionNo: 2, kind: 'coe' });
+    expect(rows[1]!.after).toMatchObject({ templateId: v1.templateId, versionNo: 2, kind: 'Certificate of employment', kindId: f.kind.coe });
     expect(JSON.stringify(rows)).not.toContain('second');
   });
 });

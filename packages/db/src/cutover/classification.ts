@@ -232,6 +232,11 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Per-store configuration (T-564) — store key, match labels, file hints and the wastage-email opt-in. Same class as ' +
       'sales_channels: it is not pilot activity, and re-seeding it would change a store key that other records name.',
   },
+  document_kinds: {
+    class: 'keep',
+    reason:
+      "The organisation's own list of document kinds (T-637), edited by an admin. Configuration, not pilot activity; templates and issued documents name them, so the 2027-01-01 purge must not erase it.",
+  },
   document_templates: {
     class: 'keep',
     reason:

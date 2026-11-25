@@ -19,6 +19,16 @@ import { retypeMatches } from '../../lib/retype';
 import { withOrgPrincipal } from './lib';
 import { DOCUMENT_ISSUE, DOCUMENT_REVISE } from './typed-forms';
 
+/** The wording the editor sends: a JSON document in a hidden field. Anything that does not parse is passed on as the raw string, which the domain refuses in words. */
+function docField(fd: FormData, name: string): unknown {
+  const raw = String(fd.get(name) ?? '');
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
 function str(fd: FormData, name: string): string {
   const v = fd.get(name);
   return typeof v === 'string' ? v.trim() : '';
@@ -29,8 +39,7 @@ export async function issueDocumentAction(fd: FormData): Promise<void> {
   const templateId = str(fd, 'templateId');
   const employmentId = str(fd, 'employmentId');
   const storeId = str(fd, 'storeId');
-  // The wording keeps its own blank lines; the domain normalises the line endings.
-  const input = { templateId, employmentId: employmentId || null, storeId: storeId || null, body: String(fd.get('body') ?? '') };
+  const input = { templateId, employmentId: employmentId || null, storeId: storeId || null, bodyDoc: docField(fd, 'bodyDoc') };
   let result: { documentId: string; number: string };
   try {
     result = await withOrgPrincipal(actor.orgId, (tx) => issueDocument(tx, actor, input));
@@ -48,7 +57,7 @@ export async function issueDocumentAction(fd: FormData): Promise<void> {
 export async function reviseDocumentAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/documents');
   const documentId = str(fd, 'documentId');
-  const input = { documentId, body: String(fd.get('body') ?? ''), reason: str(fd, 'reason') };
+  const input = { documentId, bodyDoc: docField(fd, 'bodyDoc'), reason: str(fd, 'reason') };
   const here = `/documents/${documentId}`;
   try {
     await withOrgPrincipal(actor.orgId, (tx) => reviseDocument(tx, actor, input));

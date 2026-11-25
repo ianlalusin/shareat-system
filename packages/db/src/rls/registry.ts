@@ -371,6 +371,10 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Per-store channel-settlement wiring (T-564): the store key, match labels, file hints and the wastage-email opt-in. ' +
       'Org-scoped because it is configuration that names a store to outside matching, so one org must never read the wiring of another.',
   },
+  document_kinds: {
+    scope: 'org_column',
+    reason: "T-637: an organisation's own list of document kinds (Certificate of employment, Memo, ...). Org-scoped: one organisation's kinds are not another's.",
+  },
   document_templates: {
     scope: 'org_column',
     reason:

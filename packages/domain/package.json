@@ -17,7 +17,8 @@
     "./expenses/allocate": "./src/expenses/allocate.ts",
     "./refusal-leaf": "./src/shared/refusal-leaf.ts",
     "./attendance/fingerprint": "./src/attendance/fingerprint/index.ts",
-    "./service-charge": "./src/service-charge/index.ts"
+    "./service-charge": "./src/service-charge/index.ts",
+    "./documents/doc": "./src/documents/doc.ts"
   },
   "dependencies": {
     "@shareat/auth": "*",

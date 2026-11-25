@@ -80,7 +80,8 @@ const NO_FK_PIN = { count: 36, sha256: '9d20bd2d63f66e67243a7f63042162a89efa1383
 // T-523 (0238): +pos_events.payload (snapshot). 10 -> 11.
 // T-584 (0259): +issued_document_versions.letterhead (snapshot). 11 -> 12.
 // T-511 S8b (0260): +settlement_uploads.prior_items (snapshot). 12 -> 13.
-const JSONB_PIN = { count: 13, sha256: 'bc1380009fb9e9e07490e07880dc31c0e6487635b6db13505fc3a84ae265a019' } as const;
+// T-637 (0281): +issued_document_versions.body_doc, +document_template_versions.body_doc / header_doc / footer_doc (snapshots). 13 -> 17.
+const JSONB_PIN = { count: 17, sha256: 'cae92c8ab04eb6b79dfbd41ee4eb8629648e0092a9145415ee73f703221e1612' } as const;
 
 const openKeys = (l: readonly OpenFkEntry[]) => l.map((e) => e.fk);
 const noFkKeys = (l: readonly { column: string; kind: string }[]) => l.map((e) => `${e.column}|${e.kind}`);
