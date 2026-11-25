@@ -18,7 +18,6 @@ buildCoverageReport
 buildPlan
 byMethodOf
 calculateBillTotalsCentavosT423
-callAi
 callEntry
 cancelScheduledDepletionRule
 canonicalAnalytics
