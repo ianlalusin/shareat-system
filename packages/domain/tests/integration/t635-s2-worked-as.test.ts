@@ -168,6 +168,15 @@ describe('T-635 S2 the choice reaches the day', () => {
     expect((await dayOf(f.sam.employmentId))!.worked_as).toBe('slicer');
   });
 
+  it('a slicer tap from someone WITHOUT the Slicer position is stored as REGULAR (a wrong tap never zeroes regular pay)', async () => {
+    const f = await fixture('a5');
+    const e = event(f, f.pat, { workedAs: 'slicer' }); // Pat holds no Slicer position
+    expect((await ingest(f, [e])).ingested).toBe(1);
+    const [p] = await sql<{ worked_as: string | null }[]>`select worked_as from attendance_punches where client_punch_id = ${e.clientPunchId}`;
+    expect(p!.worked_as).toBe('regular');
+    expect((await dayOf(f.pat.employmentId))!.worked_as).toBe('regular');
+  });
+
   it('an event WITHOUT the field means regular (an old queued punch still ingests); an explicit regular is regular', async () => {
     const f = await fixture('a2');
     expect((await ingest(f, [event(f, f.sam)])).ingested).toBe(1); // no workedAs key at all

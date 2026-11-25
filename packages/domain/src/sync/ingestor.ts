@@ -15,6 +15,7 @@
  * retries forever.
  */
 import { toBusinessDate } from '@shareat/core/datetime';
+import { logger } from '@shareat/core/logger';
 import { humanDate } from '../shared/refusal';
 import { sql } from 'drizzle-orm';
 import {
@@ -23,6 +24,7 @@ import {
   clockTerminalsRepo,
   employmentRepo,
   inboxQuarantineRepo,
+  productionRepo,
   type Tx,
 } from '@shareat/db';
 import type {
@@ -337,6 +339,14 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
       terminal.storeId, terminal.id);
   }
 
+  // ---- 4b. T-635 S2: a slicer tap from someone who is not a slicer is stored as REGULAR (BOSS, 25 Nov) ------
+  // A wrong tap must never zero a regular staff member's daily pay. The person has to hold the Slicer position at this store on the punch's own shift day.
+  let workedAs: 'slicer' | 'regular' | null = event.workedAs === 'slicer' || event.workedAs === 'regular' ? event.workedAs : null;
+  if (workedAs === 'slicer' && !(await productionRepo.slicerEmploymentOn(tx, employment.orgId, employment.personId, employment.storeId, shiftDay))) {
+    logger.warn({ clientPunchId, employmentId: employment.id, shiftDay }, 'ingest: a slicer clock-in from someone without the Slicer position was stored as regular');
+    workedAs = 'regular';
+  }
+
   // ---- 5. Record ---------------------------------------------------------------------
   const { punch, alreadyProcessed } = await recordPunch(tx, {
     clientPunchId,
@@ -344,7 +354,7 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
     occurredAt,
     method,
     assertedIntent: event.assertedIntent as PunchIntent,
-    workedAs: event.workedAs === 'slicer' || event.workedAs === 'regular' ? event.workedAs : null,
+    workedAs,
     source: 'offline_replay',
     deviceId: terminal.id,
   });
