@@ -109,3 +109,42 @@ Migration 0279 is hand-authored (ADR-012 §5): classification + RLS registry + t
 - Editing a posted slice record keeps each output line's existing paid / unpaid (matched to the old line of the same item) unless the form sends a new value (BOSS, 25 Nov), so an edit can never silently overpay.
 
 **Screens:** production form (who sliced, paid / not paid per output line on a slice), production record page (slicer, paid-line ticks on a draft, Confirm / Take back confirmation, checked-by), `/inventory/production/slicer-pay` (per slicer per period, rates section), payroll preview and run history show the Slicer pay column and line. Not yet seen in a browser.
+
+## S2: clock in "as slicer" or "as regular staff" (Ian, 25 Nov 2026)
+
+**Ian's words:**
+- "yes they clock in but they dont get daily rate. the thing is we need to configure the app when they sign in they will tell app if they are slicer or regular staff. if they are slicer their day earnings is based on slicing if they are regular staff they are paid in their daily rate. v1 has staff tagged as slicer to have an access to adding slice record".
+- Confirmer: "Any staff except slicers".
+- Late confirmations: "Paid in the next pay run".
+
+**Rule:**
+1. **Clock-in choice.** On the attendance kiosk (/clock, offline Firebase lane), a person who holds the Slicer position at that store is asked once per day, at clock-in: **"Working today as: Slicer / Regular staff"** (big buttons, 44px+). Everyone else clocks in exactly as today.
+   - The choice rides on the punch event (an optional field, e.g. `workedAs: 'slicer' | 'regular'`). An event without it (old terminals, queued punches) means regular.
+   - The roster mirror the kiosk reads must carry "is a slicer at this store" so the kiosk knows whom to ask. Follow the existing publisher/ingestor pattern in packages/domain/sync and the T-157 punch path; never let the kiosk import server code (clock/README invariants).
+2. **The day remembers it.** `attendance_days` gains `worked_as` (regular | slicer, NOT NULL default regular), set by the ingestor from the day's clock-in punch, and kept through the T-157 recompute (derive it from the punches, not as a hand-set column that a recompute overwrites).
+   - A manager can correct it on the attendance review page: an adjustment, audited, the T-157 adjustment pattern; the day still recomputes.
+3. **Payroll per day:**
+   - a `regular` day pays the daily rate as today
+   - a `slicer` day pays 0 from the daily rate (its earnings come from slicer pay)
+   - a person whose only days in the period are slicer days needs NO daily rate (no `unratedEmployments` refusal for them)
+   - a person with regular days and no rate is still refused as today
+   - the payslip shows "Regular days N" and "Slicer days N"
+4. **Who may add slice records:** creating or posting a slice record naming yourself needs the Slicer position (like v1). Others keep today's production capability rule.
+5. **Confirmer = any staff at that store who does NOT hold the Slicer position there** (domain rule + test; the DB CHECK confirmer != slicer stays).
+6. **Late confirmations carry forward:** a pay run includes confirmed, posted, unpaid slice records with produced_on <= periodEnd (not only inside the period). Earlier-period ones show as "from an earlier period" on the slip and the Slicer pay view. Attendance days keep their exact period window.
+
+**Audit fixes folded in here:**
+- The paid tick on the record page uses the house `Checkbox`, then census:write (unresolved back to 50).
+- An unpriceable slice record (unit not kg/g, no rate in force, no job that day) is SKIPPED with a warning in the pay-run preview and stays unpaid. It never blocks the run.
+- Accountant questions (recorded, not built): whether slicer pay should count in basic pay for PhilHealth, Pag-IBIG and the 13th month.
+- Migration ordering: T-634 (DELL) also adds a migration; whichever merges second takes the next number with a `when` above the other's.
+
+**Tests (each with a mutant):**
+- the kiosk asks only slicers, and the choice reaches attendance_days
+- a missing field means regular
+- a slicer day pays 0 daily, a regular day pays the rate
+- slicer-only days need no rate
+- a manager correction is audited and survives a recompute
+- a Slicer-position confirmer is refused
+- a late-confirmed earlier record is paid in the next run, exactly once
+- an unpriceable record is skipped, not blocking
