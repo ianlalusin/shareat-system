@@ -706,10 +706,11 @@ export async function listSlicerPayRates(tx: Tx, orgId: string): Promise<SlicerP
   return rows;
 }
 
-/** A slice record that may be paid (posted, confirmed, unpaid), in a period. `producedOn` is compared with the SAME inclusive `between from and to` the attendance days use. */
+/** A slice record that may be paid (posted, confirmed, unpaid) by a run for a period: produced on or before the period's end (a late confirmation is paid in the next run, T-635 S2). */
 export interface PayableSlicerRecord {
   readonly recordId: string;
   readonly personId: string;
+  readonly personName: string;
   readonly producedOn: string;
   /** The employment of that person at the store on that day; null when none (then no slip can carry the pay). */
   readonly employmentId: string | null;
@@ -731,7 +732,8 @@ export async function payableSlicerRecords(
 ): Promise<{ records: PayableSlicerRecord[]; lines: SlicerOutputLine[] }> {
   const paidFilter = input.includePaid ? sql`` : sql`and r.paid_by_pay_run_id is null`;
   const records = (await tx.execute(sql`
-    select r.id::text as "recordId", r.performed_by_person_id::text as "personId", r.produced_on::text as "producedOn", r.paid_by_pay_run_id::text as "paidByPayRunId",
+    select r.id::text as "recordId", r.performed_by_person_id::text as "personId", (select pe.display_name from persons pe where pe.id = r.performed_by_person_id) as "personName",
+           r.produced_on::text as "producedOn", r.paid_by_pay_run_id::text as "paidByPayRunId",
            (select e.id::text from employments e
              where e.org_id = r.org_id and e.person_id = r.performed_by_person_id and e.store_id = r.store_id
                and e.started_on <= r.produced_on and (e.ended_on is null or e.ended_on >= r.produced_on)
@@ -741,7 +743,9 @@ export async function payableSlicerRecords(
        and r.kind = 'slice' and r.status = 'posted'
        and r.confirmed_at is not null ${paidFilter}
        and r.performed_by_person_id is not null
-       and r.produced_on between ${input.from} and ${input.to}
+       -- T-635 S2 (Ian: late confirmations are "paid in the next pay run"): everything confirmed, posted and unpaid up to the period's end, however old. A paid record
+       -- is only listed (the screen's paid column) inside the period it belongs to. Attendance days keep their exact window; this does not.
+       and r.produced_on <= ${input.to} and (r.paid_by_pay_run_id is null or r.produced_on >= ${input.from})
      order by r.produced_on, r.id
   `)) as unknown as PayableSlicerRecord[];
   if (records.length === 0) return { records, lines: [] };
@@ -799,6 +803,20 @@ export async function slicerRecordsInPeriod(tx: Tx, orgId: string, input: { stor
        and r.produced_on between ${input.from} and ${input.to}
      order by p.display_name, r.produced_on, r.id
   `)) as unknown as SlicerPayViewRow[];
+}
+
+/** True when the person holds the canonical Slicer position at the store today (an open employment). The confirmer must NOT (T-635 S2). */
+export async function holdsSlicerNow(tx: Tx, orgId: string, personId: string, storeId: string): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select 1 as one
+      from employments e
+      join employment_positions ep on ep.employment_id = e.id
+      join positions p on p.id = ep.position_id
+     where e.org_id = ${orgId} and e.person_id = ${personId} and e.store_id = ${storeId} and e.ended_on is null
+       and p.org_id = ${orgId} and p.name = 'Slicer' and p.is_canonical and p.is_active
+     limit 1
+  `)) as unknown as unknown[];
+  return rows.length > 0;
 }
 
 /** The people who hold the canonical Slicer position at the store today (open employments), for the "who sliced" picker. */

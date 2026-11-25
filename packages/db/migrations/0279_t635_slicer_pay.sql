@@ -20,6 +20,13 @@
 -- `production_records.labour_cost` stays what it was: the capitalisation credit to 6100 at post (docs/POSTING-PATTERNS.md production.conversion.slice), which nets the
 -- payroll expense into the output's cost. The pay run reads the record, never writes to it except the freeze, and posts nothing against the production entry.
 --
+-- S2 (Ian, 25 Nov): staff clock in as SLICER or REGULAR. The choice rides on the punch event; the day remembers it; a slicer day pays 0 from the daily rate.
+--   attendance_punches       worked_as (null = the event carried no choice = regular; an old queued punch still ingests)
+--   attendance_days          worked_as NOT NULL default 'regular': DERIVED on every recompute from the day's first clock-in punch, overridden by a live `worked_as` adjustment
+--                            (never a hand-set column a recompute would overwrite)
+--   attendance_adjustments   a new kind `worked_as` (+ its payload column): a manager's audited correction, superseding like every other kind
+--   payslips                 slicer_days (the days paid as slicer, shown beside the regular days) and slicer_earlier_records (late-confirmed records from before the period)
+--
 -- No existing data is read, moved or deleted. Nothing in this file can fail on production data: every new column is nullable or has a constant default, and every new CHECK is
 -- true of a row whose new columns are null / zero.
 -- LOCK BUDGET. lock_timeout 5s first; ADD COLUMN with a constant default does not rewrite; the new CHECKs validate a small table.
@@ -82,7 +89,11 @@ ALTER TABLE "payslips" ADD COLUMN "slicer_kg" numeric(14,3) DEFAULT '0' NOT NULL
 --> statement-breakpoint
 ALTER TABLE "payslips" ADD COLUMN "slicer_records" integer DEFAULT 0 NOT NULL;
 --> statement-breakpoint
-ALTER TABLE "payslips" ADD CONSTRAINT "payslips_slicer_nonnegative_check" CHECK ("slicer_pay" >= 0 AND "slicer_kg" >= 0 AND "slicer_records" >= 0);
+ALTER TABLE "payslips" ADD COLUMN "slicer_days" integer DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "payslips" ADD COLUMN "slicer_earlier_records" integer DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "payslips" ADD CONSTRAINT "payslips_slicer_nonnegative_check" CHECK ("slicer_pay" >= 0 AND "slicer_kg" >= 0 AND "slicer_records" >= 0 AND "slicer_days" >= 0 AND "slicer_earlier_records" >= 0 AND "slicer_earlier_records" <= "slicer_records");
 --> statement-breakpoint
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_slicer_pay_finite_check" CHECK ("slicer_pay" > '-Infinity'::numeric AND "slicer_pay" < 'Infinity'::numeric);
 --> statement-breakpoint
@@ -92,6 +103,41 @@ ALTER TABLE "payslips" DROP CONSTRAINT "payslips_gross_identity_check";
 --> statement-breakpoint
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_gross_identity_check"
 	CHECK ("gross_pay" = "basic_pay" + "ot_pay" + "night_diff_pay" + "holiday_pay" + "leave_pay" + "sil_conversion_pay" + "slicer_pay");
+--> statement-breakpoint
+
+-- ---- S2: worked as slicer or regular -----------------------------------------------------------
+ALTER TABLE "attendance_punches" ADD COLUMN "worked_as" text;
+--> statement-breakpoint
+ALTER TABLE "attendance_punches" ADD CONSTRAINT "attendance_punches_worked_as_check" CHECK ("worked_as" IS NULL OR "worked_as" IN ('regular','slicer'));
+--> statement-breakpoint
+ALTER TABLE "attendance_days" ADD COLUMN "worked_as" text DEFAULT 'regular' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "attendance_days" ADD CONSTRAINT "attendance_days_worked_as_check" CHECK ("worked_as" IN ('regular','slicer'));
+--> statement-breakpoint
+ALTER TABLE "attendance_adjustments" ADD COLUMN "worked_as" text;
+--> statement-breakpoint
+ALTER TABLE "attendance_adjustments" DROP CONSTRAINT "attendance_adjustments_kind_check";
+--> statement-breakpoint
+ALTER TABLE "attendance_adjustments" ADD CONSTRAINT "attendance_adjustments_kind_check"
+	CHECK ("kind" in ('start_anchor', 'early_out_approved', 'half_day_override', 'verify', 'void', 'overtime_approved', 'worked_as'));
+--> statement-breakpoint
+-- The payload whitelist (0110), restated with the new kind and the new column: `worked_as` is carried by its own kind and by no other.
+ALTER TABLE "attendance_adjustments" DROP CONSTRAINT "attendance_adjustments_payload_shape_check";
+--> statement-breakpoint
+ALTER TABLE "attendance_adjustments" ADD CONSTRAINT "attendance_adjustments_payload_shape_check" CHECK (
+  ("kind" = 'start_anchor' AND "chosen_anchor_minute" IS NOT NULL
+     AND "effective_out_minute" IS NULL AND "is_half_day" IS NULL AND "approved_ot_minutes" IS NULL AND "worked_as" IS NULL)
+  OR ("kind" = 'early_out_approved' AND "effective_out_minute" IS NOT NULL
+     AND "chosen_anchor_minute" IS NULL AND "is_half_day" IS NULL AND "approved_ot_minutes" IS NULL AND "worked_as" IS NULL)
+  OR ("kind" = 'half_day_override' AND "is_half_day" IN ('true','false')
+     AND "chosen_anchor_minute" IS NULL AND "effective_out_minute" IS NULL AND "approved_ot_minutes" IS NULL AND "worked_as" IS NULL)
+  OR ("kind" = 'overtime_approved' AND "approved_ot_minutes" IS NOT NULL AND "approved_ot_minutes" >= 0
+     AND "chosen_anchor_minute" IS NULL AND "effective_out_minute" IS NULL AND "is_half_day" IS NULL AND "worked_as" IS NULL)
+  OR ("kind" = 'worked_as' AND "worked_as" IN ('regular','slicer')
+     AND "chosen_anchor_minute" IS NULL AND "effective_out_minute" IS NULL AND "is_half_day" IS NULL AND "approved_ot_minutes" IS NULL)
+  OR ("kind" IN ('verify','void') AND "chosen_anchor_minute" IS NULL
+     AND "effective_out_minute" IS NULL AND "is_half_day" IS NULL AND "approved_ot_minutes" IS NULL AND "worked_as" IS NULL)
+);
 --> statement-breakpoint
 
 -- ---- slicer_pay_rates ------------------------------------------------------------------------

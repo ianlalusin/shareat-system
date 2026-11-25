@@ -17,6 +17,8 @@ import {
 
 export type CredentialKind = 'card' | 'fingerprint';
 export type PunchIntent = 'in' | 'out';
+/** T-635 S2: what a slicer chooses at clock-in. */
+export type WorkedAs = 'slicer' | 'regular';
 
 export interface MirroredCredential {
   credentialId: string;
@@ -32,6 +34,8 @@ export interface MirroredRoster {
   staffCode: string | null;
   displayName: string;
   position: string | null;
+  /** T-635 S2: holds the Slicer position at this store, so the kiosk asks them "Working today as: Slicer / Regular staff". Absent on an old mirror document = not a slicer. */
+  isSlicer?: boolean;
 }
 
 /**
@@ -213,6 +217,8 @@ export interface PunchInput {
   credentialRef: string;
   method: 'nfc' | 'qr' | 'fingerprint';
   assertedIntent: PunchIntent;
+  /** T-635 S2: only for a slicer's clock-in. Left out otherwise (the server reads a missing value as regular). */
+  workedAs?: WorkedAs;
 }
 
 /**
@@ -254,6 +260,8 @@ export function writePunch(input: PunchInput): {
     credentialRef: input.credentialRef,
     method: input.method,
     assertedIntent: input.assertedIntent,
+    // Firestore refuses an `undefined` value, so the key is added only when there is a choice.
+    ...(input.workedAs ? { workedAs: input.workedAs } : {}),
   });
   return { clientPunchId, acknowledged };
 }

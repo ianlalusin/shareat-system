@@ -220,6 +220,9 @@ export interface PayslipRow {
   slicerPay: string;
   slicerKg: string;
   slicerRecords: number;
+  /** T-635 S2: days paid as slicer days, and records paid that were confirmed late (from before the period). `daysWorked` is the REGULAR days. */
+  slicerDays: number;
+  slicerEarlierRecords: number;
   grossPay: string;
   advanceRecovered: string;
   netPay: string;
@@ -269,6 +272,8 @@ export type PayslipInsert = Pick<
   slicerPay?: Money;
   slicerKg?: Decimal<'14,3'>;
   slicerRecords?: number;
+  slicerDays?: number;
+  slicerEarlierRecords?: number;
   grossPay: Money;
   advanceRecovered?: Money;
   netPay: Money;
@@ -313,6 +318,8 @@ export async function insertPayslip(tx: Tx, input: PayslipInsert): Promise<{ id:
       slicerPay: input.slicerPay,
       slicerKg: input.slicerKg,
       slicerRecords: input.slicerRecords,
+      slicerDays: input.slicerDays,
+      slicerEarlierRecords: input.slicerEarlierRecords,
       grossPay: input.grossPay,
       advanceRecovered: input.advanceRecovered,
       netPay: input.netPay,
@@ -359,6 +366,8 @@ export async function listPayslips(tx: Tx, runId: string): Promise<PayslipRow[]>
       slicerPay: payslips.slicerPay,
       slicerKg: payslips.slicerKg,
       slicerRecords: payslips.slicerRecords,
+      slicerDays: payslips.slicerDays,
+      slicerEarlierRecords: payslips.slicerEarlierRecords,
       grossPay: payslips.grossPay,
       advanceRecovered: payslips.advanceRecovered,
       netPay: payslips.netPay,
@@ -401,6 +410,8 @@ export interface PayableDay {
   holidayMinutes: number;
   /** ⭐ Which KIND of holiday, so payroll applies the right configured multiplier. */
   holidayType: 'regular' | 'special_non_working' | 'special_working' | null;
+  /** T-635 S2: a `slicer` day pays nothing from the daily rate (its earnings are the slicer pay). */
+  workedAs: 'regular' | 'slicer';
   /**
    * ⛔ **The overtime a manager has APPROVED**, not the overtime worked.
    *
@@ -433,6 +444,7 @@ export async function payableDays(
            d.night_diff_minutes        as "nightDiffMinutes",
            d.holiday_minutes           as "holidayMinutes",
            d.holiday_type              as "holidayType",
+           d.worked_as                 as "workedAs",
            adj.approved_ot_minutes     as "approvedOtMinutes"
     from attendance_days d
     -- ⭐ The LIVE overtime approval for this day, if a manager has made one. Superseded rows are

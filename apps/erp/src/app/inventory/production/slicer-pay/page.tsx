@@ -130,7 +130,10 @@ export default async function SlicerPayPage({ searchParams }: { searchParams: Pr
                   <Td>{r.personName}</Td>
                   <NumTd>{r.unconfirmed}</NumTd>
                   <NumTd className="font-mono">{r.confirmedKg}</NumTd>
-                  <NumTd className="font-mono font-semibold">{peso(Number(r.amountDue))}</NumTd>
+                  <NumTd className="font-mono font-semibold">
+                    {peso(Number(r.amountDue))}
+                    {r.earlierRecords > 0 && <div className="font-sans text-xs font-normal text-muted">{r.earlierRecords} from an earlier period</div>}
+                  </NumTd>
                   <NumTd className="font-mono text-muted">
                     {r.paidRecords > 0 ? `${peso(Number(r.paidAmount))} (${r.paidRecords})` : '—'}
                   </NumTd>
@@ -140,7 +143,7 @@ export default async function SlicerPayPage({ searchParams }: { searchParams: Pr
           </Table>
         )}
         <p className="text-xs text-muted">
-          Only confirmed records count. An unconfirmed one waits for a later run. Open the record on the Production screen to confirm it (not the slicer who made it).
+          Only confirmed records count. An unconfirmed one waits; once confirmed, even late, it is paid in the next pay run. Open the record on the Production screen to confirm it (not the slicer who made it).
         </p>
       </section>
 

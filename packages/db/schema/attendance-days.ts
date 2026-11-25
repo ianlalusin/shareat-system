@@ -41,7 +41,7 @@ import {
   uuid,
   foreignKey,
 } from 'drizzle-orm/pg-core';
-import { attendancePunches } from './attendance-punches';
+import { attendancePunches, WORKED_AS } from './attendance-punches';
 import { storeAttendanceConfig } from './attendance-config';
 import { employments } from './employment';
 import { organizations } from './organizations';
@@ -141,6 +141,12 @@ export const attendanceDays = pgTable(
      *  Phase 5, and auto-paying it is exactly what the pending status exists to prevent. */
     pendingOtMinutes: integer('pending_ot_minutes').notNull().default(0),
 
+    /**
+     * T-635 S2 (migration 0279). DERIVED, never hand-set: every recompute reads it from the day's first clock-in punch (`attendance_punches.worked_as`, null = regular)
+     * unless a live `worked_as` adjustment decides it. A `slicer` day pays nothing from the daily rate (its earnings are the slicer pay); a `regular` day pays the rate.
+     */
+    workedAs: text('worked_as', { enum: WORKED_AS }).notNull().default('regular'),
+
     status: text('status', { enum: ATTENDANCE_DAY_STATUSES }).notNull(),
     anomalies: text('anomalies').array().notNull().default(sql`'{}'::text[]`),
     /** Why it came out this way, in sentences. A payroll dispute is answered by reading it. */
@@ -168,6 +174,7 @@ export const attendanceDays = pgTable(
     index('attendance_days_status_idx').on(t.storeId, t.status),
     index('attendance_days_config_idx').on(t.attendanceConfigId),
 
+    check('attendance_days_worked_as_check', sql`${t.workedAs} in ('regular','slicer')`),
     check('attendance_days_status_check', sql`${t.status} in ('open','computed','needs_review','verified','voided')`),
     check('attendance_days_anchor_mode_check', sql`${t.anchorMode} in ('exact','previous','next','unallowed')`),
     check('attendance_days_holiday_type_check', sql`${t.holidayType} is null or ${t.holidayType} in ('regular','special_non_working','special_working')`),

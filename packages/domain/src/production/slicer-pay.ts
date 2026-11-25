@@ -10,9 +10,15 @@
  * posts a journal entry. A slice record's `labour_cost` stays the capitalisation credit to 6100 it has always been (POSTING-PATTERNS
  * `production.conversion.slice`): it nets payroll's expense into the output's cost. The pay run only freezes the record.
  *
- * ## Same date rule as attendance
- * A record counts in a run when `produced_on` is inside the run's period, with the same inclusive `between from and to` the attendance
- * days use (`payrollRepo.payableDays`). The period itself comes from `payroll/periods.ts`; there is no second date rule.
+ * ## Dates
+ * Attendance days keep their exact inclusive `between from and to` (`payrollRepo.payableDays`). A slice record is different (Ian, 25 Nov: late
+ * confirmations are "paid in the next pay run"): a run pays every confirmed, posted, unpaid record with `produced_on <= periodEnd`. A record from before
+ * the period's start is flagged "from an earlier period" on the slip and the Slicer pay view, and it is frozen like any other, so it is paid exactly once.
+ * The period itself comes from `payroll/periods.ts`; there is no second date rule.
+ *
+ * ## Unpriceable records never block a run
+ * A record with no rate in force, a unit that is not kg or g, or a slicer with no job that day is SKIPPED with a sentence (the preview shows it as a
+ * warning) and stays unpaid and unfrozen, so it is paid by a later run once it is fixed.
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { auditLogRepo, productionRepo, type Tx } from '@shareat/db';
@@ -38,11 +44,13 @@ export interface SlicerPayPlanLine {
   readonly recordIds: string[];
   readonly slicerPay: Money;
   readonly slicerKg: Quantity;
+  /** How many of `recordIds` were produced BEFORE the period's start (confirmed late; paid now). */
+  readonly earlierRecords: number;
 }
 
 export interface SlicerPayPlan {
   readonly byEmployment: Map<string, SlicerPayPlanLine>;
-  /** Sentences for what cannot be priced (no rate, a unit that is not kg or g, no employment). A post refuses while any exist; such a record is left unpaid. */
+  /** Sentences for what cannot be priced (no rate, a unit that is not kg or g, no employment). Shown as warnings; such a record is skipped, left unpaid, and never blocks the run. */
   readonly problems: string[];
 }
 
@@ -65,12 +73,13 @@ export async function planSlicerPay(tx: Tx, orgId: string, input: { storeId: str
       seen.add(priced.reason);
       continue;
     }
-    const line = plan.byEmployment.get(r.employmentId) ?? { employmentId: r.employmentId, personId: r.personId, recordIds: [], slicerPay: ZERO, slicerKg: fromThousandths(0n) };
+    const line = plan.byEmployment.get(r.employmentId) ?? { employmentId: r.employmentId, personId: r.personId, recordIds: [], slicerPay: ZERO, slicerKg: fromThousandths(0n), earlierRecords: 0 };
     plan.byEmployment.set(r.employmentId, {
       ...line,
       recordIds: [...line.recordIds, r.recordId],
       slicerPay: add(line.slicerPay, priced.pay),
       slicerKg: fromThousandths(toThousandths(line.slicerKg) + toThousandths(priced.kg)),
+      earlierRecords: line.earlierRecords + (r.producedOn < input.from ? 1 : 0),
     });
   }
   return plan;
@@ -119,6 +128,10 @@ export async function confirmSlicing(tx: Tx, actor: Actor, input: { recordId: st
   if (!record.performedByPersonId) return refusal('This slicing record does not say who sliced it, so there is nobody to pay. A manager can edit it to name the slicer.');
   if (record.performedByPersonId === actor.personId) {
     return refusal('You cannot confirm your own slicing. Ask another staff member to check it and confirm.');
+  }
+  // T-635 S2 (Ian: "Any staff except slicers"): a person who holds the Slicer position here is never the one who checks a slicer's work.
+  if (await productionRepo.holdsSlicerNow(tx, record.orgId, actor.personId, record.storeId)) {
+    return refusal('A slicer cannot confirm slicing. Ask another staff member who is not a slicer to check it and confirm.');
   }
   if (record.paidByPayRunId) return refusal('This slicing record was already paid in a pay run.');
   if (record.confirmedAt) return refusal('This slicing record is already confirmed.');
@@ -220,8 +233,10 @@ export interface SlicerPayRow {
   readonly unconfirmed: number;
   readonly confirmedRecords: number;
   readonly confirmedKg: Quantity;
-  /** Confirmed and not yet paid: what the next pay run will add to the payslip. */
+  /** Confirmed and not yet paid: what the next pay run will add to the payslip. Includes records confirmed late from before the period. */
   readonly amountDue: Money;
+  /** How many of the unpaid confirmed records are "from an earlier period" (produced before the period's start). */
+  readonly earlierRecords: number;
   readonly paidRecords: number;
   readonly paidAmount: Money;
 }
@@ -240,16 +255,17 @@ export async function slicerPayOverview(tx: Tx, actor: Actor, input: { storeId: 
   const byRecord = new Map<string, SlicerPayLine[]>();
   for (const l of lines) byRecord.set(l.recordId, [...(byRecord.get(l.recordId) ?? []), l]);
 
-  const acc = new Map<string, { name: string; unconfirmed: number; kg: bigint; due: Money; confirmed: number; paidN: number; paid: Money }>();
+  const acc = new Map<string, { name: string; unconfirmed: number; kg: bigint; due: Money; confirmed: number; paidN: number; paid: Money; earlier: number }>();
   for (const r of all) {
-    const a = acc.get(r.personId) ?? { name: r.personName, unconfirmed: 0, kg: 0n, due: ZERO, confirmed: 0, paidN: 0, paid: ZERO };
+    const a = acc.get(r.personId) ?? { name: r.personName, unconfirmed: 0, kg: 0n, due: ZERO, confirmed: 0, paidN: 0, paid: ZERO, earlier: 0 };
     if (!r.confirmedAt) a.unconfirmed += 1;
     acc.set(r.personId, a);
   }
   const problems: string[] = [];
   for (const r of records) {
-    const a = acc.get(r.personId);
-    if (!a) continue;
+    // A slicer whose only open record is a late confirmation from an earlier period has no record in this period, but is still owed.
+    const a = acc.get(r.personId) ?? { name: r.personName, unconfirmed: 0, kg: 0n, due: ZERO, confirmed: 0, paidN: 0, paid: ZERO, earlier: 0 };
+    acc.set(r.personId, a);
     const priced = computeRecordPay(r.producedOn, byRecord.get(r.recordId) ?? [], rates);
     if (!priced.ok) {
       if (!problems.includes(priced.reason)) problems.push(priced.reason);
@@ -262,12 +278,13 @@ export async function slicerPayOverview(tx: Tx, actor: Actor, input: { storeId: 
       a.paid = add(a.paid, priced.pay);
     } else {
       a.due = add(a.due, priced.pay);
+      if (r.producedOn < input.from) a.earlier += 1;
     }
   }
   const rows = [...acc.entries()]
     .map(([personId, a]) => ({
       personId, personName: a.name, unconfirmed: a.unconfirmed, confirmedRecords: a.confirmed, confirmedKg: fromThousandths(a.kg),
-      amountDue: a.due, paidRecords: a.paidN, paidAmount: a.paid,
+      amountDue: a.due, earlierRecords: a.earlier, paidRecords: a.paidN, paidAmount: a.paid,
     }))
     .sort((x, y) => x.personName.localeCompare(y.personName));
   return { rows, problems };

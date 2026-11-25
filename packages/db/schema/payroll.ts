@@ -268,6 +268,9 @@ export const payslips = pgTable(
     /** T-635. The paid kilograms and the record count behind `slicer_pay`, shown on the payslip. */
     slicerKg: numeric('slicer_kg', { precision: 14, scale: 3 }).notNull().default('0'),
     slicerRecords: integer('slicer_records').notNull().default(0),
+    /** T-635 S2. Days in the period paid as SLICER days (the daily rate pays nothing for them; the slicer pay is the earnings) and how many of the paid records were confirmed late, from before the period. `daysWorked` is the REGULAR days. */
+    slicerDays: integer('slicer_days').notNull().default(0),
+    slicerEarlierRecords: integer('slicer_earlier_records').notNull().default(0),
 
     grossPay: numeric('gross_pay', { precision: 14, scale: 2 }).notNull(),
     /** ⛔ Capped at gross. Net may reach zero; it may never go below, and what is still owed stays
@@ -310,7 +313,7 @@ export const payslips = pgTable(
       // T-436 (migration 0205) restated it with the two new legs, as this comment demanded of whoever adds one; T-635 (0279) adds the slicer leg.
       sql`${t.grossPay} = ${t.basicPay} + ${t.otPay} + ${t.nightDiffPay} + ${t.holidayPay} + ${t.leavePay} + ${t.silConversionPay} + ${t.slicerPay}`,
     ),
-    check('payslips_slicer_nonnegative_check', sql`${t.slicerPay} >= 0 and ${t.slicerKg} >= 0 and ${t.slicerRecords} >= 0`),
+    check('payslips_slicer_nonnegative_check', sql`${t.slicerPay} >= 0 and ${t.slicerKg} >= 0 and ${t.slicerRecords} >= 0 and ${t.slicerDays} >= 0 and ${t.slicerEarlierRecords} >= 0 and ${t.slicerEarlierRecords} <= ${t.slicerRecords}`),
     check('payslips_slicer_pay_finite_check', sql`${t.slicerPay} > '-Infinity'::numeric and ${t.slicerPay} < 'Infinity'::numeric`),
     check('payslips_slicer_kg_finite_check', sql`${t.slicerKg} > '-Infinity'::numeric and ${t.slicerKg} < 'Infinity'::numeric`),
     /** ⭐ Restated by migration 0206 (T-190): net = gross - the three employee shares - withholding - advance. */

@@ -161,6 +161,9 @@ export interface PayslipDraft {
   slicerRecords: number;
   /** The slice records this slip pays (frozen to the run on post). */
   slicerRecordIds: string[];
+  /** T-635 S2. Days in the period paid as slicer days (no daily rate; `daysWorked` is the REGULAR days), and how many paid records were confirmed late (produced before the period). */
+  slicerDays: number;
+  slicerEarlierRecords: number;
   grossPay: Money;
   advanceRecovered: Money;
   netPay: Money;
@@ -190,7 +193,7 @@ export interface PayRunPreview {
   /** T-190. Every person and agency with no number on file: that agency is not deducted for them. */
   missingGovernmentIds: { personId: string; personName: string; agency: Agency }[];
   slips: PayslipDraft[];
-  /** T-635. What stops slicer pay from being priced (no rate in force, a unit that is not kg or g, no pay rate on the payslip). A POST refuses while any exist. */
+  /** T-635. Slice records that cannot be priced (no rate in force, a unit that is not kg or g, no job that day). Shown as warnings: such a record is skipped and stays unpaid, and never blocks the run. */
   slicerProblems: string[];
   totalGross: Money;
   totalNet: Money;
@@ -314,6 +317,10 @@ async function buildPreview(
 
     for (const employmentId of employmentIds) {
       const theirDays = byEmployment.get(employmentId) ?? [];
+      // ⭐ T-635 S2: a SLICER day pays nothing from the daily rate (the slicer pay is the earnings), so it never needs a rate: only the regular days are priced.
+      // Every day, slicer or regular, is still frozen to the run that paid the person (`dayIds`).
+      const regularDays = theirDays.filter((d) => d.workedAs !== 'slicer');
+      const slicerDayCount = theirDays.length - regularDays.length;
       const leaveLine = leavePlan.leaveByEmployment.get(employmentId);
       const silPayouts = leavePlan.payoutsByEmployment.get(employmentId) ?? [];
       const slicerLine = slicerPlan.byEmployment.get(employmentId);
@@ -324,7 +331,7 @@ async function buildPreview(
       let dailyRateAtEnd: Money = ZERO;
       let missingRate = 0;
 
-      for (const d of theirDays) {
+      for (const d of regularDays) {
         const rate = await payrollRepo.rateInForceOn(trx, actor.orgId, employmentId, d.shiftDay);
         if (!rate) {
           missingRate++;
@@ -399,7 +406,7 @@ async function buildPreview(
       });
 
       // ⚠️ What the days recorded but nobody approved. Shown, never paid.
-      const unapprovedOtMinutes = theirDays.reduce(
+      const unapprovedOtMinutes = regularDays.reduce(
         (n, d) => n + Math.max(0, d.pendingOtMinutes - (d.approvedOtMinutes ?? 0)),
         0,
       );
@@ -425,6 +432,8 @@ async function buildPreview(
         slicerKg: slicerLine?.slicerKg ?? decimal('0.000', '14,3'),
         slicerRecords: slicerLine?.recordIds.length ?? 0,
         slicerRecordIds: slicerLine?.recordIds ?? [],
+        slicerDays: slicerDayCount,
+        slicerEarlierRecords: slicerLine?.earlierRecords ?? 0,
         // T-436 leave + SIL are compensation: they are in the gross BEFORE the statutory pass reads it.
         grossPay,
         // Placeholders: the statutory pass below sets the advance and the net AFTER the contributions and the withholding.
@@ -685,13 +694,6 @@ export async function postPayRun(
           'priced at zero is indistinguishable from a day nobody worked.',
       );
     }
-    // ⛔ T-635: slicing that cannot be priced is never paid at zero and never silently skipped; the run waits until it is fixed.
-    if (preview.slicerProblems.length > 0) {
-      throw refuse(
-        `postPayRun: slicer pay cannot be priced: ${preview.slicerProblems.join(' ')}`,
-        `Slicer pay cannot be worked out yet. ${preview.slicerProblems.join(' ')}`,
-      );
-    }
     if (preview.slips.length === 0) {
       throw new Error(
         'postPayRun: nothing to pay in that period. ' +
@@ -769,6 +771,8 @@ export async function postPayRun(
           slicerPay: slip.slicerPay,
           slicerKg: slip.slicerKg,
           slicerRecords: slip.slicerRecords,
+          slicerDays: slip.slicerDays,
+          slicerEarlierRecords: slip.slicerEarlierRecords,
           grossPay: slip.grossPay,
           advanceRecovered: slip.advanceRecovered,
           netPay: slip.netPay,

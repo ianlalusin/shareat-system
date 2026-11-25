@@ -7,6 +7,7 @@
 import { and, asc, count, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { toBusinessDate } from '@shareat/core/datetime';
 import type { Tx } from '../client';
+import type { WorkedAs } from '../../schema/attendance-punches';
 import {
   attendanceDays,
   type AttendanceDayStatus,
@@ -41,6 +42,8 @@ export interface AttendanceDayRow {
   holidayType: HolidayType | null;
   holidayMinutes: number;
   pendingOtMinutes: number;
+  /** T-635 S2: derived on every recompute (first clock-in punch, or a live `worked_as` adjustment). */
+  workedAs: WorkedAs;
   status: AttendanceDayStatus;
   anomalies: string[];
   explain: string[];
@@ -101,6 +104,7 @@ export async function upsertDay(tx: Tx, input: UpsertDayInput): Promise<Attendan
         holidayType: input.holidayType,
         holidayMinutes: input.holidayMinutes,
         pendingOtMinutes: input.pendingOtMinutes,
+        workedAs: input.workedAs,
         status: input.status,
         anomalies: input.anomalies,
         explain: input.explain,

@@ -277,8 +277,8 @@ export default async function PayrollPage({
           )}
 
           {pv.slicerProblems.length > 0 && (
-            <Banner tone="error">
-              <strong>Slicer pay cannot be worked out:</strong> {pv.slicerProblems.join(' ')} The run cannot be posted until this is fixed.
+            <Banner tone="warning">
+              <strong>Some slicing was left out of this run:</strong> {pv.slicerProblems.join(' ')} It stays unpaid and is picked up by a later run once fixed. The run can still be posted.
             </Banner>
           )}
 
@@ -310,7 +310,8 @@ export default async function PayrollPage({
               <thead>
                 <tr>
                   <Th>Person</Th>
-                  <Th numeric>Days</Th>
+                  <Th numeric>Regular days</Th>
+                  <Th numeric>Slicer days</Th>
                   <Th numeric>Basic</Th>
                   <Th numeric>OT + ND + Hol</Th>
                   <Th numeric>Leave + SIL payout</Th>
@@ -327,6 +328,7 @@ export default async function PayrollPage({
                   <tr key={s.employmentId}>
                     <Td>{s.personName}</Td>
                     <NumTd>{s.daysWorked}</NumTd>
+                    <NumTd>{s.slicerDays > 0 ? s.slicerDays : '—'}</NumTd>
                     <NumTd className="font-mono">{peso(Number(s.basicPay))}</NumTd>
                     <NumTd className="font-mono text-muted">
                       {peso(Number(s.otPay) + Number(s.nightDiffPay) + Number(s.holidayPay))}
@@ -340,6 +342,7 @@ export default async function PayrollPage({
                           {peso(Number(s.slicerPay))}
                           <div className="font-sans text-xs">
                             {s.slicerKg} kg · {s.slicerRecords} {s.slicerRecords === 1 ? 'record' : 'records'}
+                            {s.slicerEarlierRecords > 0 && ` (${s.slicerEarlierRecords} from an earlier period)`}
                           </div>
                         </>
                       ) : (
@@ -368,7 +371,7 @@ export default async function PayrollPage({
             </Table>
           )}
 
-          {pv.slips.length > 0 && pv.unratedEmployments.length === 0 && pv.slicerProblems.length === 0 && (
+          {pv.slips.length > 0 && pv.unratedEmployments.length === 0 && (
             <form
               action={postPayRunAction}
               className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800"
@@ -420,9 +423,9 @@ export default async function PayrollPage({
                 <ul className="text-xs text-neutral-600 dark:text-neutral-400">
                   {latestSlips.map((s) => (
                     <li key={s.id}>
-                      {s.personName} — {s.daysWorked} {Number(s.daysWorked) === 1 ? 'day' : 'days'}, net{' '}
+                      {s.personName} — regular days {s.daysWorked}{s.slicerDays > 0 ? `, slicer days ${s.slicerDays}` : ''}, net{' '}
                       <span className="font-mono">{peso(Number(s.netPay))}</span>
-                      {s.slicerRecords > 0 && ` · slicer pay ${peso(Number(s.slicerPay))} (${s.slicerKg} kg, ${s.slicerRecords} ${s.slicerRecords === 1 ? 'record' : 'records'})`}
+                      {s.slicerRecords > 0 && ` · slicer pay ${peso(Number(s.slicerPay))} (${s.slicerKg} kg, ${s.slicerRecords} ${s.slicerRecords === 1 ? 'record' : 'records'}${s.slicerEarlierRecords > 0 ? `, ${s.slicerEarlierRecords} from an earlier period` : ''})`}
                       {compare(money(s.advanceRecovered), ZERO) > 0 &&
                         (repayments[s.journalEntryId ?? ''] ?? [{ amount: s.advanceRecovered, signedOn: '' }])
                           .map((r) => ` · ${chargeRepaymentLabel(r.signedOn)} −${peso(Number(r.amount))}`)

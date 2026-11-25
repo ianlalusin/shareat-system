@@ -91,6 +91,11 @@ export interface InboxEvent {
   credentialRef: string;
   method: string;
   assertedIntent: string;
+  /**
+   * T-635 S2. What a slicer chose at clock-in: `slicer` or `regular`. OPTIONAL: an event without it (an old terminal, a queued punch, a person who is not a
+   * slicer) means regular, and still ingests.
+   */
+  workedAs?: string;
   [key: string]: unknown;
 }
 
@@ -339,6 +344,7 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
     occurredAt,
     method,
     assertedIntent: event.assertedIntent as PunchIntent,
+    workedAs: event.workedAs === 'slicer' || event.workedAs === 'regular' ? event.workedAs : null,
     source: 'offline_replay',
     deviceId: terminal.id,
   });
@@ -413,6 +419,10 @@ function shapeErrors(event: Partial<InboxEvent>): string | null {
   }
   if (!PUNCH_INTENTS.includes(event.assertedIntent as PunchIntent)) {
     problems.push(`assertedIntent "${String(event.assertedIntent)}" is not recognised`);
+  }
+  // T-635 S2: absent (or null) is fine and means regular; a value that is neither word is a malformed event, quarantined like any other.
+  if (event.workedAs !== undefined && event.workedAs !== null && event.workedAs !== 'slicer' && event.workedAs !== 'regular') {
+    problems.push(`workedAs "${String(event.workedAs)}" is not recognised`);
   }
   return problems.length ? problems.join('; ') : null;
 }
