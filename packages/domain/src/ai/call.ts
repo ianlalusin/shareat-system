@@ -42,6 +42,11 @@ export interface AiCallInput {
   messages: readonly ChatMessage[];
   tools?: readonly ToolDef[];
   maxOutputTokens: number;
+  /**
+   * T-641: true for the second and later model calls of ONE question (the tool loop). It is logged as `<feature>.step`, is not counted as another question against the person's
+   * daily limit and is not refused by it (the first call of the question already passed it), but the monthly cap, the switches, the reservation and the log apply to it in full.
+   */
+  continuation?: boolean;
 }
 
 export interface AiCallOutput {
@@ -82,7 +87,7 @@ async function plan(tx: Tx, actor: Actor, input: AiCallInput, deps: HubDeps, req
   const spent = await aiHubRepo.spendThisMonthMicro(tx, actor.orgId);
   assertUnderCap(settings, spent);
   const admin = isAdministrative((await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId))?.role);
-  if (!admin) {
+  if (!admin && !input.continuation) {
     const used = await aiHubRepo.answeredToday(tx, actor.orgId, actor.personId);
     if (used >= settings.dailyLimitPerPerson) {
       throw refuse(
@@ -129,7 +134,8 @@ async function plan(tx: Tx, actor: Actor, input: AiCallInput, deps: HubDeps, req
   return { settings, models, warning };
 }
 
-export async function callAi(run: TxRunner, actor: Actor, input: AiCallInput, deps: HubDeps = {}): Promise<AiCallOutput> {
+export async function callAi(run: TxRunner, actor: Actor, given: AiCallInput, deps: HubDeps = {}): Promise<AiCallOutput> {
+  const input: AiCallInput = given.continuation ? { ...given, feature: `${given.feature}.step` } : given;
   if (!/^[a-z][a-z0-9_.]{0,59}$/.test(input.feature)) throw internalFault(`callAi: feature "${input.feature.slice(0, 30)}" is not a short lower-case name`);
   if (!Number.isInteger(input.maxOutputTokens) || input.maxOutputTokens < 1 || input.maxOutputTokens > MAX_OUTPUT_TOKENS) {
     throw internalFault(`callAi: maxOutputTokens ${String(input.maxOutputTokens)} is not a whole number from 1 to ${MAX_OUTPUT_TOKENS}`);

@@ -7,10 +7,12 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * T-640 (security audit): `callAi` enforces switches, caps and limits but does NOT authorize the feature that calls it ("who may ask Ask ERP" is the feature's own `authorize()`).
- * So every caller of `callAi` outside packages/domain/src/ai must authorize in the same function, BEFORE the call. Today there is no caller, so the census over the real tree is
- * empty; the fixtures below prove it would catch one, and it starts guarding the day T-641 adds the first.
+ * So every caller of `callAi` outside packages/domain/src/ai must authorize in the same function, BEFORE the call.
+ * T-641 added `callAiWithTools` (the tool loop, which calls `callAi` from inside packages/domain/src/ai) and the first real caller, Ask ERP; the census now watches BOTH names, and the
+ * real-tree test below proves it sees at least that one caller (a scan that finds nothing must not read as "no ungated caller").
  */
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', '..');
+const ENTRY_POINTS = new Set(['callAi', 'callAiWithTools']);
 const GATES = new Set(['authorize', 'authorizeHub', 'authorizeOrgLevel', 'loadAndAuthorize', 'requirePageAccess']);
 
 function callersWithoutGate(source: string, file: string): string[] {
@@ -23,7 +25,7 @@ function callersWithoutGate(source: string, file: string): string[] {
     return cur;
   };
   const visit = (n: ts.Node): void => {
-    if (ts.isCallExpression(n) && name(n) === 'callAi') {
+    if (ts.isCallExpression(n) && ENTRY_POINTS.has(name(n) ?? '')) {
       const fn = topLevel(n);
       let gated = false;
       const scan = (m: ts.Node): void => {
@@ -40,14 +42,13 @@ function callersWithoutGate(source: string, file: string): string[] {
 }
 
 describe('T-640 every caller of callAi authorizes first', () => {
-  it('the real tree: no caller outside packages/domain/src/ai is ungated (empty until T-641 adds the first) [kills: an AI feature that asks the model before checking who may]', () => {
+  it('the real tree: no caller outside packages/domain/src/ai is ungated, and the scan really finds the Ask ERP caller [kills: an AI feature that asks the model before checking who may; a blind scan]', () => {
     const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8' })
       .split('\0')
       .filter((f) => /^(apps\/[^/]+\/src|packages\/domain\/src|scripts)\/.*\.tsx?$/.test(f) && !f.startsWith('packages/domain/src/ai/') && !f.includes('/tests/'));
-    const bad = files.flatMap((f) => {
-      const text = readFileSync(join(ROOT, f), 'utf8');
-      return text.includes('callAi(') ? callersWithoutGate(text, f) : [];
-    });
+    const callers = files.filter((f) => /callAi(?:WithTools)?\(/.test(readFileSync(join(ROOT, f), 'utf8')));
+    expect(callers.length, 'the census found no caller of callAi or callAiWithTools at all: it is blind, or Ask ERP was removed').toBeGreaterThan(0);
+    const bad = callers.flatMap((f) => callersWithoutGate(readFileSync(join(ROOT, f), 'utf8'), f));
     expect(bad).toEqual([]);
   });
 
@@ -59,6 +60,13 @@ describe('T-640 every caller of callAi authorizes first', () => {
   it('control: no authorize at all is caught [kills: a checker that is blind]', () => {
     const bad = `export async function askErp(tx: Tx, actor: Actor, q: string) { return callAi(run, actor, { feature: 'ask_erp', messages: [], maxOutputTokens: 5 }); }`;
     expect(callersWithoutGate(bad, 'x.ts')).toEqual(['x.ts:1']);
+  });
+
+  it('control: the tool loop entry point is watched too [kills: a census that only knows the old name]', () => {
+    const ok = `export async function a(tx: Tx, actor: Actor) { await authorize(tx, actor, 'use_ask_erp', {}); return callAiWithTools(run, actor, {}); }`;
+    expect(callersWithoutGate(ok, 'w.ts')).toEqual([]);
+    const bad = `export async function b(tx: Tx, actor: Actor) { return callAiWithTools(run, actor, {}); }`;
+    expect(callersWithoutGate(bad, 'v.ts')).toEqual(['v.ts:1']);
   });
 
   it('control: authorizing AFTER the call, or in another function, does not count [kills: a gate in the wrong place]', () => {

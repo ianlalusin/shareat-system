@@ -5,4 +5,6 @@ export { testAiModel } from './test-model';
 export type { TestModelResult } from './test-model';
 export { callAi } from './call';
 export type { AiCallInput, AiCallOutput } from './call';
+export { callAiWithTools } from './loop';
+export type { AiLoopInput, AiLoopOutput, AiToolTrace } from './loop';
 export type { HubDeps, MasterKeyState, TxRunner, UsageLevel } from './shared';

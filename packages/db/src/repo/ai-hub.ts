@@ -272,11 +272,11 @@ export async function spendThisMonthMicro(tx: Tx, orgId: string): Promise<number
   return Number(rows[0]?.total ?? 0);
 }
 
-/** Questions this person has had answered today (Manila), plus any in flight. The hub's own test calls are not questions. */
+/** Questions this person has had answered today (Manila), plus any in flight. The hub's own test calls are not questions, and neither is a later step of one question's tool loop (`<feature>.step`, T-641). */
 export async function answeredToday(tx: Tx, orgId: string, personId: string): Promise<number> {
   const rows = (await tx.execute(
     sql`select count(*)::int as n from ai_calls c
-        where c.org_id = ${orgId} and c.person_id = ${personId} and c.feature <> 'hub.test' and c.created_at >= ${DAY_START}
+        where c.org_id = ${orgId} and c.person_id = ${personId} and c.feature <> 'hub.test' and c.feature not like '%.step' and c.created_at >= ${DAY_START}
           and (c.ok or (c.error_code = ${RESERVED_CODE} and not ${SETTLED}))`,
   )) as unknown as { n: number }[];
   return Number(rows[0]?.n ?? 0);
