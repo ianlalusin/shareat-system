@@ -41,3 +41,11 @@ export const POS_CHARGE_RULES = defineFieldRules('posTablets.charge', {
   name: { label: 'The charge name', kind: 'text', min: 1, max: 40, requires: 'A charge name must be 1 to 40 characters.' },
   amount: { label: 'The charge amount', kind: 'money', min: 0.01, max: 100000, requires: 'The charge amount must be more than 0.', rangeSays: 'The charge amount must be more than 0 and at most 100,000.' },
 });
+
+/**
+ * T-633: adding table numbers (one number, or a range like "1-20"). Only the length is checked here; `parseTableNumbers` owns the shape, the 1 to 999 range,
+ * "backwards" and the 200-at-once cap, each in its own sentence.
+ */
+export const POS_TABLE_ADD_RULES = defineFieldRules('posTablets.addTables', {
+  numbers: { label: 'Table numbers', kind: 'text', min: 1, max: 11, requires: 'Type one table number, like 5, or a range, like 1-20.' },
+});

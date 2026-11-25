@@ -6,7 +6,7 @@
  * (`provisionPosTerminalLink`, `revokePosTerminalLink`, `resetApprovalPinCap`). The read gate here is the same capability the writes
  * check, at the store: `provision_clock_terminal` (admin, super admin).
  */
-import { accessRepo, pinAttemptsRepo, posTerminalLinksRepo, posV2Repo } from '@shareat/db';
+import { accessRepo, pinAttemptsRepo, posStoreSetupRepo, posTerminalLinksRepo, posV2Repo } from '@shareat/db';
 import { authorize, can, type Actor } from '@shareat/auth';
 import { listPosTerminals } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
@@ -124,4 +124,35 @@ export function revokeConfirmName(terminalNo: number): string {
 /** The form's own shape check (the domain checks again and owns the refusal sentence): a device id is a uuid. */
 export function normaliseDeviceId(raw: string): string {
   return raw.trim().toLowerCase();
+}
+
+export interface TableView {
+  readonly id: string;
+  readonly number: number;
+}
+
+/**
+ * T-633: the store's table numbers for the Tables section, active and retired, each in number order. `canManage` as in `loadDiscounts`
+ * (`manage_store_settings` at the store, asked with the non-logging `can`): it only decides whether Add and Retire are drawn.
+ */
+export async function loadTables(actor: Actor, storeId: string): Promise<{ active: TableView[]; retired: TableView[]; canManage: boolean }> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const rows = await posStoreSetupRepo.listStands(tx, actor.orgId, storeId);
+    const view = (r: (typeof rows)[number]): TableView => ({ id: r.id, number: r.number });
+    return {
+      canManage: await can(tx, actor, 'manage_store_settings', { storeId }),
+      active: rows.filter((r) => r.status === 'active').sort((a, b) => a.number - b.number).map(view),
+      retired: rows.filter((r) => r.status === 'retired').sort((a, b) => a.number - b.number).map(view),
+    };
+  });
+}
+
+const tables = (n: number) => (n === 1 ? '1 table' : `${n} tables`);
+
+/** T-633 (pure): the Add result in words, e.g. "Added 18 tables; 2 already existed." A retired number is named as kept retired, never reused. */
+export function addTablesSentence(r: { added: number; existed: number; retired: number }): string {
+  const parts: string[] = [r.added > 0 ? `Added ${tables(r.added)}` : 'No tables added'];
+  if (r.existed > 0) parts.push(`${r.existed} already existed`);
+  if (r.retired > 0) parts.push(`${tables(r.retired)} ${r.retired === 1 ? 'is' : 'are'} retired and stay${r.retired === 1 ? 's' : ''} retired (a retired number is never reused)`);
+  return `${parts.join('; ')}.${r.added > 0 ? " The tablet shows them after its next refresh." : ''}`;
 }
