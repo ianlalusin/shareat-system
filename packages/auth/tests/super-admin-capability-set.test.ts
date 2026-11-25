@@ -30,9 +30,10 @@ import { CAPABILITIES, CAPABILITY_MATRIX, SUPER_ADMIN_ONLY_CAPABILITIES } from '
  * backfill in migration 0187 (R6a) in the same slice; T-385 S3 (2026-10-09) adds `verify_own_sales_day`, WITH the
  * backfill in migration 0188; T-401 (2026-10-13) adds `add_menu_item`, WITH the backfill in migration 0196 (B0196, tested by
  * packages/db/tests/integration/t401-s1-add-menu-item-backfill.test.ts); T-510 S2 (2026-11-05) adds `pair_menu_dayparts`, WITH the backfill in
- * migration 0234 (B0234, tested by packages/db/tests/integration/t510-s2-pair-backfill.test.ts). ⛔ Do not update this to make the test pass.
+ * migration 0234 (B0234, tested by packages/db/tests/integration/t510-s2-pair-backfill.test.ts); T-640 (2026-11-25) adds `manage_ai_hub`, WITH the backfill in migration 0284 (B0284, tested by
+ * packages/db/tests/integration/t640-ai-hub-backfill.test.ts). ⛔ Do not update this to make the test pass.
  */
-const PINNED = ['add_menu_item', 'approve_item', 'cross_org_access', 'pair_menu_dayparts', 'post_journal_entry', 'unlink_store_from_pos', 'verify_own_sales_day', 'view_franchise_sales'];
+const PINNED = ['add_menu_item', 'approve_item', 'cross_org_access', 'manage_ai_hub', 'pair_menu_dayparts', 'post_journal_entry', 'unlink_store_from_pos', 'verify_own_sales_day', 'view_franchise_sales'];
 
 const WHAT_TO_DO =
   'A capability was added to or removed from the super_admin-only set.\n\n' +
@@ -43,7 +44,7 @@ const WHAT_TO_DO =
   'See packages/domain/src/organizations/index.ts (createFirstAdmin) and T-232 §2.2.';
 
 describe('SUPER_ADMIN_ONLY_CAPABILITIES — pinned, because the grants are materialised', () => {
-  it('is exactly the eight capabilities existing owners must hold (four granted at creation, the fifth backfilled by 0187, the sixth by 0188, the seventh by 0196, the eighth by 0234)', () => {
+  it('is exactly the nine capabilities existing owners must hold (four granted at creation, the fifth backfilled by 0187, the sixth by 0188, the seventh by 0196, the eighth by 0234, the ninth by 0284)', () => {
     expect([...SUPER_ADMIN_ONLY_CAPABILITIES].sort(), WHAT_TO_DO).toEqual(PINNED);
   });
 

@@ -23,6 +23,8 @@ const nextConfig = {
     '@shareat/db',
     '@shareat/domain',
     '@shareat/auth',
+    // T-640: the AI package ships TypeScript source like the others (domain imports it).
+    '@shareat/ai',
     // ⚠️ Ships TypeScript source like the others. `firebase-admin` itself stays in
     // serverExternalPackages below — transpiling the wrapper is not the same as bundling the SDK.
     '@shareat/storage-firebase',

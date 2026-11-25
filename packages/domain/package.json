@@ -21,6 +21,7 @@
     "./documents/doc": "./src/documents/doc.ts"
   },
   "dependencies": {
+    "@shareat/ai": "*",
     "@shareat/auth": "*",
     "@shareat/core": "*",
     "@shareat/db": "*",

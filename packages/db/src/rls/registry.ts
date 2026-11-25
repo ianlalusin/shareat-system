@@ -371,6 +371,26 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Per-store channel-settlement wiring (T-564): the store key, match labels, file hints and the wastage-email opt-in. ' +
       'Org-scoped because it is configuration that names a store to outside matching, so one org must never read the wiring of another.',
   },
+  ai_provider_keys: {
+    scope: 'org_column',
+    reason: "T-640. An organisation's own encrypted AI provider keys. Org-scoped: one organisation must never read, let alone use, another's key (the ciphertext is also bound to its org and provider).",
+  },
+  ai_models: {
+    scope: 'org_column',
+    reason: "T-640. An organisation's tested and activated AI models and their order. Org-scoped.",
+  },
+  ai_settings: {
+    scope: 'org_column',
+    reason: "T-640. An organisation's AI switch, monthly cap, daily limit and peso rate. Org-scoped.",
+  },
+  ai_store_switches: {
+    scope: 'org_column',
+    reason: "T-640. Which of an organisation's stores have AI features switched off. Org-scoped.",
+  },
+  ai_calls: {
+    scope: 'org_column',
+    reason: "T-640. The log of an organisation's model calls: who asked, what it cost, the prompt hash. Org-scoped: another organisation reading it would learn who uses AI for what and how much it spends.",
+  },
   document_kinds: {
     scope: 'org_column',
     reason: "T-637: an organisation's own list of document kinds (Certificate of employment, Memo, ...). Org-scoped: one organisation's kinds are not another's.",

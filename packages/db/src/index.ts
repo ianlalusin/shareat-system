@@ -430,3 +430,6 @@ export * as missedMonthsRepo from './repo/missed-months';
 export type { SafeInsert, SafeUpdate } from './repo/numeric-input';
 export type { MissedMonthSchedule } from '../schema/missed-month-adjustments';
 export * as expenseItemsRepo from './repo/expense-items';
+
+// T-640 - the AI hub: keys (ciphertext never listed), models, settings, store switches and the call log.
+export * as aiHubRepo from './repo/ai-hub';
