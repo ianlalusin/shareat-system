@@ -76,6 +76,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // T-401 S6: the usage tolerance band is org policy, admin-only like the menu depletion rules (`set_menu_depletion`); the setters check the same word.
   '/settings/usage-tolerance': 'set_menu_depletion',
   '/settings/business-rules': 'manage_business_rules',
+  // T-640 (Ian, 25 Nov 2026): the AI hub holds provider keys and the AI spending cap: super admin only. Every hub function checks the same word (and an admin-or-above role) on the write.
+  '/settings/ai-hub': 'manage_ai_hub',
   // T-584 (Ian, 15 Nov 2026): HR documents. The register, a document and its print need view_documents; issuing needs issue_documents; the templates are the admin's. The longer prefix wins over /documents. Every domain function checks the same word at the document's store.
   '/documents': 'view_documents',
   '/documents/new': 'issue_documents',

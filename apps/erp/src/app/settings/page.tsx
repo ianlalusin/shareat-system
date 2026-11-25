@@ -89,6 +89,7 @@ export default async function SettingsPage() {
           <SettingsRow href="/settings/organization" title="Organisation" hint="The registered name, TIN and tax type the books are kept under." writeCap="manage_chart_of_accounts" />
           <SettingsRow href="/settings/expense-categories" title="Expense categories" hint="Which account each kind of spend debits." writeCap="manage_chart_of_accounts" />
           <SettingsRow href="/settings/business-rules" title="Business rules" hint="Payout tolerance, loan rounding, and the withholding and VAT rates." writeCap="manage_business_rules" />
+          <SettingsRow href="/settings/ai-hub" title="AI hub" hint="AI provider keys, which models answer, the spending cap and the AI switches." writeCap="manage_ai_hub" />
           <SettingsRow href="/payroll/rates" title="Payroll rates" hint="SSS, PhilHealth, Pag-IBIG and tax tables, and minimum wages." writeCap="manage_payroll_rates" />
           <SettingsRow href="/settings/usage-tolerance" title="Usage tolerance" hint="How far recorded stock usage may stray from what POS sales imply." writeCap="set_menu_depletion" />
           <SettingsRow href="/menu/usage-source" title="Usage source" hint="Whether daily stock usage comes from POS item maps or menu stock rules." writeCap={['switch_usage_source', 'manage_pos_map']} />

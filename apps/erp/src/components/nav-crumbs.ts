@@ -166,6 +166,7 @@ export const CRUMB_PAGES: readonly string[] = [
   '/sales-days/new',
   '/service-charge',
   '/settings',
+  '/settings/ai-hub',
   '/settings/attendance',
   '/settings/business-rules',
   '/settings/expense-categories',
@@ -199,6 +200,7 @@ export const NO_CRUMB_PREFIXES: readonly string[] = ['/pos', '/clock', '/sign-in
  */
 export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   '/admin': 'Admin',
+  '/settings/ai-hub': 'AI hub',
   '/admin/stores/[id]': 'Store',
   '/admin/stores/[id]/pos-preflight': 'POS pre-flight',
   '/admin/users/[personId]': 'User',

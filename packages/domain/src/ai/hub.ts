@@ -166,7 +166,13 @@ export async function saveProviderKey(tx: Tx, actor: Actor, input: { provider: s
   const master = requireMasterKey(deps);
   const before = await aiHubRepo.getKeyMeta(tx, actor.orgId, provider);
   const keyLast4 = lastFour(key);
-  const saved = await aiHubRepo.upsertKey(tx, { orgId: actor.orgId, provider, keyEnvelope: encryptSecret(key, master, keyContext(actor.orgId, provider)), keyLast4, setBy: actor.personId });
+  let saved: { id: string };
+  try {
+    saved = await aiHubRepo.upsertKey(tx, { orgId: actor.orgId, provider, keyEnvelope: encryptSecret(key, master, keyContext(actor.orgId, provider)), keyLast4, setBy: actor.personId });
+  } catch {
+    // ⛔ not the driver's error: its message carries the query and its parameters (the ciphertext), and error text reaches a log and a screen
+    throw refuse('ai hub: saving the key failed', 'The key could not be saved just now. Try again; if it keeps failing, tell whoever looks after the system.');
+  }
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'ai_key.saved',
