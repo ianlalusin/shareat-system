@@ -27,13 +27,7 @@ function str(fd: FormData, name: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-async function done(ok: string): Promise<void> {
-  revalidatePath(ROUTE);
-  return await redirectWithFlash(ROUTE, {}, { ok });
-}
-async function refused(err: unknown): Promise<void> {
-  return await redirectWithFlash(ROUTE, {}, { error: errorMessage(err) });
-}
+// T-640: each exported action calls redirectWithFlash itself (no-typed-values-in-urls G1b allows it only there).
 
 export async function saveKeyAction(fd: FormData): Promise<void> {
   const actor = await requireActor(ROUTE);
@@ -42,13 +36,12 @@ export async function saveKeyAction(fd: FormData): Promise<void> {
     // the raw (untrimmed) value goes to the domain, which trims and checks it; it is not read again here
     ({ replaced } = await withOrgPrincipal(actor.orgId, (tx) => saveProviderKey(tx, actor, { provider: str(fd, 'provider'), key: String(fd.get('key') ?? '') })));
   } catch (err) {
-    return await refused(err);
+    return await redirectWithFlash(ROUTE, {}, { error: errorMessage(err) });
   }
-  return await done(
-    replaced
+  revalidatePath(ROUTE);
+  return await redirectWithFlash(ROUTE, {}, { ok: replaced
       ? 'The key is replaced. The old one is gone, and only the last 4 characters of the new one stay in view. Test the models again before relying on them.'
-      : 'The key is saved, encrypted. Only its last 4 characters will ever be shown. Now test a model below.',
-  );
+      : 'The key is saved, encrypted. Only its last 4 characters will ever be shown. Now test a model below.', });
 }
 
 export async function removeKeyAction(fd: FormData): Promise<void> {
@@ -57,9 +50,10 @@ export async function removeKeyAction(fd: FormData): Promise<void> {
   try {
     removed = (await withOrgPrincipal(actor.orgId, (tx) => removeProviderKey(tx, actor, { provider: str(fd, 'provider') }))).modelsRemoved;
   } catch (err) {
-    return await refused(err);
+    return await redirectWithFlash(ROUTE, {}, { error: errorMessage(err) });
   }
-  return await done(removed > 0 ? `The key is removed, and so ${removed === 1 ? 'is its model' : `are its ${removed} models`}. Type the key again to bring them back; they will need a new test.` : 'The key is removed.');
+  revalidatePath(ROUTE);
+  return await redirectWithFlash(ROUTE, {}, { ok: removed > 0 ? `The key is removed, and so ${removed === 1 ? 'is its model' : `are its ${removed} models`}. Type the key again to bring them back; they will need a new test.` : 'The key is removed.' });
 }
 
 export async function testModelAction(fd: FormData): Promise<void> {
@@ -70,10 +64,11 @@ export async function testModelAction(fd: FormData): Promise<void> {
   try {
     result = await testAiModel(run, actor, { provider: str(fd, 'provider'), model });
   } catch (err) {
-    return await refused(err);
+    return await redirectWithFlash(ROUTE, {}, { error: errorMessage(err) });
   }
   if (!result.ok) return await redirectWithFlash(ROUTE, {}, { error: `${model}: the test failed. ${result.note}` });
-  return await done(`${model}: ${result.note}`);
+  revalidatePath(ROUTE);
+  return await redirectWithFlash(ROUTE, {}, { ok: `${model}: ${result.note}` });
 }
 
 export async function activateModelAction(fd: FormData): Promise<void> {
@@ -81,9 +76,10 @@ export async function activateModelAction(fd: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => activateAiModel(tx, actor, { provider: str(fd, 'provider'), model: str(fd, 'model') }));
   } catch (err) {
-    return await refused(err);
+    return await redirectWithFlash(ROUTE, {}, { error: errorMessage(err) });
   }
-  return await done('The model is switched on, last in the order. Move it earlier if it should be tried first.');
+  revalidatePath(ROUTE);
+  return await redirectWithFlash(ROUTE, {}, { ok: 'The model is switched on, last in the order. Move it earlier if it should be tried first.' });
 }
 
 export async function deactivateModelAction(fd: FormData): Promise<void> {
@@ -91,9 +87,10 @@ export async function deactivateModelAction(fd: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => deactivateAiModel(tx, actor, { provider: str(fd, 'provider'), model: str(fd, 'model') }));
   } catch (err) {
-    return await refused(err);
+    return await redirectWithFlash(ROUTE, {}, { error: errorMessage(err) });
   }
-  return await done('The model is switched off. It keeps its test result.');
+  revalidatePath(ROUTE);
+  return await redirectWithFlash(ROUTE, {}, { ok: 'The model is switched off. It keeps its test result.' });
 }
 
 export async function moveModelAction(fd: FormData): Promise<void> {
@@ -101,9 +98,10 @@ export async function moveModelAction(fd: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => moveAiModel(tx, actor, { provider: str(fd, 'provider'), model: str(fd, 'model'), direction: str(fd, 'direction') }));
   } catch (err) {
-    return await refused(err);
+    return await redirectWithFlash(ROUTE, {}, { error: errorMessage(err) });
   }
-  return await done('The order is changed. The first model is tried first; the next is used only when the one before it fails.');
+  revalidatePath(ROUTE);
+  return await redirectWithFlash(ROUTE, {}, { ok: 'The order is changed. The first model is tried first; the next is used only when the one before it fails.' });
 }
 
 export async function saveSettingsAction(fd: FormData): Promise<void> {
@@ -122,7 +120,8 @@ export async function saveSettingsAction(fd: FormData): Promise<void> {
   } catch (err) {
     return await redirectWithFlash(ROUTE, {}, { error: errorMessage(err), typed: keepTyping(fd, AI_SETTINGS_EDIT, '', { actorId: actor.personId }) });
   }
-  return await done(changed ? 'Saved. The cap and limits apply to the very next AI question.' : 'Nothing was different, so nothing was changed.');
+  revalidatePath(ROUTE);
+  return await redirectWithFlash(ROUTE, {}, { ok: changed ? 'Saved. The cap and limits apply to the very next AI question.' : 'Nothing was different, so nothing was changed.' });
 }
 
 export async function storeSwitchAction(fd: FormData): Promise<void> {
@@ -131,7 +130,8 @@ export async function storeSwitchAction(fd: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => setAiStoreSwitch(tx, actor, { storeId: str(fd, 'storeId'), enabled }));
   } catch (err) {
-    return await refused(err);
+    return await redirectWithFlash(ROUTE, {}, { error: errorMessage(err) });
   }
-  return await done(enabled ? 'AI features are on for that store.' : 'AI features are off for that store.');
+  revalidatePath(ROUTE);
+  return await redirectWithFlash(ROUTE, {}, { ok: enabled ? 'AI features are on for that store.' : 'AI features are off for that store.' });
 }
