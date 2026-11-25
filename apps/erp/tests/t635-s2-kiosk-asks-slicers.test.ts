@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * T-635 S2 - the clock kiosk asks "Working today as: Slicer / Regular staff" ONLY of a slicer clocking in, and the choice rides on the punch event.
  * (The kiosk is offline and Firebase-only: this file reads `lane.ts`, which imports the client SDK only; the route-is-client-only guard covers the page.)
  */
-const setDoc = vi.fn(async () => {});
+const setDoc = vi.fn(async (..._args: unknown[]) => {});
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(), doc: vi.fn((_db: unknown, path: string, id: string) => `${path}/${id}`), getDocs: vi.fn(), onSnapshot: vi.fn(), query: vi.fn(), where: vi.fn(),
-  setDoc: (...a: unknown[]) => (setDoc as unknown as (...x: unknown[]) => Promise<void>)(...a),
+  setDoc: (...a: unknown[]) => setDoc(...a),
 }));
 
 import { mustChooseWorkedAs, writePunch } from '../src/lib/terminal/lane';

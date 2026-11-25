@@ -148,3 +148,23 @@ Migration 0279 is hand-authored (ADR-012 §5): classification + RLS registry + t
 - a Slicer-position confirmer is refused
 - a late-confirmed earlier record is paid in the next run, exactly once
 - an unpriceable record is skipped, not blocking
+
+## S2 as built (builder, 25 Nov 2026) - folded into migration 0279 (still unapplied anywhere)
+
+**Migration 0279 (S2 part):** `attendance_punches.worked_as` (null allowed), `attendance_days.worked_as` (NOT NULL default regular), `attendance_adjustments.worked_as` + the new kind `worked_as` (kind CHECK and the payload whitelist restated), `payslips.slicer_days` and `slicer_earlier_records`. Applied clean on a fresh scratch DB (t635s2_test).
+
+- **Kiosk:** `/clock` stays Firebase-only. The roster mirror document gains `isSlicer` (any open canonical Slicer position, primary or not; the position trigger already re-enqueues the roster). `lane.ts` `mustChooseWorkedAs(intent, who)` decides: only a slicer clocking IN is asked, with two 56px buttons; the punch is written when one is pressed; no answer in 30 s records nothing and says so. `writePunch` adds `workedAs` only when chosen. Firestore rules: `workedAs` optional, `slicer`/`regular` only. An event without it is regular and still ingests; any other value is quarantined as malformed.
+- **The day remembers it, derived:** `adjudicateDay` sets `worked_as = live adjustment ?? first clock-in punch's value ?? regular` on every recompute. A manager's correction is a `worked_as` adjustment (audited like the other kinds: who, which session, superseding the last), saved from a "Worked as" card on the attendance day page. `slicer` is refused for someone without the Slicer position that day.
+- **Payroll per day:** only regular days are priced and need a rate; slicer days pay 0 from the daily rate but are still frozen to the run. A person with slicer days only and no rate gets no unrated refusal. The slip and the preview show Regular days N and Slicer days N.
+- **Confirmer:** a person who holds the Slicer position at the store cannot confirm (domain rule; the DB CHECK confirmer != slicer stays).
+- **Late confirmations:** a run pays every confirmed, posted, unpaid record with `produced_on <= periodEnd` (attendance days keep their exact window). Earlier-period ones are counted on the slip (`slicer_earlier_records`) and on the Slicer pay view ("from an earlier period"). Paid once: the freeze (`paid_by_pay_run_id`) excludes them from every later run; voiding the run releases them.
+- **Unpriceable records are skipped:** no rate in force, a unit that is not kg or g, or no job that day gives a warning in the preview and Slicer pay view; the record stays unpaid and unfrozen and the run still posts (the S1 post-time refusal is gone, and the test that asserted it now asserts the skip).
+- **Rule 4 (who may add slice records):** unchanged and already true: naming yourself needs the Slicer position (`slicerRefusal` at draft and at post); everyone else keeps `post_production`.
+- **Audit fixes:** paid tick uses the house `Checkbox`; slicer rate form converted to `CheckedForm` with `SLICER_RATE_RULES`; census pins re-written.
+
+**Shortcuts and doubts (BOSS to check):**
+- The kiosk asks at every clock-IN by a slicer (not literally once per day); only the day's first clock-in decides, so a second answer is harmless. A "once per day" ask would need the day feed to carry `workedAs` too.
+- A device can assert `slicer` for someone who does not hold the position; the server stores it as sent. The cost falls on that person (a slicer day pays 0 daily and they have no slicer pay), and a manager can correct it. Not checked at ingest.
+- t384-s3 and t411 guard classifications were added as exemptions (the Set-a-rate window and the draft slicer form are not edit-in-place records; Confirm and Take back confirmation are COMMANDS). Marked NEEDS BOSS APPROVAL in the test files.
+- The slicer-pay.ts and slicer-pay-math.ts string-date comparisons are EXEMPT in the t371 G2 guard as ISO-date ordering, like the other date comparisons there.
+

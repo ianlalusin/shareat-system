@@ -220,6 +220,9 @@ DEF-002.
 | `is_paid` (production line) | an OUTPUT line the slicer is paid per kg for; false = re-cut or trimming |
 | `paid_by_pay_run_id` (production record) | the posted pay run that paid it; set on post, cleared on void; while set the record cannot be edited or voided |
 | `slicer_pay` (payslip) | per-kg pay in gross, NOT in `basic_pay` |
+| `worked_as` (punch / day / adjustment) | `regular` or `slicer`. The punch carries what the person chose at clock-in (null = no choice = regular); the day's value is DERIVED on every recompute (first clock-in, or a live `worked_as` adjustment); a `slicer` day pays 0 from the daily rate |
+| `isSlicer` (roster mirror document) | the offline kiosk asks only these people "Working today as: Slicer / Regular staff" |
+| `slicer_days` / `slicer_earlier_records` (payslip) | days paid as slicer days (`days_worked` is the REGULAR days); records paid that were confirmed late, from before the period |
 
 ## Words we deliberately avoid
 

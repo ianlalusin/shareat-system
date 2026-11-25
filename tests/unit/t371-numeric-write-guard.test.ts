@@ -81,6 +81,9 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   // T-635 (slicer pay rate in force): ISO effective-date ordering (lexicographic by design), never a numeric(p,s) column value
   'packages/domain/src/production/slicer-pay-math.ts::latest::r.effectiveFrom <= on': 'not-a-column-value',
   'packages/domain/src/production/slicer-pay-math.ts::latest::r.effectiveFrom > a.effectiveFrom': 'not-a-column-value',
+  // T-635 S2 (late confirmations): "produced before the period's start" on two ISO date strings, counted for the "from an earlier period" note; never a numeric(p,s) column value
+  'packages/domain/src/production/slicer-pay.ts::planSlicerPay::r.producedOn < input.from': 'not-a-column-value',
+  'packages/domain/src/production/slicer-pay.ts::slicerPayOverview::r.producedOn < input.from': 'not-a-column-value',
   // T-502 S5 (expense items report): ISO business-date ordering (lexicographic by design), never a money comparison
   'packages/domain/src/reports/expense-items.ts::attribute::r.businessDate > p.businessDate': 'not-a-column-value',
   'apps/erp/src/app/reports/expense-items/range.ts::resolveRange::from > to': 'not-a-column-value',
