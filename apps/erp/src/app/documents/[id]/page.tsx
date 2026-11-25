@@ -54,7 +54,7 @@ export default async function DocumentPage({ params, searchParams }: { params: P
   const { got, canIssue } = loaded;
   const { document: doc, versions } = got;
   const current = versions[0]!;
-  // After a refused revision the editor reopens with what was typed (when it was small enough to keep).
+  // After a revision the server turned down, the editor reopens with what was typed (when it was small enough to keep).
   const typedRevision = typedFor(sp, DOCUMENT_REVISE, doc.id, actor.personId);
   const revisedDoc = typedRevision?.kind === 'typed' && typeof typedRevision.fields.bodyDoc === 'string' ? safeDoc(typedRevision.fields.bodyDoc) : null;
   const open = !doc.voided;

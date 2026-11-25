@@ -1,5 +1,5 @@
 import { requirePageAccess } from '../../../../lib/page-access';
-import { templateEditorView } from '../editor-page';
+import { templateEditorView } from '../editor-view';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'New template — Shareat System' };
