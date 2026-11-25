@@ -30,7 +30,3 @@ export const MODEL_CATALOGUE: readonly CatalogueModel[] = [
 export function catalogueModel(provider: string, model: string): CatalogueModel | undefined {
   return MODEL_CATALOGUE.find((m) => m.provider === provider && m.model === model);
 }
-
-export function modelsOf(provider: AiProvider): readonly CatalogueModel[] {
-  return MODEL_CATALOGUE.filter((m) => m.provider === provider);
-}

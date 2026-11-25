@@ -64,6 +64,9 @@ const EXEMPT: Record<string, string> = {
 // `<button>` labels written in app/ - they are the `label=` prop of <ConfirmDestructive>, whose own submit button is the one
 // control (apps/erp/tests/t412-destructive-census.test.ts is the guard for those). Their entries left this list with them.
 const COMMANDS: Record<string, string> = {
+  'Remove key': 'T-640 (BOSS approved 26 Nov 2026): deletes a stored AI provider key and, with it, that provider\'s models (a credential removed; audited ai_key.removed; super admin only, inside a "Remove this key" reveal)',
+  'Test': 'T-640 (BOSS approved 26 Nov 2026): sends one tiny prompt with one tool to an AI provider with the stored key (spends a fraction of a centavo, counted against the monthly cap; logged in ai_calls)',
+  'Switch on': 'T-640 (BOSS approved 26 Nov 2026): switches a tested AI model on (it then answers questions and spends money; audited ai_model.activated) or one store\'s AI features back on; super admin only',
   'Switch off': 'T-632 (NEEDS BOSS APPROVAL): withdraws every live price of one menu item at one store (a status change: history and past sales are kept; audited per row)',
   'Activate': 'T-612 (Ian, 19 Nov 2026): a manager or administrator switches a hired person account on (pending -> active) so they can sign in; audited account.activated; who may is decided in the domain',
   'Approve and book': 'T-511 S7b (BOSS approved): approves one settlement day and books its payout (money in the books); audited; the uploader rule and the blockers are re-checked in the domain',
@@ -495,6 +498,8 @@ describe('G8: submit labels are Save / Save draft / a COMMANDS verb / a toggle',
 /** Buttons whose text is not a literal (`{label}`), per file. Pinned so a new one is a decision, not silence. */
 const DYNAMIC_BUTTONS: Record<string, number> = {
   'expenses/recurring/page.tsx': 1,
+  // T-640 (BOSS approved 26 Nov 2026): the Move earlier / Move later buttons of the AI model order share one MoveForm that takes the label as a prop
+  'settings/ai-hub/page.tsx': 1,
 };
 describe('G8b: dynamic-label buttons are an explicit list', () => {
   it('equals DYNAMIC_BUTTONS', () => {

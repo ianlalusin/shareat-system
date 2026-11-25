@@ -209,7 +209,7 @@ function ProviderCard({ p }: { p: AiProviderView }) {
           <Input {...nativeAttrs(AI_KEY_RULES.key)} type="password" autoComplete="off" spellCheck={false} className="w-full" />
         </Field>
         <SubmitButton variant="primary" pendingLabel="Saving…">
-          {p.hasKey ? 'Replace key' : 'Save key'}
+          Save
         </SubmitButton>
       </CheckedForm>
       {p.hasKey && (
