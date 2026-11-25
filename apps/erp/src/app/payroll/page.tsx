@@ -109,6 +109,9 @@ export default async function PayrollPage({
           <a href="/payroll/separations" className={SECONDARY_LINK}>
             Separations
           </a>
+          <a href={`/inventory/production/slicer-pay?store=${storeId}`} className={SECONDARY_LINK}>
+            Slicer pay
+          </a>
         </>
       }
     >
@@ -273,6 +276,12 @@ export default async function PayrollPage({
             </Banner>
           )}
 
+          {pv.slicerProblems.length > 0 && (
+            <Banner tone="warning">
+              <strong>Some slicing was left out of this run:</strong> {pv.slicerProblems.join(' ')} It stays unpaid and is picked up by a later run once fixed. The run can still be posted.
+            </Banner>
+          )}
+
           {pv.unconfirmedRates.length > 0 && (
             <Banner tone="warning">
               <strong>Rates not confirmed:</strong> {pv.unconfirmedRates.join('; ')}. The figures below use them, but the run
@@ -301,10 +310,12 @@ export default async function PayrollPage({
               <thead>
                 <tr>
                   <Th>Person</Th>
-                  <Th numeric>Days</Th>
+                  <Th numeric>Regular days</Th>
+                  <Th numeric>Slicer days</Th>
                   <Th numeric>Basic</Th>
                   <Th numeric>OT + ND + Hol</Th>
                   <Th numeric>Leave + SIL payout</Th>
+                  <Th numeric>Slicer pay</Th>
                   <Th numeric>Gross</Th>
                   <Th numeric>SSS / PhilHealth / Pag-IBIG</Th>
                   <Th numeric>Tax</Th>
@@ -317,12 +328,26 @@ export default async function PayrollPage({
                   <tr key={s.employmentId}>
                     <Td>{s.personName}</Td>
                     <NumTd>{s.daysWorked}</NumTd>
+                    <NumTd>{s.slicerDays > 0 ? s.slicerDays : '—'}</NumTd>
                     <NumTd className="font-mono">{peso(Number(s.basicPay))}</NumTd>
                     <NumTd className="font-mono text-muted">
                       {peso(Number(s.otPay) + Number(s.nightDiffPay) + Number(s.holidayPay))}
                     </NumTd>
                     <NumTd className="font-mono text-muted">
                       {peso(Number(s.leavePay) + Number(s.silConversionPay))}
+                    </NumTd>
+                    <NumTd className="font-mono text-muted">
+                      {s.slicerRecords > 0 ? (
+                        <>
+                          {peso(Number(s.slicerPay))}
+                          <div className="font-sans text-xs">
+                            {s.slicerKg} kg · {s.slicerRecords} {s.slicerRecords === 1 ? 'record' : 'records'}
+                            {s.slicerEarlierRecords > 0 && ` (${s.slicerEarlierRecords} from an earlier period)`}
+                          </div>
+                        </>
+                      ) : (
+                        '—'
+                      )}
                     </NumTd>
                     <NumTd className="font-mono">{peso(Number(s.grossPay))}</NumTd>
                     <NumTd className="font-mono text-xs">
@@ -398,8 +423,9 @@ export default async function PayrollPage({
                 <ul className="text-xs text-neutral-600 dark:text-neutral-400">
                   {latestSlips.map((s) => (
                     <li key={s.id}>
-                      {s.personName} — {s.daysWorked} {Number(s.daysWorked) === 1 ? 'day' : 'days'}, net{' '}
+                      {s.personName} — regular days {s.daysWorked}{s.slicerDays > 0 ? `, slicer days ${s.slicerDays}` : ''}, net{' '}
                       <span className="font-mono">{peso(Number(s.netPay))}</span>
+                      {s.slicerRecords > 0 && ` · slicer pay ${peso(Number(s.slicerPay))} (${s.slicerKg} kg, ${s.slicerRecords} ${s.slicerRecords === 1 ? 'record' : 'records'}${s.slicerEarlierRecords > 0 ? `, ${s.slicerEarlierRecords} from an earlier period` : ''})`}
                       {compare(money(s.advanceRecovered), ZERO) > 0 &&
                         (repayments[s.journalEntryId ?? ''] ?? [{ amount: s.advanceRecovered, signedOn: '' }])
                           .map((r) => ` · ${chargeRepaymentLabel(r.signedOn)} −${peso(Number(r.amount))}`)

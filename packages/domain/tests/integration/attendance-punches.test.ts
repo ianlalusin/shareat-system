@@ -267,6 +267,7 @@ describe('T-156 invariant 8 — ⭐ no column here is derived from a business ru
       'store_id',
       'supersedes_punch_id',
       'void_reason',
+      'worked_as', // T-635 S2: what the person TAPPED at clock-in (slicer / regular) - a recorded fact, like asserted_intent; the day's worked_as is derived elsewhere
     ]);
   });
 });

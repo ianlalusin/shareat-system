@@ -24,17 +24,20 @@ export interface ProductionScreenData {
   readonly inputItems: ProductionItemOption[];
   readonly recipes: Awaited<ReturnType<typeof productionRepo.listRecipes>>;
   readonly records: Awaited<ReturnType<typeof productionRepo.listProductionRecords>>;
+  /** T-635: the people who hold the Slicer position at this store today, for the "who sliced" picker. */
+  readonly slicers: { personId: string; personName: string }[];
 }
 
 /** Everything the register + "New record" form needs, in one org-scoped transaction. */
 export async function productionScreenData(orgId: string, storeId: string): Promise<ProductionScreenData> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const [locations, itemRows, usableRows, recipes, records] = await Promise.all([
+    const [locations, itemRows, usableRows, recipes, records, slicers] = await Promise.all([
       stockUsageRepo.listOperatingLocations(tx, storeId),
       itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
       itemsRepo.listUsableItems(tx, orgId, storeId),
       productionRepo.listRecipes(tx, orgId),
       productionRepo.listProductionRecords(tx, storeId),
+      productionRepo.listSlicersAtStore(tx, orgId, storeId),
     ]);
     return {
       locations,
@@ -48,6 +51,7 @@ export async function productionScreenData(orgId: string, storeId: string): Prom
       })),
       recipes,
       records,
+      slicers,
     };
   });
 }
@@ -63,12 +67,18 @@ export interface ProductionLineView {
   readonly movementId: string | null;
   readonly revision: number;
   readonly reversedAt: Date | null;
+  /** T-635: an output line the slicer is paid for. */
+  readonly isPaid: boolean;
 }
 
 export interface ProductionRecordDetail {
   readonly record: NonNullable<Awaited<ReturnType<typeof productionRepo.getProductionRecord>>>;
   readonly locationName: string;
   readonly lines: ProductionLineView[];
+  /** T-635 */
+  readonly slicerName: string | null;
+  readonly confirmedByName: string | null;
+  readonly slicers: { personId: string; personName: string }[];
 }
 
 export async function productionRecordDetail(orgId: string, id: string): Promise<ProductionRecordDetail | null> {
@@ -76,10 +86,12 @@ export async function productionRecordDetail(orgId: string, id: string): Promise
     const record = await productionRepo.getProductionRecord(tx, id);
     if (!record || record.orgId !== orgId) return null;
 
-    const [rows, itemRows, locationName] = await Promise.all([
+    const [rows, itemRows, locationName, names, slicers] = await Promise.all([
       productionRepo.listProductionRecordLines(tx, id),
       itemsRepo.listItems(tx, orgId, { includeInactive: true, stockedOnly: true }),
       stockUsageRepo.locationName(tx, record.locationId),
+      productionRepo.personNames(tx, orgId, [record.performedByPersonId, record.confirmedByPersonId].filter((x): x is string => !!x)),
+      record.kind === 'slice' && record.status === 'draft' ? productionRepo.listSlicersAtStore(tx, orgId, record.storeId) : Promise.resolve([]),
     ]);
     const itemsById = new Map(itemRows.map((i) => [i.id, i]));
     const lines: ProductionLineView[] = rows.map((r) => {
@@ -95,9 +107,17 @@ export async function productionRecordDetail(orgId: string, id: string): Promise
         movementId: r.movementId,
         revision: r.revision,
         reversedAt: r.reversedAt,
+        isPaid: r.isPaid,
       };
     });
 
-    return { record, locationName, lines };
+    return {
+      record,
+      locationName,
+      lines,
+      slicerName: record.performedByPersonId ? (names.get(record.performedByPersonId) ?? null) : null,
+      confirmedByName: record.confirmedByPersonId ? (names.get(record.confirmedByPersonId) ?? null) : null,
+      slicers,
+    };
   });
 }

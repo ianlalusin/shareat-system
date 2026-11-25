@@ -20,15 +20,15 @@
  * record inserts NEW lines for the new revision and stamps `reversed_at` on the old ones, which
  * stay visible — never a delete, never an UPDATE of the old row's quantity.
  *
- * ## §7's decision — the slicer-payment lock lives HERE, as a derived query
+ * ## §7's decision — the slicer-payment lock (superseded by T-635, migration 0279)
  *
- * Not a column on this table (⛔ DEF-075's pattern), and not a call Phase 5 makes into inventory.
- * See `packages/domain/src/production/index.ts`'s `hasLiveSlicerPaymentCovering` — the predicate
- * is written now, with Phase 5's payment table stubbed, so the coupling point is designed rather
- * than discovered.
+ * It was a stub for a payment table that was never built. T-635 pays the slicer through the pay run, so the lock is now the
+ * record's own `paid_by_pay_run_id` (the same idea as `attendance_days.frozen_by_pay_run_id`): set when a posted run pays the
+ * record, cleared when that run is voided. `hasLiveSlicerPaymentCovering` in `production/index.ts` reads it.
  */
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   date,
   index,
@@ -45,6 +45,7 @@ import {
 import { items } from './items';
 import { journalEntries } from './journal';
 import { organizations } from './organizations';
+import { payRuns } from './payroll';
 import { persons } from './persons';
 import { stockLocations } from './stock-locations';
 import { stockMovements } from './stock-ledger';
@@ -160,6 +161,13 @@ export const productionRecords = pgTable(
       .notNull()
       .references(() => persons.id, { onDelete: 'restrict' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** T-635 (migration 0279). Who sliced it. Required to POST a slice record (the domain checks they hold Slicer at the store on `produced_on`); null on convert and cook. */
+    performedByPersonId: uuid('performed_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+    /** T-635. Another staff member checked the work. Never the slicer (CHECK below); cleared by an edit; the pay run reads only confirmed records. */
+    confirmedByPersonId: uuid('confirmed_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    /** T-635. The posted pay run that paid this record's slicer pay. Set when the run posts, cleared when it is voided; while set the record cannot be edited or voided. */
+    paidByPayRunId: uuid('paid_by_pay_run_id').references(() => payRuns.id, { onDelete: 'restrict' }),
   },
   (t) => [
     check('production_records_revision_positive_check', sql`${t.revision} > 0`),
@@ -174,6 +182,14 @@ export const productionRecords = pgTable(
     ),
     // ⭐ Invariant 5, as a constraint: a `convert` never carries a journal entry.
     check('production_records_convert_no_journal_check', sql`${t.kind} <> 'convert' or ${t.journalEntryId} is null`),
+    // T-635 (migration 0279): confirmation is a pair, never by the slicer; paid means confirmed and still posted.
+    check('production_records_confirmed_pair_check', sql`(${t.confirmedByPersonId} is null) = (${t.confirmedAt} is null)`),
+    check(
+      'production_records_confirmer_not_slicer_check',
+      sql`${t.confirmedByPersonId} is null or ${t.performedByPersonId} is null or ${t.confirmedByPersonId} <> ${t.performedByPersonId}`,
+    ),
+    check('production_records_paid_shape_check', sql`${t.paidByPayRunId} is null or (${t.confirmedAt} is not null and ${t.status} = 'posted')`),
+    index('production_records_paid_run_idx').on(t.paidByPayRunId),
     index('production_records_store_status_idx').on(t.storeId, t.status, t.producedOn),
     index('production_records_org_idx').on(t.orgId),
     check('production_records_labour_cost_finite_check', sql`${t.labourCost} > '-Infinity'::numeric and ${t.labourCost} < 'Infinity'::numeric`),
@@ -219,6 +235,22 @@ export const productionRecords = pgTable(
       foreignColumns: [productionRecipes.orgId, productionRecipes.id],
       name: 'production_records_recipe_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-635 (migration 0279): same-org twins of the three new FKs.
+    foreignKey({
+      columns: [t.orgId, t.performedByPersonId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'production_records_performed_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.confirmedByPersonId],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'production_records_confirmed_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.paidByPayRunId],
+      foreignColumns: [payRuns.orgId, payRuns.id],
+      name: 'production_records_paid_by_pay_run_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -246,6 +278,8 @@ export const productionRecordLines = pgTable(
      *  8: "the old legs remain visible and marked reversed." */
     reversedAt: timestamp('reversed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** T-635 (migration 0279). Only an OUTPUT line of a slice record counts toward the slicer's pay, and only while this is true. False = a re-cut or trimming the slicer is not paid for. */
+    isPaid: boolean('is_paid').notNull().default(true),
   },
   (t) => [
     check('production_record_lines_quantity_positive_check', sql`${t.quantity} > 0`),

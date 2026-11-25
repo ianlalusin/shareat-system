@@ -1350,6 +1350,10 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-627: a charge frozen on an org’s own sales receipt; carries its own org_id.',
   },
+  slicer_pay_rates: {
+    scope: 'org_column',
+    reason: 'T-635. An org’s own per-kg slicer rates; a franchise reading another org’s would learn its labour cost (same reasoning as pay_rates).',
+  },
   payment_options: {
     scope: 'org_column',
     reason: 'T-629: an org’s own master list of payment options (org-level, no store); org isolation is the point.',

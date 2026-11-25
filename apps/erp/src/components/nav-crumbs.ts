@@ -104,6 +104,7 @@ export const CRUMB_PAGES: readonly string[] = [
   '/inventory/production/recipes',
   '/inventory/production/recipes/[id]',
   '/inventory/production/recipes/new',
+  '/inventory/production/slicer-pay',
   '/inventory/returns',
   '/inventory/transfers',
   '/inventory/usage',

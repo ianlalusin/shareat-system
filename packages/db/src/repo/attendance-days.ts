@@ -7,6 +7,7 @@
 import { and, asc, count, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { toBusinessDate } from '@shareat/core/datetime';
 import type { Tx } from '../client';
+import type { WorkedAs } from '../../schema/attendance-punches';
 import {
   attendanceDays,
   type AttendanceDayStatus,
@@ -41,6 +42,8 @@ export interface AttendanceDayRow {
   holidayType: HolidayType | null;
   holidayMinutes: number;
   pendingOtMinutes: number;
+  /** T-635 S2: derived on every recompute (first clock-in punch, or a live `worked_as` adjustment). */
+  workedAs: WorkedAs;
   status: AttendanceDayStatus;
   anomalies: string[];
   explain: string[];
@@ -101,6 +104,7 @@ export async function upsertDay(tx: Tx, input: UpsertDayInput): Promise<Attendan
         holidayType: input.holidayType,
         holidayMinutes: input.holidayMinutes,
         pendingOtMinutes: input.pendingOtMinutes,
+        workedAs: input.workedAs,
         status: input.status,
         anomalies: input.anomalies,
         explain: input.explain,
@@ -146,6 +150,8 @@ export interface ReviewDayRow extends AttendanceDayRow {
   hasStartAnchor: boolean;
   hasEarlyOut: boolean;
   hasHalfDayOverride: boolean;
+  /** T-635 S2: a live `worked_as` correction stands on this day. */
+  hasWorkedAs: boolean;
 }
 
 /**
@@ -168,7 +174,8 @@ const REVIEW_SELECT = sql`
   adj_ot.approved_ot_minutes as "approvedOtMinutes",
   (adj_anchor.id is not null) as "hasStartAnchor",
   (adj_out.id is not null) as "hasEarlyOut",
-  (adj_half.id is not null) as "hasHalfDayOverride"
+  (adj_half.id is not null) as "hasHalfDayOverride",
+  (adj_wa.id is not null) as "hasWorkedAs"
 `;
 
 /**
@@ -192,6 +199,9 @@ const REVIEW_JOINS = sql`
   left join attendance_adjustments adj_half
     on adj_half.employment_id = d.employment_id and adj_half.shift_day = d.shift_day
    and adj_half.kind = 'half_day_override' and adj_half.superseded_by_adjustment_id is null
+  left join attendance_adjustments adj_wa
+    on adj_wa.employment_id = d.employment_id and adj_wa.shift_day = d.shift_day
+   and adj_wa.kind = 'worked_as' and adj_wa.superseded_by_adjustment_id is null
 `;
 
 /** Every day in the range, decided or not — the roster half of T-195 §3.1. */

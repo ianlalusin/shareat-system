@@ -82,6 +82,7 @@ import {
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 import { testItemCode } from './_fixtures/item-code';
+import { ensureSlicerPerson } from './_fixtures/t635-slicer';
 import type { PosV1SoldItemInput } from '../../../db/src/pos-v1/fixtures';
 
 // `listUsableItems` does not exist at HEAD (T-383 S2b). Read off the namespace so L1 fails on its BEHAVIOUR (TypeError at call
@@ -448,9 +449,10 @@ describe('C7-C10 - production input, supplier return, branch order, customer ret
     await stockIn(w, w.A, w.kitchenA, slab, '100', '300.0000', 'meat_slab');
     await retire(w, slab);
 
+    const slicerId = await ensureSlicerPerson(sql, { orgId: w.orgId, storeId: w.A });
     const draft = await asOrg(w.orgId, (tx) =>
       createProductionDraft(tx, w.mgr, {
-        orgId: w.orgId, storeId: w.A, locationId: w.kitchenA, kind: 'slice', producedOn: '2026-08-10', labourCost: '1000.00',
+        orgId: w.orgId, storeId: w.A, locationId: w.kitchenA, kind: 'slice', performedByPersonId: slicerId, producedOn: '2026-08-10', labourCost: '1000.00',
         inputs: [{ itemId: slab, quantity: '100', unit: 'kg' }],
         outputs: [
           { itemId: sliceA, quantity: '40', unit: 'kg' },

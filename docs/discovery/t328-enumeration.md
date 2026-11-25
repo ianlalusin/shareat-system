@@ -310,6 +310,8 @@ traced; "grep only" = not traced further than the pattern match.
 | `${prefix}ItemId` L49 | apps/erp/src/app/inventory/production/actions.ts | OUT | id — grep only |
 | `${prefix}Quantity` L50 | apps/erp/src/app/inventory/production/actions.ts | OUT | quantity, not money — grep only |
 | `${prefix}Unit` L51 | apps/erp/src/app/inventory/production/actions.ts | OUT | unit label — grep only |
+| `${prefix}Paid` L56 | apps/erp/src/app/inventory/production/actions.ts | OUT | a yes/no choice per output line (T-635), not money |
+| `paidLineId` L158 | apps/erp/src/app/inventory/production/actions.ts | OUT | ids of the ticked output lines (T-635), not money |
 | `itemId` L90 | apps/erp/src/app/inventory/usage/actions.ts | OUT | id — grep only |
 | `quantity` L91 | apps/erp/src/app/inventory/usage/actions.ts | OUT | quantity, not money — grep only |
 | `positionIds` L111 | apps/erp/src/app/staff/actions.ts | OUT | ids — grep only |
