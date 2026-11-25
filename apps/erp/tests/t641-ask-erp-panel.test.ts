@@ -40,7 +40,10 @@ describe('T-641 the panel and the domain agree on the limits', () => {
     expect(panel).toMatch(/\{count\}\/\{ASK_ERP_RULES\.question\.max\}/);
   });
   it('the form action is the one server action, which reaches the rule through askErp [kills: a form whose action asserts nothing]', () => {
-    expect(panel).toContain('action={askErpAction as unknown as');
+    expect(panel).toContain('action={askErpFormAction}');
+    const actions = readFileSync(join(import.meta.dirname, '..', 'src', 'app', 'ask-erp', 'actions.ts'), 'utf8');
+    // the form action only forwards to askErpAction, which goes through askErp (authorize, then the rule)
+    expect(actions).toMatch(/export async function askErpFormAction\(formData: FormData\): Promise<void> \{\s*await askErpAction\(formData\);/);
     const domain = readFileSync(join(import.meta.dirname, '..', '..', '..', 'packages', 'domain', 'src', 'ask-erp', 'index.ts'), 'utf8');
     expect(domain).toMatch(/assertFieldRules\(ASK_ERP_RULES, \{ question: input\.question \}\)/);
     // authorize first, then the rule
