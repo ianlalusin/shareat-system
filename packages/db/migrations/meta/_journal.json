@@ -1737,6 +1737,13 @@
       "when": 1810697507084,
       "tag": "0285_t640_ai_tokens_estimated",
       "breakpoints": true
+    },
+    {
+      "idx": 286,
+      "version": "7",
+      "when": 1810783907084,
+      "tag": "0286_t641_ask_erp_capability",
+      "breakpoints": true
     }
   ]
 }

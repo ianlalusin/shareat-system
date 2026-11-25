@@ -66,5 +66,6 @@
   "packages/db/src/triggers": 0,
   "packages/domain/src/*": 0,
   "packages/db/src/*": 1,
-  "packages/domain/src/ai": 0
+  "packages/domain/src/ai": 0,
+  "packages/domain/src/ask-erp": 0
 }

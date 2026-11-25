@@ -89,9 +89,9 @@ describe('T-641 the built knowledge file', () => {
   });
 
   it('finds the glossary for anyone and keeps the decision log for people who may read the reports [kills: manager text served to staff; a search that cannot find the real file]', async () => {
-    const forAnyone = await searchKnowledge('dineInSales', { manager: false });
+    const forAnyone = await searchKnowledge('dineinsales', { manager: false });
     expect(forAnyone[0]?.id).toBe('glossary:dineinsales');
-    expect((await searchKnowledge('what does dineInSales mean', { manager: false })).slice(0, 2).map((h) => h.id)).toContain('glossary:dineinsales');
+    expect((await searchKnowledge('what does dineinsales mean', { manager: false })).slice(0, 2).map((h) => h.id)).toContain('glossary:dineinsales');
     expect(forAnyone.every((h) => !h.id.startsWith('bible-13:')  && !h.id.startsWith('posting:'))).toBe(true);
     const forManager = await searchKnowledge('why PostgreSQL system of record decision', { manager: true });
     expect(forManager.some((h) => h.id.startsWith('bible-13:'))).toBe(true);
