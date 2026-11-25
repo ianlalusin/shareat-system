@@ -25,7 +25,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, expenseAlertsRepo, manilaToday, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { money } from '@shareat/core/money';
-import { acknowledgeFinding, expenseAlertThresholds, listFindings, readinessOf } from '@shareat/domain';
+import { acknowledgeFinding, expenseAlertThresholds, listFindings, readinessOf, recordFindingObservations } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -159,6 +159,19 @@ describe('T-639 category spend spike', () => {
     expect(found[0]!.detail).toContain('₱200,000.00');
     expect(found[0]!.detail).toContain('₱100,000.00');
     expect(found[0]!.detail).toContain('2.0×');
+    expect(found[0]!.detail).toContain('this week');
+  });
+
+  it('last week is judged too, against the eight weeks before it: a Friday spike with nothing since still shows on the Monday after, keyed by last week [kills: judging only the current week]', async () => {
+    const f = await fixture('spike-lastweek');
+    const meat = await category(f, 'Meat');
+    for (const m of HISTORY_MONDAYS.slice(1, 5)) await exp(f, { categoryId: meat, date: dayOf(m, 1), amount: '100000.00' });
+    await exp(f, { categoryId: meat, date: dayOf(HISTORY_MONDAYS[0]!, 4), amount: '200000.00' });
+    const found = await spikes(f);
+    expect(kindsOf(found)).toEqual(['expenseCategorySpike']);
+    expect(found[0]!.key).toContain(HISTORY_MONDAYS[0]!);
+    expect(found[0]!.detail).toContain('last week');
+    expect(found[0]!.detail).not.toContain('this week');
   });
 
   it('stays quiet on a normal week: 100,000 against a usual 100,000 [kills: flagging every week]', async () => {
@@ -260,6 +273,17 @@ describe('T-639 expense frequency spike', () => {
     expect(found[0]!.severity).toBe('soft');
     expect(found[0]!.detail).toMatch(/5 expenses this week/);
     expect(found[0]!.detail).toMatch(/about 2\.0 a week/);
+  });
+
+  it('last week is judged too for a jump in count: 5 expenses last week against about 2 a week before it [kills: judging only the current week]', async () => {
+    const f = await fixture('freq-lastweek');
+    const supplies = await category(f, 'Supplies');
+    for (let w = 1; w < 8; w++) for (const d of [1, 2]) await exp(f, { categoryId: supplies, date: dayOf(HISTORY_MONDAYS[w]!, d), amount: small, supplier: `S${w}${d}` });
+    for (let d = 0; d < 5; d++) await exp(f, { categoryId: supplies, date: dayOf(HISTORY_MONDAYS[0]!, d), amount: small, supplier: `L${d}` });
+    const found = await spikes(f);
+    expect(kindsOf(found)).toEqual(['expenseFrequencySpike']);
+    expect(found[0]!.key).toContain(HISTORY_MONDAYS[0]!);
+    expect(found[0]!.detail).toMatch(/5 expenses last week/);
   });
 
   it('exactly double the usual is not a jump: 4 this week against about 2 a week [kills: >= instead of >]', async () => {
@@ -379,8 +403,24 @@ describe('T-639 possible duplicate', () => {
     expect(found).toHaveLength(1);
     expect(found[0]!.kind).toBe('expenseDuplicate');
     expect(found[0]!.severity).toBe('soft');
-    expect(found[0]!.key).toBe(`expenseDuplicate:${[a, b].sort().join(':')}`);
+    expect(found[0]!.key).toBe(`expenseDuplicate:${a}`); // keyed by the earlier of the two
     expect(found[0]!.detail).toContain('₱8,000.00');
+    expect(b).not.toBe(a);
+  });
+
+  it('three equal expenses are ONE finding listing all three, keyed by the earliest; a far-away pair of the same shape is its own finding [kills: per-pair keys (three findings); merging clusters that are not within 3 days]', async () => {
+    const f = await fixture('dup-cluster');
+    const cat = await category(f, 'Repairs', 'OPEX');
+    const first = await exp(f, { categoryId: cat, date: '2026-11-10', amount: '8000.00' });
+    await exp(f, { categoryId: cat, date: '2026-11-11', amount: '8000.00' });
+    await exp(f, { categoryId: cat, date: '2026-11-12', amount: '8000.00' });
+    await exp(f, { categoryId: cat, date: '2026-11-17', amount: '8000.00' });
+    await exp(f, { categoryId: cat, date: '2026-11-17', amount: '8000.00' });
+    const found = await duplicates(f);
+    expect(found).toHaveLength(2);
+    const trio = found.find((x) => x.key === `expenseDuplicate:${first}`)!;
+    expect(trio.detail).toContain('3 ₱8,000.00 expenses');
+    expect(found.some((x) => x.key.startsWith('expenseDuplicate:') && x.key !== trio.key && x.detail.includes('both on'))).toBe(true);
   });
 
   it('three days apart is still a duplicate, four is not [kills: < 3 or <= 4]', async () => {
@@ -568,5 +608,21 @@ describe('T-639 the acknowledge flow (real dates, because acknowledgeFinding rea
     expect(accepted.status).toBe('acknowledged');
     expect(accepted.acknowledgedBy).toBe(admin!.id);
     expect(after.acknowledgedCount).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('T-639 expense alerts are advice, not scorecard tasks', () => {
+  it('an expense alert is in the feed but never becomes a finding occurrence, so the manager scorecard cannot count it (real dates, the job reads the real clock) [kills: recording every finding kind as an occurrence]', async () => {
+    const f = await fixture('no-occurrence');
+    const today = await asOrg(f.orgId, (tx) => manilaToday(tx));
+    const meat = await category(f, 'Meat');
+    for (const back of [7, 14, 21]) await exp(f, { categoryId: meat, date: dayOf(today, -back), amount: '100000.00' });
+    await exp(f, { categoryId: meat, date: today, amount: '120000.00' });
+    await exp(f, { categoryId: meat, date: today, amount: '80000.00' });
+    const feed = await asOrg(f.orgId, (tx) => listFindings(tx, f.orgId, { period: '2026-10' }));
+    expect(feed.findings.some((x) => x.kind === 'expenseCategorySpike')).toBe(true);
+    await asOrg(f.orgId, (tx) => recordFindingObservations(tx, f.orgId));
+    const rows = await sql<{ n: string }[]>`select count(*)::text n from finding_occurrences where org_id = ${f.orgId} and kind in ('expenseCategorySpike', 'expenseOutlier', 'expenseFrequencySpike', 'expenseDuplicate', 'expenseSelfApproved', 'expenseOverBudget')`;
+    expect(rows[0]!.n).toBe('0');
   });
 });

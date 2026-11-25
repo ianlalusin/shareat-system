@@ -511,7 +511,8 @@ export async function recordFindingObservations(
   const seen = new Map<string, { storeId: string | null; kind: string }>();
   for (const period of periodsAsked) {
     const feed = await listFindings(tx, orgId, { period });
-    for (const f of feed.findings) seen.set(f.key, { storeId: f.storeId, kind: f.kind });
+    // T-639: expense alerts are advice, not fixable tasks: they never become occurrences, so the scorecard never counts them.
+    for (const f of feed.findings) if (!expenseAlertsRepo.EXPENSE_ALERT_KINDS.has(f.kind)) seen.set(f.key, { storeId: f.storeId, kind: f.kind });
   }
 
   const openKeys = new Set(open.map((o) => o.findingKey));

@@ -150,8 +150,9 @@ const todayOf = (asOf?: string) => (asOf ? sql`${asOf}::date` : MANILA_TODAY);
 const OPERATING = sql`e.status <> 'voided' and c."group" in ('OPEX', 'COGS')`;
 
 /**
- * Detectors 1 and 3, from ONE query: a category's spend this week against its usual week (Ian's example: meat is ordinarily 100k a
- * week and is now 200k), and the number of expenses this week against the usual count.
+ * Detectors 1 and 3, from ONE query: a category's spend in a week against its usual week (Ian's example: meat is ordinarily 100k a
+ * week and is now 200k), and the number of expenses in a week against the usual count. Two weeks are judged: this week and the last
+ * completed one, each against the `HISTORY_WEEKS` full weeks before IT, so a Friday to Sunday spike still shows on Monday.
  * Findings are keyed by store, category and week, so a spike is accepted for the week it happened in and a new week is asked afresh.
  */
 export async function categorySpendAlerts(tx: Tx, orgId: string, thresholdsFor: ThresholdsFor, asOf?: string): Promise<DetectedFinding[]> {
@@ -159,14 +160,14 @@ export async function categorySpendAlerts(tx: Tx, orgId: string, thresholdsFor: 
   const rows = (await tx.execute(sql`
     select e.store_id::text as store_id, s.name as store_name, e.category_id::text as category_id, c.category,
            date_trunc('week', e.business_date)::date::text as week_start,
-           date_trunc('week', ${today})::date::text as this_monday,
+           ((date_trunc('week', ${today})::date - date_trunc('week', e.business_date)::date) / 7)::int as weeks_back,
            sum(e.total_amount)::text as total, count(*)::int as n
       from expenses e
       join stores s on s.id = e.store_id
       join expense_categories c on c.id = e.category_id
      where e.org_id = ${orgId}
        and ${OPERATING}
-       and e.business_date >= (date_trunc('week', ${today})::date - ${HISTORY_WEEKS * 7}::int)
+       and e.business_date >= (date_trunc('week', ${today})::date - ${(HISTORY_WEEKS + 1) * 7}::int)
        and e.business_date <= ${today}
      group by e.store_id, s.name, e.category_id, c.category, date_trunc('week', e.business_date)
   `)) as unknown as {
@@ -175,50 +176,52 @@ export async function categorySpendAlerts(tx: Tx, orgId: string, thresholdsFor: 
     category_id: string;
     category: string;
     week_start: string;
-    this_monday: string;
+    weeks_back: number;
     total: string;
     n: number;
   }[];
 
-  const groups = new Map<string, { storeId: string; storeName: string; categoryId: string; category: string; monday: string; weeks: { week: string; total: Money; n: number }[] }>();
+  const groups = new Map<string, { storeId: string; storeName: string; categoryId: string; category: string; weeks: { week: string; back: number; total: Money; n: number }[] }>();
   for (const r of rows) {
     const key = `${r.store_id}:${r.category_id}`;
-    const g = groups.get(key) ?? { storeId: r.store_id, storeName: r.store_name, categoryId: r.category_id, category: r.category, monday: r.this_monday, weeks: [] };
-    g.weeks.push({ week: r.week_start, total: money(r.total), n: r.n });
+    const g = groups.get(key) ?? { storeId: r.store_id, storeName: r.store_name, categoryId: r.category_id, category: r.category, weeks: [] };
+    g.weeks.push({ week: r.week_start, back: r.weeks_back, total: money(r.total), n: r.n });
     groups.set(key, g);
   }
 
   const found: DetectedFinding[] = [];
   for (const g of groups.values()) {
-    const current = g.weeks.find((w) => w.week === g.monday);
-    if (!current) continue;
-    const history = g.weeks.filter((w) => w.week < g.monday);
     const t = thresholdsFor(g.categoryId);
+    for (const [back, when] of [[0, 'this week'], [1, 'last week']] as const) {
+      const current = g.weeks.find((w) => w.back === back);
+      if (!current) continue;
+      const history = g.weeks.filter((w) => w.back > back && w.back <= back + HISTORY_WEEKS);
 
-    const usual = usualWeeklySpend(history.map((w) => w.total));
-    if (usual && isSpendSpike(current.total, usual, t)) {
-      found.push({
-        kind: 'expenseCategorySpike',
-        key: `expenseCategorySpike:${g.storeId}:${g.categoryId}:${g.monday}`,
-        storeId: g.storeId,
-        severity: 'soft',
-        detail:
-          `${g.category}: ${peso(current.total)} this week at ${g.storeName}, usually about ${peso(usual)} (${ratioText(current.total, usual)}×). ` +
-          'Worth asking what changed. Nothing is blocked; this is only a nudge.',
-      });
-    }
+      const usual = usualWeeklySpend(history.map((w) => w.total));
+      if (usual && isSpendSpike(current.total, usual, t)) {
+        found.push({
+          kind: 'expenseCategorySpike',
+          key: `expenseCategorySpike:${g.storeId}:${g.categoryId}:${current.week}`,
+          storeId: g.storeId,
+          severity: 'soft',
+          detail:
+            `${g.category}: ${peso(current.total)} ${when} at ${g.storeName}, usually about ${peso(usual)} (${ratioText(current.total, usual)}×). ` +
+            'Worth asking what changed. Nothing is blocked; this is only a nudge.',
+        });
+      }
 
-    const historyCount = history.reduce((a, w) => a + w.n, 0);
-    if (history.length >= MIN_HISTORY_WEEKS && isFrequencyJump(current.n, historyCount, t)) {
-      found.push({
-        kind: 'expenseFrequencySpike',
-        key: `expenseFrequencySpike:${g.storeId}:${g.categoryId}:${g.monday}`,
-        storeId: g.storeId,
-        severity: 'soft',
-        detail:
-          `${g.category}: ${current.n} expenses this week at ${g.storeName}, usually about ${meanCountText(historyCount)} a week. ` +
-          'Many small expenses can be one purchase split up. Nothing is blocked.',
-      });
+      const historyCount = history.reduce((a, w) => a + w.n, 0);
+      if (history.length >= MIN_HISTORY_WEEKS && isFrequencyJump(current.n, historyCount, t)) {
+        found.push({
+          kind: 'expenseFrequencySpike',
+          key: `expenseFrequencySpike:${g.storeId}:${g.categoryId}:${current.week}`,
+          storeId: g.storeId,
+          severity: 'soft',
+          detail:
+            `${g.category}: ${current.n} expenses ${when} at ${g.storeName}, usually about ${meanCountText(historyCount)} a week. ` +
+            'Many small expenses can be one purchase split up. Nothing is blocked.',
+        });
+      }
     }
   }
   return found;
@@ -287,9 +290,24 @@ export async function singleExpenseOutliers(tx: Tx, orgId: string, thresholdsFor
   return found;
 }
 
-/** Detector 5: the same store, supplier and amount twice within `DUPLICATE_DAYS`. One finding per pair, never one for each side. */
+/** The advisory kinds this file raises: nudges, not tasks, so the manager scorecard and finding_occurrences leave them out. */
+export const EXPENSE_ALERT_KINDS: ReadonlySet<string> = new Set([
+  'expenseCategorySpike',
+  'expenseOutlier',
+  'expenseFrequencySpike',
+  'expenseDuplicate',
+  'expenseSelfApproved',
+  'expenseOverBudget',
+]);
+
+/**
+ * Detector 5: the same store, supplier and amount more than once within `DUPLICATE_DAYS` of each other. ONE finding per cluster (days
+ * chain: the 1st, 3rd and 5th are one cluster), never a pair or a side, keyed by the earliest member (by business date, then id, so a
+ * later duplicate joining the cluster does not change the key and lose its acknowledgement).
+ */
 export async function possibleDuplicateExpenses(tx: Tx, orgId: string, thresholdsFor: ThresholdsFor, asOf?: string): Promise<DetectedFinding[]> {
   const today = todayOf(asOf);
+  // Both sides are date-bounded so the (org_id, business_date) index serves the self-join: a pair's newer side is within RECENT_DAYS, so both are within RECENT_DAYS + DUPLICATE_DAYS.
   const rows = (await tx.execute(sql`
     select a.id::text as a_id, b.id::text as b_id, a.store_id::text as store_id, s.name as store_name, a.category_id::text as category_id,
            ec.category, sup.name as supplier_name, a.total_amount::text as amount,
@@ -302,6 +320,8 @@ export async function possibleDuplicateExpenses(tx: Tx, orgId: string, threshold
       join suppliers sup on sup.id = a.supplier_id
       join expense_categories ec on ec.id = a.category_id
      where a.org_id = ${orgId}
+       and a.business_date >= ${today} - ${RECENT_DAYS + DUPLICATE_DAYS}::int
+       and b.business_date >= ${today} - ${RECENT_DAYS + DUPLICATE_DAYS}::int
        and a.status <> 'voided' and b.status <> 'voided'
        and greatest(a.business_date, b.business_date) >= ${today} - ${RECENT_DAYS}::int
   `)) as unknown as {
@@ -317,18 +337,48 @@ export async function possibleDuplicateExpenses(tx: Tx, orgId: string, threshold
     b_date: string;
   }[];
 
-  return rows
-    .filter((r) => compare(money(r.amount), thresholdsFor(r.category_id).minAmount) >= 0)
-    .map((r) => ({
+  // Union the pairs into clusters: each pair links two ids, a cluster is a connected set of ids.
+  type Row = (typeof rows)[number];
+  const parent = new Map<string, string>();
+  const root = (x: string): string => {
+    let r = x;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    return r;
+  };
+  const members = new Map<string, { date: string; row: Row }>();
+  for (const r of rows) {
+    for (const [id, date] of [[r.a_id, r.a_date], [r.b_id, r.b_date]] as const) {
+      if (!parent.has(id)) parent.set(id, id);
+      members.set(id, { date, row: r });
+    }
+    parent.set(root(r.a_id), root(r.b_id));
+  }
+  const clusters = new Map<string, { id: string; date: string; row: Row }[]>();
+  for (const [id, m] of members) {
+    const list = clusters.get(root(id)) ?? [];
+    list.push({ id, ...m });
+    clusters.set(root(id), list);
+  }
+
+  const found: DetectedFinding[] = [];
+  for (const list of clusters.values()) {
+    list.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : x.id < y.id ? -1 : 1));
+    const first = list[0]!;
+    const r = first.row;
+    if (compare(money(r.amount), thresholdsFor(r.category_id).minAmount) < 0) continue;
+    const days = [...new Set(list.map((m) => m.date))].map(humanDay);
+    const when = days.length === 1 ? `${list.length === 2 ? 'both' : 'all'} on ${days[0]}` : `on ${days.slice(0, -1).join(', ')} and ${days[days.length - 1]}`;
+    found.push({
       kind: 'expenseDuplicate',
-      key: `expenseDuplicate:${r.a_id}:${r.b_id}`,
+      key: `expenseDuplicate:${first.id}`,
       storeId: r.store_id,
-      severity: 'soft' as const,
+      severity: 'soft',
       detail:
-        `${r.store_name}: two ${peso(money(r.amount))} expenses to ${r.supplier_name} (${r.category}), ` +
-        `${r.a_date === r.b_date ? `both on ${humanDay(r.a_date)}` : `on ${humanDay(r.a_date)} and ${humanDay(r.b_date)}`}. ` +
-        'A repeat entry, or two real purchases? Nothing is blocked.',
-    }));
+        `${r.store_name}: ${list.length === 2 ? 'two' : list.length} ${peso(money(r.amount))} expenses to ${r.supplier_name} (${r.category}), ${when}. ` +
+        'A repeat entry, or real purchases? Nothing is blocked.',
+    });
+  }
+  return found;
 }
 
 /** Detector 6: an expense approved by the person who recorded it. The approval flow allows it, so it is a nudge, not a refusal. */
