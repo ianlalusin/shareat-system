@@ -50,7 +50,8 @@ export async function makeWorld(sql: Sql, tag: string): Promise<World> {
     return o!.id;
   };
   const store = async (orgId: string, name: string): Promise<string> => {
-    const [s] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uniq('st')}, ${name}) returning id`;
+    // a short code with no long digit run: the privacy guard would (rightly) take a 13-digit run in a code for an ID number
+    const [s] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${`T${++seq}${Math.random().toString(36).slice(2, 5)}`}, ${name}) returning id`;
     return s!.id;
   };
   const person = async (orgId: string, name: string, role: string, stores: string[]): Promise<Actor> => {

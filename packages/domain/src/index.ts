@@ -214,3 +214,4 @@ export { readPosRules, readReceiptLookupDays } from './business-rules/pos-rules'
 
 // T-640 - the AI hub: keys, models, caps and switches (Settings > AI hub), the Test call, and the one door every AI feature calls.
 export * from './ai';
+export * from './ask-erp'; // T-641
