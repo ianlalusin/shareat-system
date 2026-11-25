@@ -166,6 +166,8 @@ export const aiCalls = pgTable(
     ok: boolean('ok').notNull(),
     /** Set exactly when `ok` is false: the error kind (and status), e.g. `rate_limit_429`. Never a provider's reply text. */
     errorCode: text('error_code'),
+    /** True when the provider reported no usage (or zero) and the tokens (and so the cost) were estimated from the text, about 4 characters a token (migration 0285). */
+    tokensEstimated: boolean('tokens_estimated').notNull().default(false),
     /** SHA-256 (64 lower-case hex characters) of the prompt AS SENT (after the privacy guard). The text itself is never stored. */
     promptSha256: text('prompt_sha256').notNull(),
     /** Attempts of one logical call (the fallback walk) share this reference. */

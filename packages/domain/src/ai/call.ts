@@ -30,7 +30,7 @@ import {
   type ToolDef,
 } from '@shareat/ai';
 import { gone, internalFault, refuse } from '../shared/refusal';
-import { assertUnderCap, asProviderError, guarded, MAX_OUTPUT_TOKENS, openKey } from './engine';
+import { assertUnderCap, asProviderError, guarded, MAX_OUTPUT_TOKENS, openKey, reservationCost, settleUsage } from './engine';
 import { percentOfCap, pesosText, requireMasterKey, settingsOrDefaults, usageLevel, MICRO, type HubDeps, type HubSettings, type TxRunner } from './shared';
 
 export interface AiCallInput {
@@ -65,13 +65,20 @@ interface Planned {
   warning: string | null;
 }
 
-async function plan(tx: Tx, actor: Actor, input: AiCallInput, deps: HubDeps): Promise<Planned> {
+/**
+ * Everything that must hold BEFORE a provider is called, decided in ONE transaction under the organisation's AI lock: the switches, the monthly cap, the person's daily limit, the
+ * models and their keys, and then a RESERVATION row carrying the worst-case cost of this call. The lock is held until commit and the reservation is committed with it, so a second
+ * call (another request, another server process) reads the first one's reservation: two calls at the edge of the cap cannot both pass, and the cap is overshot by at most one call.
+ * The reservation stops counting the moment a real row of the same call exists (see `RESERVED_CODE`).
+ */
+async function plan(tx: Tx, actor: Actor, input: AiCallInput, deps: HubDeps, req: ChatRequest, sha256: string, groupRef: string): Promise<Planned> {
   const settings = settingsOrDefaults(await aiHubRepo.getSettings(tx, actor.orgId));
   if (!settings.enabled) throw refuse('ai hub: AI is switched off for the organisation', 'AI features are switched off for the company. A super admin can switch them on in Settings > AI hub.');
   if (input.storeId) {
     if (!(await aiHubRepo.storeBelongsToOrg(tx, actor.orgId, input.storeId))) throw gone(`ai hub: store ${input.storeId} not in org`, 'store');
     if (!(await aiHubRepo.isStoreOn(tx, actor.orgId, input.storeId))) throw refuse('ai hub: AI is switched off for the store', 'AI features are switched off for this store.');
   }
+  await aiHubRepo.lockOrgAiCap(tx, actor.orgId);
   const spent = await aiHubRepo.spendThisMonthMicro(tx, actor.orgId);
   assertUnderCap(settings, spent);
   const admin = isAdministrative((await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId))?.role);
@@ -95,7 +102,26 @@ async function plan(tx: Tx, actor: Actor, input: AiCallInput, deps: HubDeps): Pr
     const key = await openKey(tx, actor.orgId, m.provider, deps);
     if (key) models.push({ ...m, key });
   }
-  if (models.length === 0) throw refuse('ai hub: no active model has a readable key', 'No AI model can be used right now: its key is missing or cannot be opened. A super admin can fix it in Settings > AI hub.');
+  const first = models[0];
+  if (!first) throw refuse('ai hub: no active model has a readable key', 'No AI model can be used right now: its key is missing or cannot be opened. A super admin can fix it in Settings > AI hub.');
+  await aiHubRepo.insertCall(tx, {
+    orgId: actor.orgId,
+    storeId: input.storeId ?? null,
+    personId: actor.personId,
+    feature: input.feature,
+    provider: first.provider,
+    model: first.model,
+    tokensIn: 0,
+    tokensOut: 0,
+    costMicroPhp: reservationCost(req, models.map((m) => m.price), settings.pesosPerUsdHundredths),
+    latencyMs: 0,
+    toolCalls: 0,
+    ok: false,
+    errorCode: aiHubRepo.RESERVED_CODE,
+    promptSha256: sha256,
+    groupRef,
+    tokensEstimated: true,
+  });
   const warning =
     admin && usageLevel(spent, settings.monthlyCapPesos, settings.warnAtPercent) === 'warn'
       ? `AI spending this month is at ${percentOfCap(spent, settings.monthlyCapPesos)}% of the monthly cap (₱${pesosText(spent)} of ₱${pesosText(settings.monthlyCapPesos * MICRO)}).`
@@ -114,9 +140,9 @@ export async function callAi(run: TxRunner, actor: Actor, input: AiCallInput, de
   const base: ChatRequest = { model: '', messages: input.messages, maxOutputTokens: input.maxOutputTokens, ...(input.system ? { system: input.system } : {}), ...(input.tools ? { tools: input.tools } : {}) };
   const g = guarded(base);
 
-  const planned = await run((tx) => plan(tx, actor, input, deps));
-  const http = deps.http ?? fetchHttpClient;
   const groupRef = randomUUID();
+  const planned = await run((tx) => plan(tx, actor, input, deps, g.request, g.sha256, groupRef));
+  const http = deps.http ?? fetchHttpClient;
   const kinds: string[] = [];
   let stop: AiProviderError | null = null;
 
@@ -130,7 +156,8 @@ export async function callAi(run: TxRunner, actor: Actor, input: AiCallInput, de
       failure = asProviderError(e);
     }
     const latencyMs = Math.round(performance.now() - t0);
-    const costMicroPhp = reply ? costMicroPesos(reply, m.price, planned.settings.pesosPerUsdHundredths) : 0;
+    const usage = reply ? settleUsage(reply, g.request) : null;
+    const costMicroPhp = usage ? costMicroPesos(usage, m.price, planned.settings.pesosPerUsdHundredths) : 0;
     await run((tx) =>
       aiHubRepo.insertCall(tx, {
         orgId: actor.orgId,
@@ -139,8 +166,8 @@ export async function callAi(run: TxRunner, actor: Actor, input: AiCallInput, de
         feature: input.feature,
         provider: m.provider,
         model: m.model,
-        tokensIn: reply?.tokensIn ?? 0,
-        tokensOut: reply?.tokensOut ?? 0,
+        tokensIn: usage?.tokensIn ?? 0,
+        tokensOut: usage?.tokensOut ?? 0,
         costMicroPhp,
         latencyMs,
         toolCalls: reply?.toolCalls.length ?? 0,
@@ -148,16 +175,17 @@ export async function callAi(run: TxRunner, actor: Actor, input: AiCallInput, de
         errorCode: failure ? errorCode(failure) : null,
         promptSha256: g.sha256,
         groupRef,
+        tokensEstimated: usage?.estimated ?? false,
       }),
     );
-    if (reply) {
+    if (reply && usage) {
       return {
         text: reply.text,
         toolCalls: reply.toolCalls,
         provider: m.provider,
         model: m.model,
-        tokensIn: reply.tokensIn,
-        tokensOut: reply.tokensOut,
+        tokensIn: usage.tokensIn,
+        tokensOut: usage.tokensOut,
         costMicroPhp,
         warning: planned.warning,
         redactions: g.redactions,

@@ -65,6 +65,34 @@ describe('T-640 privacy guard - key-shaped strings, credentials and contacts', (
   });
 });
 
+describe('T-640 privacy guard - other separators, other key shapes (security audit)', () => {
+  it('SSS, TIN, PhilHealth and Pag-IBIG numbers grouped with a space, a dot or a slash are replaced too [kills: a pattern that only knows the dash]', () => {
+    for (const sep of [' ', '.', '/', '-']) {
+      gone(`SSS 33${sep}1234567${sep}8`, '1234567');
+      gone(`TIN 123${sep}456${sep}789`, '456');
+      gone(`TIN with branch 123${sep}456${sep}789${sep}000`, '456');
+      gone(`PhilHealth 12${sep}345678901${sep}2`, '345678901');
+      gone(`Pag-IBIG 1234${sep}5678${sep}9012`, '5678');
+    }
+  });
+
+  it('Philippine mobile numbers with spaces, dots, a country code or brackets are replaced [kills: a phone number written the way people write it]', () => {
+    gone('call 917 123 4567', '917', '4567');
+    gone('call (0917) 123-4567', '0917', '4567');
+    gone('call 0917 123 4567', '4567');
+    gone('call +63 (917) 123-4567', '4567');
+    gone('call 0917.123.4567', '4567');
+  });
+
+  it('Stripe-style sk_live_ / sk_test_ keys and an Authorization: Basic credential are replaced; the word "Basic" in prose is not [kills: a key shape with an underscore, a Basic credential in a header]', () => {
+    gone('key sk_live_0123456789abcdefABCD', '0123456789abcdef');
+    gone('key sk_test_0123456789abcdefABCD', '0123456789abcdef');
+    gone('rk_live_0123456789abcdefABCD', '0123456789abcdef');
+    gone('Authorization: Basic dXNlcjpwYXNzd29yZA==', 'dXNlcjpwYXNzd29yZA');
+    expect(scrubText('Basic understanding of tax rates').text).toBe('Basic understanding of tax rates');
+  });
+});
+
 describe('T-640 privacy guard - pictures and personal fields', () => {
   it('a base64 picture is REFUSED, not scrubbed [kills: a receipt image reaching a provider]', () => {
     expect(() => scrubText('here: data:image/jpeg;base64,/9j/4AAQSkZJRg')).toThrow(PrivacyRefusal);

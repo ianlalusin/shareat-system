@@ -158,8 +158,12 @@ export async function getAiHubView(tx: Tx, actor: Actor, deps: HubDeps = {}): Pr
 // Keys
 // -------------------------------------------------------------------------------------------------------------------
 
-/** Saves a provider's key, new or replacing the old one (replacing means typing a new one: the old is never shown). Returns whether it replaced one. */
-export async function saveProviderKey(tx: Tx, actor: Actor, input: { provider: string; key: string }, deps: HubDeps = {}): Promise<{ replaced: boolean }> {
+/**
+ * Saves a provider's key, new or replacing the old one (replacing means typing a new one: the old is never shown). Returns whether it replaced one.
+ * Replacing also puts every model of that provider back to untested and off, and closes the gap in the order: a new key may belong to a different account, so what the old one
+ * proved no longer holds, and each model must pass its Test again before it answers anything.
+ */
+export async function saveProviderKey(tx: Tx, actor: Actor, input: { provider: string; key: string }, deps: HubDeps = {}): Promise<{ replaced: boolean; modelsReset: number }> {
   await authorizeHub(tx, actor);
   const provider = providerOf(input.provider);
   const key = assertFieldRules(AI_KEY_RULES, { key: input.key }).key ?? '';
@@ -173,16 +177,22 @@ export async function saveProviderKey(tx: Tx, actor: Actor, input: { provider: s
     // ⛔ not the driver's error: its message carries the query and its parameters (the ciphertext), and error text reaches a log and a screen
     throw refuse('ai hub: saving the key failed', 'The key could not be saved just now. Try again; if it keeps failing, tell whoever looks after the system.');
   }
+  let modelsReset = 0;
+  if (before) {
+    modelsReset = await aiHubRepo.resetModelsOfProvider(tx, actor.orgId, provider);
+    const stillActive = await aiHubRepo.listActiveModels(tx, actor.orgId);
+    for (const [i, m] of stillActive.entries()) if (m.priority !== i + 1) await aiHubRepo.setPriority(tx, actor.orgId, m.provider, m.model, i + 1);
+  }
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'ai_key.saved',
     storeId: null,
     entityId: saved.id,
     before: before ? { provider, endsWith: before.keyLast4 } : null,
-    after: { provider, endsWith: keyLast4, replaced: !!before },
+    after: { provider, endsWith: keyLast4, replaced: !!before, modelsReset },
     source: 'web',
   });
-  return { replaced: !!before };
+  return { replaced: !!before, modelsReset };
 }
 
 /** Removes a provider's key and, with it, that provider's models (a model cannot outlive its key). */

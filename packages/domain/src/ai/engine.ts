@@ -14,7 +14,10 @@ import {
   type AiErrorKind,
   type AiProvider,
   type ChatRequest,
+  type ChatResult,
+  type ModelPrice,
   type RedactionCounts,
+  costMicroPesos,
 } from '@shareat/ai';
 import { aiHubRepo, type Tx } from '@shareat/db';
 import { refuse } from '../shared/refusal';
@@ -40,6 +43,34 @@ export function guarded(req: ChatRequest): { request: ChatRequest; sha256: strin
     .update(JSON.stringify({ system: g.system ?? null, messages: g.messages, tools: g.tools ?? [] }))
     .digest('hex');
   return { request, sha256, redactions: g.redactions };
+}
+
+/** About four characters a token, never less than one. */
+export function estimateTokens(chars: number): number {
+  return Math.max(1, Math.ceil(chars / 4));
+}
+
+/** How long the cleaned request is, in characters, as it is sent. */
+export function requestChars(req: ChatRequest): number {
+  return JSON.stringify({ system: req.system ?? null, messages: req.messages, tools: req.tools ?? [] }).length;
+}
+
+/**
+ * The tokens to log and cost for an ANSWERED call. A provider that reports no usage, or a zero, would make an answer cost nothing and slip past the cap; a side that is missing or
+ * zero is estimated from the characters (about 4 a token) and the row says so (`tokens_estimated`). A side the provider did report is kept as reported.
+ */
+export function settleUsage(reply: ChatResult, req: ChatRequest): { tokensIn: number; tokensOut: number; estimated: boolean } {
+  const inOk = reply.tokensIn > 0;
+  const outOk = reply.tokensOut > 0;
+  if (inOk && outOk) return { tokensIn: reply.tokensIn, tokensOut: reply.tokensOut, estimated: false };
+  const outChars = reply.text.length + (reply.toolCalls.length > 0 ? JSON.stringify(reply.toolCalls).length : 0);
+  return { tokensIn: inOk ? reply.tokensIn : estimateTokens(requestChars(req)), tokensOut: outOk ? reply.tokensOut : estimateTokens(outChars), estimated: true };
+}
+
+/** The worst a call can cost: the request as sent, and the longest answer allowed, at the dearest of the models the walk may reach. */
+export function reservationCost(req: ChatRequest, prices: readonly ModelPrice[], pesosPerUsdHundredths: number): number {
+  const tokensIn = estimateTokens(requestChars(req));
+  return prices.reduce((worst, p) => Math.max(worst, costMicroPesos({ tokensIn, tokensOut: req.maxOutputTokens }, p, pesosPerUsdHundredths)), 0);
 }
 
 /** Refuses, in a sentence, when this month's spend has reached the cap. */

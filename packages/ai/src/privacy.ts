@@ -25,11 +25,12 @@ const IMAGE = /data:image\/[a-z0-9.+-]+;base64,/i;
 /** Order matters: the more specific shapes first, so a long number is not half-eaten by a shorter pattern. */
 const PATTERNS: ReadonlyArray<{ kind: string; re: RegExp; marker: string }> = [
   // keys and tokens
-  { kind: 'key', re: /(?<![A-Za-z0-9_-])(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}/g, marker: '[KEY REMOVED]' },
+  { kind: 'key', re: /(?<![A-Za-z0-9_-])(?:sk|rk|pk)[-_][A-Za-z0-9_-]{16,}/g, marker: '[KEY REMOVED]' },
   { kind: 'key', re: /AIza[0-9A-Za-z_-]{30,}/g, marker: '[KEY REMOVED]' },
   { kind: 'key', re: /(?<![A-Za-z0-9])(?:AKIA|ASIA)[0-9A-Z]{16}(?![A-Za-z0-9])/g, marker: '[KEY REMOVED]' },
   { kind: 'key', re: /(?<![A-Za-z0-9_-])(?:ghp|gho|ghs|xox[abp])[-_][A-Za-z0-9_-]{16,}/g, marker: '[KEY REMOVED]' },
   { kind: 'key', re: /Bearer\s+[A-Za-z0-9._~+/=-]{16,}/gi, marker: '[KEY REMOVED]' },
+  { kind: 'key', re: /(?<=Authorization\s*[:=]\s*)Basic\s+[A-Za-z0-9+/=]{8,}/gi, marker: '[KEY REMOVED]' },
   { kind: 'key', re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, marker: '[KEY REMOVED]' },
   // "pin: 1234", "password = hunter2", "api key: ..." - the value goes, the word stays
   { kind: 'credential', re: /(?<![A-Za-z])((?:pin|passcode|password|passwd|pwd|secret|token|api[ _-]?key)\s*[:=]\s*)\S*[^\s.,;:!?]/gi, marker: '$1[REMOVED]' },
@@ -37,14 +38,14 @@ const PATTERNS: ReadonlyArray<{ kind: string; re: RegExp; marker: string }> = [
   { kind: 'key', re: /(?<![A-Za-z0-9_-])(?![0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?![A-Za-z0-9_-]))(?=[A-Za-z0-9_-]*[0-9])(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_-])/g, marker: '[KEY REMOVED]' },
   // contact details
   { kind: 'contact', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g, marker: '[CONTACT REMOVED]' },
-  { kind: 'contact', re: /(?<![0-9])(?:\+?63[ -]?|0)9[0-9]{2}[ -]?[0-9]{3}[ -]?[0-9]{4}(?![0-9])/g, marker: '[CONTACT REMOVED]' },
+  { kind: 'contact', re: /(?<![0-9])(?:\+?63[ -]?\(?|0\(?)?9[0-9]{2}\)?[ .-]?[0-9]{3}[ .-]?[0-9]{4}(?![0-9])/g, marker: '[CONTACT REMOVED]' },
   // card and account numbers: 13 to 19 digits, spaces or dashes allowed between groups
   { kind: 'account_number', re: /(?<![0-9A-Za-z_-])(?:[0-9][ -]?){12,18}[0-9](?![0-9A-Za-z_])/g, marker: '[NUMBER REMOVED]' },
-  // government IDs: dashed forms, then the same lengths run together
-  { kind: 'government_id', re: /(?<![0-9])[0-9]{4}-[0-9]{4}-[0-9]{4}(?![0-9])/g, marker: '[ID REMOVED]' }, // Pag-IBIG
-  { kind: 'government_id', re: /(?<![0-9])[0-9]{2}-[0-9]{9}-[0-9](?![0-9])/g, marker: '[ID REMOVED]' }, // PhilHealth
-  { kind: 'government_id', re: /(?<![0-9])[0-9]{3}-[0-9]{3}-[0-9]{3}(?:-[0-9]{3,5})?(?![0-9])/g, marker: '[ID REMOVED]' }, // TIN
-  { kind: 'government_id', re: /(?<![0-9])[0-9]{2}-[0-9]{7}-[0-9](?![0-9])/g, marker: '[ID REMOVED]' }, // SSS
+  // government IDs: grouped forms (a space, dot, slash or dash between the groups), then the same lengths run together
+  { kind: 'government_id', re: /(?<![0-9])[0-9]{4}[ ./-][0-9]{4}[ ./-][0-9]{4}(?![0-9])/g, marker: '[ID REMOVED]' }, // Pag-IBIG
+  { kind: 'government_id', re: /(?<![0-9])[0-9]{2}[ ./-][0-9]{9}[ ./-][0-9](?![0-9])/g, marker: '[ID REMOVED]' }, // PhilHealth
+  { kind: 'government_id', re: /(?<![0-9])[0-9]{3}[ ./-][0-9]{3}[ ./-][0-9]{3}(?:[ ./-][0-9]{3,5})?(?![0-9])/g, marker: '[ID REMOVED]' }, // TIN
+  { kind: 'government_id', re: /(?<![0-9])[0-9]{2}[ ./-][0-9]{7}[ ./-][0-9](?![0-9])/g, marker: '[ID REMOVED]' }, // SSS
   // 9, 10 and 12 digit runs (TIN, SSS, PhilHealth / Pag-IBIG written without dashes); a run touching a letter or hyphen is part of an identifier (a UUID), not a number
   { kind: 'government_id', re: /(?<![0-9A-Za-z_.,-])(?:[0-9]{12}|[0-9]{10}|[0-9]{9})(?![0-9A-Za-z_]|[.,][0-9])/g, marker: '[ID REMOVED]' },
 ];

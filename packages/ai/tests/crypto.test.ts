@@ -66,6 +66,21 @@ describe('T-640 key cipher', () => {
     for (const bad of [undefined, null, '', '   ', 'ab'.repeat(31), 'zz'.repeat(32), Buffer.alloc(16, 5).toString('base64'), 'short']) expect(parseMasterKey(bad as string | undefined), String(bad)).toBeNull();
   });
 
+  it('an all-zero master key is a placeholder, not a key: not parsed, and not usable to encrypt [kills: a default key left in the environment]', () => {
+    expect(parseMasterKey('0'.repeat(64))).toBeNull();
+    expect(parseMasterKey(Buffer.alloc(32, 0).toString('base64'))).toBeNull();
+    expect(() => encryptSecret(KEY, Buffer.alloc(32, 0), CTX)).toThrow(KeyCryptoError);
+    expect(parseMasterKey('0'.repeat(63) + '1')?.length).toBe(32);
+  });
+
+  it('the authentication tag is a full 16 bytes: a shortened tag opens nothing [kills: accepting a truncated tag, which makes forgery far easier]', () => {
+    const env = encryptSecret(KEY, MASTER, CTX);
+    const [v, iv, tag, ct] = env.split('.');
+    expect(Buffer.from(tag!, 'base64')).toHaveLength(16);
+    const short = Buffer.from(tag!, 'base64').subarray(0, 8).toString('base64');
+    expect(() => decryptSecret([v, iv, short, ct].join('.'), MASTER, CTX)).toThrow(KeyCryptoError);
+  });
+
   it('a key that is not 32 bytes cannot encrypt [kills: AES with a weak key]', () => {
     expect(() => encryptSecret(KEY, Buffer.alloc(16, 1), CTX)).toThrow();
   });

@@ -123,8 +123,10 @@ async function ready(f: Fx, n: ReturnType<typeof net>, models: [P, string][]): P
 const deps = (n: ReturnType<typeof net>) => ({ masterKey: Buffer.alloc(32, 7), http: n.http });
 const ask = (f: Fx, n: ReturnType<typeof net>, who: Actor, over: Partial<Parameters<typeof callAi>[2]> = {}) =>
   callAi(runnerFor(f.orgId), who, { feature: 'ask_erp', messages: [{ role: 'user', content: 'What did we sell today?' }], maxOutputTokens: 200, ...over }, deps(n));
-const calls = (orgId: string) => sql<{ provider: string; model: string; ok: boolean; error_code: string | null; feature: string; group_ref: string; cost_micro_php: string; tokens_in: number; tokens_out: number; tool_calls: number; prompt_sha256: string; store_id: string | null; person_id: string | null }[]>`
-  select provider, model, ok, error_code, feature, group_ref, cost_micro_php::text, tokens_in, tokens_out, tool_calls, prompt_sha256, store_id, person_id from ai_calls where org_id = ${orgId} order by created_at, id`;
+/** The real attempts of an organisation. Reservation rows (the in-flight placeholder the router writes before a provider is called) are left out: `reservations()` shows them. */
+const calls = (orgId: string) => sql<{ provider: string; model: string; ok: boolean; error_code: string | null; feature: string; group_ref: string; cost_micro_php: string; tokens_in: number; tokens_out: number; tool_calls: number; prompt_sha256: string; store_id: string | null; person_id: string | null; tokens_estimated: boolean }[]>`
+  select provider, model, ok, error_code, feature, group_ref, cost_micro_php::text, tokens_in, tokens_out, tool_calls, prompt_sha256, store_id, person_id, tokens_estimated from ai_calls where org_id = ${orgId} and error_code is distinct from 'reserved' order by created_at, id`;
+const reservations = (orgId: string) => sql<{ group_ref: string; cost_micro_php: string }[]>`select group_ref, cost_micro_php::text from ai_calls where org_id = ${orgId} and error_code = 'reserved' order by created_at, id`;
 const MONTH_BEFORE = sql`(date_trunc('month', timezone('Asia/Manila', now())) at time zone 'Asia/Manila') - interval '1 day'`;
 const DAY_BEFORE = sql`(date_trunc('day', timezone('Asia/Manila', now())) at time zone 'Asia/Manila') - interval '1 minute'`;
 async function logRow(f: Fx, over: { person?: Actor; cost?: number; ok?: boolean; feature?: string; at?: 'now' | 'last_month' | 'yesterday' } = {}) {
@@ -386,6 +388,86 @@ describe('T-640 the monthly cap and the daily limit (test 5)', () => {
     expect(log.map((r) => r.cost_micro_php)).toEqual(['15660', '16200']);
     const view = await asOrg(f.orgId, (tx) => getAiHubView(tx, f.sup, deps(n)));
     expect(Number(view.usage.spentText)).toBeGreaterThanOrEqual(0.03); // 1,566 (the test) + 15,660 + 16,200 micro-pesos = 0.033
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+describe('T-640 caps hold under concurrent calls (security audit)', () => {
+  const same = { enabled: '1', pesosPerUsd: '58', warnAtPercent: '80' };
+
+  it('two calls at the edge of the cap, started together: one is answered, the other refused, the provider is called once [kills: a check-then-call race that lets both through]', async () => {
+    const f = await fixture('race-cap');
+    const n = net();
+    await ready(f, n, [['openai', 'gpt-4o-mini']]);
+    await asOrg(f.orgId, (tx) => saveAiSettings(tx, f.sup, { ...same, monthlyCapPesos: '1', dailyLimitPerPerson: '30' }));
+    const [cur] = await sql<{ n: number }[]>`select coalesce(sum(cost_micro_php), 0)::int as n from ai_calls where org_id = ${f.orgId}`;
+    await logRow(f, { cost: 999_999 - cur!.n, person: f.staff }); // one micro-peso under the cap
+    const seen0 = n.seen.length;
+    const results = await Promise.allSettled([ask(f, n, f.manager), ask(f, n, f.staff2)]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const refused = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect((refused.reason as RefusalError).userMessage).toMatch(/spending cap/);
+    expect(n.seen.length).toBe(seen0 + 1);
+  });
+
+  it('a call in flight counts: its reservation (the worst-case cost) is in the month\'s spend until a real row of that call exists, then only the real cost counts [kills: a reservation that stays on the bill, or one that is never counted]', async () => {
+    const f = await fixture('race-reserve');
+    const n = net();
+    await ready(f, n, [['openai', 'gpt-4o-mini']]);
+    n.replies.openai = reply('openai', { tokensIn: 1000, tokensOut: 200 });
+    const spendNow = () => asOrg(f.orgId, (tx) => aiHubRepo.spendThisMonthMicro(tx, f.orgId));
+    const real = async () => Number((await sql<{ n: string }[]>`select coalesce(sum(cost_micro_php), 0)::text as n from ai_calls where org_id = ${f.orgId} and error_code is distinct from 'reserved'`)[0]!.n);
+    expect(await spendNow()).toBe(await real());
+    const out = await ask(f, n, f.manager);
+    const res = await reservations(f.orgId);
+    expect(res).toHaveLength(1);
+    expect(Number(res[0]!.cost_micro_php)).toBeGreaterThan(0);
+    // the call is over: its reservation no longer counts, only the real cost does
+    expect(out.costMicroPhp).toBeGreaterThan(0);
+    expect(await spendNow()).toBe(await real());
+    // a reservation with nothing after it is a call still running (or one that died): it counts in full
+    const before = await spendNow();
+    await sql`insert into ai_calls (org_id, person_id, feature, provider, model, cost_micro_php, ok, error_code, prompt_sha256, group_ref) values (${f.orgId}, ${f.manager.personId}, 'ask_erp', 'openai', 'gpt-4o-mini', 5000000, false, 'reserved', ${'c'.repeat(64)}, uuidv7())`;
+    expect(await spendNow()).toBe(before + 5_000_000);
+  });
+
+  it('two questions from one person at the daily limit, started together: one is answered, the other refused [kills: a daily limit that two requests can both pass]', async () => {
+    const f = await fixture('race-daily');
+    const n = net();
+    await ready(f, n, [['openai', 'gpt-4o-mini']]);
+    await asOrg(f.orgId, (tx) => saveAiSettings(tx, f.sup, { ...same, monthlyCapPesos: '1000', dailyLimitPerPerson: '1' }));
+    const results = await Promise.allSettled([ask(f, n, f.staff), ask(f, n, f.staff)]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(((results.find((r) => r.status === 'rejected') as PromiseRejectedResult).reason as RefusalError).userMessage).toMatch(/used your 1 AI question for today/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+describe('T-640 an answered call is never free (security audit)', () => {
+  it('a 200 reply with no usage, or zero usage, is estimated from the text (about 4 characters a token), costed, and logged as estimated [kills: an answer that costs 0 and slips past the cap]', async () => {
+    const f = await fixture('estimate');
+    const n = net();
+    await ready(f, n, [['openai', 'gpt-4o-mini']]);
+    const answer = 'x'.repeat(400);
+    n.replies.openai = { choices: [{ message: { content: answer } }] }; // no usage at all
+    const r1 = await ask(f, n, f.manager, { messages: [{ role: 'user', content: 'y'.repeat(800) }] });
+    expect(r1.tokensOut).toBe(100);
+    expect(r1.tokensIn).toBeGreaterThanOrEqual(200);
+    expect(r1.costMicroPhp).toBeGreaterThan(0);
+    n.replies.openai = { choices: [{ message: { content: answer } }], usage: { prompt_tokens: 0, completion_tokens: 0 } };
+    const r2 = await ask(f, n, f.manager);
+    expect(r2.tokensOut).toBe(100);
+    expect(r2.costMicroPhp).toBeGreaterThan(0);
+    n.replies.openai = { choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 50, completion_tokens: 0 } }; // only one side missing: that side is estimated, the other kept
+    const r3 = await ask(f, n, f.manager);
+    expect(r3.tokensIn).toBe(50);
+    expect(r3.tokensOut).toBe(1);
+    n.replies.openai = reply('openai', { tokensIn: 70, tokensOut: 9 });
+    const r4 = await ask(f, n, f.manager);
+    expect([r4.tokensIn, r4.tokensOut]).toEqual([70, 9]);
+    const log = (await calls(f.orgId)).filter((r) => r.feature === 'ask_erp');
+    expect(log.map((r) => r.tokens_estimated)).toEqual([true, true, true, false]);
+    expect(log.every((r) => r.ok && Number(r.cost_micro_php) > 0)).toBe(true);
   });
 });
 

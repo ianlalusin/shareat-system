@@ -183,6 +183,30 @@ describe('T-640 keys (test 1: encrypted, never shown back, never logged)', () =>
     for (const k of [KEY_A, KEY_B]) for (const p of pieces(k)) expect(audit, p).not.toContain(p);
   });
 
+  it('replacing a key puts that provider\'s models back to untested and off, closes the gap in the order, leaves other providers alone, and says so in the audit row [kills: a new key inheriting the old key\'s passed tests]', async () => {
+    const f = await fixture('key-reset');
+    await asOrg(f.orgId, (tx) => saveProviderKey(tx, f.sup, { provider: 'openai', key: KEY_A }, MASTER));
+    await asOrg(f.orgId, (tx) => saveProviderKey(tx, f.sup, { provider: 'google', key: KEY_B }, MASTER));
+    for (const [provider, model] of [['openai', 'gpt-4o-mini'], ['google', 'gemini-2.5-flash'], ['openai', 'gpt-4.1-mini']] as const) {
+      await asOrg(f.orgId, (tx) => aiHubRepo.recordTest(tx, { orgId: f.orgId, provider, model, ok: true, toolCalling: true, latencyMs: 5, note: 'ok' }));
+      await asOrg(f.orgId, (tx) => activateAiModel(tx, f.sup, { provider, model }));
+    }
+    const r = await asOrg(f.orgId, (tx) => saveProviderKey(tx, f.sup, { provider: 'openai', key: KEY_B + 'x' }, MASTER));
+    expect(r).toEqual({ replaced: true, modelsReset: 2 });
+    const view = await asOrg(f.orgId, (tx) => getAiHubView(tx, f.sup, MASTER));
+    for (const m of view.models.filter((x) => x.provider === 'openai' && ['gpt-4o-mini', 'gpt-4.1-mini'].includes(x.model))) {
+      expect(m, m.model).toMatchObject({ test: 'never', active: false, priority: null, toolCalling: null, testNote: null, canActivate: false });
+    }
+    expect(view.models.find((m) => m.model === 'gemini-2.5-flash')).toMatchObject({ test: 'passed', active: true, priority: 1 });
+    expect(view.order.map((o) => `${o.priority}:${o.model}`)).toEqual(['1:gemini-2.5-flash']);
+    expect(await sentenceOf(asOrg(f.orgId, (tx) => activateAiModel(tx, f.sup, { provider: 'openai', model: 'gpt-4o-mini' })))).toMatch(/did not pass/);
+    const [row] = await sql<{ after: { modelsReset: number } }[]>`select after from audit_log where org_id = ${f.orgId} and action = 'ai_key.saved' order by recorded_at desc, id desc limit 1`;
+    expect(row!.after.modelsReset).toBe(2);
+    // the first save of a key resets nothing
+    const g = await fixture('key-reset-first');
+    expect((await asOrg(g.orgId, (tx) => saveProviderKey(tx, g.sup, { provider: 'openai', key: KEY_A }, MASTER))).modelsReset).toBe(0);
+  });
+
   it('without the server master key nothing is stored and the refusal is a sentence [kills: storing a key unencrypted when the master key is absent]', async () => {
     const f = await fixture('key-nomaster');
     const missing = await sentenceOf(asOrg(f.orgId, (tx) => saveProviderKey(tx, f.sup, { provider: 'openai', key: KEY_A }, { masterKey: null })));

@@ -61,3 +61,10 @@ v1 (ERP-rebuild `src/lib/ai/registry.ts`, `router.ts`, `capabilities.ts`, `audit
 8. Provider adapters are tested against recorded or fake HTTP; no real network in CI.
 
 Migration 0284 hand-authored (ADR-012 §5): classification + RLS + audit catalogue. ai_calls is operational (purge class decided with the classification rules), the provider config is keep. Full CI suite. census:write.
+
+## As built (26 Nov 2026)
+
+- Migrations 0284 (five tables, capability backfill) and 0285 (`ai_calls.tokens_estimated`). `packages/ai` (adapters over plain fetch, no SDK; cipher; privacy guard; model list in code), `packages/domain/src/ai` (hub, Test call, `callAi`), screen `/settings/ai-hub`.
+- Caps and the peso rate live in `ai_settings` (not the business-rules registry: T-639 edits the same registry lines).
+- Security audit fixes: the cap and the daily limit are checked under a per-organisation advisory lock together with a RESERVATION row (worst-case cost, error code `reserved`, superseded by the first real row of the same call), so concurrent calls overshoot by at most one call; an answer with missing or zero usage is estimated (about 4 characters a token) and flagged; more separators and key shapes in the privacy guard; a 16-byte auth tag and no all-zero master key; no redirects and a 2 MB reply cap; replacing a key resets that provider's models to untested and off.
+- Known limit: a reservation stops counting at the first real row of its call, so the second attempt of a fallback walk is briefly unreserved.

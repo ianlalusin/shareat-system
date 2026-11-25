@@ -10,7 +10,7 @@ import type { Actor } from '@shareat/auth';
 import { aiHubRepo } from '@shareat/db';
 import { adapterFor, catalogueModel, costMicroPesos, errorCode, fetchHttpClient, judgeTestReply, testRequest, type AiProvider, type ChatResult } from '@shareat/ai';
 import { gone, refuse } from '../shared/refusal';
-import { assertUnderCap, asProviderError, failureSentence, guarded, openKey } from './engine';
+import { assertUnderCap, asProviderError, failureSentence, guarded, openKey, settleUsage } from './engine';
 import { authorizeHub, providerOf, requireMasterKey, settingsOrDefaults, type HubDeps, type TxRunner } from './shared';
 
 export interface TestModelResult {
@@ -55,7 +55,8 @@ export async function testAiModel(run: TxRunner, actor: Actor, input: { provider
     : kind
       ? failureSentence(kind.kind)
       : 'The model answered with nothing. Try the test again.';
-  const cost = reply ? costMicroPesos(reply, plan.listed, plan.settings.pesosPerUsdHundredths) : 0;
+  const usage = reply ? settleUsage(reply, g.request) : null;
+  const cost = usage ? costMicroPesos(usage, plan.listed, plan.settings.pesosPerUsdHundredths) : 0;
 
   // 3. log it and record the outcome (re-checked: the key may have been removed meanwhile)
   await run(async (tx) => {
@@ -68,8 +69,8 @@ export async function testAiModel(run: TxRunner, actor: Actor, input: { provider
       feature: 'hub.test',
       provider: plan.provider,
       model: plan.listed.model,
-      tokensIn: reply?.tokensIn ?? 0,
-      tokensOut: reply?.tokensOut ?? 0,
+      tokensIn: usage?.tokensIn ?? 0,
+      tokensOut: usage?.tokensOut ?? 0,
       costMicroPhp: cost,
       latencyMs,
       toolCalls: reply?.toolCalls.length ?? 0,
@@ -77,6 +78,7 @@ export async function testAiModel(run: TxRunner, actor: Actor, input: { provider
       errorCode: ok ? null : kind ? errorCode(kind) : 'empty_reply',
       promptSha256: g.sha256,
       groupRef: randomUUID(),
+      tokensEstimated: usage?.estimated ?? false,
     });
     await aiHubRepo.recordTest(tx, { orgId: actor.orgId, provider: plan.provider, model: plan.listed.model, ok, toolCalling: verdict.toolCalling, latencyMs, note });
   });

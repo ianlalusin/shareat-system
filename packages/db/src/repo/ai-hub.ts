@@ -62,6 +62,19 @@ export async function upsertKey(tx: Tx, input: { orgId: string; provider: AiProv
   return { id: row!.id };
 }
 
+/**
+ * Replacing a key puts every model of that provider back to untested and off (a new key may belong to a different account, so what was tested no longer holds). Returns how many
+ * models were reset. Their test results, tool fact and place in the order are cleared in one statement, so the active/priority CHECK holds.
+ */
+export async function resetModelsOfProvider(tx: Tx, orgId: string, provider: AiProviderName): Promise<number> {
+  const rows = await tx
+    .update(aiModels)
+    .set({ active: false, priority: null, passedAt: null, toolCalling: null, lastTestOk: null, lastTestAt: null, lastTestLatencyMs: null, lastTestNote: null, updatedAt: sql`now()` })
+    .where(and(eq(aiModels.orgId, orgId), eq(aiModels.provider, provider)))
+    .returning({ id: aiModels.id });
+  return rows.length;
+}
+
 /** Removes a provider's key and, first, its models (a model cannot outlive its key). Returns whether a key was there and how many models went with it. */
 export async function deleteKeyWithModels(tx: Tx, orgId: string, provider: AiProviderName): Promise<{ keyRemoved: boolean; modelsRemoved: number }> {
   const models = await tx.delete(aiModels).where(and(eq(aiModels.orgId, orgId), eq(aiModels.provider, provider))).returning({ id: aiModels.id });
@@ -219,6 +232,8 @@ export interface CallInsert {
   /** SHA-256 hex of the prompt as sent. The text itself is never passed to this layer. */
   promptSha256: string;
   groupRef: string;
+  /** True when the provider reported no usage (or zero) and the tokens were estimated from the text (about 4 characters a token). */
+  tokensEstimated: boolean;
 }
 
 export async function insertCall(tx: Tx, row: CallInsert): Promise<void> {
@@ -230,18 +245,39 @@ const MONTH_START = sql`(date_trunc('month', timezone('Asia/Manila', now())) at 
 /** The start of the current Manila day, as an instant. */
 const DAY_START = sql`(date_trunc('day', timezone('Asia/Manila', now())) at time zone 'Asia/Manila')`;
 
-/** What this Manila month has cost so far, in micro-pesos (every attempt, the hub's own test calls included). */
+/**
+ * The error code of a RESERVATION row. Before a provider is called, the router writes one row of this code carrying the worst-case cost of the call, under the per-organisation
+ * lock, so two calls at the edge of the cap cannot both pass the check. Once any later row of the same `group_ref` exists (the answer, or a failed attempt) the reservation no
+ * longer counts: only the real cost does. A reservation with nothing after it (a call in flight, or a process that died) counts as spent and as one question asked.
+ * Append-only still holds: nothing is ever updated.
+ */
+export const RESERVED_CODE = 'reserved';
+const SETTLED = sql`exists (select 1 from ai_calls s where s.org_id = c.org_id and s.group_ref = c.group_ref and s.id <> c.id)`;
+/** A row that still counts: everything except a reservation that has been followed by a real row. Always used with the alias `c`. */
+const LIVE = sql`(c.error_code is distinct from ${RESERVED_CODE} or not ${SETTLED})`;
+
+/**
+ * Takes the organisation's AI spending lock for the rest of the transaction (check the cap, the daily limit, then write the reservation, all under it). A transaction-scoped
+ * advisory lock on a hash of the organisation and 'ai_cap': it never blocks another organisation and is released at commit.
+ */
+export async function lockOrgAiCap(tx: Tx, orgId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:ai_cap`}, 0))`);
+}
+
+/** What this Manila month has cost so far, in micro-pesos (every attempt, the hub's own test calls included, plus calls still in flight at their reserved cost). */
 export async function spendThisMonthMicro(tx: Tx, orgId: string): Promise<number> {
   const rows = (await tx.execute(
-    sql`select coalesce(sum(cost_micro_php), 0)::text as total from ai_calls where org_id = ${orgId} and created_at >= ${MONTH_START}`,
+    sql`select coalesce(sum(c.cost_micro_php), 0)::text as total from ai_calls c where c.org_id = ${orgId} and c.created_at >= ${MONTH_START} and ${LIVE}`,
   )) as unknown as { total: string }[];
   return Number(rows[0]?.total ?? 0);
 }
 
-/** Questions this person has had answered today (Manila). The hub's own test calls are not questions. */
+/** Questions this person has had answered today (Manila), plus any in flight. The hub's own test calls are not questions. */
 export async function answeredToday(tx: Tx, orgId: string, personId: string): Promise<number> {
   const rows = (await tx.execute(
-    sql`select count(*)::int as n from ai_calls where org_id = ${orgId} and person_id = ${personId} and ok and feature <> 'hub.test' and created_at >= ${DAY_START}`,
+    sql`select count(*)::int as n from ai_calls c
+        where c.org_id = ${orgId} and c.person_id = ${personId} and c.feature <> 'hub.test' and c.created_at >= ${DAY_START}
+          and (c.ok or (c.error_code = ${RESERVED_CODE} and not ${SETTLED}))`,
   )) as unknown as { n: number }[];
   return Number(rows[0]?.n ?? 0);
 }
@@ -256,8 +292,8 @@ export interface UsageRow {
 /** This month's spend per feature, biggest first. */
 export async function usageByFeatureThisMonth(tx: Tx, orgId: string): Promise<UsageRow[]> {
   const rows = (await tx.execute(
-    sql`select feature as key, feature as label, count(*)::int as calls, coalesce(sum(cost_micro_php), 0)::text as cost
-        from ai_calls where org_id = ${orgId} and created_at >= ${MONTH_START} group by feature order by sum(cost_micro_php) desc, feature`,
+    sql`select c.feature as key, c.feature as label, count(*)::int as calls, coalesce(sum(c.cost_micro_php), 0)::text as cost
+        from ai_calls c where c.org_id = ${orgId} and c.created_at >= ${MONTH_START} and ${LIVE} group by c.feature order by sum(c.cost_micro_php) desc, c.feature`,
   )) as unknown as { key: string; label: string; calls: number; cost: string }[];
   return rows.map((r) => ({ key: r.key, label: r.label, calls: Number(r.calls), costMicroPhp: Number(r.cost) }));
 }
@@ -267,7 +303,7 @@ export async function usageByPersonThisMonth(tx: Tx, orgId: string): Promise<Usa
   const rows = (await tx.execute(
     sql`select coalesce(c.person_id::text, '-') as key, coalesce(p.display_name, 'System') as label, count(*)::int as calls, coalesce(sum(c.cost_micro_php), 0)::text as cost
         from ai_calls c left join persons p on p.id = c.person_id
-        where c.org_id = ${orgId} and c.created_at >= ${MONTH_START}
+        where c.org_id = ${orgId} and c.created_at >= ${MONTH_START} and ${LIVE}
         group by c.person_id, p.display_name order by sum(c.cost_micro_php) desc, 2`,
   )) as unknown as { key: string; label: string; calls: number; cost: string }[];
   return rows.map((r) => ({ key: r.key, label: r.label, calls: Number(r.calls), costMicroPhp: Number(r.cost) }));
