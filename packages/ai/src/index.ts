@@ -8,4 +8,7 @@ export * from './errors';
 export * from './http';
 export * from './models';
 export * from './pricing';
+export * from './privacy';
 export * from './crypto';
+export * from './adapters';
+export * from './test-call';
