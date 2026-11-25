@@ -69,7 +69,22 @@ feature someone will use. Build P0 with its first feature, not ahead of one.
   candidate) so we do not rewrite v1's per-provider structured-output shims. Decided in the P0 spec.
 - Every call gets a trace id carried into the app's structured log and into the call row.
 
-### 4.2 Keys: runtime env on the droplet, never git, never the DB
+### 4.2 Keys: typed on screen, encrypted at rest, master key in the server env (AMENDED 2026-11-25, T-640)
+
+> **Superseded in part by Ian, 25 Nov 2026 (docs/tasks/640-ai-hub.md).** The original rule below, "keys only in `.env.local`, never in the DB", is replaced for PROVIDER keys:
+> a super admin types each provider key on Settings > AI hub, under these safeguards.
+>
+> - The key is encrypted at rest with **AES-256-GCM**; the **master key** is `AI_KEYS_MASTER_KEY` in `/srv/shareat-shared/.env.local` (never in git, never in the database). The ciphertext is also bound to its organisation and provider.
+> - It is **never shown back**: only the provider and the last 4 characters. Replacing a key means typing a new one. It is never sent to the browser, never logged, never in an audit row or an error message.
+> - Capability **`manage_ai_hub`**, super admin only (not even an admin). Saving, replacing or removing a key is audited without key material.
+> - While `AI_KEYS_MASTER_KEY` is absent the hub refuses to store or use a key, in a sentence, and nothing else in the app is affected (it is optional in the env contract on purpose).
+> - A model is picked from a list in code and usable only after a Test call passes. Spending is capped (organisation monthly cap, per-person daily limit) and every call is logged in `ai_calls` with a prompt hash and never the text.
+>
+> What still holds from the text below: GitHub Actions secrets are build-time only; the master key is set by Ian, never an agent; losing the master key means typing the provider keys again.
+
+**Original text, kept for the record (the "Now" and "Never" lines no longer apply to provider keys):**
+
+### 4.2 (original) Keys: runtime env on the droplet, never git, never the DB
 
 - **GitHub Actions secrets are build-time only.** A key baked into the build artifact is a leaked
   key. So the key does not ride in the artifact.
@@ -96,6 +111,7 @@ feature someone will use. Build P0 with its first feature, not ahead of one.
   moves a typical row by up to ±20 %. Token counts are the exact fact. Cost is stored as `numeric`
   in the DB and handled as an integer sub-centavo unit in code (e.g. micro-pesos), rolled up to
   centavos for display. The spec fixes the unit.
+  **T-640 fixed the unit: micro-pesos (millionths of a peso) in a whole-number bigint column cost_micro_php, so no numeric column exists in the hub.**
 
 ### 4.4 The brain = `ai_knowledge`: AI proposes, an admin approves
 

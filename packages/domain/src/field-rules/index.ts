@@ -40,3 +40,4 @@ export * from './kitchen';
 export * from './pos';
 export * from './documents';
 export * from './slicer-pay';
+export * from './ai-hub';

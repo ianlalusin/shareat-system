@@ -144,6 +144,16 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('document_kind.renamed', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
   def('document_kind.retired', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
   def('document_kind.reactivated', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
+  // T-640: the AI hub (org level, admin-readable). Payloads carry the provider, the last 4 characters of a key and ids, NEVER key material, a ciphertext, a prompt or a reply.
+  def('ai_key.saved', 'security', 'high', 'org', 'ai_provider_keys', 'T-640', ADMIN),
+  def('ai_key.removed', 'security', 'high', 'org', 'ai_provider_keys', 'T-640', ADMIN),
+  def('ai_model.activated', 'settings', 'high', 'org', 'ai_models', 'T-640', ADMIN),
+  def('ai_model.deactivated', 'settings', 'high', 'org', 'ai_models', 'T-640', ADMIN),
+  def('ai_model.order_set', 'settings', 'normal', 'org', 'ai_models', 'T-640', ADMIN),
+  // T-640: the AI switch, the monthly cap, the daily limit, the peso rate, the warning percent, or one store's switch (after.store names the store when it is a store).
+  def('ai_settings.changed', 'settings', 'high', 'org', 'ai_settings', 'T-640', ADMIN),
+  // T-640: one store's AI switch (entity = the ai_store_switches row; after.store is the store id; org scope, so no store_id on the audit row).
+  def('ai_store_switch.set', 'settings', 'normal', 'org', 'ai_store_switches', 'T-640', ADMIN),
   def('document.issued', 'staff', 'normal', 'either', 'issued_documents', 'T-584'),
   def('document.revised', 'staff', 'high', 'either', 'issued_documents', 'T-584'),
   def('document.signed', 'security', 'high', 'either', 'issued_documents', 'T-584'),

@@ -118,6 +118,14 @@ const serverSchema = z.object({
   POS_API_URL: blankAsAbsent(),
   POS_API_KEY: blankAsAbsent(),
 
+  /**
+   * T-640. The MASTER KEY that encrypts the AI provider keys a super admin types on Settings > AI hub (AES-256-GCM): 32 random bytes as 64 hex characters or as
+   * base64. It lives ONLY in the server environment (`/srv/shareat-shared/.env.local`), never in git and never in the database. OPTIONAL on purpose: while it is
+   * absent the AI hub refuses to store or use a key, in a sentence, and nothing else in the app is affected. ⛔ Never log it, never echo it. Its shape is judged
+   * where it is used (the hub says "the server key is not valid"), not here, so a mistyped value cannot stop the whole app from starting.
+   */
+  AI_KEYS_MASTER_KEY: blankAsAbsent(),
+
   /** Signs shared-terminal session tokens (bible §7.1). Never defaulted. */
   SESSION_SECRET: requiredSecret(32),
 

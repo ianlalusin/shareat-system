@@ -4,6 +4,7 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
+      "@shareat/ai": ["../../packages/ai/src/index.ts"],
       "@shareat/core": ["../../packages/core/src/index.ts"],
       "@shareat/core/*": ["../../packages/core/src/*"],
       "@shareat/db": ["../../packages/db/src/index.ts"],

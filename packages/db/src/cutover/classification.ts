@@ -232,6 +232,29 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Per-store configuration (T-564) — store key, match labels, file hints and the wastage-email opt-in. Same class as ' +
       'sales_channels: it is not pilot activity, and re-seeding it would change a store key that other records name.',
   },
+  ai_provider_keys: {
+    class: 'keep',
+    reason:
+      "T-640. The organisation's own AI provider keys, stored encrypted (the server key is not in the database). Configuration a super admin typed in, not pilot activity: purging it would switch every AI feature off on 2 January until someone typed the keys again.",
+  },
+  ai_models: {
+    class: 'keep',
+    reason:
+      'T-640. Which models a super admin tested and activated, in what order. Configuration, like the keys it belongs to; the result of the last Test call goes with it.',
+  },
+  ai_settings: {
+    class: 'keep',
+    reason: 'T-640. The AI on/off switch, the monthly cap, the daily limit per person and the peso rate: configuration that is still in force in January until a super admin changes it.',
+  },
+  ai_store_switches: {
+    class: 'keep',
+    reason: 'T-640. Which stores had AI features switched off. Configuration, not pilot activity.',
+  },
+  ai_calls: {
+    class: 'purge',
+    reason:
+      'T-640. The log of every model call (who, feature, tokens, cost, the prompt hash). Pilot activity: the spend it counts is this month and this day only, and a purge only resets the usage report. It holds no prompt text and no key.',
+  },
   document_kinds: {
     class: 'keep',
     reason:
