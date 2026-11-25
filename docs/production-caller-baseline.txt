@@ -177,7 +177,6 @@ seedStore
 setActiveFake
 setCostBasisItem
 setDocumentNonBlocking
-setItemPricing
 setSalesChannelBankHints
 setTillFloat
 signOffPack

@@ -137,6 +137,21 @@ export async function listOfferings(tx: Tx, orgId: string, commissaryStoreId: st
   return rows;
 }
 
+/** T-638: the commissaries that actively offer ONE item, (the item page's price-to-stores readout looks each one's manual cost up through the domain). */
+export async function activeOfferingsForItem(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+): Promise<{ commissaryStoreId: string; storeName: string }[]> {
+  return (await tx.execute(sql`
+    select o.commissary_store_id as "commissaryStoreId", s.name as "storeName"
+    from commissary_item_offerings o
+    join stores s on s.id = o.commissary_store_id and s.org_id = ${orgId}
+    where o.org_id = ${orgId} and o.item_id = ${itemId} and o.status = 'active'
+    order by s.name asc
+  `)) as unknown as { commissaryStoreId: string; storeName: string }[];
+}
+
 /** Insert, or — on the `(commissary_store_id, item_id)` pair — replace the manual cost and status. */
 export async function upsertOffering(
   tx: Tx,
