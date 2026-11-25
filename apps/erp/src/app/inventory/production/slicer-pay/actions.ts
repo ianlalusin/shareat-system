@@ -4,6 +4,7 @@
  * Server action for the slicer pay rates. T-635. Thin: the gate is `set_pay_rate` inside `setSlicerPayRate`, and the actor comes from the session.
  */
 import { assertFieldRules, setSlicerPayRate } from '@shareat/domain';
+import { authorize } from '@shareat/auth';
 import { SLICER_RATE_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from '../lib';
 import { requireActor } from '../../../../lib/session';
@@ -21,7 +22,8 @@ export async function saveSlicerRateAction(fd: FormData): Promise<void> {
   const back = '/inventory/production/slicer-pay';
   let result: Awaited<ReturnType<typeof setSlicerPayRate>> | undefined;
   try {
-    // The domain call authorizes first and owns every sentence; the form's own rules are asserted on the same fields (T-440 S9).
+    // Authorize first (T-440 S9 G6), then the form's own rules; the domain call authorizes again and owns every sentence.
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'set_pay_rate', { storeId }));
     const checked = assertFieldRules(SLICER_RATE_RULES, fd);
     result = await withOrgPrincipal(actor.orgId, (tx) =>
       setSlicerPayRate(tx, actor, {
