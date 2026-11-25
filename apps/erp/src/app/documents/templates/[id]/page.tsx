@@ -1,5 +1,6 @@
 import { requirePageAccess } from '../../../../lib/page-access';
-import { TemplateEditorScreen } from '../editor-page';
+import { TemplateNotFound, templateEditorView } from '../editor-page';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Edit template — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -11,5 +12,11 @@ export default async function EditTemplatePage({ params }: { params: Promise<{ i
   const { id } = await params;
   const { actor, refusal } = await requirePageAccess(`/documents/templates/${id}`);
   if (refusal) return refusal;
-  return <TemplateEditorScreen actor={actor} {...(UUID.test(id) ? { templateId: id } : { templateId: '00000000-0000-0000-0000-000000000000' })} />;
+  const view = UUID.test(id) ? await templateEditorView(actor, id) : null;
+  if (!view) return <TemplateNotFound />;
+  return (
+    <Page density="table" className="space-y-6" title={view.title} description={view.description}>
+      {view.editor}
+    </Page>
+  );
 }

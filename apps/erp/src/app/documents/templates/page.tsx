@@ -7,11 +7,10 @@ import { typedFor } from '../../../lib/keep-typing';
 import { DOCUMENT_KIND_EDIT } from './typed-forms';
 import { createKindAction, renameKindAction, retireTemplateAction, setKindStatusAction } from './actions';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { DOCUMENT_KIND_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm, EditableRecord } from '@/components/forms';
-import { Badge, Button, EmptyState, Field, FlashBanner, Input } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, EmptyState, Field, FlashBanner, Input } from '@/components/ui';
 
 export const metadata = { title: 'Document templates — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -38,20 +37,22 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
   const retired = templates.filter((t) => t.retired);
 
   return (
-    <Page density="table" className="space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-semibold">Document templates</h1>
-          <PageDescription>
-            The standard wording and page for each kind of document. Fields like the employee&apos;s name are filled in when a document is issued; type {'{{'} in the editor to insert one.
-          </PageDescription>
-          <p className="mt-1 text-sm text-muted">Each save is a new version. Documents already issued keep the wording they were written from.</p>
-        </div>
+    <Page
+      density="table"
+      className="space-y-8"
+      title="Document templates"
+      description={
+        <>
+          The standard wording and page for each kind of document. Fields like the employee&apos;s name are filled in when a document is issued; type {'{{'} in the editor to insert one. Each save is a
+          new version. Documents already issued keep the wording they were written from.
+        </>
+      }
+      actions={
         <a href="/documents/templates/new" className="inline-flex min-h-11 items-center rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-white">
           + New template
         </a>
-      </div>
-
+      }
+    >
       <FlashBanner flash={sp} />
 
       {active.length === 0 ? (
@@ -106,9 +107,18 @@ export default async function DocumentTemplatesPage({ searchParams }: { searchPa
                   <form action={setKindStatusAction}>
                     <input type="hidden" name="kindId" value={k.id} />
                     <input type="hidden" name="status" value={k.active ? 'retired' : 'active'} />
-                    <Button type="submit" variant={k.active ? 'danger' : 'secondary'} icon={null}>
-                      {k.active ? 'Retire' : 'Restore'}
-                    </Button>
+                    {k.active ? (
+                      <ConfirmDestructive
+                        tier="confirm"
+                        quiet
+                        label="Retire kind"
+                        consequence="It is not offered for new templates. Documents already issued keep the name they were issued with. You can bring it back later."
+                      />
+                    ) : (
+                      <Button type="submit" variant="secondary" icon={null}>
+                        Restore
+                      </Button>
+                    )}
                   </form>
                 }
               >

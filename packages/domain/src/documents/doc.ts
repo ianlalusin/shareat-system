@@ -11,7 +11,7 @@
 import { FIELD_DEFS, parseBody, type MergeField, type MergeValues } from './merge-fields';
 
 // The editor and the renderer reach the field list through this leaf (it is the db-free import they are allowed).
-export { FIELD_DEFS, suggestFields, type FieldDef } from './merge-fields';
+export { FIELD_DEFS, suggestFields, type FieldDef, type MergeValues } from './merge-fields';
 export const FIELD_LABELS: Readonly<Record<string, string>> = Object.fromEntries(FIELD_DEFS.map((f) => [f.name, f.label]));
 
 export interface DocMark {

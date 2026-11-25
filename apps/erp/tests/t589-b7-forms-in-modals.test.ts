@@ -20,7 +20,7 @@ describe('T-589 B7 forms in modals', () => {
     expect(modals(src)).toEqual([]);
     expect(src).toContain('href="/documents/templates/new"');
     expect(src).not.toContain('action={saveTemplateAction}');
-    expect(app('documents/templates/new/page.tsx')).toContain('TemplateEditorScreen');
+    expect(app('documents/templates/new/page.tsx')).toContain('templateEditorView');
   });
 
   it('expenses/recurring: the create TemplateForm is in a header modal, with no templateId (create branch)', () => {

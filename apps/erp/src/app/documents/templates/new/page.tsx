@@ -1,5 +1,6 @@
 import { requirePageAccess } from '../../../../lib/page-access';
-import { TemplateEditorScreen } from '../editor-page';
+import { templateEditorView } from '../editor-page';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'New template — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -8,5 +9,10 @@ export const dynamic = 'force-dynamic';
 export default async function NewTemplatePage() {
   const { actor, refusal } = await requirePageAccess('/documents/templates/new');
   if (refusal) return refusal;
-  return <TemplateEditorScreen actor={actor} />;
+  const view = (await templateEditorView(actor))!; // a new template always has a view
+  return (
+    <Page density="table" className="space-y-6" title={view.title} description={view.description}>
+      {view.editor}
+    </Page>
+  );
 }

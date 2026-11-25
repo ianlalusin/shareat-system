@@ -12,9 +12,9 @@ import {
   fillDoc,
   sampleValues,
   type DocJson,
+  type MergeValues,
   type PageMargin,
 } from '@shareat/domain/documents/doc';
-import type { MergeValues } from '@shareat/domain';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
