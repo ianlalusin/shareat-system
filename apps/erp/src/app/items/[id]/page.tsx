@@ -363,6 +363,9 @@ export default async function ItemDetailPage({
         {/* T-638 (Ian, 25 Nov): the price a commissary charges stores lives here, on the Wholesale row; Commissary -> Catalogue only reads it. */}
         <div id="price-to-stores" className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
           <h3 className="text-sm font-medium">Price to stores (wholesale)</h3>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            This is what a commissary charges a store. Diner (retail) prices are set under Menu → Prices.
+          </p>
           {soldWholesale ? (
             <>
               <p className="text-sm">
@@ -394,9 +397,6 @@ export default async function ItemDetailPage({
               Applies once &ldquo;Sold to other stores or buyers (wholesale)&rdquo; is ticked above.
             </p>
           )}
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            This is what a commissary charges a store. Diner (retail) prices are set under Menu → Prices.
-          </p>
         </div>
 
         {byStore.length > 0 && (

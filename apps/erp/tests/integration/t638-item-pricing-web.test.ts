@@ -135,6 +135,8 @@ async function detailHtml(actor: { orgId: string; personId: string }, id: string
   const el = await ItemDetailPage({ params: Promise.resolve({ id }), searchParams: Promise.resolve({}) });
   return decode(renderToStaticMarkup(el as never));
 }
+/** Visible words: tags (and React's <!-- --> markers) removed, whitespace collapsed. */
+const text = (h: string) => h.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
 const priceBlock = (html: string) => html.slice(html.indexOf('id="price-to-stores"'), html.indexOf('id="price-to-stores"') + 5000);
 
 describe('T-638 the item page, Wholesale row', () => {
@@ -167,7 +169,7 @@ describe('T-638 the item page, Wholesale row', () => {
     const id = await insertItem(f, 'Kimchi', true);
     await sql`insert into commissary_item_offerings (org_id, commissary_store_id, item_id, manual_cost, created_by) values (${f.orgId}, ${f.storeId}, ${id}, '95.0000', ${f.manager.personId})`;
     const block = priceBlock(await detailHtml(f.manager, id));
-    expect(block).toContain('At Commissary: ₱95.00 = manual cost (no deliveries yet)');
+    expect(text(block)).toContain('At Commissary: ₱95.00 = manual cost (no deliveries yet)');
   }, 60_000);
 
   it('an item not sold wholesale shows the hint and no edit. MUTANT: gate on wholesale dropped', async () => {
@@ -199,8 +201,8 @@ describe('T-638 Commissary catalogue: read-only column', () => {
     ACTOR_HOLDER.actor = f.manager;
     const el = await CataloguePage({ searchParams: Promise.resolve({ commissary: f.storeId }) });
     const html = decode(renderToStaticMarkup(el as never));
-    expect(html).toContain('Price to stores');
-    expect(html).toContain('₱120.00 = last delivery ₱100.00 + ₱20.00');
+    expect(text(html)).toContain('Price to stores');
+    expect(text(html)).toContain('₱120.00 = last delivery ₱100.00 + ₱20.00');
     expect(html).toContain(`/items/${id}#price-to-stores`);
     expect(html).not.toContain('name="pricingMode"');
   }, 60_000);
