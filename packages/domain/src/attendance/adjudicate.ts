@@ -184,6 +184,9 @@ export async function adjudicateDay(tx: Tx, input: AdjudicateInput): Promise<Att
     holidayType: isHoliday ? (input.holidayType ?? 'regular') : null,
     holidayMinutes: isHoliday ? result.computedMinutes : 0,
     pendingOtMinutes: result.pendingOtMinutes,
+    // ⭐ T-635 S2: DERIVED every time, from the punches plus the live decisions, so a recompute can never overwrite it with a stale value. A manager's `worked_as`
+    // decision wins; otherwise the day's first clock-in decides; a punch with no choice (an old queued event) is regular.
+    workedAs: adjustments.workedAs ?? ins[0]?.workedAs ?? 'regular',
     status: resolveStatus(result.anomalies, punches, existing?.status, adjustments.managerDecision),
     anomalies: result.anomalies,
     explain: result.explain,
@@ -280,6 +283,7 @@ export async function toDayAdjustments(
     if (a.kind === 'half_day_override' && a.isHalfDay !== null) {
       out.halfDayOverride = a.isHalfDay === 'true';
     }
+    if (a.kind === 'worked_as' && a.workedAs !== null) out.workedAs = a.workedAs;
     // ⛔ DEF-115. A void OUTRANKS a verify: the two cannot both stand as live decisions today,
     // but if that ever changes, "discard this day" is the safer of the two to honour.
     if (a.kind === 'void') out.managerDecision = 'voided';

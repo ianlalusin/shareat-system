@@ -122,7 +122,11 @@ async function buildDocument(tx: Tx, row: OutboxRow): Promise<MirrorDocument | n
              coalesce(
                (select pos.name from employment_positions ep
                  join positions pos on pos.id = ep.position_id
-                where ep.employment_id = e.id and ep.is_primary limit 1), null) as "position"
+                where ep.employment_id = e.id and ep.is_primary limit 1), null) as "position",
+             -- T-635 S2: tells the offline kiosk whom to ask "working today as: Slicer / Regular staff". Any open Slicer position counts, primary or not.
+             exists (select 1 from employment_positions ep2
+                       join positions pos2 on pos2.id = ep2.position_id
+                      where ep2.employment_id = e.id and pos2.name = 'Slicer' and pos2.is_canonical and pos2.is_active) as "isSlicer"
       from employments e join persons p on p.id = e.person_id
       where e.id = ${row.entityId}::uuid`)) as unknown as Record<string, unknown>[];
 
@@ -146,6 +150,7 @@ async function buildDocument(tx: Tx, row: OutboxRow): Promise<MirrorDocument | n
         staffCode: employment.staffCode,
         displayName: employment.displayName,
         position: employment.position,
+        isSlicer: employment.isSlicer === true,
         employmentStatus: employment.employmentStatus,
       },
     };

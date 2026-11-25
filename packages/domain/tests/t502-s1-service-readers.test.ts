@@ -74,6 +74,7 @@ export const READERS: Readonly<Record<string, 'STOCK' | 'LABEL' | 'ACCOUNT'>> = 
   'packages/domain/src/cutover/opening-stock.ts': 'ACCOUNT',
   'packages/domain/src/items/index.ts': 'LABEL',
   'packages/domain/src/items/import.ts': 'LABEL', // T-502 S4: validates kind/unit on a CSV row and creates purchasable items only; never stocks or posts
+  'packages/domain/src/production/slicer-pay.ts': 'STOCK', // T-635: a slicer rate may only name a sliced product (a service item never reaches it)
   'packages/domain/src/stock/usage-post-core.ts': 'ACCOUNT',
   'packages/domain/src/stock/usage-records.ts': 'ACCOUNT',
   'packages/domain/src/stock/receipt-posting.ts': 'ACCOUNT',
@@ -81,6 +82,7 @@ export const READERS: Readonly<Record<string, 'STOCK' | 'LABEL' | 'ACCOUNT'>> = 
   'packages/etl/src/master-data/items-plan.ts': 'LABEL',
   'packages/etl/src/pos-v2/plan-store-menu.ts': 'LABEL', // T-626: reads the v1 inventory item's kind ('variant') to group menu variants; never the v2 items.kind, no stock or ledger
   'apps/erp/src/app/inventory/production/lib.ts': 'STOCK',
+  'apps/erp/src/app/inventory/production/slicer-pay/lib.ts': 'STOCK', // T-635: lists the sliced products a rate can name
   'apps/erp/src/app/inventory/production/page.tsx': 'STOCK',
   'apps/erp/src/app/inventory/returns/page.tsx': 'STOCK',
   'apps/erp/src/app/items/actions.ts': 'LABEL',
