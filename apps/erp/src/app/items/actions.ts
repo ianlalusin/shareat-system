@@ -28,6 +28,8 @@ import {
   addItemAlias,
   removeItemAlias,
   setItemExpenseCategory,
+  setItemPricing,
+  computeBranchPrice,
   setItemStatus,
   setItemVariantOf,
   setStoreSellability,
@@ -37,14 +39,14 @@ import {
   assertFieldRules,
   type ItemCodeSuggestion,
 } from '@shareat/domain';
-import { ITEMS_REJECT_RULES, ITEMS_RENAME_RULES, ITEMS_REQUEST_RULES } from '@shareat/domain/field-rules';
+import { ITEMS_PRICING_RULES, ITEMS_REJECT_RULES, ITEMS_RENAME_RULES, ITEMS_REQUEST_RULES } from '@shareat/domain/field-rules';
 import { AuthorizationError, can } from '@shareat/auth';
 import { itemsRepo, type BaseUnit, type ItemKind } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
-import { ITEM_ALIAS, ITEM_CATEGORY, ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from './typed-forms';
+import { ITEM_ALIAS, ITEM_CATEGORY, ITEM_FLAGS, ITEM_PRICING, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from './typed-forms';
 import { errorMessage as sharedErrorMessage, resolveConstraintName } from '@/lib/constraint-messages';
 import { isPresentable } from '../../lib/error-shape';
 import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
@@ -505,4 +507,74 @@ export async function mergeItemsAction(formData: FormData): Promise<void> {
     return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash('/items', {}, { ok: summary });
+}
+
+/**
+ * ⭐ T-638. Say how the price a commissary charges stores for this item is worked out (the Wholesale row on /items/[id]).
+ * `manage_items`. T-440 S9 G6: the field check runs only for a caller `setItemPricing`'s own authorize() would let in, so
+ * a person without the right is told "you may not", never "your amount is wrong". A figure the chosen rule does not use is
+ * not sent on, so a stale amount from another rule never reaches the row.
+ */
+export async function setItemPricingAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const itemId = str(formData, 'itemId');
+  const pricingMode = str(formData, 'pricingMode') as 'fixed' | 'fixed_markup' | 'percent_markup';
+  try {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      if (await can(tx, actor, 'manage_items', {})) assertFieldRules(ITEMS_PRICING_RULES, formData);
+      return setItemPricing(tx, actor, {
+        itemId,
+        pricingMode,
+        fixedAmount: pricingMode === 'fixed' ? str(formData, 'fixedAmount') : null,
+        fixedMarkupAmount: pricingMode === 'fixed_markup' ? str(formData, 'fixedMarkupAmount') : null,
+        markupPercent: pricingMode === 'percent_markup' ? str(formData, 'markupPercent') : null,
+        marginAlertThresholdPct: str(formData, 'marginAlertThresholdPct') || null,
+      });
+    });
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a manager or admin can set the price to stores.', typed: keepTyping(formData, ITEM_PRICING, itemId, { actorId: actor.personId }) });
+    }
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, ITEM_PRICING, itemId, { actorId: actor.personId }) });
+  }
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: 'Saved. Commissary orders now use this price.' });
+}
+
+/**
+ * T-638. The live line under the pricing form: what the figures typed so far would charge, against the cost as it stands now.
+ * Judged by `computeBranchPrice` itself (the one price rule), with the cost derived here, never taken from the browser.
+ * Null: nothing to say yet (not allowed, a figure not typed or not a number, or no delivery cost for a markup rule).
+ */
+export async function previewItemPricingAction(input: {
+  itemId: string;
+  pricingMode: string;
+  fixedAmount?: string;
+  fixedMarkupAmount?: string;
+  markupPercent?: string;
+  marginAlertThresholdPct?: string;
+}): Promise<{ price: string; marginPct: string | null; marginAlert: boolean } | null> {
+  const actor = await requireActor();
+  const mode = input.pricingMode;
+  if (mode !== 'fixed' && mode !== 'fixed_markup' && mode !== 'percent_markup') return null;
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    if (!(await can(tx, actor, 'manage_items', {}))) return null;
+    const basis = await itemsRepo.costBasisFor(tx, actor.orgId, String(input.itemId ?? ''));
+    if (!basis && mode !== 'fixed') return null;
+    const figure = (v: string | undefined) => (v && v.trim() !== '' ? v.trim().replace(/,/g, '') : null);
+    try {
+      const r = computeBranchPrice(
+        {
+          pricingMode: mode,
+          fixedAmount: mode === 'fixed' ? figure(input.fixedAmount) : null,
+          fixedMarkupAmount: mode === 'fixed_markup' ? figure(input.fixedMarkupAmount) : null,
+          markupPercent: mode === 'percent_markup' ? figure(input.markupPercent) : null,
+          marginAlertThresholdPct: figure(input.marginAlertThresholdPct),
+        },
+        basis?.basis ?? '0',
+      );
+      return { price: r.price, marginPct: r.marginPct, marginAlert: r.marginAlert };
+    } catch {
+      return null;
+    }
+  });
 }

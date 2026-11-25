@@ -19,6 +19,8 @@ import { COMMISSARY_FIRST_LINK_RULES, COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULE
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
+import { NAV_LINK } from '@/components/action-link';
+import { PriceToStoresText } from '../../items/price-to-stores';
 
 export const metadata = { title: 'Commissary catalogue — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -101,7 +103,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
     );
   }
 
-  const [{ links, offerings, purchasableItems }, categories] = await Promise.all([
+  const [{ links, offerings, purchasableItems, prices }, categories] = await Promise.all([
     catalogueData(actor.orgId, commissaryStoreId),
     listCategoriesGrouped(actor.orgId),
   ]);
@@ -248,18 +250,20 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
         </div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Only an active, purchasable item can be offered. The manual cost is the last-resort
-          price, used only when the item has no store-price rule and no purchase history.
+          price, used only when the item has no store-price rule and no purchase history. The price to
+          stores is read-only here: set it on the item&rsquo;s own page.
         </p>
         {offerings.length === 0 ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">No offerings yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table aria-label="What this commissary offers" className="w-full min-w-[560px] border-collapse text-sm">
+            <table aria-label="What this commissary offers" className="w-full min-w-[720px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th className="px-3 py-2 font-medium">Item</th>
                   <th className="px-3 py-2 font-medium">Unit</th>
                   <th className="px-3 py-2 text-right font-medium">Manual cost</th>
+                  <th className="px-3 py-2 font-medium">Price to stores</th>
                   <th className="px-3 py-2 font-medium">Status</th>
                   <th className="px-3 py-2"></th>
                 </tr>
@@ -273,6 +277,12 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                     <td className="px-3 py-2">{o.baseUnit}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {o.manualCost ? peso(o.manualCost) : '—'}
+                    </td>
+                    {/* T-638: read-only; the price is set on the item page (Wholesale row), so each one links there. */}
+                    <td className="px-3 py-2">
+                      <a href={`/items/${o.itemId}#price-to-stores`} className={NAV_LINK}>
+                        <PriceToStoresText view={prices[o.itemId]!} />
+                      </a>
                     </td>
                     <td className="px-3 py-2">{statusLabel(o.status)}</td>
                     <td className="px-3 py-2 text-right">

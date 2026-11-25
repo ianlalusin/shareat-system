@@ -7,6 +7,7 @@
  * callers in `apps/` — every row in `commissary_item_map` was hand-run SQL.
  */
 import { commissaryCatalogueRepo, itemsRepo, type ItemRow } from '@shareat/db';
+import { priceToStores, type PriceToStores } from '@shareat/domain';
 import {
   listCategoriesGrouped,
   listStores,
@@ -38,6 +39,8 @@ export interface CataloguePageData {
   offerings: commissaryCatalogueRepo.OfferingRow[];
   /** The org's active items that are purchasable — what a NEW offering may name. */
   purchasableItems: ItemOption[];
+  /** T-638: the price each offered item charges stores, by item id (read-only here; it is edited on the item page). */
+  prices: Record<string, PriceToStores>;
 }
 
 /** Everything the Links and Offerings sections need, in one org-scoped transaction. */
@@ -48,10 +51,13 @@ export async function catalogueData(orgId: string, commissaryStoreId: string): P
       commissaryCatalogueRepo.listOfferings(tx, orgId, commissaryStoreId),
       itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
     ]);
+    const prices: Record<string, PriceToStores> = {};
+    for (const o of offerings) prices[o.itemId] = await priceToStores(tx, orgId, commissaryStoreId, o.itemId);
     return {
       links: allLinks.filter((l) => l.commissaryStoreId === commissaryStoreId),
       offerings,
       purchasableItems: items.filter((i) => i.isPurchasable).map(toItemOption),
+      prices,
     };
   });
 }
