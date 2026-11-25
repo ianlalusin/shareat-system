@@ -59,7 +59,8 @@ describe('T-641 the tool loop', () => {
       ['ask_erp', true, 1],
       ['ask_erp.step', true, 0],
     ]);
-    expect(new Set(rows.map((r) => r.group_ref)).size).toBe(2);
+    // the two rounds are two separate calls (two groups); the hub's own setup test call (`hub.test`) is another group and is not part of this question
+    expect(new Set(rows.filter((r) => r.feature.startsWith('ask_erp')).map((r) => r.group_ref)).size).toBe(2);
     expect(out.tokensIn).toBe(200);
     expect(out.costMicroPhp).toBeGreaterThan(0);
   });

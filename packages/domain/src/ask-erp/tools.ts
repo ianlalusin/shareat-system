@@ -11,8 +11,8 @@
  *   4. A refusal is a plain sentence returned AS the tool result ("refused": true, "message"). The model passes it on; it does not get a way round it.
  *   5. No tool writes. No tool writes SQL: each calls an existing report function or repo read, and shapes its answer with a narrow projection (shape.ts).
  */
-import { AuthorizationError, can, type Actor, type Capability } from '@shareat/auth';
-import { budgetsRepo, lowStockRepo, type Tx } from '@shareat/db';
+import { AuthorizationError, authorize, can, isAdministrative, CAPABILITY_SCOPE, type Actor, type Capability } from '@shareat/auth';
+import { accessRepo, aiHubRepo, budgetsRepo, lowStockRepo, storesRepo, type Tx } from '@shareat/db';
 import type { ToolCall, ToolDef } from '@shareat/ai';
 import { RefusalError, refuse } from '../shared/refusal';
 import { getIncomeStatement } from '../reports/income-statement';
@@ -25,7 +25,7 @@ import { lastCompletedPeriod } from '../scheduler';
 import type { TxRunner } from '../ai/shared';
 import { searchKnowledge } from './knowledge';
 import { budgetPeriodKey, resolvePeriod, type ResolvedPeriod } from './period';
-import { pickStores, visibleStores, type Picked, type StoreRef, type Visible } from './scope';
+import { findStore, type Picked, type StoreRef, type Visible } from './scope';
 import { periodOut, shapeBudgets, shapeCostDrivers, shapeFindings, shapeIncomeStatement, shapeKnowledge, shapeLowStock, shapeSalesRollup, shapeStoreComparison, shapeUnpaid, storesOut } from './shape';
 
 export interface AskSource {
@@ -77,6 +77,46 @@ const link = (label: string, path: string, params: Record<string, string | undef
   const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => e[1] !== undefined)).toString();
   return { label, href: q ? `${path}?${q}` : path };
 };
+
+// ---- which stores a question may touch (scope.ts has the types and the store lookup) ----
+
+async function visibleStores(tx: Tx, actor: Actor): Promise<Visible> {
+  const all = await storesRepo.listForOrg(tx, actor.orgId);
+  const covers = await accessRepo.personCoversWholeOrg(tx, actor.personId, actor.orgId);
+  const held = new Set(await accessRepo.storeIdsForPerson(tx, actor.personId));
+  const off = new Set((await aiHubRepo.listStoreSwitches(tx, actor.orgId)).filter((s) => !s.enabled).map((s) => s.storeId));
+  const role = (await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId))?.role;
+  const stores = all
+    .filter((s) => !off.has(s.id) && (s.isActive ? covers || held.has(s.id) : held.has(s.id)))
+    .map(({ id, name, code }) => ({ id, name, code }));
+  const activeIds = new Set(all.filter((s) => s.isActive).map((s) => s.id));
+  return { stores, orgWide: isAdministrative(role) || covers, activeCount: activeIds.size, activeShown: stores.filter((s) => activeIds.has(s.id)).length };
+}
+
+/**
+ * The stores a tool reads for `capability`, as the asker. Throws the capability's own refusal (an `AuthorizationError`, with its plain sentence) when the person may not use it at the
+ * named store, or at any store when none is named. `authorize` is the logging check, so a refused ask is recorded like any other refusal.
+ */
+async function pickStores(tx: Tx, actor: Actor, v: Visible, capability: Capability, raw: unknown): Promise<Picked> {
+  const storeScoped = CAPABILITY_SCOPE[capability] === 'store';
+  const given = typeof raw === 'string' && raw.trim() !== '' ? raw : null;
+  if (given) {
+    const s = findStore(v, given);
+    await authorize(tx, actor, capability, storeScoped ? { storeId: s.id } : {});
+    return { stores: [s], named: true, wholeOrg: false, note: null };
+  }
+  if (v.stores.length === 0) throw refuse('ask erp: the asker has no store in scope', 'You are not assigned to any store that AI is switched on for, so there is nothing I can show.');
+  const allowed: StoreRef[] = [];
+  for (const s of v.stores) if (await can(tx, actor, capability, storeScoped ? { storeId: s.id } : {})) allowed.push(s);
+  if (allowed.length === 0) {
+    // the logging check, once, so the person gets the capability's own sentence and the refusal is recorded
+    await authorize(tx, actor, capability, storeScoped ? { storeId: (v.stores[0] as StoreRef).id } : {});
+    throw refuse(`ask erp: ${capability} not held at any store`, 'You do not have access to that information.');
+  }
+  const wholeOrg = v.orgWide && allowed.length === v.stores.length && v.activeShown === v.activeCount;
+  const note = allowed.length < v.stores.length ? `Only the ${allowed.length} of your ${v.stores.length} stores where you may see this are included.` : null;
+  return { stores: allowed, named: false, wholeOrg, note };
+}
 
 // ---- the shared pieces of the definitions ------------------------------------------------------------------------------------------------------------
 const STORE_PARAM = { type: 'string', description: 'A store code or name, as listed by listMyStores. Leave it out for every store the person may see.' };

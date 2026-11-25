@@ -21,7 +21,6 @@ export const MAX_RANGE_DAYS = 366;
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const monthName = (ymd: string): string => `${MONTHS[Number(ymd.slice(5, 7)) - 1] ?? ''} ${ymd.slice(0, 4)}`;
-const daysBetween = (from: string, to: string): number => Math.round((Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10)) - Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10))) / 86_400_000);
 
 function realDate(v: unknown): string | null {
   if (typeof v !== 'string') return null;
@@ -43,8 +42,9 @@ export function resolvePeriod(input: { period?: unknown; from?: unknown; to?: un
     const from = realDate(input.from);
     const to = realDate(input.to);
     if (!from || !to) throw refuse('ask erp: bad date range', 'Give both dates as real calendar dates written YYYY-MM-DD, or use a named period such as this_month.');
-    if (from > to) throw refuse('ask erp: range reversed', 'The first date must not be after the second.');
-    if (daysBetween(from, to) + 1 > MAX_RANGE_DAYS) throw refuse('ask erp: range too long', `Ask for a period of at most ${MAX_RANGE_DAYS} days, or one month at a time.`);
+    if (from.localeCompare(to) > 0) throw refuse('ask erp: range reversed', 'The first date must not be after the second.');
+    // too long when `to` is past the last day a range of MAX_RANGE_DAYS days starting at `from` could reach (dates compare as text, YYYY-MM-DD)
+    if (to.localeCompare(addDays(from as BusinessDate, MAX_RANGE_DAYS - 1)) > 0) throw refuse('ask erp: range too long', `Ask for a period of at most ${MAX_RANGE_DAYS} days, or one month at a time.`);
     return { from, to, label: from === to ? from : `${from} to ${to}` };
   }
   const name = input.period === undefined || input.period === null || input.period === '' ? 'this_month' : input.period;

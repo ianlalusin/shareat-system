@@ -17,6 +17,7 @@ vi.mock('../src/app/ask-erp/actions', () => ({ askErpAction: vi.fn() }));
 
 import { AskErpLauncher } from '../src/components/ask-erp/AskErpLauncher';
 import { MAX_HISTORY_TURNS, MAX_QUESTION_CHARS } from '@shareat/domain';
+import { ASK_ERP_RULES } from '@shareat/domain/field-rules';
 
 const read = (rel: string) => readFileSync(join(import.meta.dirname, '..', 'src', rel), 'utf8');
 const panel = read('components/ask-erp/AskErpLauncher.tsx');
@@ -24,15 +25,26 @@ const action = read('app/ask-erp/actions.ts').replace(/\/\*[\s\S]*?\*\//g, ''); 
 const shell = read('components/shell/AppShell.tsx');
 
 describe('T-641 the panel and the domain agree on the limits', () => {
-  it('the question limit and the turns kept are the domain\'s numbers [kills: a panel that allows a question the server refuses]', () => {
-    expect(Number(/const MAX_QUESTION_CHARS = (\d+);/.exec(panel)?.[1])).toBe(MAX_QUESTION_CHARS);
+  it('the question rule is 1 to 500 characters, the domain constant equals it, and the panel keeps ten turns [kills: a panel that allows a question the server refuses]', () => {
+    expect(ASK_ERP_RULES.question).toMatchObject({ kind: 'text', min: 1, max: 500 });
+    expect(MAX_QUESTION_CHARS).toBe(ASK_ERP_RULES.question.max);
     expect(Number(/const KEEP_TURNS = (\d+);/.exec(panel)?.[1])).toBe(MAX_HISTORY_TURNS);
-    expect(MAX_QUESTION_CHARS).toBe(500);
     expect(MAX_HISTORY_TURNS).toBe(10);
   });
-  it('the question box is limited and counted [kills: a box with no limit or no count]', () => {
-    expect(panel).toContain('maxLength={MAX_QUESTION_CHARS}');
-    expect(panel).toMatch(/\{text\.length\}\/\{MAX_QUESTION_CHARS\}/);
+  it('the question box is the ruled one: a house CheckedForm with the rule set, a Field with the rule, and the control spreads nativeAttrs (limit and required come from the rule) [kills: a hand-limited box; the live check left out]', () => {
+    expect(panel).toContain('<CheckedForm');
+    expect(panel).toContain('rules={ASK_ERP_RULES}');
+    expect(panel).toContain('<Field label="Your question" rule={ASK_ERP_RULES.question}>');
+    expect(panel).toContain('{...nativeAttrs(ASK_ERP_RULES.question)}');
+    expect(panel).not.toMatch(/maxLength=/);
+    expect(panel).toMatch(/\{count\}\/\{ASK_ERP_RULES\.question\.max\}/);
+  });
+  it('the form action is the one server action, which reaches the rule through askErp [kills: a form whose action asserts nothing]', () => {
+    expect(panel).toContain('action={askErpAction as unknown as');
+    const domain = readFileSync(join(import.meta.dirname, '..', '..', '..', 'packages', 'domain', 'src', 'ask-erp', 'index.ts'), 'utf8');
+    expect(domain).toMatch(/assertFieldRules\(ASK_ERP_RULES, \{ question: input\.question \}\)/);
+    // authorize first, then the rule
+    expect(domain.indexOf("authorize(tx, actor, 'use_ask_erp'")).toBeLessThan(domain.indexOf('assertFieldRules(ASK_ERP_RULES'));
   });
 });
 
@@ -70,7 +82,7 @@ describe('T-641 what is rendered', () => {
     expect(html.match(/<button/g)).toHaveLength(1);
   });
   it('the open panel keeps the house components, the limit, the count and the source links [kills: a hand-rolled panel that drops them]', () => {
-    expect(panel).toMatch(/import \{ Banner, Button, Textarea \} from '@\/components\/ui'/);
+    expect(panel).toMatch(/import \{ Banner, Button, Field, Textarea \} from '@\/components\/ui'/);
     expect(panel).toContain('NAV_LINK');
     expect(panel).toContain('role="log"');
     expect(panel).toContain('aria-label="Ask ERP"');

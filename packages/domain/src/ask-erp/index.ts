@@ -14,11 +14,12 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import type { ChatMessage } from '@shareat/ai';
 import { callAiWithTools } from '../ai/loop';
 import type { HubDeps, TxRunner } from '../ai/shared';
-import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { ASK_ERP_RULES } from '../field-rules/ask-erp';
 import { buildKit, type AskSource } from './tools';
 
 /** The question's length and the turns kept, as v1's Ask ERP had them (Ian, 25 Nov 2026). Technical input limits, not business settings: a longer question costs more and answers worse. */
-export const MAX_QUESTION_CHARS = 500;
+export const MAX_QUESTION_CHARS = 500; // = ASK_ERP_RULES.question.max (a unit test pins them together)
 export const MAX_HISTORY_TURNS = 10;
 /** One earlier answer is cut to this many characters when it is sent back as history. */
 const MAX_HISTORY_CHARS = 4000;
@@ -61,13 +62,6 @@ export function systemPrompt(today: string, storeNames: readonly string[]): stri
   ].join('\n');
 }
 
-function checkQuestion(raw: string): string {
-  const q = raw.trim();
-  if (q === '') throw refuse('ask erp: empty question', 'Type a question first.');
-  if (q.length > MAX_QUESTION_CHARS) throw refuse('ask erp: question too long', `Please keep the question to ${MAX_QUESTION_CHARS} characters or fewer. This one is ${q.length}.`);
-  return q;
-}
-
 /** The last ten turns, each cut to a sane length, starting with a person's turn (a provider refuses a conversation that opens with an answer). */
 function checkHistory(history: readonly AskErpTurn[] | undefined): ChatMessage[] {
   const kept = (history ?? [])
@@ -80,7 +74,8 @@ function checkHistory(history: readonly AskErpTurn[] | undefined): ChatMessage[]
 
 export async function askErp(run: TxRunner, actor: Actor, input: AskErpInput, deps: HubDeps = {}): Promise<AskErpAnswer> {
   await run((tx) => authorize(tx, actor, 'use_ask_erp', {}));
-  const question = checkQuestion(input.question);
+  // after the door, as every domain function does: the same rule the panel shows live (1 to 500 characters), with its own sentence
+  const question = assertFieldRules(ASK_ERP_RULES, { question: input.question }).question ?? '';
   const history = checkHistory(input.history);
   const today = toBusinessDate();
   const kit = await buildKit(run, actor, today);

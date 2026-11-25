@@ -3,20 +3,25 @@
  * Ask ERP - the floating button and its side panel. T-641 (docs/tasks/641-ask-erp.md).
  *
  * Mounted once by `AppShell`, only for a person who holds `use_ask_erp`; `AppShell` already leaves it out of /pos, /clock and sign-in (it returns bare children there).
- * Presentation only: the server action authorizes again and every figure is read through its own capability. The conversation lives in this component and nowhere else.
+ * Presentation only: the server action authorizes again, asserts the same field rule and reads every figure through its own capability. The conversation lives in this component only.
  *
- * What the person sees: a question box (500 characters, with the count), the last ten turns kept, an answer with the screens its figures came from as links (built by the server
- * from the tools that ran, never written by the model), and, plainly, that an answer is to be checked on its screen.
+ * What the person sees: a question box ruled by `ASK_ERP_RULES` (1 to 500 characters; the house live check and the count), the last ten turns kept, an answer with the screens its
+ * figures came from as links (built by the server from the tools that ran, never written by the model), and, plainly, that an answer is to be checked on its screen.
+ *
+ * The form is a house `CheckedForm` so the rule is checked live and Ask is truly disabled while it fails. A valid submit is taken over here (`onSubmitCapture` stops React's own
+ * form action, because the reply is shown in the panel and a form action's return value is not); the same server action is the form's `action` for a browser without scripts.
  */
 import Link from 'next/link';
-import { useEffect, useRef, useState, useTransition } from 'react';
-import { Banner, Button, Textarea } from '@/components/ui';
+import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+import { ASK_ERP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Banner, Button, Field, Textarea } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
 import { NAV_LINK } from '@/components/action-link';
 import { askErpAction, type AskReply } from '../../app/ask-erp/actions';
 
-/** Same numbers as the domain (`MAX_QUESTION_CHARS`, `MAX_HISTORY_TURNS`); a test pins them together. */
-const MAX_QUESTION_CHARS = 500;
+/** The turns sent back with a question (the server keeps the last ten too; a test pins both to the domain's number). */
 const KEEP_TURNS = 10;
+const QUESTION_ID = 'ask-erp-question';
 
 interface Source {
   label: string;
@@ -32,7 +37,7 @@ const EXAMPLES = ['What is our cost driver this month?', 'Anything unusual this 
 
 export function AskErpLauncher() {
   const [open, setOpen] = useState(false);
-  const [text, setText] = useState('');
+  const [count, setCount] = useState(0);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -40,23 +45,28 @@ export function AskErpLauncher() {
   const log = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open) document.getElementById('ask-erp-question')?.focus();
+    if (open) document.getElementById(QUESTION_ID)?.focus();
   }, [open]);
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight });
   }, [turns, pending]);
 
-  function send(question: string) {
-    const q = question.trim();
-    if (q === '' || q.length > MAX_QUESTION_CHARS || pending) return;
+  function ask(form: HTMLFormElement) {
+    const box = form.elements.namedItem('question');
+    const q = box instanceof HTMLTextAreaElement ? box.value.trim() : '';
+    if (q === '' || pending) return;
     const history = turns.slice(-KEEP_TURNS).map(({ role, content }) => ({ role, content }));
+    const data = new FormData();
+    data.set('question', q);
+    data.set('history', JSON.stringify(history));
     setTurns((t) => [...t, { role: 'user', content: q }]);
-    setText('');
     setError(null);
+    form.reset();
+    setCount(0);
     startTransition(async () => {
       let reply: AskReply;
       try {
-        reply = await askErpAction(q, history);
+        reply = await askErpAction(data);
       } catch {
         reply = { ok: false, error: 'The question could not be sent. Check the connection and try again.' };
       }
@@ -65,6 +75,16 @@ export function AskErpLauncher() {
         setWarning(reply.warning);
       } else setError(reply.error);
     });
+  }
+
+  function fill(example: string) {
+    const box = document.getElementById(QUESTION_ID);
+    if (!(box instanceof HTMLTextAreaElement)) return;
+    box.value = example;
+    // the form's own live check listens for `input`
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    box.focus();
+    setCount(example.length);
   }
 
   if (!open) {
@@ -102,7 +122,7 @@ export function AskErpLauncher() {
             <ul className="space-y-2">
               {EXAMPLES.map((ex) => (
                 <li key={ex}>
-                  <Button variant="secondary" icon={null} className="text-left" onClick={() => setText(ex)}>
+                  <Button variant="secondary" icon={null} className="text-left" onClick={() => fill(ex)}>
                     {ex}
                   </Button>
                 </li>
@@ -138,39 +158,41 @@ export function AskErpLauncher() {
         {warning ? <Banner tone="warning">{warning}</Banner> : null}
       </div>
 
-      <form
+      <CheckedForm
+        rules={ASK_ERP_RULES}
+        action={askErpAction as unknown as (formData: FormData) => Promise<void>}
         className="shrink-0 space-y-2 border-t border-surface-border px-4 py-3"
-        onSubmit={(e) => {
+        onSubmitCapture={(e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
-          send(text);
+          ask(e.currentTarget);
         }}
       >
-        <label htmlFor="ask-erp-question" className="sr-only">
-          Your question
-        </label>
-        <Textarea
-          id="ask-erp-question"
-          value={text}
-          rows={3}
-          maxLength={MAX_QUESTION_CHARS}
-          placeholder="Type your question"
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              send(text);
-            }
-          }}
-        />
+        <div onInput={(e) => setCount((e.target as HTMLTextAreaElement).value.length)}>
+          <Field label="Your question" rule={ASK_ERP_RULES.question}>
+            <Textarea
+              {...nativeAttrs(ASK_ERP_RULES.question)}
+              id={QUESTION_ID}
+              rows={3}
+              className="w-full"
+              placeholder="Type your question"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
+            />
+          </Field>
+        </div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs tabular-nums text-muted">
-            {text.length}/{MAX_QUESTION_CHARS}
+            {count}/{ASK_ERP_RULES.question.max}
           </span>
-          <Button variant="primary" type="submit" icon={null} disabled={pending || text.trim() === ''}>
+          <Button variant="primary" type="submit" icon={null} disabled={pending}>
             Ask
           </Button>
         </div>
-      </form>
+      </CheckedForm>
     </aside>
   );
 }
