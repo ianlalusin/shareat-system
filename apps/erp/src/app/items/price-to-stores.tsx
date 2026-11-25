@@ -24,7 +24,9 @@ export function priceToStoresWords(v: PriceToStores): PriceToStoresWords {
   if (v.price === null) {
     return {
       headline: 'Needs a cost',
-      how: v.rule
+      how: v.rule?.pricingMode === 'fixed'
+        ? 'The fixed price comes to nothing and there is no manual cost, so a store cannot be charged for it.'
+        : v.rule
         ? 'There is no delivery cost yet for the markup to add to, and no manual cost, so a store cannot be charged for it.'
         : 'No pricing rule is set, and there is no manual cost, so a store cannot be charged for it.',
       alert: null,

@@ -62,3 +62,9 @@ Ian's words: "i guess we put that to product pricing too, we have already that r
 - **Commissary → Catalogue** shows a READ-ONLY "Price to stores" column (same derive function plus the worked-out text), and each price links to the item page. There is no second edit path.
 - Retail (diner) prices stay on Menu → Prices / What this store sells. Say so in a one-line hint on the item page, so nobody looks for them there.
 - Tests are unchanged in substance (the page test covers the item page; the catalogue column test is a read-only render).
+
+## As built
+
+- Setting the price to stores is ADMIN-ONLY (Ian, 25 Nov): `setItemPricing`, `setItemPricingAction`, `previewItemPricingAction` and the page's `mayPrice` all use `manage_price_lists`, not `manage_items`. A manager can still SEE the price.
+- The item page says franchise prices (e.g. Padre Garcia) come from their own price list under Customers → Price lists and do not follow this price.
+- Internal transfers made through `createTradeOrder` price with `branchPriceFor`, which has no manual-cost tier. An item that has only a manual cost is therefore refused there, in words (safe, never priced at zero).

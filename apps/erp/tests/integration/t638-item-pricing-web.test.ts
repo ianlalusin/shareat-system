@@ -73,9 +73,10 @@ async function fixture(hint: string) {
     return { orgId, personId: p!.id };
   };
   const manager = await mk('Manager', 'manager');
+  const admin = await mk('Admin', 'admin');
   const staff = await mk('Staff', 'staff');
   const [sup] = await sql<{ id: string }[]>`insert into suppliers (org_id, name, created_by) values (${orgId}, ${uid('sup')}, ${manager.personId}) returning id`;
-  return { orgId, storeId: store!.id, supplierId: sup!.id, manager, staff };
+  return { orgId, storeId: store!.id, supplierId: sup!.id, manager, admin, staff };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
@@ -143,13 +144,13 @@ const text = (h: string) => h.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
 const priceBlock = (html: string) => html.slice(html.indexOf('id="price-to-stores"'), html.indexOf('id="price-to-stores"') + 5000);
 
 describe('T-638 the item page, Wholesale row', () => {
-  it('a wholesale item shows the price now with how it was worked out, and an Edit button for a manager. MUTANTS: block dropped; basis ignored; edit not gated', async () => {
+  it('a wholesale item shows the price now with how it was worked out, and an Edit button for an admin only. MUTANTS: block dropped; basis ignored; edit not gated; edit gate back to manage_items', async () => {
     const f = await fixture('page');
     const id = await insertItem(f, 'Pork belly', true);
     await deliver(f, id, '200.00', '2026-11-01');
     await deliver(f, id, '213.04', '2026-11-10');
     await setRule(f, id, { mode: 'percent_markup', pct: '15', alert: '30' });
-    const html = await detailHtml(f.manager, id);
+    const html = await detailHtml(f.admin, id);
     const block = priceBlock(html);
     expect(block).toContain('Price to stores (wholesale)');
     expect(block).toContain('₱245.00 = last delivery ₱213.04 + 15%');
@@ -157,6 +158,12 @@ describe('T-638 the item page, Wholesale row', () => {
     expect(block).toContain('Diner (retail) prices are set under Menu');
     expect(html).toContain('name="pricingMode"');
     expect(html).toContain('name="markupPercent"');
+    expect(block).toContain("Franchise prices (e.g. Padre Garcia) come from their own price list under Customers → Price lists and don't follow this price.");
+    // A manager still SEES the price, but gets no form and is told who can change it.
+    const mgr = await detailHtml(f.manager, id);
+    expect(priceBlock(mgr)).toContain('₱245.00 = last delivery ₱213.04 + 15%');
+    expect(mgr).not.toContain('name="pricingMode"');
+    expect(text(priceBlock(mgr))).toContain('Only an admin can change it.');
   }, 60_000);
 
   it('no rule and no deliveries: "Needs a cost", never a zero price', async () => {
@@ -212,20 +219,26 @@ describe('T-638 Commissary catalogue: read-only column', () => {
 });
 
 describe('T-638 setItemPricingAction', () => {
-  it('a role without manage_items is refused, and the field sentence is never said. MUTANT: assertFieldRules before the gate', async () => {
+  it('a staff member AND a manager are refused, and the field sentence is never said. MUTANTS: assertFieldRules before the gate; authorize back to manage_items', async () => {
     const f = await fixture('auth');
     const id = await insertItem(f, 'Rice', true);
-    ACTOR_HOLDER.actor = f.staff;
-    // A blank figure would read "The markup percent ..." if the field check ran first.
-    const to = await redirectOf(() => actions.setItemPricingAction(form({ itemId: id, pricingMode: 'percent_markup', markupPercent: '' })));
-    expect(param(to, 'error')).toBe('Only a manager or admin can set the price to stores.');
-    expect(await ruleRow(id)).toBeUndefined();
+    for (const who of [f.staff, f.manager]) {
+      ACTOR_HOLDER.actor = who;
+      // A blank figure would read "The markup percent ..." if the field check ran first.
+      const to = await redirectOf(() => actions.setItemPricingAction(form({ itemId: id, pricingMode: 'percent_markup', markupPercent: '' })));
+      expect(param(to, 'error')).toBe('Only an admin can set the price to stores.');
+      expect(await ruleRow(id)).toBeUndefined();
+      // A valid save is refused too: the manager's gate is the capability, not the typed figure.
+      const ok = await redirectOf(() => actions.setItemPricingAction(form({ itemId: id, pricingMode: 'percent_markup', markupPercent: '10' })));
+      expect(param(ok, 'error')).toBe('Only an admin can set the price to stores.');
+      expect(await ruleRow(id)).toBeUndefined();
+    }
   }, 60_000);
 
-  it('a manager saves each rule; a figure the rule does not use is not stored; an audit row is written. MUTANTS: unused figure stored; no audit', async () => {
+  it('an admin saves each rule; a figure the rule does not use is not stored; an audit row is written. MUTANTS: unused figure stored; no audit', async () => {
     const f = await fixture('save');
     const id = await insertItem(f, 'Chicken', true);
-    ACTOR_HOLDER.actor = f.manager;
+    ACTOR_HOLDER.actor = f.admin;
     const ok = await redirectOf(() =>
       actions.setItemPricingAction(form({ itemId: id, pricingMode: 'percent_markup', markupPercent: '12.5', fixedAmount: '999', fixedMarkupAmount: '5', marginAlertThresholdPct: '10' })),
     );
@@ -233,14 +246,18 @@ describe('T-638 setItemPricingAction', () => {
     expect(await ruleRow(id)).toEqual({ pricing_mode: 'percent_markup', fixed_amount: null, markup_percent: '12.5000', fixed_markup_amount: null, margin_alert_threshold_pct: '10.0000' });
     await redirectOf(() => actions.setItemPricingAction(form({ itemId: id, pricingMode: 'fixed', fixedAmount: '180', markupPercent: '12.5' })));
     expect(await ruleRow(id)).toMatchObject({ pricing_mode: 'fixed', fixed_amount: '180.00', markup_percent: null, margin_alert_threshold_pct: null });
-    const audits = await sql<{ action: string }[]>`select action from audit_log where org_id = ${f.orgId} and entity_id = ${id} and action = 'item_pricing.set'`;
+    const audits = await sql<{ before: Record<string, unknown> | null; after: Record<string, unknown> }[]>`select before, after from audit_log where org_id = ${f.orgId} and entity_id = ${id} and action = 'item_pricing.set' order by id`;
     expect(audits.length).toBe(2);
+    expect(audits[0]!.before).toBeNull();
+    // The second save: percent 12.5 -> fixed 180, with the first row's figures as "before".
+    expect(audits[1]!.before).toMatchObject({ pricingMode: 'percent_markup', markupPercent: '12.5000', fixedAmount: null });
+    expect(audits[1]!.after).toMatchObject({ pricingMode: 'fixed', fixedAmount: '180.00', markupPercent: null });
   }, 60_000);
 
   it('a blank figure for the chosen rule is refused in words and nothing is written', async () => {
     const f = await fixture('blank');
     const id = await insertItem(f, 'Fish', true);
-    ACTOR_HOLDER.actor = f.manager;
+    ACTOR_HOLDER.actor = f.admin;
     const to = await redirectOf(() => actions.setItemPricingAction(form({ itemId: id, pricingMode: 'fixed_markup', fixedMarkupAmount: '' })));
     expect(param(to, 'error')).toMatch(/markup amount/i);
     expect(await ruleRow(id)).toBeUndefined();
@@ -248,11 +265,11 @@ describe('T-638 setItemPricingAction', () => {
 });
 
 describe('T-638 the live preview is computeBranchPrice', () => {
-  it('equals computeBranchPrice for the same inputs and the cost derived on the server; null for a markup with no deliveries, a bad number, or without the right', async () => {
+  it('equals computeBranchPrice for the same inputs and the cost derived on the server; null for a markup with no deliveries, a bad number, or without the right (a manager included)', async () => {
     const f = await fixture('prev');
     const id = await insertItem(f, 'Pork', true);
     const { computeBranchPrice } = await import('@shareat/domain');
-    ACTOR_HOLDER.actor = f.manager;
+    ACTOR_HOLDER.actor = f.admin;
     expect(await actions.previewItemPricingAction({ itemId: id, pricingMode: 'percent_markup', markupPercent: '15' })).toBeNull();
     await deliver(f, id, '213.04', '2026-11-10');
     const got = await actions.previewItemPricingAction({ itemId: id, pricingMode: 'percent_markup', markupPercent: '15', marginAlertThresholdPct: '20' });
@@ -263,7 +280,9 @@ describe('T-638 the live preview is computeBranchPrice', () => {
     const wantAmt = computeBranchPrice({ pricingMode: 'fixed_markup', fixedMarkupAmount: '1000.50', marginAlertThresholdPct: '5' }, '213.04');
     expect(amt).toEqual({ price: wantAmt.price, marginPct: wantAmt.marginPct, marginAlert: wantAmt.marginAlert });
     expect(await actions.previewItemPricingAction({ itemId: id, pricingMode: 'percent_markup', markupPercent: 'abc' })).toBeNull();
-    ACTOR_HOLDER.actor = f.staff;
-    expect(await actions.previewItemPricingAction({ itemId: id, pricingMode: 'percent_markup', markupPercent: '15' })).toBeNull();
+    for (const who of [f.manager, f.staff]) {
+      ACTOR_HOLDER.actor = who;
+      expect(await actions.previewItemPricingAction({ itemId: id, pricingMode: 'percent_markup', markupPercent: '15' })).toBeNull();
+    }
   }, 60_000);
 });

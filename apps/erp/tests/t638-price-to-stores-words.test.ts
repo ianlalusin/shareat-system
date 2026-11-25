@@ -53,6 +53,12 @@ describe('T-638 T1 - the worked-out words', () => {
     }
     expect(renderToStaticMarkup(createElement(PriceToStoresText, { view: view({}) }))).toContain('Needs a cost');
   });
+  it('a stored FIXED rule that yields nothing: "Needs a cost" with a fixed-rule reason, never the markup words', () => {
+    const w = priceToStoresWords(view({ rule: rule({ pricingMode: 'fixed', fixedAmount: '0.00' }) }));
+    expect(w.headline).toBe('Needs a cost');
+    expect(w.how).toMatch(/fixed price/i);
+    expect(w.how).not.toMatch(/delivery cost|markup/i);
+  });
   it('T1b the margin chip shows only when the alert fires', () => {
     const base = { price: '120.00', from: 'branch_price' as const, basis: '100.0000', basisFrom: 'own' as const, rule: rule({ pricingMode: 'fixed_markup', fixedMarkupAmount: '20.00', marginAlertThresholdPct: '25.0000' }) };
     expect(priceToStoresWords(view({ ...base, marginAlert: true })).alert).toBe('below your 25% margin alert');

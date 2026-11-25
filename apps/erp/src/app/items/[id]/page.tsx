@@ -76,9 +76,9 @@ export default async function ItemDetailPage({
   // T-378 S4 (DEF-600). Presentation aid only: the same gate the action uses, asked here so the form is drawn only for
   // who may use it. `changeItemBaseUnit` stays the enforcement. Pattern: channel-settlements/page.tsx.
   const mayApproveItem = await withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'approve_item', {}));
-  // T-638. Same presentation-aid rule: `setItemPricing` (manage_items) is the gate; the price is drawn for everyone who can open the page.
+  // T-638. Same presentation-aid rule: `setItemPricing` (manage_price_lists, admin only) is the gate; the price is drawn for everyone who can open the page.
   const [mayPrice, priceToStores] = await Promise.all([
-    withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'manage_items', {})),
+    withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'manage_price_lists', {})),
     itemPriceToStores(actor.orgId, id),
   ]);
   const soldWholesale = item.sellableWholesale || byStore.some((s) => s.resolved.sellableWholesale);
@@ -366,6 +366,9 @@ export default async function ItemDetailPage({
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             This is what a commissary charges a store. Diner (retail) prices are set under Menu → Prices.
           </p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Franchise prices (e.g. Padre Garcia) come from their own price list under Customers → Price lists and don&apos;t follow this price.
+          </p>
           {soldWholesale ? (
             <>
               <p className="text-sm">
@@ -389,7 +392,7 @@ export default async function ItemDetailPage({
                   basis={priceToStores.basis}
                 />
               ) : (
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">Only a manager or admin can change it.</p>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">Only an admin can change it.</p>
               )}
             </>
           ) : (

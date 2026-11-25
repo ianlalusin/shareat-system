@@ -511,7 +511,7 @@ export async function mergeItemsAction(formData: FormData): Promise<void> {
 
 /**
  * ⭐ T-638. Say how the price a commissary charges stores for this item is worked out (the Wholesale row on /items/[id]).
- * `manage_items`. T-440 S9 G6: the field check runs only for a caller `setItemPricing`'s own authorize() would let in, so
+ * `manage_price_lists` (admin only; Ian 25 Nov). T-440 S9 G6: the field check runs only for a caller `setItemPricing`'s own authorize() would let in, so
  * a person without the right is told "you may not", never "your amount is wrong". A figure the chosen rule does not use is
  * not sent on, so a stale amount from another rule never reaches the row.
  */
@@ -521,7 +521,7 @@ export async function setItemPricingAction(formData: FormData): Promise<void> {
   const pricingMode = str(formData, 'pricingMode') as 'fixed' | 'fixed_markup' | 'percent_markup';
   try {
     await withOrgPrincipal(actor.orgId, async (tx) => {
-      if (await can(tx, actor, 'manage_items', {})) assertFieldRules(ITEMS_PRICING_RULES, formData);
+      if (await can(tx, actor, 'manage_price_lists', {})) assertFieldRules(ITEMS_PRICING_RULES, formData);
       return setItemPricing(tx, actor, {
         itemId,
         pricingMode,
@@ -533,11 +533,11 @@ export async function setItemPricingAction(formData: FormData): Promise<void> {
     });
   } catch (err) {
     if (err instanceof AuthorizationError) {
-      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a manager or admin can set the price to stores.', typed: keepTyping(formData, ITEM_PRICING, itemId, { actorId: actor.personId }) });
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only an admin can set the price to stores.', typed: keepTyping(formData, ITEM_PRICING, itemId, { actorId: actor.personId }) });
     }
     return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, ITEM_PRICING, itemId, { actorId: actor.personId }) });
   }
-  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: 'Saved. Commissary orders now use this price.' });
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: 'Saved. Commissary orders to your stores now use this price.' });
 }
 
 /**
@@ -557,7 +557,7 @@ export async function previewItemPricingAction(input: {
   const mode = input.pricingMode;
   if (mode !== 'fixed' && mode !== 'fixed_markup' && mode !== 'percent_markup') return null;
   return withOrgPrincipal(actor.orgId, async (tx) => {
-    if (!(await can(tx, actor, 'manage_items', {}))) return null;
+    if (!(await can(tx, actor, 'manage_price_lists', {}))) return null;
     const basis = await itemsRepo.costBasisFor(tx, actor.orgId, String(input.itemId ?? ''));
     if (!basis && mode !== 'fixed') return null;
     const figure = (v: string | undefined) => (v && v.trim() !== '' ? v.trim().replace(/,/g, '') : null);

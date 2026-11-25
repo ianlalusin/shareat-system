@@ -1501,7 +1501,7 @@ export async function setItemPricing(
   },
 ): Promise<void> {
   const run = async (trx: Tx) => {
-    await authorize(trx, actor, 'manage_items', {});
+    await authorize(trx, actor, 'manage_price_lists', {}); // admin-only, like customer price lists (Ian 25 Nov)
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error(`setItemPricing: item ${input.itemId} does not exist.`);
     if (item.status !== 'active') {
