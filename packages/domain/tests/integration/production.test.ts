@@ -513,14 +513,14 @@ describe('T-176 test 11 — concurrency: two posts against the same slab, one co
   });
 });
 
-describe('T-176 test 12 — the slicer-payment lock, stubbed (§7)', () => {
-  it('until Phase 5 exists, every record posts, edits and voids freely', async () => {
+describe('T-176 test 12 — the slicer-payment lock (§7; real since T-635, see t635-slicer-pay.test.ts)', () => {
+  it('a record no pay run has paid posts, edits and voids freely', async () => {
     await stockUpSlab();
     const { recordId, posted } = await draftAndPost();
     expect(posted.ok).toBe(true);
-    // hasLiveSlicerPaymentCovering is a stub that always returns false — proven by every other
+    // Nothing here is paid by a pay run, so hasLiveSlicerPaymentCovering is false — proven by every other
     // test in this file succeeding at all three operations. Explicitly exercised here too:
-    const voided = await asOrg(orgA, (tx) => voidProduction(tx, managerActor, { recordId, reason: 'no lock yet' }));
+    const voided = await asOrg(orgA, (tx) => voidProduction(tx, managerActor, { recordId, reason: 'not paid, so no lock' }));
     expect(voided.ok).toBe(true);
   });
 });
