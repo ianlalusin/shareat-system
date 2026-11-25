@@ -13,13 +13,12 @@ import {
 } from './lib';
 import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
-import { Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select, statusLabel } from '@/components/ui';
+import { Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowAction, RowLink, Select, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { COMMISSARY_FIRST_LINK_RULES, COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { NAV_LINK } from '@/components/action-link';
 import { PriceToStoresText } from '../../items/price-to-stores';
 
 export const metadata = { title: 'Commissary catalogue — Shareat System' };
@@ -270,7 +269,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
               </thead>
               <tbody>
                 {offerings.map((o) => (
-                  <tr key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                  <LinkRow key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
                       {o.itemName} <span className="ml-1 font-mono text-xs text-neutral-500">{o.itemCode}</span>
                     </td>
@@ -280,12 +279,13 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                     </td>
                     {/* T-638: read-only; the price is set on the item page (Wholesale row), so each one links there. */}
                     <td className="px-3 py-2">
-                      <a href={`/items/${o.itemId}#price-to-stores`} className={NAV_LINK}>
+                      <RowLink href={`/items/${o.itemId}#price-to-stores`}>
                         <PriceToStoresText view={prices[o.itemId]!} />
-                      </a>
+                      </RowLink>
                     </td>
                     <td className="px-3 py-2">{statusLabel(o.status)}</td>
                     <td className="px-3 py-2 text-right">
+                      <RowAction>
                       <form action={upsertOfferingAction}>
                         <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
                         <input type="hidden" name="itemId" value={o.itemId} />
@@ -295,8 +295,9 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                           {o.status === 'active' ? 'Deactivate' : 'Reactivate'}
                         </Button>
                       </form>
+                      </RowAction>
                     </td>
-                  </tr>
+                  </LinkRow>
                 ))}
               </tbody>
             </table>
