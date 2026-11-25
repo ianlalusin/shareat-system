@@ -20,14 +20,14 @@ export interface RuleDefinition {
   readonly label: string;
   /** One sentence saying what the number does. */
   readonly help: string;
-  /** `days` and `flag` are whole numbers: `days` a count of days, `flag` an on/off switch stored as 0 or 1 (T-575). `hours` (T-621) is a whole number of hours (a length of time), not `hour`, which is a time of day 0-23. */
-  readonly unit: 'money' | 'percent' | 'hour' | 'minutes' | 'hours' | 'days' | 'flag';
+  /** `times` (T-639) is a multiplier with at most two decimals (1.5 means one and a half times); `count` (T-639) is a whole number of things. `days` and `flag` are whole numbers: `days` a count of days, `flag` an on/off switch stored as 0 or 1 (T-575). `hours` (T-621) is a whole number of hours (a length of time), not `hour`, which is a time of day 0-23. */
+  readonly unit: 'money' | 'percent' | 'hour' | 'minutes' | 'hours' | 'days' | 'flag' | 'times' | 'count';
   readonly default: string;
   readonly min: string;
   readonly max: string;
   readonly capability: typeof RULE_ADMIN_CAPABILITY;
   /** The key's first dotted segment; the screen groups by it. */
-  readonly namespace: 'settlement' | 'tax' | 'pos';
+  readonly namespace: 'settlement' | 'tax' | 'pos' | 'expenses';
 }
 
 export const RULE_REGISTRY = {
@@ -170,6 +170,57 @@ export const RULE_REGISTRY = {
     max: '1',
     capability: RULE_ADMIN_CAPABILITY,
     namespace: 'pos',
+  },
+  // T-639 - the expense-alert thresholds. No seed row: the reader falls back to these defaults until an admin sets a value.
+  'expenses.alert_spike_multiplier': {
+    label: 'Weekly spending in a category that counts as a spike (times the usual week)',
+    help: 'A category’s spending this week is compared with its usual week, the middle of the last 8 full weeks that had any spending. 1.5 means a week above one and a half times the usual is flagged. It is only a finding on the Findings screen; no expense is ever blocked.',
+    unit: 'times',
+    default: '1.5',
+    min: '1',
+    max: '20',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'expenses',
+  },
+  'expenses.alert_min_amount': {
+    label: 'Smallest amount worth an expense alert (pesos)',
+    help: 'An expense alert is raised only when the extra spending, or the single expense, is at least this many pesos. It keeps small everyday purchases from flagging. It applies to spikes, unusual single expenses, possible duplicates and expenses approved by the person who recorded them.',
+    unit: 'money',
+    default: '5000.00',
+    min: '0',
+    max: '100000',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'expenses',
+  },
+  'expenses.alert_outlier_multiplier': {
+    label: 'How far above usual a single expense must be to stand out (times the usual spread)',
+    help: 'The usual spread is how much a category’s expenses at a store normally differ from their typical amount over the last 90 days. An expense above the typical amount plus this many times that spread is flagged. At least 10 earlier expenses are needed before it judges.',
+    unit: 'times',
+    default: '5',
+    min: '1',
+    max: '50',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'expenses',
+  },
+  'expenses.alert_frequency_multiplier': {
+    label: 'Number of expenses in a week that counts as a jump (times the usual count)',
+    help: 'A category with more expenses this week than this many times its average over the last 8 weeks is flagged, once it also reaches the fewest-expenses count below. 2 means double the usual.',
+    unit: 'times',
+    default: '2',
+    min: '1',
+    max: '20',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'expenses',
+  },
+  'expenses.alert_frequency_min_count': {
+    label: 'Fewest expenses in a week before a jump is flagged',
+    help: 'A jump in how many expenses a category has this week is flagged only when there are at least this many. It keeps a category that normally has none or one from flagging on two or three.',
+    unit: 'count',
+    default: '4',
+    min: '1',
+    max: '1000',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'expenses',
   },
 } as const satisfies Record<string, RuleDefinition>;
 
