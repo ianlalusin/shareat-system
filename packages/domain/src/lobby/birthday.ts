@@ -169,8 +169,8 @@ export async function acceptBirthdayCore(
   input: AcceptBirthdayInput,
   guard: StoreGuard,
 ): Promise<{ requestId: string; status: 'accepted'; scheduledAt: Date }> {
-  const scheduledAt = cleanTime(input);
   const row = await requestOrRefuse(tx, ctx, input.requestId, guard);
+  const scheduledAt = cleanTime(input); // after the store check (authorize first), so a person who may not act here learns nothing about the rule
   if (row.status !== 'requested') throw lobbyRefusal('LOBBY_BIRTHDAY_CLOSED');
   await lobbyRepo.acceptBirthdayRow(tx, ctx.orgId, row.id, scheduledAt, ctx.personId);
   await auditLogRepo.append(tx, ctx.orgId, {
@@ -192,8 +192,8 @@ export async function declineBirthdayCore(
   input: DeclineBirthdayInput,
   guard: StoreGuard,
 ): Promise<{ requestId: string; status: 'declined' }> {
-  const reason = cleanReason(input.reason);
   const row = await requestOrRefuse(tx, ctx, input.requestId, guard);
+  const reason = cleanReason(input.reason); // after the store check, as for the time in `acceptBirthdayCore`
   if (row.status !== 'requested') throw lobbyRefusal('LOBBY_BIRTHDAY_CLOSED');
   await lobbyRepo.declineBirthdayRow(tx, ctx.orgId, row.id, reason, ctx.personId);
   await auditLogRepo.append(tx, ctx.orgId, {
@@ -229,8 +229,12 @@ export async function markBirthdayPlayedCore(tx: Tx, ctx: MoveCtx, requestId: st
 // ------------------------------------------------------------------------------------------------ door 1: an ERP cashier
 
 const staffCtx = (actor: Actor): MoveCtx => ({ orgId: actor.orgId, personId: actor.personId });
-/** The capability is store-scoped and the store is the request's own. */
-const staffGuard = (tx: Tx, actor: Actor): StoreGuard => async (storeId) => {
+/**
+ * The capability is store-scoped and the store is the request's own. `onlyStoreId` (T-644 S3: the store the paired tablet works at, taken from the pairing) narrows it:
+ * a request of any other store answers exactly like a ghost id, so a paired tablet cannot act on, or probe, another store's requests.
+ */
+const staffGuard = (tx: Tx, actor: Actor, onlyStoreId?: string): StoreGuard => async (storeId) => {
+  if (onlyStoreId !== undefined && storeId.toLowerCase() !== onlyStoreId.toLowerCase()) throw lobbyRefusal('LOBBY_NOT_FOUND');
   await authorize(tx, actor, 'record_sale', { storeId });
 };
 
@@ -239,16 +243,16 @@ export async function listBirthdayRequests(tx: Tx, actor: Actor, storeId: string
   return listBirthdayCore(tx, actor.orgId, storeId);
 }
 
-export async function acceptBirthday(tx: Tx, actor: Actor, input: AcceptBirthdayInput) {
-  return acceptBirthdayCore(tx, staffCtx(actor), input, staffGuard(tx, actor));
+export async function acceptBirthday(tx: Tx, actor: Actor, input: AcceptBirthdayInput, opts?: { onlyStoreId?: string }) {
+  return acceptBirthdayCore(tx, staffCtx(actor), input, staffGuard(tx, actor, opts?.onlyStoreId));
 }
 
-export async function declineBirthday(tx: Tx, actor: Actor, input: DeclineBirthdayInput) {
-  return declineBirthdayCore(tx, staffCtx(actor), input, staffGuard(tx, actor));
+export async function declineBirthday(tx: Tx, actor: Actor, input: DeclineBirthdayInput, opts?: { onlyStoreId?: string }) {
+  return declineBirthdayCore(tx, staffCtx(actor), input, staffGuard(tx, actor, opts?.onlyStoreId));
 }
 
-export async function markBirthdayPlayed(tx: Tx, actor: Actor, requestId: string) {
-  return markBirthdayPlayedCore(tx, staffCtx(actor), requestId, staffGuard(tx, actor));
+export async function markBirthdayPlayed(tx: Tx, actor: Actor, requestId: string, opts?: { onlyStoreId?: string }) {
+  return markBirthdayPlayedCore(tx, staffCtx(actor), requestId, staffGuard(tx, actor, opts?.onlyStoreId));
 }
 
 // ------------------------------------------------------------------------------------------------ door 2: the POS tablet

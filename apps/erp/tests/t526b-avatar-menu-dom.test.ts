@@ -15,6 +15,10 @@ vi.mock('@/app/pos/_shell/use-device-sync', () => ({
   useDeviceSync: () => ({ offlineActor: null, setOfflineActor: () => undefined, pending: 0, sending: false, conflicts: 0, clearConflicts: () => undefined, needsInternet: false, unpaired: false }),
 }));
 vi.mock('@/app/pos/_shell/SwitchCashierDialog', () => ({ SwitchCashierDialog: () => null }));
+// T-644: the shell's lobby poll calls a Server Action; these tests are about other things, so it stays idle.
+vi.mock('@/app/pos/_lobby/use-lobby-poll', () => ({ useLobbyPoll: () => ({ list: null, loaded: false, error: null, refresh: async () => undefined }) }));
+// T-644 S3: so does the birthday prompt (its Server Actions); it renders nothing here.
+vi.mock('@/app/pos/_lobby/BirthdayPrompt', () => ({ BirthdayPrompt: () => null }));
 
 import { PosShell } from '@/app/pos/_shell/PosShell';
 

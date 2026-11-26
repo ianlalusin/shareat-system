@@ -415,6 +415,10 @@ export interface GovernmentIdsRow {
   philhealthNo: string | null;
   pagibigNo: string | null;
   tin: string | null;
+  /** T-636 (0288): deduct this agency at all (false = unticked on the staff page; the pay run skips it). */
+  deductSss: boolean;
+  deductPhilhealth: boolean;
+  deductPagibig: boolean;
 }
 
 /** ⚠️ Personal data. Called only behind `run_payroll` (payroll) or `enrol_staff` (the staff page). */
@@ -427,6 +431,9 @@ export async function governmentIdsFor(tx: Tx, orgId: string, personIds: string[
       philhealthNo: persons.philhealthNo,
       pagibigNo: persons.pagibigNo,
       tin: persons.tin,
+      deductSss: persons.deductSss,
+      deductPhilhealth: persons.deductPhilhealth,
+      deductPagibig: persons.deductPagibig,
     })
     .from(persons)
     .where(and(eq(persons.orgId, orgId), inArray(persons.id, personIds)));
@@ -441,6 +448,21 @@ export async function setGovernmentIds(
   const rows = await tx
     .update(persons)
     .set({ sssNo: ids.sssNo, philhealthNo: ids.philhealthNo, pagibigNo: ids.pagibigNo, tin: ids.tin, updatedAt: new Date() })
+    .where(and(eq(persons.id, personId), eq(persons.orgId, orgId)))
+    .returning({ id: persons.id });
+  return rows.length > 0;
+}
+
+/** T-636 (0288): the three deduct-this-agency ticks. Returns false when no such person in the org. */
+export async function setStatutoryDeductions(
+  tx: Tx,
+  orgId: string,
+  personId: string,
+  flags: { deductSss: boolean; deductPhilhealth: boolean; deductPagibig: boolean },
+): Promise<boolean> {
+  const rows = await tx
+    .update(persons)
+    .set({ ...flags, updatedAt: new Date() })
     .where(and(eq(persons.id, personId), eq(persons.orgId, orgId)))
     .returning({ id: persons.id });
   return rows.length > 0;

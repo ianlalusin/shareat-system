@@ -9,7 +9,10 @@
 import type { Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import type { LobbyEntryStatus } from './checkin';
-import { callCore, listCore, parkCore, removeCore, seatCore, type MoveCtx } from './core';
+import { callCore, listAndStampCore, listCore, parkCore, removeCore, seatCore, setPausedCore, type CoreLobbyList, type MoveCtx } from './core';
+import { lobbyRefusal } from './refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { POS_LOBBY_SEAT_RULES, POS_LOBBY_WALKIN_RULES } from '../field-rules/pos';
 
 export interface ParkWalkInInput {
   readonly storeId: string;
@@ -41,8 +44,12 @@ export interface SeatEntryInput {
 }
 
 const ctxOf = (actor: Actor): MoveCtx => ({ orgId: actor.orgId, personId: actor.personId });
-/** The capability is store-scoped and the store is the entry's own. */
-const guardFor = (tx: Tx, actor: Actor) => async (storeId: string) => {
+/**
+ * The capability is store-scoped and the store is the entry's own. `onlyStoreId` (T-644: the store the paired tablet works at, taken from the pairing)
+ * narrows it: an entry of any other store answers exactly like a ghost id, so a paired tablet cannot act on, or probe, another store's line.
+ */
+const guardFor = (tx: Tx, actor: Actor, onlyStoreId?: string) => async (storeId: string) => {
+  if (onlyStoreId !== undefined && storeId.toLowerCase() !== onlyStoreId.toLowerCase()) throw lobbyRefusal('LOBBY_NOT_FOUND');
   await authorize(tx, actor, 'record_sale', { storeId });
 };
 
@@ -57,6 +64,7 @@ export async function parkWalkIn(
   opts?: { randomCode?: () => string },
 ): Promise<{ entryId: string; code: string }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
+  assertFieldRules(POS_LOBBY_WALKIN_RULES, { displayName: input.displayName ?? '', phone: input.phone ?? '', note: input.note ?? '' });
   return parkCore(tx, ctxOf(actor), input.storeId, input, opts);
 }
 
@@ -67,16 +75,38 @@ export async function listLobbyEntries(tx: Tx, actor: Actor, storeId: string): P
 }
 
 /** waiting -> called. Calling an already-called entry changes nothing. A closed entry cannot be called. */
-export async function callEntry(tx: Tx, actor: Actor, entryId: string): Promise<{ entryId: string; status: 'called' }> {
-  return callCore(tx, ctxOf(actor), entryId, guardFor(tx, actor));
+export async function callEntry(tx: Tx, actor: Actor, entryId: string, opts?: { onlyStoreId?: string }): Promise<{ entryId: string; status: 'called' }> {
+  return callCore(tx, ctxOf(actor), entryId, guardFor(tx, actor, opts?.onlyStoreId));
 }
 
-/** waiting|called -> seated, with the POS session id and the stand (see `seatCore`). */
-export async function seatEntry(tx: Tx, actor: Actor, input: SeatEntryInput): Promise<{ entryId: string; status: 'seated' }> {
-  return seatCore(tx, ctxOf(actor), input, guardFor(tx, actor));
+/**
+ * waiting|called -> seated, with the POS session id and the stand (see `seatCore`). `onlyStoreId` as for `callEntry` (T-644 S2). The stand label is bounded
+ * AFTER the store check (authorize first, then the field rule), so a person who may not act here learns nothing about the rule.
+ */
+export async function seatEntry(tx: Tx, actor: Actor, input: SeatEntryInput, opts?: { onlyStoreId?: string }): Promise<{ entryId: string; status: 'seated' }> {
+  const allowed = guardFor(tx, actor, opts?.onlyStoreId);
+  return seatCore(tx, ctxOf(actor), input, async (storeId) => {
+    await allowed(storeId);
+    assertFieldRules(POS_LOBBY_SEAT_RULES, { standLabel: input.standLabel ?? '' });
+  });
 }
 
 /** waiting|called -> removed (the cashier takes a party off the line). Its pending claims expire. A seated entry cannot be removed. */
-export async function removeEntry(tx: Tx, actor: Actor, entryId: string): Promise<{ entryId: string; status: 'removed' }> {
-  return removeCore(tx, ctxOf(actor), entryId, guardFor(tx, actor));
+export async function removeEntry(tx: Tx, actor: Actor, entryId: string, opts?: { onlyStoreId?: string }): Promise<{ entryId: string; status: 'removed' }> {
+  return removeCore(tx, ctxOf(actor), entryId, guardFor(tx, actor, opts?.onlyStoreId));
+}
+
+/**
+ * T-644 S1 - the ERP POS's lobby list: the live line with each party's order lines, plus whether the store's lobby is on and paused.
+ * ⛔ It stamps `lobby_stores.pos_seen_at` (diners can check in only while that is under 5 minutes old); the shell polls it every 10 s on every tab.
+ */
+export async function listLobby(tx: Tx, actor: Actor, input: { storeId: string }): Promise<CoreLobbyList> {
+  await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
+  return listAndStampCore(tx, actor.orgId, input.storeId);
+}
+
+/** The cashier pauses or resumes the store's diner check-in (audit `lobby.pause` / `lobby.resume`). A store with no lobby row is LOBBY_NOT_FOUND. */
+export async function setLobbyPaused(tx: Tx, actor: Actor, input: { storeId: string; paused: boolean }): Promise<{ paused: boolean }> {
+  await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
+  return setPausedCore(tx, ctxOf(actor), input.storeId, input.paused);
 }

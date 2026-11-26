@@ -20,13 +20,14 @@ import { listTodaysSalesReceipts, recordRefund } from '../../src';
 import { REFUND_NO_CHARGES } from '../../src/pos/refund';
 import { D1, asOrg, close, closeAll, manila, pinOf, reading, sell, sql, uuid, world, type World } from './_fixtures/t531-day-close';
 
+import { chargePresetRow } from './_fixtures/t634-charges';
 afterAll(closeAll);
 
 const AT = manila(D1, '22:30');
 
 /** 2 pork (500.00) + Leftover 3 x 100.00 (per unit): amount due 800.00, paid 800.00 cash. */
 async function receipt(w: World) {
-  const preset = (await sql<{ id: string }[]>`insert into pos_charge_presets (org_id, store_id, name, amount, per_unit, created_by) values (${w.orgId}, ${w.storeId}, 'Leftover', '100.00', true, ${w.adminId}) returning id`)[0]!.id;
+  const preset = await chargePresetRow(sql as never, { orgId: w.orgId, storeId: w.storeId, name: 'Leftover', amount: '100.00', perUnit: true, createdBy: w.adminId }); // T-634
   const s = await sell(w, { at: manila(D1, '19:00'), items: [{ item: w.menu.pork, qty: 2 }], expectTotal: '500.00', charges: [{ presetId: preset, qty: 3 }], pay: [{ tenderId: w.cash, amount: '800.00' }] });
   const lines = await sql<{ id: string }[]>`select id from pos_sales_receipt_lines where receipt_id = ${s.receiptId} order by line_no`;
   const pays = await sql<{ id: string }[]>`select id from pos_sales_receipt_payments where receipt_id = ${s.receiptId}`;

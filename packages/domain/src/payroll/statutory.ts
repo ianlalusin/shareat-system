@@ -113,7 +113,7 @@ export interface StatutoryInput {
   isMwe: boolean;
   rates: Record<Agency, ContributionRate>;
   prior: Record<Agency, AgencyPrior>;
-  /** Agencies with no number on file: both shares are zero. */
+  /** Agencies not deducted (no number on file, or unticked on the staff page, T-636): both shares are zero. */
   skipped: readonly Agency[];
   brackets: readonly WithholdingBracket[];
   advanceOutstanding: Money;
@@ -127,6 +127,33 @@ export interface StatutoryResult {
   withholding: Money;
   advanceRecovered: Money;
   netPay: Money;
+}
+
+/** What a person has on file for one pay run: the three numbers and the three deduct ticks (T-636, migration 0288). */
+export interface DeductionFacts {
+  readonly sssNo: string | null;
+  readonly philhealthNo: string | null;
+  readonly pagibigNo: string | null;
+  readonly deductSss: boolean;
+  readonly deductPhilhealth: boolean;
+  readonly deductPagibig: boolean;
+}
+
+/**
+ * T-636 (pure): which agencies a payslip skips, and why. An agency is skipped when it is UNTICKED (the person is not covered, Ian: on-call staff, checked with
+ * the accountant) OR its number is MISSING. Only `missing` is a warning (`missingGovernmentIds`); an untick is a deliberate choice, shown as a quiet note.
+ * An agency that is both unticked and missing counts as unticked (the choice explains it; asking for a number nobody will use would be noise).
+ * No facts at all (a person the read did not return) = every agency missing, as before.
+ */
+export function agenciesToSkip(facts: DeductionFacts | undefined): { skipped: Agency[]; missing: Agency[]; unticked: Agency[] } {
+  const rows: [Agency, string | null | undefined, boolean][] = [
+    ['sss', facts?.sssNo, facts?.deductSss ?? true],
+    ['philhealth', facts?.philhealthNo, facts?.deductPhilhealth ?? true],
+    ['pagibig', facts?.pagibigNo, facts?.deductPagibig ?? true],
+  ];
+  const unticked = rows.filter(([, , deduct]) => !deduct).map(([a]) => a);
+  const missing = rows.filter(([, no, deduct]) => deduct && !no).map(([a]) => a);
+  return { skipped: rows.filter(([a]) => unticked.includes(a) || missing.includes(a)).map(([a]) => a), missing, unticked };
 }
 
 function nonNegativeDifference(figure: Money, already: Money): Money {

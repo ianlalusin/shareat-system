@@ -55,6 +55,7 @@ import {
   type TableSessionRow,
 } from '../../schema/pos-v2';
 import { employments } from '../../schema/employment';
+import { menuOptionValues } from '../../schema/menu';
 import { persons } from '../../schema/persons';
 import { posTabletPairings } from '../../schema/pos-tablet-pairings';
 import { tenders } from '../../schema/pos-v1';
@@ -744,10 +745,17 @@ export async function listQueuedLines(tx: Tx, orgId: string, storeId: string, o:
     .orderBy(asc(tableSessionLines.addedAtDevice), asc(tableSessionLines.id));
 }
 
-/** T-529: the open dine-in tables holding a live package line (the refill picker), one row per package line, by stand number. */
+/** T-529: the open dine-in tables holding a live package line (the refill picker), one row per package line, by stand number. T-643: `seatFlavours` = the names of the line's chosen options, in menu order. */
 export async function listRefillableTables(tx: Tx, orgId: string, storeId: string) {
   return tx
-    .select({ sessionId: tableSessions.id, standNumber: posStands.number, headsCashier: tableSessions.headsCashier, headsServer: tableSessions.headsServer, packageVariantId: tableSessionLines.menuItemVariantId })
+    .select({
+      sessionId: tableSessions.id,
+      standNumber: posStands.number,
+      headsCashier: tableSessions.headsCashier,
+      headsServer: tableSessions.headsServer,
+      packageVariantId: tableSessionLines.menuItemVariantId,
+      seatFlavours: sql<string[]>`coalesce((select array_agg(${menuOptionValues.name} order by ${menuOptionValues.sortOrder}, ${menuOptionValues.name}) from ${menuOptionValues} where ${menuOptionValues.orgId} = ${tableSessionLines.orgId} and ${menuOptionValues.id} = any(${tableSessionLines.optionValueIds})), '{}'::text[])`,
+    })
     .from(tableSessions)
     .innerJoin(posStands, and(eq(posStands.id, tableSessions.standId), eq(posStands.storeId, tableSessions.storeId)))
     .innerJoin(

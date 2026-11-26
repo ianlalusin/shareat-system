@@ -2,7 +2,7 @@
 import { navHrefAllowed } from '@/lib/route-capability';
 import type { PosStateBody } from './pos-state';
 
-export type PosTabKey = 'orders' | 'kitchen' | 'refills' | 'reservations' | 'receipts' | 'till';
+export type PosTabKey = 'orders' | 'lobby' | 'kitchen' | 'refills' | 'reservations' | 'receipts' | 'till';
 export interface PosTab {
   key: PosTabKey;
   label: string;
@@ -11,6 +11,7 @@ export interface PosTab {
 
 const TABS: readonly PosTab[] = [
   { key: 'orders', label: 'Orders', href: '/pos' },
+  { key: 'lobby', label: 'Lobby', href: '/pos/lobby' }, // T-644: record_sale, by prefix
   { key: 'kitchen', label: 'Kitchen', href: '/pos/kitchen' },
   { key: 'refills', label: 'Refills', href: '/pos/refills' },
   { key: 'reservations', label: 'Reservations', href: '/pos/reservations' },
@@ -23,8 +24,9 @@ export function visibleTabs(held: ReadonlySet<string>): PosTab[] {
   return TABS.filter((t) => navHrefAllowed(t.href, held));
 }
 
-/** null when the person may not read that list (the server sends null) or nothing has arrived yet. */
-export function tabCount(key: PosTabKey, body: PosStateBody | null): number | null {
+/** null when the person may not read that list (the server sends null) or nothing has arrived yet. T-644: the Lobby count is the polled waiting line (`lobbyWaiting`), not a state-poll list. */
+export function tabCount(key: PosTabKey, body: PosStateBody | null, lobbyWaiting?: number | null): number | null {
+  if (key === 'lobby') return lobbyWaiting ?? null;
   const list = key === 'kitchen' ? body?.kitchenQueue : key === 'refills' ? body?.refillQueue : null;
   return list ? list.length : null;
 }

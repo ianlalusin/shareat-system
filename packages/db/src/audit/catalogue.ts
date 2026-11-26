@@ -213,6 +213,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // size is capped); `after.table` / `after.event` say which. Dotted: new. Org-scoped, admin-readable; rows are immutable once confirmed.
   // T-190: a person's government numbers were set or cleared. Records FIELD NAMES only, never a number.
   def('staff_gov_ids.changed', 'security', 'high', 'store', 'persons', 'T-190', { viewers: 'admin' }),
+  // T-636: a person's "deduct SSS / PhilHealth / Pag-IBIG" ticks changed on the staff page (entity = the persons row; before/after = each changed tick). Money:
+  // it decides what the next payslip deducts and what the employer remits. Ian: for staff not covered, such as on-call staff, checked with the accountant.
+  def('person.statutory_deduction_set', 'money', 'high', 'store', 'persons', 'T-636', ADMIN),
   def('payroll_rate.change', 'money', 'high', 'org', 'statutory_rates', 'T-190', ADMIN),
   // T-193 S3: recording (and, S4, voiding) a payment to SSS / PhilHealth / Pag-IBIG / BIR. Org-scoped, admin-readable; payloads carry agency, month, receipt no. and amounts, never a government number.
   def('statutory_payment.record', 'money', 'high', 'org', 'statutory_payments', 'T-193', ADMIN),
@@ -283,6 +286,12 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('payment_option.updated', 'money', 'normal', 'org', 'payment_options', 'T-629'),
   def('payment_option.retired', 'money', 'high', 'org', 'payment_options', 'T-629'),
   def('payment_option.reactivated', 'money', 'normal', 'org', 'payment_options', 'T-629'),
+  // T-634: the org's master list of charges (entity = the charge_options row): added, its amount / per unit changed (every store follows), retired (refused while
+  // any store has it on) or brought back. A store switching one on or off is pos.charge_preset_set / pos.charge_preset_retired (entity = its pos_charge_presets row).
+  def('charge_option.created', 'settings', 'normal', 'org', 'charge_options', 'T-634'),
+  def('charge_option.updated', 'settings', 'normal', 'org', 'charge_options', 'T-634'),
+  def('charge_option.retired', 'settings', 'normal', 'org', 'charge_options', 'T-634'),
+  def('charge_option.reactivated', 'settings', 'normal', 'org', 'charge_options', 'T-634'),
   // T-533 S1: a store's POS mode set or moved (off, test, live from a date, or the roll-back); entity = the pos_stores row. `high`: it decides whether real sales days come from the new POS.
   def('pos.store_mode_set', 'settings', 'high', 'store', 'pos_stores', 'T-533'),
   // T-531: the day close (the Z; entity = the pos_day_closes row, or the run id for the backlog), the ERP sales day it derives, and the December bridge to v1 (entity = the store).

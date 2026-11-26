@@ -24,6 +24,7 @@ import {
   renamePerson,
   setEmploymentPositions,
   setGovernmentIds,
+  setStatutoryDeductions,
   setStaffPhoto,
   setStaffSignature,
   upsertStorePosition,
@@ -369,7 +370,7 @@ export async function renamePersonAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Name saved.' });
 }
 
-/** T-190 - SSS / PhilHealth / Pag-IBIG / TIN. A blank box clears that number; an agency with no number is not deducted on the payslip. */
+/** T-190 - SSS / PhilHealth / Pag-IBIG / TIN. A blank box clears that number; an agency with no number is not deducted on the payslip. T-636: plus the three Deduct ticks. */
 export async function setGovernmentIdsAction(formData: FormData): Promise<void> {
   const actor = await requireActor('/staff');
   const employmentId = str(formData, 'employmentId');
@@ -387,6 +388,17 @@ export async function setGovernmentIdsAction(formData: FormData): Promise<void> 
         pagibigNo: str(formData, 'pagibigNo'),
         tin: str(formData, 'tin'),
       });
+      // T-636: the three Deduct ticks, saved with the numbers (same right, same transaction). Only when the form carries them: an unticked checkbox is absent
+      // from the form, so the marker tells "unticked" apart from "this form has no ticks".
+      if (formData.get('statutoryTicks') === '1') {
+        await setStatutoryDeductions(tx, actor, {
+          personId: employment.personId,
+          storeId: employment.storeId,
+          deductSss: formData.get('deductSss') === 'on',
+          deductPhilhealth: formData.get('deductPhilhealth') === 'on',
+          deductPagibig: formData.get('deductPagibig') === 'on',
+        });
+      }
     });
   } catch (err) {
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });

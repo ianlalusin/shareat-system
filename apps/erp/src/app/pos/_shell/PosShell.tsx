@@ -30,6 +30,8 @@ import { usePosState } from './use-pos-state';
 import { useUpdateGate } from './use-update-gate';
 import { useOfflineXSlip } from './use-offline-xslip';
 import { useOutageReplay } from '../_kitchen/use-outage-replay';
+import { BirthdayPrompt } from '../_lobby/BirthdayPrompt';
+import { useLobbyPoll } from '../_lobby/use-lobby-poll';
 
 
 /** One stable empty list, so the memo below does not recompute on every render. */
@@ -97,6 +99,9 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   const actor = sync.offlineActor;
   const caps = new Set(actor ? actor.posCapabilities : heldPos);
   const tabs = visibleTabs(caps);
+  // T-644: the waiting-line poll runs on EVERY tab of the store tablet (online, signed in as a person who holds record_sale, not an offline sign-in): each answer stamps
+  // `pos_seen_at`, which is the only thing that lets diners check in. A phone or a kitchen browser never polls, so it can never make the lobby look open.
+  const lobby = useLobbyPoll({ enabled: pairedStoreId !== null && state.online && !actor && caps.has('record_sale'), storeId });
   const query = !pairedStoreId && stores.length > 1 && storeId ? `?storeId=${storeId}` : '';
 
   // How long the pill says we have been offline; re-read every 30 s so the minutes move.
@@ -185,6 +190,7 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
     clockAt,
     requestDrain: sync.requestDrain,
     setResultsHandler: sync.setResultsHandler,
+    lobby,
   };
 
   return (
@@ -300,7 +306,7 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
           <nav aria-label="POS sections" className={NAV}>
             {tabs.map((t) => {
               const active = t.href === '/pos' ? pathname === '/pos' : pathname.startsWith(t.href);
-              const count = tabCount(t.key, state.body);
+              const count = tabCount(t.key, state.body, lobby.list?.entries.length ?? null);
               return (
                 <Link key={t.key} href={`${t.href}${query}`} aria-current={active ? 'page' : undefined} className={`${TAB} ${active ? 'bg-ink text-canvas' : 'text-muted hover:text-ink'}`}>
                   {t.label}
@@ -368,6 +374,8 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
           )}
         </main>
       </div>
+      {/* T-644 S3: birthday-song requests, on every tab of the store tablet. The scheduler runs for anyone who holds record_sale there (an offline sign-in too); the poll and the answers need the internet and the signed-in person. */}
+      <BirthdayPrompt storeId={pairedStoreId !== null && caps.has('record_sale') ? storeId : null} online={state.online && !actor} />
       <SwitchCashierDialog open={switching} onClose={() => setSwitching(false)} onSwitched={sync.setOfflineActor} />
     </>
   );

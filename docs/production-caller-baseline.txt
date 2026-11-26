@@ -18,7 +18,6 @@ buildCoverageReport
 buildPlan
 byMethodOf
 calculateBillTotalsCentavosT423
-callEntry
 cancelScheduledDepletionRule
 canonicalAnalytics
 capitalizeFromExpense
@@ -92,7 +91,6 @@ jobResult
 kdsEventDayId
 listAdjustments
 listAvailableCommissaries
-listBirthdayRequests
 listCategoryLives
 listClaimRequests
 listDayIdsWithLivePull
@@ -109,7 +107,6 @@ listWriteOffsForCharge
 loadMod
 lobbyPartiesAhead
 makeDeps
-markBirthdayPlayed
 markReviewed
 memoryLocalStorage
 middleware
@@ -120,7 +117,6 @@ oldWholeBillSeniorDiscount
 openClaim
 openFloatsForStore
 oracleStat
-parkWalkIn
 parseGrabDateTime
 partitionVisibleRefills
 pendingItemRequests
@@ -145,7 +141,6 @@ reconcileSupplier
 recordClientEvents
 remainingFor
 remainingOf
-removeEntry
 removeUsageLine
 replayQuarantinedEvent
 requestMap
@@ -166,7 +161,6 @@ runLoad
 saleOps
 sampleCandidates
 saveStoreChannelSettlement
-seatEntry
 seedCanonicalPositions
 seedRefundRecord
 seedSale
