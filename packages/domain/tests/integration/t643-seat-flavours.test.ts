@@ -29,6 +29,10 @@ async function seatingFlavours(f: Fx, sortOrders: number[] = [0, 1, 2, 3]) {
     await insOptionOffer(f, v!.id, '0.00');
     ids.push(v!.id);
   }
+  // Offers start at the DB's now() and may not be back-dated, but the seating line is stamped by this process's clock (nowIso): wait until that clock has passed them,
+  // or a seating right after setup reads the menu "before" the flavours exist and is refused "option not on the item".
+  const [last] = await sql<{ at: Date }[]>`select max(effective_from) as at from menu_option_offers where org_id = ${f.orgId}`;
+  while (Date.now() <= last!.at.getTime()) await new Promise((r) => setTimeout(r, 5));
   return ids;
 }
 
