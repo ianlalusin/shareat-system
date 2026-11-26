@@ -46,7 +46,8 @@ export interface LobbyListView {
 }
 
 /** What every lobby action answers: a result, never a thrown refusal. */
-export type LobbyResult<T extends object = object> = ({ ok: true } & T) | { ok: false; error: string };
+/** `final: true` (only on a refusal that will never succeed on a retry, e.g. a closed birthday request) is set by the action from the refusal code, never guessed from the sentence. */
+export type LobbyResult<T extends object = object> = ({ ok: true } & T) | { ok: false; error: string; final?: true };
 
 /** What the poll leaves for the screens: the last good list, whether one has arrived, and a plain sentence when the last try failed. */
 export interface LobbyPollState {

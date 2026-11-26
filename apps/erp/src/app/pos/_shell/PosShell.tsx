@@ -30,6 +30,7 @@ import { usePosState } from './use-pos-state';
 import { useUpdateGate } from './use-update-gate';
 import { useOfflineXSlip } from './use-offline-xslip';
 import { useOutageReplay } from '../_kitchen/use-outage-replay';
+import { BirthdayPrompt } from '../_lobby/BirthdayPrompt';
 import { useLobbyPoll } from '../_lobby/use-lobby-poll';
 
 
@@ -373,6 +374,8 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
           )}
         </main>
       </div>
+      {/* T-644 S3: birthday-song requests, on every tab of the store tablet. The scheduler runs for anyone who holds record_sale there (an offline sign-in too); the poll and the answers need the internet and the signed-in person. */}
+      <BirthdayPrompt storeId={pairedStoreId !== null && caps.has('record_sale') ? storeId : null} online={state.online && !actor} />
       <SwitchCashierDialog open={switching} onClose={() => setSwitching(false)} onSwitched={sync.setOfflineActor} />
     </>
   );
