@@ -16,6 +16,7 @@ import type { NewPosEvent } from '@/lib/pos-device';
 import { receiptHeaderOf } from '@/lib/pos-print/header';
 import { printAmount } from '@/lib/pos-print/layout';
 import type { PrintLayout, ReceiptView } from '@/lib/pos-print/types';
+import { claimHint, type ApprovedClaimView } from '../_lobby/claims';
 import { AmountPad } from './AmountPad';
 import { lookupSeniorRepeat, repeatWarning } from './senior-repeat';
 import { receiptLinesOf, statutoryDiners, toPriceCharges, toPriceLines, type BillLineRow, type ChargePresetLike, type PresetLike, type ProjectedBill } from './bill';
@@ -72,6 +73,8 @@ export interface PaymentPanelProps {
   online: boolean;
   /** T-576: the store asks for a manager PIN on a custom or preset discount, and on removing one (pin), or flags it for review while offline (review). */
   approvalMode?: LineApprovalMode;
+  /** T-644 S4 (ruling 6): asks the server for the senior / PWD claims approved at the lobby for this table. Absent = none are offered. It never applies a discount. */
+  loadLobbyClaims?: (sessionId: string) => Promise<ApprovedClaimView[]>;
   layout: PrintLayout;
   /** Customer copies per receipt, from the till's settings (T-546). */
   copies: number;
@@ -160,6 +163,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
   // T-575: the repeat-card warning under a diner's ID box, filled when the box loses focus. `id` is the number it was asked about, so a warning never outlives an edit of the box.
   const [repeats, setRepeats] = useState<Record<number, { id: string; text: string }>>({});
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
+  const [lobbyClaims, setLobbyClaims] = useState<readonly ApprovedClaimView[]>([]);
   const [chargeSheet, setChargeSheet] = useState(false); // T-627
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -220,6 +224,17 @@ export function PaymentPanel(p: PaymentPanelProps) {
     root?.querySelector<HTMLElement>('[data-tender]:not(:disabled)')?.focus();
     setFocusNew(null);
   }, [focusNew]);
+
+  // T-644 S4: the claims approved at the lobby for this table are OFFERED on the discount sheet and noted under the diner's ID box; nothing is added until the cashier confirms.
+  const { loadLobbyClaims, sessionId: claimSession, online: claimOnline } = p;
+  useEffect(() => {
+    if (!loadLobbyClaims || !claimOnline) return;
+    let live = true;
+    void loadLobbyClaims(claimSession).then((c) => live && setLobbyClaims(c), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [loadLobbyClaims, claimSession, claimOnline]);
 
   const askRepeat = async (dinerNo: number, raw: string) => {
     const id = raw.trim();
@@ -471,6 +486,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
                   </legend>
                   <input type="text" data-erp-size="free" data-holder={`${d.dinerNo}-holderName`} className={FIELD} {...HOLDER_ATTRS.holderName} placeholder="Name on the card" aria-label={`Name for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}`} value={holders[d.dinerNo]?.holderName ?? ''} onChange={(e) => setHolders((h) => ({ ...h, [d.dinerNo]: { holderName: e.target.value, idNumber: h[d.dinerNo]?.idNumber ?? '' } }))} />
                   <input type="text" data-erp-size="free" data-holder={`${d.dinerNo}-idNumber`} className={FIELD} {...HOLDER_ATTRS.idNumber} placeholder="ID number" aria-label={`ID number for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}`} value={holders[d.dinerNo]?.idNumber ?? ''} onChange={(e) => setHolders((h) => ({ ...h, [d.dinerNo]: { holderName: h[d.dinerNo]?.holderName ?? '', idNumber: e.target.value } }))} onBlur={(e) => void askRepeat(d.dinerNo, e.target.value)} />
+                  {claimHint(lobbyClaims, d) ? <p className="text-sm text-muted">{claimHint(lobbyClaims, d)}</p> : null}
                   {repeats[d.dinerNo]?.text && repeats[d.dinerNo]!.id === (holders[d.dinerNo]?.idNumber ?? '').trim() ? (
                     <p role="status" className="rounded-2xl bg-warning-soft px-4 py-2 text-sm font-semibold text-warning-ink">
                       {repeats[d.dinerNo]!.text}
@@ -625,6 +641,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
           heads={p.heads}
           presets={p.presets}
           approvalMode={approvalMode}
+          lobbyClaims={lobbyClaims}
           onClose={() => setSheet(null)}
           onAdd={addDiscount}
           onApplyAll={applyAll}

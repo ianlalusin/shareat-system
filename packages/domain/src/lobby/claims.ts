@@ -314,8 +314,12 @@ export async function rejectClaimCore(
 // ------------------------------------------------------------------------------------------------ door 1: an ERP cashier
 
 const staffCtx = (actor: Actor): MoveCtx => ({ orgId: actor.orgId, personId: actor.personId });
-/** The capability is store-scoped and the store is the claim's own. */
-const staffGuard = (tx: Tx, actor: Actor): StoreGuard => async (storeId) => {
+/**
+ * The capability is store-scoped and the store is the claim's own. `onlyStoreId` (T-644 S4: the store the paired tablet works at, taken from the pairing) narrows it:
+ * a claim of any other store answers exactly like a ghost id, so a paired tablet cannot act on, or probe, another store's claims.
+ */
+const staffGuard = (tx: Tx, actor: Actor, onlyStoreId?: string): StoreGuard => async (storeId) => {
+  if (onlyStoreId !== undefined && storeId.toLowerCase() !== onlyStoreId.toLowerCase()) throw lobbyRefusal('LOBBY_NOT_FOUND');
   await authorize(tx, actor, 'record_sale', { storeId });
 };
 
@@ -324,16 +328,38 @@ export async function listClaimRequests(tx: Tx, actor: Actor, storeId: string): 
   return listClaimsCore(tx, actor.orgId, storeId);
 }
 
-export async function openClaim(tx: Tx, actor: Actor, claimId: string): Promise<OpenClaimView> {
-  return openClaimCore(tx, staffCtx(actor), claimId, staffGuard(tx, actor));
+export async function openClaim(tx: Tx, actor: Actor, claimId: string, opts?: { onlyStoreId?: string }): Promise<OpenClaimView> {
+  return openClaimCore(tx, staffCtx(actor), claimId, staffGuard(tx, actor, opts?.onlyStoreId));
 }
 
-export async function approveClaim(tx: Tx, actor: Actor, input: ApproveClaimInput) {
-  return approveClaimCore(tx, staffCtx(actor), input, staffGuard(tx, actor));
+export async function approveClaim(tx: Tx, actor: Actor, input: ApproveClaimInput, opts?: { onlyStoreId?: string }) {
+  return approveClaimCore(tx, staffCtx(actor), input, staffGuard(tx, actor, opts?.onlyStoreId));
 }
 
-export async function rejectClaim(tx: Tx, actor: Actor, input: RejectClaimInput) {
-  return rejectClaimCore(tx, staffCtx(actor), input, staffGuard(tx, actor));
+export async function rejectClaim(tx: Tx, actor: Actor, input: RejectClaimInput, opts?: { onlyStoreId?: string }) {
+  return rejectClaimCore(tx, staffCtx(actor), input, staffGuard(tx, actor, opts?.onlyStoreId));
+}
+
+/** T-644 S4: one claim's status (the cashier's re-check after a lost reply). Nothing else: no name, no ID number, no audit row. */
+export async function claimStatus(tx: Tx, actor: Actor, claimId: string, opts?: { onlyStoreId?: string }): Promise<{ status: ClaimStatus }> {
+  return claimStatusCore(tx, staffCtx(actor), claimId, staffGuard(tx, actor, opts?.onlyStoreId));
+}
+
+/** What the paying screen of one session may know of an APPROVED claim: the kind, the card's last 4 and the statutory-diner reference. Never a name or an ID number (the database keeps neither after approval). */
+export interface ApprovedClaimView {
+  readonly kind: ClaimKind;
+  readonly idLast4: string;
+  readonly statutoryDinerRef: string;
+}
+
+/**
+ * T-644 S4 (ruling 6): the approved claims of the entry seated at POS session `sessionId`, so the payment screen can offer them to the cashier. A read for
+ * `record_sale` at `storeId`; it changes nothing and decides no money. An empty list for a session no claim was approved on.
+ */
+export async function approvedClaimsForSession(tx: Tx, actor: Actor, input: { storeId: string; sessionId: string }): Promise<ApprovedClaimView[]> {
+  await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
+  const rows = await lobbyRepo.listApprovedClaimsOfSession(tx, actor.orgId, input.storeId, input.sessionId);
+  return rows.map((r) => ({ kind: r.kind, idLast4: r.idLast4, statutoryDinerRef: r.statutoryDinerRef }));
 }
 
 // ------------------------------------------------------------------------------------------------ door 2: the POS tablet
