@@ -97,7 +97,7 @@ describe('the list stamps only from a paired tablet of the same store', () => {
     expect((await lobbyRow(f.storeId))!.pos_seen_at).toBeNull();
   });
 
-  it('a pairing of ANOTHER store cannot stamp this store [kills: a list that stamps the body's store after a pairing of a different store]', async () => {
+  it('a pairing of ANOTHER store cannot stamp this store [kills: a list that stamps the store named in the body after a pairing of a different store]', async () => {
     const f = await fixture();
     await withLobbyStore(f, f.storeId);
     await withLobbyStore(f, f.store2Id);

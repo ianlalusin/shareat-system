@@ -11,6 +11,8 @@ import { authorize, type Actor } from '@shareat/auth';
 import type { LobbyEntryStatus } from './checkin';
 import { callCore, listAndStampCore, listCore, parkCore, removeCore, seatCore, setPausedCore, type CoreLobbyList, type MoveCtx } from './core';
 import { lobbyRefusal } from './refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { POS_LOBBY_WALKIN_RULES } from '../field-rules/pos';
 
 export interface ParkWalkInInput {
   readonly storeId: string;
@@ -62,6 +64,7 @@ export async function parkWalkIn(
   opts?: { randomCode?: () => string },
 ): Promise<{ entryId: string; code: string }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
+  assertFieldRules(POS_LOBBY_WALKIN_RULES, { displayName: input.displayName ?? '', phone: input.phone ?? '', note: input.note ?? '' });
   return parkCore(tx, ctxOf(actor), input.storeId, input, opts);
 }
 
