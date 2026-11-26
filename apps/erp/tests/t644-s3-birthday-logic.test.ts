@@ -527,7 +527,7 @@ describe('wiring', () => {
     expect(prompt).toMatch(/final: r\.final === true/);
     expect(prompt).not.toMatch(/final: true \}\)/);
     const actions = read('lobby/actions.ts');
-    expect(actions).toMatch(/'LOBBY_BIRTHDAY_CLOSED' \|\| code === 'LOBBY_NOT_FOUND'/);
+    expect(actions).toMatch(/'LOBBY_BIRTHDAY_CLOSED' \|\| code === 'LOBBY_CLAIM_CLOSED' \|\| code === 'LOBBY_NOT_FOUND'/);
     expect(read('_lobby/BirthdaySongButton.tsx')).toContain('subscribeGaveUp');
   });
 
@@ -544,7 +544,7 @@ describe('wiring', () => {
 
   it('the birthday actions take no store from the body and always pass the pairing store as onlyStoreId [kills: a store read from the body, a request probe across stores]', () => {
     const actions = read('lobby/actions.ts');
-    const birthday = actions.slice(actions.indexOf('T-644 S3 - the birthday-song requests'));
+    const birthday = actions.slice(actions.indexOf('T-644 S3 - the birthday-song requests'), actions.indexOf('T-644 S4 - the senior / PWD discount claims'));
     expect(birthday.length).toBeGreaterThan(500);
     expect(birthday).not.toMatch(/input\.storeId|storeId:\s*string/);
     expect(birthday.match(/onlyStoreId: storeId/g)).toHaveLength(3);

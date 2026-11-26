@@ -92,7 +92,6 @@ kdsEventDayId
 listAdjustments
 listAvailableCommissaries
 listCategoryLives
-listClaimRequests
 listDayIdsWithLivePull
 listLiveForStore
 listLobbyEntries
@@ -114,7 +113,6 @@ mintUniqueToken
 nameMatches
 newCorrelationId
 oldWholeBillSeniorDiscount
-openClaim
 openFloatsForStore
 oracleStat
 parseGrabDateTime

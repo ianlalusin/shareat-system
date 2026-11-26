@@ -273,6 +273,7 @@ export function Orders() {
             personId={personId}
             online={pos.online}
             approvalMode={approvalMode}
+            loadLobbyClaims={pos.lobby?.approvedClaims}
             layout={printSettingsOf(payment.store).layout}
             copies={printSettingsOf(payment.store).copies}
             deps={{ reserveTerminalSeq, newId: newDeviceId, enqueue, requestDrain: pos.requestDrain, print: printLines }}
