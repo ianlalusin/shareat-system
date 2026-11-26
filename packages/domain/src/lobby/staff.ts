@@ -12,7 +12,7 @@ import type { LobbyEntryStatus } from './checkin';
 import { callCore, listAndStampCore, listCore, parkCore, removeCore, seatCore, setPausedCore, type CoreLobbyList, type MoveCtx } from './core';
 import { lobbyRefusal } from './refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
-import { POS_LOBBY_WALKIN_RULES } from '../field-rules/pos';
+import { POS_LOBBY_SEAT_RULES, POS_LOBBY_WALKIN_RULES } from '../field-rules/pos';
 
 export interface ParkWalkInInput {
   readonly storeId: string;
@@ -79,9 +79,16 @@ export async function callEntry(tx: Tx, actor: Actor, entryId: string, opts?: { 
   return callCore(tx, ctxOf(actor), entryId, guardFor(tx, actor, opts?.onlyStoreId));
 }
 
-/** waiting|called -> seated, with the POS session id and the stand (see `seatCore`). */
-export async function seatEntry(tx: Tx, actor: Actor, input: SeatEntryInput): Promise<{ entryId: string; status: 'seated' }> {
-  return seatCore(tx, ctxOf(actor), input, guardFor(tx, actor));
+/**
+ * waiting|called -> seated, with the POS session id and the stand (see `seatCore`). `onlyStoreId` as for `callEntry` (T-644 S2). The stand label is bounded
+ * AFTER the store check (authorize first, then the field rule), so a person who may not act here learns nothing about the rule.
+ */
+export async function seatEntry(tx: Tx, actor: Actor, input: SeatEntryInput, opts?: { onlyStoreId?: string }): Promise<{ entryId: string; status: 'seated' }> {
+  const allowed = guardFor(tx, actor, opts?.onlyStoreId);
+  return seatCore(tx, ctxOf(actor), input, async (storeId) => {
+    await allowed(storeId);
+    assertFieldRules(POS_LOBBY_SEAT_RULES, { standLabel: input.standLabel ?? '' });
+  });
 }
 
 /** waiting|called -> removed (the cashier takes a party off the line). Its pending claims expire. A seated entry cannot be removed. */

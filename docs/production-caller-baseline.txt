@@ -163,7 +163,6 @@ runLoad
 saleOps
 sampleCandidates
 saveStoreChannelSettlement
-seatEntry
 seedCanonicalPositions
 seedRefundRecord
 seedSale

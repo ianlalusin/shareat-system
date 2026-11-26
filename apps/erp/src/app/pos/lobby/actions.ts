@@ -9,7 +9,7 @@
  */
 import type { Actor } from '@shareat/auth';
 import type { Tx } from '@shareat/db';
-import { callEntry, listLobby, parkWalkIn, removeEntry, setLobbyPaused } from '@shareat/domain';
+import { callEntry, listLobby, parkWalkIn, removeEntry, seatEntry, setLobbyPaused } from '@shareat/domain';
 import { requireActor } from '@/lib/session';
 import { tabletPairing } from '@/lib/pos-api';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -58,7 +58,7 @@ export async function listLobbyAction(input: { storeId: string }): Promise<Lobby
         phone: e.phone,
         createdAt: e.createdAt.toISOString(),
         calledAt: e.calledAt ? e.calledAt.toISOString() : null,
-        lines: e.lines.map((l) => ({ lineKind: l.lineKind, qty: l.qty, variantId: l.variantId, label: l.label, posItemKey: l.posItemKey })),
+        lines: e.lines.map((l) => ({ lineKind: l.lineKind, qty: l.qty, variantId: l.variantId, optionValueIds: l.optionValueIds, label: l.label, posItemKey: l.posItemKey })),
       })),
     };
   }, true);
@@ -88,6 +88,26 @@ export async function removeEntryAction(input: { storeId: string; entryId: strin
     await removeEntry(tx, actor, entryId, { onlyStoreId: storeId });
     return {};
   });
+}
+
+/**
+ * T-644 S2 - record that a party sits at a table the cashier has just opened (`stand.opened` is already in the outbox). `joinUrl` is always null: the ERP has no join-link
+ * source, so the diner's phone shows the counter message. The body names no store: it is the pairing's (`needsPairing`), and `onlyStoreId` makes another store's entry
+ * answer like a ghost id. The stand label is bounded by the domain after the store check.
+ */
+export async function seatLobbyEntryAction(input: { entryId: string; sessionId: string; standLabel: string }): Promise<LobbyResult<{ entryId: string }>> {
+  const entryId = entryIdOf(input);
+  const sessionId = isRecord(input) && typeof input.sessionId === 'string' && UUID.test(input.sessionId) ? input.sessionId.toLowerCase() : null;
+  if (!entryId || !sessionId) return { ok: false, error: BAD_ENTRY };
+  const standLabel = typeof input.standLabel === 'string' ? input.standLabel : '';
+  return atStore(
+    {},
+    async (tx, actor, storeId) => {
+      const r = await seatEntry(tx, actor, { entryId, sessionId, standLabel, joinUrl: null }, { onlyStoreId: storeId });
+      return { entryId: r.entryId };
+    },
+    true,
+  );
 }
 
 export async function setLobbyPausedAction(input: { storeId: string; paused: boolean }): Promise<LobbyResult<{ paused: boolean }>> {

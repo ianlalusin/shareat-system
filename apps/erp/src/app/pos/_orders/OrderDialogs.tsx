@@ -37,10 +37,18 @@ export interface OrderSend {
 }
 
 /** `at` is the shell's menu clock (T-559): the picker and the items-so-far price at that instant and flip at each daypart boundary. */
-export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend, at }: { mode: OrderDialogMode; menu: MenuLike | null; stands: { id: string; number: number }[]; tiles: Tile[]; onClose: () => void; onSend: (o: OrderSend) => Promise<string | null>; at?: Date }) {
+/** T-644 S2: a lobby party seated through this same sheet: its size and the lines that matched the menu start filled in, and the rest are listed for the cashier to tap in. */
+export interface SeatPrefill {
+  title: string;
+  heads: number;
+  cart: CartLine[];
+  byHand: string[];
+}
+
+export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend, at, prefill }: { mode: OrderDialogMode; menu: MenuLike | null; stands: { id: string; number: number }[]; tiles: Tile[]; onClose: () => void; onSend: (o: OrderSend) => Promise<string | null>; at?: Date; prefill?: SeatPrefill }) {
   const [standId, setStandId] = useState<string | null>(null);
-  const [heads, setHeads] = useState(START_HEADS);
-  const [cart, setCart] = useState<CartLine[]>([]);
+  const [heads, setHeads] = useState(prefill?.heads ?? START_HEADS);
+  const [cart, setCart] = useState<CartLine[]>(prefill?.cart ?? []);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +75,7 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend, at }: 
     return () => document.removeEventListener('keydown', onKey);
   }, []);
   const ready = mode.kind === 'seat' ? standId !== null : cart.length > 0;
-  const title = seat ? 'Seat a party' : mode.kind === 'take_out' ? 'Take-out' : `Add items · ${mode.label}`;
+  const title = seat ? (prefill?.title ?? 'Seat a party') : mode.kind === 'take_out' ? 'Take-out' : `Add items · ${mode.label}`;
   const send = async () => {
     setBusy(true);
     setError(null);
@@ -157,6 +165,13 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend, at }: 
       </div>
       <aside aria-label="New order summary" className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 lg:w-96 lg:shrink-0">
         <h2 className="font-display text-2xl font-bold">{asideTitle}</h2>
+        {seat && prefill && prefill.byHand.length > 0 ? (
+          <ul aria-label="Tap in by hand" className="space-y-1 rounded-2xl border border-surface-border bg-canvas p-3 text-sm text-muted">
+            {prefill.byHand.map((line, n) => (
+              <li key={`${n}-${line}`}>{line}</li>
+            ))}
+          </ul>
+        ) : null}
         {menu ? <ItemsSoFar cart={cart} menu={menu} heads={pickerHeads} onChange={setCart} pinTotal at={at} /> : null}
         {/* Pinned: the running total and the Send button stay in view however long the list grows (T-528 Addendum, P1). */}
         <div className="sticky bottom-0 -mx-4 -mb-4 space-y-3 rounded-b-2xl bg-surface px-4 pb-4">
