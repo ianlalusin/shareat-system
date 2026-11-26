@@ -215,7 +215,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('staff_gov_ids.changed', 'security', 'high', 'store', 'persons', 'T-190', { viewers: 'admin' }),
   // T-636: a person's "deduct SSS / PhilHealth / Pag-IBIG" ticks changed on the staff page (entity = the persons row; before/after = each changed tick). Money:
   // it decides what the next payslip deducts and what the employer remits. Ian: for staff not covered, such as on-call staff, checked with the accountant.
-  def('person.statutory_deduction_set', 'money', 'high', 'store', 'persons', 'T-636'),
+  def('person.statutory_deduction_set', 'money', 'high', 'store', 'persons', 'T-636', ADMIN),
   def('payroll_rate.change', 'money', 'high', 'org', 'statutory_rates', 'T-190', ADMIN),
   // T-193 S3: recording (and, S4, voiding) a payment to SSS / PhilHealth / Pag-IBIG / BIR. Org-scoped, admin-readable; payloads carry agency, month, receipt no. and amounts, never a government number.
   def('statutory_payment.record', 'money', 'high', 'org', 'statutory_payments', 'T-193', ADMIN),

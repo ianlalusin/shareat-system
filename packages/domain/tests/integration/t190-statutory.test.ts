@@ -1039,4 +1039,15 @@ describe('T-636 - per-person tick boxes for SSS / PhilHealth / Pag-IBIG', () => 
     expect((await detail('sss')).map((r) => r.personId)).not.toContain(f.workerId);
     expect((await detail('philhealth')).find((r) => r.personId === f.workerId)).toMatchObject({ ee: '260.00', notDeducted: false });
   });
+
+  it('test 7: a person TICKED for SSS with no SSS number keeps a 0.00 notDeducted row in the month detail, while an UNTICKED person is dropped  [mutant: filter on skipped_agencies instead of unticked_agencies -> red]', async () => {
+    const f = await ready('t636g', { numbers: ['philhealth', 'pagibig'] }); // SSS ticked (default) but no SSS number on file
+    await addDays(f, dates('2026-01', 1, 13));
+    await post(f, H1);
+    const sssRows = () => asOrg(f.orgId, (tx) => statutoryPaymentsRepo.monthDetail(tx, f.orgId, 'sss', '2026-01-01'));
+    expect((await sssRows()).find((r) => r.personId === f.workerId)).toMatchObject({ ee: '0.00', notDeducted: true });
+    // Same slip, but the SSS tick is now off on the stored payslip: the person is dropped. Filtering on skipped_agencies would keep the row above AND drop it here wrongly.
+    await sql`update payslips set unticked_agencies = '{sss}' where person_id = ${f.workerId}`;
+    expect((await sssRows()).map((r) => r.personId)).not.toContain(f.workerId);
+  });
 });
