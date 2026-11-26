@@ -94,9 +94,9 @@ const EXEMPT: Record<string, string> = {
   listLobbyEntries:
     'UNWIRED — T-644 S1 lists through `listLobby` (it adds the lines and the pos_seen_at stamp), so this plain list has no screen. Remove this row if one ever calls it.',
   listClaimRequests:
-    'UNWIRED — T-455 S7a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S7b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
+    'UNWIRED — T-455 S7a built the ERP-cashier door (authorize record_sale); the tablet door that was its real caller was deleted with apps/pos (T-588) and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
   openClaim:
-    'UNWIRED — T-455 S7a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S7b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
+    'UNWIRED — T-455 S7a built the ERP-cashier door (authorize record_sale); the tablet door that was its real caller was deleted with apps/pos (T-588) and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
   authorizeHub:
     'INTERNAL — T-640: the first statement of every hub function (`getAiHubView`, `saveProviderKey`, `removeProviderKey`, `activateAiModel`, `deactivateAiModel`, `moveAiModel`, `setAiModelOrder`, `saveAiSettings`, `setAiStoreSwitch` in packages/domain/src/ai/hub.ts, and `testAiModel` in test-model.ts); each of those has an app action or page calling it. Shared across two files, so it must be exported from shared.ts, but it is not in the package barrel.',
   gatherApprovalFacts:

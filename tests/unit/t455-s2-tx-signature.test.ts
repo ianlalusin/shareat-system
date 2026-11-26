@@ -54,50 +54,39 @@ const PINNED: Record<string, string[]> = {
   // T-644 S1: listLobby and setLobbyPaused are the ERP POS's list (stamps pos_seen_at) and pause switch.
   'staff.ts': ['callEntry', 'listLobby', 'listLobbyEntries', 'parkWalkIn', 'removeEntry', 'seatEntry', 'setLobbyPaused'],
   'purge.ts': ['expireStaleLobbyEntries', 'purgeLobbyPersonalData', 'runLobbyNightly', 'sweepStalePendingClaims'],
-  // T-455 S5: the shared core of the cashier moves and the POS tablet's moves (each takes tx: Tx first).
+  // T-455 S5: the shared core of the cashier moves and the ERP cashier's moves (each takes tx: Tx first).
   'core.ts': ['callCore', 'listAndStampCore', 'listCore', 'parkCore', 'removeCore', 'seatCore', 'setPausedCore'],
-  // T-455 S6a: the birthday-song request - the diner's three moves, the shared cores, the ERP cashier's door and the tablet's door (each takes tx: Tx first).
+  // T-455 S6a: the birthday-song request - the diner's three moves, the shared cores, the ERP cashier's door (each takes tx: Tx first).
   'birthday.ts': [
     'acceptBirthday',
     'acceptBirthdayCore',
-    'acceptBirthdayForTerminal',
     'cancelMyBirthday',
     'declineBirthday',
     'declineBirthdayCore',
-    'declineBirthdayForTerminal',
     'expireSeatedBirthdayRequests',
     'expireStaleBirthdayRequests',
     'getMyBirthday',
     'listBirthdayCore',
-    'listBirthdayForTerminal',
     'listBirthdayRequests',
     'markBirthdayPlayed',
     'markBirthdayPlayedCore',
-    'markBirthdayPlayedForTerminal',
     'readMyBirthday',
     'requestBirthday',
   ],
-  // T-455 S7a: the senior / PWD discount claim - the diner's three moves, the shared cores, the ERP cashier's door and the tablet's door (each takes tx: Tx first).
+  // T-455 S7a: the senior / PWD discount claim - the diner's three moves, the shared cores, the ERP cashier's door (each takes tx: Tx first).
   'claims.ts': [
     'approveClaim',
     'approveClaimCore',
-    'approveClaimForTerminal',
     'cancelMyClaim',
-    'claimStatusCore',
-    'claimStatusForTerminal',
     'listClaimRequests',
     'listClaimsCore',
-    'listClaimsForTerminal',
     'listMyClaims',
     'openClaim',
     'openClaimCore',
-    'openClaimForTerminal',
     'rejectClaim',
     'rejectClaimCore',
-    'rejectClaimForTerminal',
     'submitClaim',
   ],
-  'terminal.ts': ['callForTerminal', 'listForTerminal', 'parkForTerminal', 'removeForTerminal', 'seatForTerminal', 'setLobbyPausedForTerminal'],
 };
 /** Exported functions that are allowed to have no `tx` (pure helpers). Empty on purpose: keep helpers unexported (CONTRACT QUESTION 9). */
 const NO_TX_ALLOWED: string[] = [];

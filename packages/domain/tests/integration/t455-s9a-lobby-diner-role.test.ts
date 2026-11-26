@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 /**
  * T-455 S9a audit item 2 - every DINER branch of the domain runs on the real `shareat_lobby` role (withLobbyPrincipal), not on the owner or shareat_app.
  * The audit asked whether a diner path calls auditLogRepo.append (the lobby role has NO grant on audit_log). Finding: none does - the append calls are in the
- * staff/cashier cores only (core.ts, claims.ts openClaimCore / approve / reject, birthday.ts accept / decline / played, terminal.ts). This file proves it by
+ * staff/cashier cores only (core.ts, claims.ts openClaimCore / approve / reject, birthday.ts accept / decline / played). This file proves it by
  * running check-in (with lines and options), my-entry, birthday request / read / cancel, claim submit / list / cancel and entry cancel, under the role,
  * and by asserting the org's audit_log did not move.
  * Real Postgres via TEST_DATABASE_URL (`_test` guard); nothing here names a lane database.

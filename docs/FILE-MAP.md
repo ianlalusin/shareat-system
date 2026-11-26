@@ -82,7 +82,7 @@ field name.
 | **Authorization** — the single `authorize()` gate, enforced in every domain service | `packages/auth/src/authorize.ts` (the ONLY gate; `Actor`, `AuthorizeContext`, `AuthorizationError`) · `capabilities.ts` (`ROLES`, the `Capability` union, `CAPABILITY_MATRIX`, `CAPABILITY_SCOPE`) · `roles.ts` (`assignRole`, `elevateManager`) · tests `packages/auth/tests/integration/authorize.test.ts` | Bible §7 · T-138 |
 | **Role / user MANAGEMENT UI — DOES NOT EXIST YET.** `assignRole()` exists but no screen calls it; its caller must `authorize()` for `manage_users` | — no admin console under `apps/erp/src/app/`; do not invent one without a spec | Bible §7 |
 | **Firestore sync (mirror + inbox) — DOES NOT EXIST YET.** Planned as `packages/domain/sync/` | — | Bible §5 |
-| POS / CUSTOMER / Website apps — placeholders only | `apps/pos/`, `apps/customer/`, `apps/website/` (README each) | ADR-003 |
+| CUSTOMER / Website apps — placeholders only (POS now lives in the ERP at `apps/erp` `/pos`; `apps/pos` was retired, T-588) | `apps/customer/`, `apps/website/` (README each) | ADR-003 |
 | **Identity & sessions** — the ONLY way an `Actor` is produced | schema `packages/db/schema/sessions.ts` · repo `packages/db/src/repo/sessions.ts` · crypto `packages/auth/src/credentials.ts` · services `packages/auth/src/sessions.ts` · request boundary `apps/erp/src/lib/session.ts` · sign-in `apps/erp/src/app/sign-in/` | T-138 · bible §7.1, row 138 · DEF-062 · DEF-063 |
 
 ## Tests and gates

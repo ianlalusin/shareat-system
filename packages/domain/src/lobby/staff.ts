@@ -4,7 +4,7 @@
  * from the caller). Payloads carry the code, party size, stand and session id - never a name or phone.
  *
  * `tx: Tx` first, no transaction opened here (DEF-421). Every function authorises `record_sale` at the entry's (or the list's) store itself.
- * The state logic is `core.ts`, shared with the POS tablet's `terminal.ts` (T-455 S5): this file only adds the capability check.
+ * The state logic is `core.ts` (T-455 S5): this file only adds the capability check.
  */
 import type { Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
