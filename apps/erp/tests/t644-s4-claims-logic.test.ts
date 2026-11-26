@@ -222,7 +222,7 @@ describe('the wiring', () => {
     }
     const dialog = code('_lobby/ClaimDialog.tsx');
     expect(dialog).toContain('setOpened(null)'); // closing drops the opened claim
-    expect([...dialog.matchAll(/<input\b[^>]*/g)].map((m) => m[0])).toHaveLength(1); // only the "I have seen the card" tick: no typed field at all
+    expect([...dialog.matchAll(/<(?:input|Checkbox)\b[^>]*/g)].map((m) => m[0])).toHaveLength(1); // only the "I have seen the card" tick: no typed field at all
     expect(dialog).not.toMatch(/<textarea|maxLength=|pattern=/i);
     expect(dialog).toMatch(/CLAIM_REJECT_REASONS\.map/);
     expect(code('_lobby/ClaimsStrip.tsx')).not.toMatch(/holderName|idNumber/);

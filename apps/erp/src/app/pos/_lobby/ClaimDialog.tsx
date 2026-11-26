@@ -7,7 +7,7 @@
  * discount itself is added at payment, where the claim is offered to the cashier (`DiscountSheet`). A lost answer is checked with the server before anything is said.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Banner, Dialog } from '@/components/ui';
+import { Banner, Checkbox, Dialog } from '@/components/ui';
 import { approveClaimAction, claimStatusAction, openClaimAction, rejectClaimAction } from '../lobby/actions';
 import { CLAIM_REJECT_REASONS, DINER_NO_MAX, claimApproveBlock, decideWithRecheck, type OpenedClaimView } from './claims';
 import { LOBBY_NEEDS_INTERNET } from './logic';
@@ -112,9 +112,7 @@ export function ClaimDialog({ claimId, onClose }: { claimId: string; onClose: (c
               </div>
             </section>
           )}
-          <label className="flex min-h-12 items-center gap-3 text-base text-ink">
-            <input type="checkbox" className="h-6 w-6" checked={cardSeen} disabled={busy} onChange={(e) => setCardSeen(e.target.checked)} />I have seen the card
-          </label>
+          <Checkbox checked={cardSeen} disabled={busy} onChange={(e) => setCardSeen(e.target.checked)} label="I have seen the card" />
           {opened.sessionRef !== null && block ? <p className="text-sm text-muted">{block}</p> : null}
           <button type="button" className={PRIMARY} disabled={busy || block !== null} aria-disabled={busy || block !== null} onClick={approve}>
             {busy ? 'Saving…' : 'Approve'}

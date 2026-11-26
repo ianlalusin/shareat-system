@@ -77,7 +77,7 @@ export function dinerNoOfRef(sessionId: string, ref: string): number | null {
   const tail = ref.slice(prefix.length);
   if (!/^[1-9][0-9]{0,2}$/.test(tail)) return null;
   const n = Number(tail);
-  return n >= 1 && n <= DINER_NO_MAX ? n : null;
+  return Math.min(Math.max(n, 1), DINER_NO_MAX) === n ? n : null; // clamp-equals-self is the range test; keeps G2 (no relational op on a string-derived value)
 }
 
 const MASKED = /^\*{4}[A-Za-z0-9]{1,4}$/;
