@@ -10,6 +10,8 @@
 export const BIRTHDAY_PLAYLIST = ['/sounds/birthday-shareat.mp3', '/sounds/happy-birthday.mp3'] as const;
 /** A song counts as heard once this much of it has played. */
 const HEARD_FRACTION = 0.75;
+/** Consecutive load errors before the player stops itself: both files tried once. */
+const MAX_ERRORS = 2;
 const RESUME_KEY = 'erp.pos.birthdaySong.lastStop';
 
 /** The parts of an HTMLAudioElement used here (a test passes a plain object). */
@@ -29,6 +31,8 @@ export interface BirthdayPlayer {
   /** The index of the playing song, or null when nothing plays. */
   current(): number | null;
   subscribe(listener: (track: number | null) => void): () => void;
+  /** Called when the songs keep failing to load and the player has stopped itself (the screen shows "Could not play"). */
+  subscribeGaveUp(listener: () => void): () => void;
 }
 
 const next = (i: number) => (i + 1) % BIRTHDAY_PLAYLIST.length;
@@ -37,6 +41,7 @@ export function createBirthdayPlayer(deps: PlayerDeps): BirthdayPlayer {
   let track: number | null = null;
   let stopNow: (() => void) | null = null;
   const listeners = new Set<(t: number | null) => void>();
+  const gaveUp = new Set<() => void>();
   const setTrack = (t: number | null) => {
     track = t;
     listeners.forEach((l) => l(t));
@@ -77,18 +82,28 @@ export function createBirthdayPlayer(deps: PlayerDeps): BirthdayPlayer {
     const el = deps.newAudio();
     let index = startTrack();
     let stopped = false;
+    let errors = 0;
     const playAt = (i: number): Promise<void> => {
       index = i;
       el.src = BIRTHDAY_PLAYLIST[i] ?? BIRTHDAY_PLAYLIST[0];
       setTrack(i);
-      return el.play();
+      return el.play().then(() => {
+        errors = 0; // a song really started
+      });
     };
     el.onended = () => {
       if (!stopped) void playAt(next(index)).catch(() => undefined);
     };
-    // A broken file skips to the other song instead of going silent.
+    // A broken file skips to the other song instead of going silent; two in a row (both files) stop the player rather than loop forever.
     el.onerror = () => {
-      if (!stopped) void playAt(next(index)).catch(() => undefined);
+      if (stopped) return;
+      errors += 1;
+      if (errors >= MAX_ERRORS) {
+        stop();
+        gaveUp.forEach((l) => l());
+        return;
+      }
+      void playAt(next(index)).catch(() => undefined);
     };
     stopNow = () => {
       stopped = true;
@@ -114,6 +129,10 @@ export function createBirthdayPlayer(deps: PlayerDeps): BirthdayPlayer {
     subscribe(listener) {
       listeners.add(listener);
       return () => void listeners.delete(listener);
+    },
+    subscribeGaveUp(listener) {
+      gaveUp.add(listener);
+      return () => void gaveUp.delete(listener);
     },
   };
 }

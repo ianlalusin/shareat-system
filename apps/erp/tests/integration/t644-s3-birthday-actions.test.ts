@@ -194,6 +194,17 @@ describe('declineBirthdayAction', () => {
     expect(await rowOf(id)).toMatchObject({ status: 'requested', decline_reason: null });
   });
 
+  it('no record_sale + bad reason gives the access refusal, not the reason one [kills: a preset check before authorize]', async () => {
+    const f = await fixture();
+    const id = await request(f, f.storeId);
+    const good = await call('declineBirthdayAction', f.kitchen, { requestId: id, reason: 'Too busy right now' }, f.pairingToken);
+    const bad = await call('declineBirthdayAction', f.kitchen, { requestId: id, reason: 'The kitchen is on fire' }, f.pairingToken);
+    expect(good.ok).toBe(false);
+    expect(bad).toEqual(good);
+    expect(bad.error).not.toBe('Choose a reason to decline.');
+    expect(await rowOf(id)).toMatchObject({ status: 'requested', decline_reason: null });
+  });
+
   it('a request of ANOTHER store, a person without record_sale and a browser with no pairing are all refused and the request stays requested [kills: a decline across stores, without the capability, or without the pairing]', async () => {
     const f = await fixture();
     const other = await request(f, f.store2Id);
@@ -227,6 +238,7 @@ describe('markBirthdayPlayedAction', () => {
     const r = await call('markBirthdayPlayedAction', f.counter, { requestId: fresh }, f.pairingToken);
     expect(r.ok).toBe(false);
     oneSentence(r.error);
+    expect(r.final, 'a request that is not accepted is final').toBe(true);
     expect((await rowOf(fresh)).status).toBe('requested');
     const acc = await request(f, f.storeId, 'accepted');
     expect((await call('markBirthdayPlayedAction', f.counter, { requestId: acc }, f.pairingToken)).ok).toBe(true);
@@ -246,7 +258,9 @@ describe('markBirthdayPlayedAction', () => {
     for (const r of [await call('markBirthdayPlayedAction', f.kitchen, { requestId: mine }, f.pairingToken), await call('markBirthdayPlayedAction', f.counter, { requestId: mine }, null)]) {
       expect(r.ok).toBe(false);
       oneSentence(r.error);
+      expect(r.final, 'an access or pairing refusal may pass: not final [kills: every refusal final]').toBeUndefined();
     }
+    expect(across.final, 'another store looks like a ghost id: final').toBe(true);
     expect(await call('markBirthdayPlayedAction', f.counter, { requestId: 'nope' }, f.pairingToken)).toEqual({ ok: false, error: 'Choose a birthday request from the list.' });
     expect((await rowOf(other)).status).toBe('accepted');
     expect((await rowOf(mine)).status).toBe('accepted');

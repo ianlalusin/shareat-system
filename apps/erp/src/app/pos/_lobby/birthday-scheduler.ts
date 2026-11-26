@@ -20,6 +20,12 @@ export interface SchedulerDeps {
   markPlayed(requestId: string): Promise<void>;
   storeId: string;
   countdownSeconds?: number;
+  /** Web Locks (`navigator.locks`): only one tab plays a given request. Left out, the browser's own is used; `null` means none (a tab then plays without asking). */
+  locks?: LocksLike | null;
+}
+
+export interface LocksLike {
+  request(name: string, options: { ifAvailable: true }, callback: (lock: object | null) => Promise<void>): Promise<unknown>;
 }
 
 export interface SchedulerState {
@@ -65,6 +71,7 @@ export function createBirthdayScheduler(deps: SchedulerDeps): Scheduler {
   let blocked: { requestId: string; scheduledAt: number } | null = null;
   let tick: ReturnType<typeof setInterval> | null = null;
   let disposed = false;
+  let storageOk = true; // false once a write failed: then storage cannot say whether another tab took a request
 
   const emit = () => listeners.forEach((l) => l());
 
@@ -77,7 +84,19 @@ export function createBirthdayScheduler(deps: SchedulerDeps): Scheduler {
       const v: Stored = { items: [...items].map(([requestId, scheduledAt]) => ({ requestId, scheduledAt })), toMark: [...toMark] };
       deps.storage.setItem(key, JSON.stringify(v));
     } catch {
-      /* storage unavailable or blocked: the schedule lives in memory for this run only */
+      storageOk = false; // storage unavailable or blocked: the schedule lives in memory for this run only
+    }
+  }
+
+  /** Another tab that fired first has already removed the id from storage. Unreadable storage counts as "not taken". */
+  function takenByAnotherTab(requestId: string): boolean {
+    if (!storageOk) return false;
+    try {
+      const raw = deps.storage.getItem(key);
+      const st = raw ? (JSON.parse(raw) as Stored) : null;
+      return !(st && Array.isArray(st.items) && st.items.some((i) => i?.requestId === requestId));
+    } catch {
+      return false;
     }
   }
 
@@ -89,9 +108,28 @@ export function createBirthdayScheduler(deps: SchedulerDeps): Scheduler {
 
   async function fire(requestId: string): Promise<void> {
     if (disposed) return;
+    const locks = deps.locks !== undefined ? deps.locks : typeof navigator !== 'undefined' ? ((navigator as unknown as { locks?: LocksLike }).locks ?? null) : null;
+    if (!locks) return play(requestId);
+    await locks.request(`shareat-birthday:${requestId}`, { ifAvailable: true }, async (lock) => {
+      if (lock) await play(requestId);
+      else giveUp(requestId); // another tab is playing this request
+    });
+  }
+
+  function giveUp(requestId: string): void {
+    items.delete(requestId);
+    endCountdown();
+    emit();
+    startNextDue();
+  }
+
+  async function play(requestId: string): Promise<void> {
+    if (disposed) return;
+    if (takenByAnotherTab(requestId)) return giveUp(requestId);
     const scheduledAt = items.get(requestId) ?? clock();
     items.delete(requestId);
     endCountdown();
+    persist(); // forgotten before the song starts, so another tab (or a reload) cannot play it again
     let started = false;
     try {
       await deps.playSong();

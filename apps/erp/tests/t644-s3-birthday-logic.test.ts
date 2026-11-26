@@ -245,6 +245,65 @@ describe('played is reported only after the song starts', () => {
   });
 });
 
+describe('two tabs, one song', () => {
+  /** A stand-in for navigator.locks: a held name answers null to an ifAvailable request. */
+  const fakeLocks = () => {
+    const held = new Set<string>();
+    return {
+      async request(name: string, _o: { ifAvailable: true }, cb: (lock: object | null) => Promise<void>) {
+        if (held.has(name)) return cb(null);
+        held.add(name);
+        try {
+          await cb({});
+        } finally {
+          held.delete(name);
+        }
+      },
+    };
+  };
+  const twoTabs = (locks: ReturnType<typeof fakeLocks> | null) => {
+    const storage = memStorage();
+    const log: string[] = [];
+    const mk = (tab: string) =>
+      createBirthdayScheduler({ storage, storeId: 'st1', locks, playSong: async () => void log.push(`play:${tab}`), markPlayed: async (id) => void log.push(`mark:${tab}:${id}`) });
+    return { a: mk('a'), b: mk('b'), storage, log };
+  };
+
+  it('two tabs whose countdowns end together: exactly one plays, the other lets go [kills: a request that plays in every open tab, a lock that is not checked]', async () => {
+    const { a, b, log } = twoTabs(fakeLocks());
+    a.accept({ requestId: 'r1', scheduledAt: T0 });
+    b.accept({ requestId: 'r1', scheduledAt: T0 });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(log.filter((l) => l.startsWith('play:'))).toHaveLength(1);
+    expect(b.state().pending, 'the tab that lost lets go of it').toEqual([]);
+    expect(b.state().countdown).toBeNull();
+    a.dispose();
+    b.dispose();
+  });
+
+  it('without Web Locks, a tab skips a request another tab already removed from storage [kills: a fire that never re-reads storage before playing]', async () => {
+    const { a, b, log } = twoTabs(null);
+    a.accept({ requestId: 'r1', scheduledAt: T0 });
+    b.accept({ requestId: 'r1', scheduledAt: T0 });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(log.filter((l) => l.startsWith('play:'))).toHaveLength(1);
+    a.dispose();
+    b.dispose();
+  });
+
+  it('a request is out of storage the moment its song begins, not after it ends [kills: a persist that waits for the song]', async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    const { s, storage } = setup({ playSong: () => gate });
+    s.accept({ requestId: 'r1', scheduledAt: T0 });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(storage.m.has(KEY), 'gone while play() is still pending').toBe(false);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    s.dispose();
+  });
+});
+
 describe('the poller is single-flight', () => {
   const row = (over: Partial<BirthdayView> = {}): BirthdayView => ({ requestId: 'r1', code: '4821', displayName: 'Ana', standLabel: '5', celebrantName: 'Ben', status: 'requested', scheduledAt: null, createdAt: '2026-11-26T10:00:00.000Z', ...over });
 
@@ -385,6 +444,25 @@ describe('the player: a plain audio element, no native plugin', () => {
     expect(el.pause).toHaveBeenCalled();
   });
 
+  it('two load errors in a row stop the player and tell the screen; one error, then a song that starts, does not [kills: an error loop that never ends, a counter that is never reset]', async () => {
+    const el = fakeAudio();
+    const p = createBirthdayPlayer({ newAudio: () => asAudio(el), storage: null });
+    const gaveUp = vi.fn();
+    p.subscribeGaveUp(gaveUp);
+    await p.play();
+    el.onerror?.();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(p.current(), 'one broken file skips to the other song').toBe(1);
+    el.onerror?.();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(p.current(), 'a song started in between: the count starts over').toBe(0);
+    expect(gaveUp).not.toHaveBeenCalled();
+    el.onerror?.();
+    el.onerror?.();
+    expect(p.current()).toBeNull();
+    expect(gaveUp).toHaveBeenCalledTimes(1);
+  });
+
   it('the next play starts at the song after the one last stopped when 75 percent was heard, else at the same song [kills: a rotation that ignores how much was heard]', async () => {
     const storage = storeOf();
     const run = async (fraction: number) => {
@@ -441,6 +519,16 @@ describe('wiring', () => {
     expect(prompt).toMatch(/promptView\(\{ hasRequest: current !== null, sheetOpen, mode \}\)/);
     expect(prompt).toContain('LOBBY_POLL_MS'); // pos2 beat, 10 s
     expect(prompt).toContain('Tap to play');
+  });
+
+  it('the song stops when the prompt unmounts, and only the actions final flag makes a report final [kills: a song that keeps playing after the shell is gone, a transient refusal dropped as final]', () => {
+    const prompt = read('_lobby/BirthdayPrompt.tsx');
+    expect(prompt).toMatch(/useEffect\(\(\) => \(\) => player\.stop\(\), \[player\]\)/);
+    expect(prompt).toMatch(/final: r\.final === true/);
+    expect(prompt).not.toMatch(/final: true \}\)/);
+    const actions = read('lobby/actions.ts');
+    expect(actions).toMatch(/'LOBBY_BIRTHDAY_CLOSED' \|\| code === 'LOBBY_NOT_FOUND'/);
+    expect(read('_lobby/BirthdaySongButton.tsx')).toContain('subscribeGaveUp');
   });
 
   it('the prompt has no free-text field and no native plugin: the only input is the time, and the decline buttons come from the three fixed reasons [kills: a free-typed decline reason, a native plugin]', () => {

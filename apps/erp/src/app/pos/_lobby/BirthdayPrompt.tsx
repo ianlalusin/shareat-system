@@ -54,6 +54,9 @@ export function BirthdayPrompt({ storeId, online }: { storeId: string | null; on
   // One player for the shell's life: the song keeps going while the cashier moves between tabs.
   const player = useMemo(() => createBirthdayPlayer({ newAudio: () => new Audio(), storage: tabletStorage() }), []);
 
+  // The song stops with the shell (a sign-out or a store change must not leave it playing).
+  useEffect(() => () => player.stop(), [player]);
+
   useEffect(() => {
     if (!storeId) return;
     const s = createBirthdayScheduler({
@@ -62,8 +65,8 @@ export function BirthdayPrompt({ storeId, online }: { storeId: string | null; on
       playSong: () => player.play(),
       markPlayed: async (requestId) => {
         const r = await markBirthdayPlayedAction({ requestId });
-        // A refusal is the server's final word (closed, expired, not this store's); a thrown error (no network) is retried on the next tick.
-        if (!r.ok) throw Object.assign(new Error(r.error), { final: true });
+        // `final` is the server's last word (closed, not accepted, not this store's); anything else (no network, no access right now) is retried on the next tick.
+        if (!r.ok) throw Object.assign(new Error(r.error), { final: r.final === true });
       },
     });
     scheduler.current = s;

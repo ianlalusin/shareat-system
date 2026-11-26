@@ -12,6 +12,7 @@ export function BirthdaySongButton({ player }: { player: BirthdayPlayer }) {
   const [failed, setFailed] = useState(false);
   const busy = useRef(false);
   useEffect(() => player.subscribe(setTrack), [player]);
+  useEffect(() => player.subscribeGaveUp(() => setFailed(true)), [player]);
   const playing = track !== null;
 
   const toggle = async () => {

@@ -7,8 +7,8 @@
  * call and remove also pass it as `onlyStoreId`, so an entry id of another store answers like a ghost id. A domain refusal comes back as a RESULT, never a thrown error.
  * ⛔ `listLobbyAction` stamps `lobby_stores.pos_seen_at` (inside `listLobby`): the shell polls it on every tab, and diners cannot check in without that stamp.
  */
-import type { Actor } from '@shareat/auth';
-import type { Tx } from '@shareat/db';
+import { authorize, type Actor } from '@shareat/auth';
+import { refuse, type Tx } from '@shareat/db';
 import { acceptBirthday, callEntry, declineBirthday, listBirthdayRequests, listLobby, markBirthdayPlayed, parkWalkIn, removeEntry, seatEntry, setLobbyPaused } from '@shareat/domain';
 import { requireActor } from '@/lib/session';
 import { tabletPairing } from '@/lib/pos-api';
@@ -35,7 +35,9 @@ async function atStore<T extends object>(input: unknown, run: (tx: Tx, actor: Ac
   try {
     return { ok: true, ...(await withOrgPrincipal(actor.orgId, (tx) => run(tx, actor, store.storeId))) };
   } catch (err) {
-    return { ok: false, error: errorMessage(err) };
+    const code = (err as { code?: unknown } | null)?.code;
+    // The birthday request is closed or not this store's: a later try cannot succeed (the tablet drops its report). Anything else may be a passing fault.
+    return { ok: false, error: errorMessage(err), ...(code === 'LOBBY_BIRTHDAY_CLOSED' || code === 'LOBBY_NOT_FOUND' ? { final: true as const } : {}) };
   }
 }
 
@@ -170,10 +172,12 @@ export async function declineBirthdayAction(input: { requestId: string; reason: 
   const requestId = requestIdOf(input);
   if (!requestId) return { ok: false, error: BAD_BIRTHDAY };
   const reason = isRecord(input) && typeof input.reason === 'string' ? input.reason : '';
-  if (!BIRTHDAY_DECLINE_PRESETS.includes(reason)) return { ok: false, error: BAD_BIRTHDAY_REASON };
   return atStore(
     {},
     async (tx, actor, storeId) => {
+      // Access first: a person who may not act here must not learn which reasons are allowed.
+      await authorize(tx, actor, 'record_sale', { storeId });
+      if (!BIRTHDAY_DECLINE_PRESETS.includes(reason)) throw refuse('birthday decline reason is not a preset', BAD_BIRTHDAY_REASON);
       await declineBirthday(tx, actor, { requestId, reason }, { onlyStoreId: storeId });
       return {};
     },
