@@ -12,6 +12,7 @@ import { MenuPicker } from './MenuPicker';
 import type { MenuLike } from './menu-filter';
 import { CANCEL_REASONS, CANCEL_REASON_MAX, CANCEL_REASON_MIN, HEADS_MAX, HEADS_MIN, TAKE_OUT_NAME_MAX, type CartLine } from './payloads';
 import { seatStandChoices, type Tile } from './project';
+import { useHoldSheetOpen } from '../_lobby/sheet-open';
 import { LineApprovalField } from '../_shell/LineApprovalField';
 import type { LineApprovalMode } from '../_shell/line-approval';
 
@@ -53,6 +54,7 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend, at, pr
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const seat = mode.kind === 'seat';
+  useHoldSheetOpen(); // T-644 S3: while this sheet is open the birthday prompt is a banner, never a dialog over a half-built order
   const heading = useRef<HTMLHeadingElement>(null);
   const standButtons = useRef(new Map<string, HTMLButtonElement>());
   // Addendum 2: the stand row slides sideways, so the chosen stand is brought into view whenever the choice changes (never on open: nothing is chosen yet).

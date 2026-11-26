@@ -91,7 +91,6 @@ jobResult
 kdsEventDayId
 listAdjustments
 listAvailableCommissaries
-listBirthdayRequests
 listCategoryLives
 listClaimRequests
 listDayIdsWithLivePull
@@ -108,7 +107,6 @@ listWriteOffsForCharge
 loadMod
 lobbyPartiesAhead
 makeDeps
-markBirthdayPlayed
 markReviewed
 memoryLocalStorage
 middleware

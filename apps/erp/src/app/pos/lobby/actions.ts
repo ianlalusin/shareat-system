@@ -9,12 +9,13 @@
  */
 import type { Actor } from '@shareat/auth';
 import type { Tx } from '@shareat/db';
-import { callEntry, listLobby, parkWalkIn, removeEntry, seatEntry, setLobbyPaused } from '@shareat/domain';
+import { acceptBirthday, callEntry, declineBirthday, listBirthdayRequests, listLobby, markBirthdayPlayed, parkWalkIn, removeEntry, seatEntry, setLobbyPaused } from '@shareat/domain';
 import { requireActor } from '@/lib/session';
 import { tabletPairing } from '@/lib/pos-api';
 import { errorMessage } from '@/lib/constraint-messages';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { actionStore } from '../_shell/action-store';
+import { BAD_BIRTHDAY, BAD_BIRTHDAY_REASON, BIRTHDAY_DECLINE_PRESETS, strictIso, type BirthdayView } from '../_lobby/birthday';
 import { BAD_ENTRY, type LobbyListView, type LobbyResult } from '../_lobby/logic';
 
 const ROUTE = '/pos/lobby';
@@ -114,4 +115,82 @@ export async function setLobbyPausedAction(input: { storeId: string; paused: boo
   if (!isRecord(input) || typeof input.paused !== 'boolean') return { ok: false, error: 'Choose pause or resume.' };
   const paused = input.paused;
   return atStore(input, (tx, actor, storeId) => setLobbyPaused(tx, actor, { storeId, paused }));
+}
+
+/**
+ * T-644 S3 - the birthday-song requests, as Server Actions (docs/tasks/644-lobby-in-erp-pos.md, S3). Each call is the T-455 staff twin (`listBirthdayRequests`, `acceptBirthday`,
+ * `declineBirthday`, `markBirthdayPlayed`), which authorizes `record_sale` and owns every state refusal. Online only, and only from the store's PAIRED tablet: none of them names
+ * a store in the body (it is the pairing's, `needsPairing`), and accept / decline / played pass it as `onlyStoreId`, so another store's request id answers like a ghost id.
+ * The time and the decline reason are bounded by the domain AFTER the store check; the reason must also be one of the three fixed ones (no free text from this screen).
+ */
+const requestIdOf = (input: unknown): string | null => (isRecord(input) && typeof input.requestId === 'string' && UUID.test(input.requestId) ? input.requestId.toLowerCase() : null);
+
+/** The store's open requests, oldest first. Times are ISO text. Never a phone, a hash or a hand-off link. */
+export async function listBirthdaysAction(): Promise<LobbyResult<{ birthdays: BirthdayView[] }>> {
+  return atStore(
+    {},
+    async (tx, actor, storeId) => {
+      const rows = await listBirthdayRequests(tx, actor, storeId);
+      return {
+        birthdays: rows.map((r) => ({
+          requestId: r.requestId,
+          code: r.code,
+          displayName: r.displayName,
+          standLabel: r.standLabel,
+          celebrantName: r.celebrantName,
+          status: r.status,
+          scheduledAt: r.scheduledAt ? r.scheduledAt.toISOString() : null,
+          createdAt: r.createdAt.toISOString(),
+        })),
+      };
+    },
+    true,
+  );
+}
+
+/** requested -> accepted at a time ("Now" is the current time). A time that is not a strict ISO timestamp reaches the domain as an invalid date and is refused there. */
+export async function acceptBirthdayAction(input: { requestId: string; scheduledAt: string }): Promise<LobbyResult<{ scheduledAt: string }>> {
+  const requestId = requestIdOf(input);
+  if (!requestId) return { ok: false, error: BAD_BIRTHDAY };
+  const raw = isRecord(input) ? input.scheduledAt : undefined;
+  // No time stays absent (the domain asks for one); a bad one becomes an invalid Date. Either way the domain judges it after the store check.
+  const scheduledAt = (raw === undefined || raw === null ? undefined : (strictIso(raw) ?? new Date(Number.NaN))) as Date;
+  return atStore(
+    {},
+    async (tx, actor, storeId) => {
+      const r = await acceptBirthday(tx, actor, { requestId, scheduledAt }, { onlyStoreId: storeId });
+      return { scheduledAt: r.scheduledAt.toISOString() };
+    },
+    true,
+  );
+}
+
+/** requested -> declined with one of the three fixed reasons; anything else is refused before the database is touched. */
+export async function declineBirthdayAction(input: { requestId: string; reason: string }): Promise<LobbyResult> {
+  const requestId = requestIdOf(input);
+  if (!requestId) return { ok: false, error: BAD_BIRTHDAY };
+  const reason = isRecord(input) && typeof input.reason === 'string' ? input.reason : '';
+  if (!BIRTHDAY_DECLINE_PRESETS.includes(reason)) return { ok: false, error: BAD_BIRTHDAY_REASON };
+  return atStore(
+    {},
+    async (tx, actor, storeId) => {
+      await declineBirthday(tx, actor, { requestId, reason }, { onlyStoreId: storeId });
+      return {};
+    },
+    true,
+  );
+}
+
+/** accepted -> played: the tablet started the song. Not time-gated here (S6a ruling 7); the tablet's scheduler owns the clock. */
+export async function markBirthdayPlayedAction(input: { requestId: string }): Promise<LobbyResult> {
+  const requestId = requestIdOf(input);
+  if (!requestId) return { ok: false, error: BAD_BIRTHDAY };
+  return atStore(
+    {},
+    async (tx, actor, storeId) => {
+      await markBirthdayPlayed(tx, actor, requestId, { onlyStoreId: storeId });
+      return {};
+    },
+    true,
+  );
 }
