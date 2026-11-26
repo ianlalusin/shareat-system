@@ -129,13 +129,13 @@ describe('T-526 R1/R3 - which tabs a person sees', () => {
   const labels = (held: string[]) => visibleTabs(new Set(held)).map((t) => t.label);
   const hrefs = (held: string[]) => visibleTabs(new Set(held)).map((t) => t.href);
 
-  it('all three capabilities: Orders, Kitchen, Refills, Reservations, Receipts, Till in that order, with their routes', () => {
+  it('all three capabilities: Orders, Lobby, Kitchen, Refills, Reservations, Receipts, Till in that order, with their routes', () => {
     const all = ['record_sale', 'serve_pos_ticket', 'request_pos_refill'];
-    expect(labels(all)).toEqual(['Orders', 'Kitchen', 'Refills', 'Reservations', 'Receipts', 'Till']); // T-628 added Reservations (record_sale, by prefix)
-    expect(hrefs(all)).toEqual(['/pos', '/pos/kitchen', '/pos/refills', '/pos/reservations', '/pos/receipts', '/pos/till']);
+    expect(labels(all)).toEqual(['Orders', 'Lobby', 'Kitchen', 'Refills', 'Reservations', 'Receipts', 'Till']); // T-628 added Reservations, T-644 Lobby (both record_sale, by prefix)
+    expect(hrefs(all)).toEqual(['/pos', '/pos/lobby', '/pos/kitchen', '/pos/refills', '/pos/reservations', '/pos/receipts', '/pos/till']);
   });
-  it('record_sale alone: Orders, Reservations, Receipts, Till (never Kitchen or Refills)', () => {
-    expect(labels(['record_sale'])).toEqual(['Orders', 'Reservations', 'Receipts', 'Till']);
+  it('record_sale alone: Orders, Lobby, Reservations, Receipts, Till (never Kitchen or Refills)', () => {
+    expect(labels(['record_sale'])).toEqual(['Orders', 'Lobby', 'Reservations', 'Receipts', 'Till']);
   });
   it('serve_pos_ticket alone: Kitchen only', () => {
     expect(labels(['serve_pos_ticket'])).toEqual(['Kitchen']);
@@ -152,6 +152,11 @@ describe('T-526 R1/R3 - which tabs a person sees', () => {
     expect(tabCount('refills', body7)).toBe(1);
     expect(tabCount('kitchen', { ...body7, kitchenQueue: null })).toBeNull();
     expect(tabCount('refills', null)).toBeNull();
+  });
+  it('T-644: the Lobby count is the polled waiting line, not a state-poll list; none until the first answer', () => {
+    expect(tabCount('lobby', body7, 3)).toBe(3);
+    expect(tabCount('lobby', body7)).toBeNull();
+    expect(tabCount('lobby', null, null)).toBeNull();
   });
 });
 

@@ -51,10 +51,11 @@ const LOBBY_SRC = resolve(here, '..', '..', 'packages', 'domain', 'src', 'lobby'
 /** The exported functions S2 owns, pinned BY VALUE per file. Adding, renaming or removing one means editing this list. */
 const PINNED: Record<string, string[]> = {
   'checkin.ts': ['cancelMyEntry', 'checkIn', 'getMyEntry', 'lobbyPartiesAhead'],
-  'staff.ts': ['callEntry', 'listLobbyEntries', 'parkWalkIn', 'removeEntry', 'seatEntry'],
+  // T-644 S1: listLobby and setLobbyPaused are the ERP POS's list (stamps pos_seen_at) and pause switch.
+  'staff.ts': ['callEntry', 'listLobby', 'listLobbyEntries', 'parkWalkIn', 'removeEntry', 'seatEntry', 'setLobbyPaused'],
   'purge.ts': ['expireStaleLobbyEntries', 'purgeLobbyPersonalData', 'runLobbyNightly', 'sweepStalePendingClaims'],
   // T-455 S5: the shared core of the cashier moves and the POS tablet's moves (each takes tx: Tx first).
-  'core.ts': ['callCore', 'listCore', 'parkCore', 'removeCore', 'seatCore'],
+  'core.ts': ['callCore', 'listAndStampCore', 'listCore', 'parkCore', 'removeCore', 'seatCore', 'setPausedCore'],
   // T-455 S6a: the birthday-song request - the diner's three moves, the shared cores, the ERP cashier's door and the tablet's door (each takes tx: Tx first).
   'birthday.ts': [
     'acceptBirthday',
