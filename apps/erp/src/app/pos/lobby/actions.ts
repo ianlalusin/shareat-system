@@ -9,7 +9,8 @@
  */
 import type { Actor } from '@shareat/auth';
 import type { Tx } from '@shareat/db';
-import { callEntry, listLobby, parkWalkIn, removeEntry, setLobbyPaused } from '@shareat/domain';
+import { assertFieldRules, callEntry, listLobby, parkWalkIn, removeEntry, setLobbyPaused } from '@shareat/domain';
+import { POS_LOBBY_WALKIN_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '@/lib/session';
 import { tabletPairing } from '@/lib/pos-api';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -67,6 +68,7 @@ export async function listLobbyAction(input: { storeId: string }): Promise<Lobby
 /** The cashier parks a walk-in on the line. The domain trims and bounds the name, party size, phone and note. */
 export async function parkWalkInAction(input: { storeId: string; displayName: string; partySize: number; phone?: string | null; note?: string | null }): Promise<LobbyResult<{ code: string }>> {
   return atStore(input, async (tx, actor, storeId) => {
+    assertFieldRules(POS_LOBBY_WALKIN_RULES, { displayName: input.displayName ?? '', phone: input.phone ?? '', note: input.note ?? '' });
     const r = await parkWalkIn(tx, actor, { storeId, displayName: input.displayName, partySize: input.partySize, phone: input.phone ?? null, note: input.note ?? null });
     return { code: r.code };
   });

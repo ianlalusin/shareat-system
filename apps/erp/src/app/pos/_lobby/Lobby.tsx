@@ -7,6 +7,7 @@
  * Same sheets, touch sizes and wording as the Reservations tab. Nothing here decides: the server judges every rule.
  */
 import { useMemo, useState } from 'react';
+import { checkAll, nativeAttrs, POS_LOBBY_WALKIN_RULES } from '@shareat/domain/field-rules';
 import { Badge, Banner, Dialog } from '@/components/ui';
 import { usePos } from '../_shell/pos-context';
 import { Keypad } from '../_shell/Keypad';
@@ -18,6 +19,11 @@ const PRIMARY = 'min-h-16 inline-flex w-full items-center justify-center rounded
 const SECONDARY = 'min-h-12 min-w-12 inline-flex items-center justify-center gap-2 rounded-full border border-surface-border bg-surface px-4 text-base font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
 const FIELD = 'min-h-12 w-full rounded-2xl border border-field-border bg-field px-4 text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 const STEP = 'min-h-12 min-w-12 inline-flex items-center justify-center rounded-2xl border border-surface-border bg-surface text-xl font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
+
+// The walk-in fields' own rules (name 1 to 40, phone up to 30, note up to 60): the same set the server asserts.
+const NAME_ATTRS = nativeAttrs(POS_LOBBY_WALKIN_RULES.displayName);
+const PHONE_ATTRS = nativeAttrs(POS_LOBBY_WALKIN_RULES.phone);
+const NOTE_ATTRS = nativeAttrs(POS_LOBBY_WALKIN_RULES.note);
 
 type Sheet = { kind: 'walkin' } | { kind: 'remove'; e: LobbyEntryView };
 const nameOf = (e: LobbyEntryView) => e.displayName?.trim() || e.code;
@@ -198,7 +204,7 @@ export function Lobby() {
 
       <Dialog open={sheet?.kind === 'walkin'} onClose={close} title="Add walk-in" description="Put a customer on the waiting line. They get a code." size="md">
         <div className="flex flex-col gap-3">
-          <input className={FIELD} aria-label="Name" placeholder="Name" maxLength={40} value={name} onChange={(e) => setName(e.target.value.slice(0, 40))} />
+          <input className={FIELD} {...NAME_ATTRS} aria-label="Name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
           <div className="flex items-center gap-2">
             <span className="text-base text-ink">Guests</span>
             <button type="button" className={STEP} aria-label="One fewer guest" disabled={saving || party <= 1} onClick={() => setParty((p) => Math.max(1, p - 1))}>
@@ -211,10 +217,10 @@ export function Lobby() {
               +
             </button>
           </div>
-          <input className={FIELD} aria-label="Phone number" placeholder="Phone (optional)" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^\d+\-\s]/g, '').slice(0, 30))} />
-          <input className={FIELD} aria-label="Note" placeholder="Note (optional): birthday, window seat" value={note} onChange={(e) => setNote(e.target.value.slice(0, 60))} />
+          <input className={FIELD} {...PHONE_ATTRS} aria-label="Phone number" placeholder="Phone (optional)" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^\d+\-\s]/g, ''))} />
+          <input className={FIELD} {...NOTE_ATTRS} aria-label="Note" placeholder="Note (optional): birthday, window seat" value={note} onChange={(e) => setNote(e.target.value)} />
           {problem ? <Banner tone="error">{problem}</Banner> : null}
-          <button type="button" className={PRIMARY} disabled={saving || name.trim() === ''} onClick={saveWalkIn}>
+          <button type="button" className={PRIMARY} disabled={saving || !checkAll(POS_LOBBY_WALKIN_RULES, { displayName: name, phone, note }).ok} onClick={saveWalkIn}>
             Add to the line
           </button>
         </div>
