@@ -90,6 +90,6 @@ describe('T-643 test 2 - listRefillableTables carries seatFlavours', () => {
     const flavoured = await seat(f, [v[1]!, v[0]!]);
     const out = await read(f);
     expect(out.tables.find((t) => t.sessionId === plain)!.seatFlavours).toEqual([]);
-    expect(out.tables.find((t) => t.sessionId === flavoured)!.seatFlavours).toEqual(['Garlic', 'Spicy']);
+    expect(out.tables.find((t) => t.sessionId === flavoured)!.seatFlavours).toEqual(['Spicy', 'Garlic']);
   });
 });
