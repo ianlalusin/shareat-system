@@ -39,8 +39,7 @@ const EXEMPT: Record<string, string> = {
   'admin/pos-tablets/TillsSection.tsx': 'T-546: per-cash-register settings blocks saved one at a time, not an edit-in-place record',
   // T-622 (BOSS approved 21 Nov 2026, same precedent as TillsSection): the Add / Change discount window. Change is already behind its own button and modal (T-448), the name is locked, and the only hidden id is the store; the prefilled value is the one preset being changed. The edit-in-place Change / Apply shape would add a tap to a one-value edit.
   'admin/pos-tablets/DiscountsSection.tsx': 'T-622: the Change window is opened by its own button and saves one preset; not an edit-in-place record',
-  // T-627 (NEEDS BOSS APPROVAL, same precedent as DiscountsSection): the Add / Change charge window. Change is behind its own button and modal, the name is locked, the only hidden id is the store; the prefilled amount is the one charge being changed.
-  'admin/pos-tablets/ChargesSection.tsx': 'T-627: the Change window is opened by its own button and saves one charge; not an edit-in-place record',
+  // T-634: the T-627 ChargesSection entry is gone: the store section is now on/off switches (no record-bound form), and the org list uses EditableRecord.
   // T-635 (BOSS approved 25 Nov 2026, same precedent as TillsSection): the Set a rate window. The only hidden id is the store; the date default is the period start the picker is on, not a stored record. Rates are append-only, so there is nothing to edit in place.
   'inventory/production/slicer-pay/page.tsx': 'T-635: a rate window that adds an append-only row; the date default is the picked period, not a record',
   // T-635 (BOSS approved 25 Nov 2026): the slicer pick and paid ticks on a DRAFT slice record, saved on their own with one click. A draft is still being composed, so the lock-then-Edit shape would add a tap to a two-control save.

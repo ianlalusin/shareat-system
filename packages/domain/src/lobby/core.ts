@@ -117,6 +117,57 @@ export async function listCore(tx: Tx, orgId: string, storeId: string): Promise<
   }));
 }
 
+export interface CoreLine {
+  readonly lineKind: 'package' | 'a_la_carte';
+  readonly qty: number;
+  readonly variantId: string;
+  readonly optionValueIds: string[];
+  readonly label: string;
+  /** The store's ACTIVE POS v1 link key, or null: the screen then shows `label` as text to tap in by hand. */
+  readonly posItemKey: string | null;
+}
+
+export interface CoreLobbyList {
+  readonly lobbyEnabled: boolean;
+  readonly paused: boolean;
+  readonly entries: (CoreListRow & { readonly lines: CoreLine[] })[];
+}
+
+/**
+ * The cashier screen's list: the live line with each party's order lines, AND the `lobby_stores.pos_seen_at` stamp (the POS-is-up signal).
+ * ⛔ The stamp is load-bearing: a diner can check in only while it is under 5 minutes old (checkin.ts), so every cashier list read goes through here.
+ * Shared by `terminal.ts` (the pos2 tablet) and `staff.ts` (the ERP POS). No stamp is written for a store with no `lobby_stores` row (none is created).
+ */
+export async function listAndStampCore(tx: Tx, orgId: string, storeId: string): Promise<CoreLobbyList> {
+  const store = await lobbyRepo.getLobbyStore(tx, orgId, storeId, 0, false);
+  if (store) await lobbyRepo.stampPosSeen(tx, orgId, storeId);
+  const rows = await listCore(tx, orgId, storeId);
+  const lines = await lobbyRepo.listLinesForEntries(tx, orgId, storeId, rows.map((r) => r.entryId));
+  const entries = rows.map((r) => ({
+    ...r,
+    lines: lines
+      .filter((l) => l.entryId === r.entryId)
+      .map((l) => ({ lineKind: l.lineKind, qty: l.qty, variantId: l.variantId, optionValueIds: l.optionValueIds, label: l.label, posItemKey: l.posItemKey })),
+  }));
+  return { lobbyEnabled: store?.enabled ?? false, paused: store?.paused ?? false, entries };
+}
+
+/** Flip the store's pause switch (audit `lobby.pause` / `lobby.resume`). A store with no `lobby_stores` row is LOBBY_NOT_FOUND. The caller has already authorised the store. */
+export async function setPausedCore(tx: Tx, ctx: MoveCtx, storeId: string, paused: boolean): Promise<{ paused: boolean }> {
+  const ok = await lobbyRepo.setPaused(tx, ctx.orgId, storeId, paused);
+  if (!ok) throw lobbyRefusal('LOBBY_NOT_FOUND', 'lobby store');
+  await auditLogRepo.append(tx, ctx.orgId, {
+    actorPersonId: ctx.personId,
+    action: paused ? 'lobby.pause' : 'lobby.resume',
+    storeId,
+    entityId: storeId,
+    before: { paused: !paused },
+    after: withCashier(ctx, { paused }),
+    source: 'pos',
+  });
+  return { paused };
+}
+
 async function liveEntryOrRefuse(tx: Tx, ctx: MoveCtx, entryId: string, guard: StoreGuard): Promise<lobbyRepo.EntryRow> {
   const row = await lobbyRepo.getEntryForUpdate(tx, ctx.orgId, entryId, LOBBY_ENTRY_TTL_HOURS);
   if (!row) throw lobbyRefusal('LOBBY_NOT_FOUND');

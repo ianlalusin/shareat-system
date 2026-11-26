@@ -8,6 +8,7 @@ import { createContext, useContext, type MutableRefObject } from 'react';
 import type { PosEvent, PosEventResult } from '@/lib/pos-device';
 import type { SessionBody } from '../_orders/project';
 import type { SnapshotOrdersPart } from './use-device-sync';
+import type { LobbyPoll } from '../_lobby/use-lobby-poll';
 
 export interface PosContextValue {
   storeId: string | null;
@@ -34,6 +35,8 @@ export interface PosContextValue {
   clockAt?: number;
   /** The table bodies the Orders tab has fetched, written by it and read by the shell's refusal notice (a cancelled line names its stand from here). */
   bodiesRef: MutableRefObject<Record<string, SessionBody | undefined>>;
+  /** T-644: the waiting line the shell polls on every tab (the poll is what keeps diner check-in open); idle until the first answer, and always idle off the store tablet. */
+  lobby?: LobbyPoll;
   requestDrain: () => void;
   setResultsHandler: (handler: ((sent: PosEvent[], results: PosEventResult[]) => void) | null) => void;
 }
