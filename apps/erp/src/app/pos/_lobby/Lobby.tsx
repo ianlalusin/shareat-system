@@ -4,7 +4,7 @@
  * T-644 S1 - the Lobby tab: the waiting line (walk-ins and diners checked in on their phones) with Call, Remove (after a confirm), Pause / Resume the diner
  * check-in, and Add walk-in. A code keypad narrows the line by code, tap only. T-644 S2 adds Seat: the Orders seat sheet (`OrderDialog`) opens with the party's size and
  * lines filled in; confirming opens the table first, then tells the lobby (`seat.ts`); a lobby step that fails leaves "Seated, link not saved" with Retry / Dismiss on the
- * row. Online only: the list comes from the shell's poll
+ * row. T-644 S4 adds the "Discount claims" strip (senior / PWD claims to check, `ClaimsStrip.tsx`). Online only: the list comes from the shell's poll
  * (`use-lobby-poll.ts`, every tab, so the `pos_seen_at` stamp keeps diners able to check in); every move is a Server Action (`../lobby/actions.ts`).
  * Same sheets, touch sizes and wording as the Reservations tab. Nothing here decides: the server judges every rule.
  */
@@ -20,6 +20,7 @@ import { projectOrders, type ServerStand } from '../_orders/project';
 import { usePos } from '../_shell/pos-context';
 import { Keypad } from '../_shell/Keypad';
 import { callEntryAction, parkWalkInAction, removeEntryAction, seatLobbyEntryAction, setLobbyPausedAction } from '../lobby/actions';
+import { ClaimsStrip } from './ClaimsStrip';
 import { byHandLines, filterByCode, keypadPress, LOBBY_NEEDS_INTERNET, LOBBY_NOT_PAIRED, lobbyRowSummary, type LobbyEntryView, type LobbyResult } from './logic';
 import { addPending, clearPending, keepOnly, readPending, type PendingSeat } from './pending';
 import { mapLobbyLines, retryLobbyLink, SEAT_LINK_NOT_SAVED, seatButton, seatLobbyParty, type SeatDeps } from './seat';
@@ -251,6 +252,7 @@ export function Lobby() {
           {ready && list && !list.lobbyEnabled ? <Banner tone="info">Diner check-in is off for this store. Walk-ins can still be added.</Banner> : null}
           {notice ? <Banner tone="success">{notice}</Banner> : null}
           {problem && sheet === null ? <Banner tone="error">{problem}</Banner> : null}
+          <ClaimsStrip ready={ready} />
 
           {entries.length > 0 ? (
             <div className="flex flex-col gap-2">

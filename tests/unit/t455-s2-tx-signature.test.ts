@@ -77,7 +77,10 @@ const PINNED: Record<string, string[]> = {
   'claims.ts': [
     'approveClaim',
     'approveClaimCore',
+    'approvedClaimsForSession',
     'cancelMyClaim',
+    'claimStatus',
+    'claimStatusCore',
     'listClaimRequests',
     'listClaimsCore',
     'listMyClaims',

@@ -879,6 +879,31 @@ export async function expireClaimRow(tx: Tx, orgId: string, claimId: string): Pr
     .where(and(eq(lobbyDiscountClaims.orgId, orgId), eq(lobbyDiscountClaims.id, claimId)));
 }
 
+export interface ApprovedClaimRow {
+  readonly kind: 'senior' | 'pwd';
+  readonly idLast4: string;
+  readonly statutoryDinerRef: string;
+}
+
+/** T-644 S4: the APPROVED claims of one POS session at one store, oldest first. No name, no ID number (the database holds neither once a claim is approved). */
+export async function listApprovedClaimsOfSession(tx: Tx, orgId: string, storeId: string, sessionRef: string): Promise<ApprovedClaimRow[]> {
+  const rows = await tx
+    .select({ kind: lobbyDiscountClaims.kind, idLast4: lobbyDiscountClaims.idLast4, statutoryDinerRef: lobbyDiscountClaims.statutoryDinerRef })
+    .from(lobbyDiscountClaims)
+    .innerJoin(lobbyEntries, claimJoinEntry)
+    .where(
+      and(
+        eq(lobbyDiscountClaims.orgId, orgId),
+        eq(lobbyEntries.storeId, storeId),
+        eq(lobbyDiscountClaims.status, 'approved'),
+        eq(lobbyDiscountClaims.sessionRef, sessionRef),
+      ),
+    )
+    .orderBy(asc(lobbyDiscountClaims.createdAt), asc(lobbyDiscountClaims.id));
+  // The shape CHECK makes the reference non-null on an approved row; the filter is for the type.
+  return rows.flatMap((r) => (r.statutoryDinerRef === null ? [] : [{ kind: r.kind, idLast4: r.idLast4, statutoryDinerRef: r.statutoryDinerRef }]));
+}
+
 export interface ClaimListRow {
   readonly claimId: string;
   readonly entryId: string;

@@ -7,6 +7,7 @@
  */
 import { useState } from 'react';
 import { Dialog } from '@/components/ui';
+import { claimOfferLabel, type ApprovedClaimView } from '../_lobby/claims';
 import { AmountPad } from './AmountPad';
 import { appendAmountKey, checkDiscount, freeUnits, type BillLine, type DiscountAdd } from './logic';
 import type { PresetLike } from './bill';
@@ -24,13 +25,15 @@ type Choice = { type: 'preset'; presetId: string } | { type: 'custom' } | { type
 
 export type SheetTarget = { kind: 'line'; line: BillLine } | { kind: 'all' };
 
-export function DiscountSheet({ target, bill, heads, presets, approvalMode = 'none', onClose, onAdd, onApplyAll }: {
+export function DiscountSheet({ target, bill, heads, presets, approvalMode = 'none', lobbyClaims = [], onClose, onAdd, onApplyAll }: {
   target: SheetTarget;
   bill: readonly BillLine[];
   heads: number;
   presets: readonly PresetLike[];
   /** T-576: the store asks for a manager PIN on a custom or preset discount (and on every-line), or flags it for review when offline. Senior/PWD are never asked. */
   approvalMode?: LineApprovalMode;
+  /** T-644 S4 (ruling 6): senior / PWD claims approved at the lobby for this table. Each is a quick-pick that chooses the kind and the diner number; it never adds a discount by itself. */
+  lobbyClaims?: readonly ApprovedClaimView[];
   onClose: () => void;
   onAdd: (add: DiscountAdd & { presetId?: string }, pin: string) => Promise<string | null>;
   onApplyAll: (presetId: string, pin: string) => Promise<string | null>;
@@ -122,6 +125,20 @@ export function DiscountSheet({ target, bill, heads, presets, approvalMode = 'no
           </div>
           {presets.length === 0 && target.kind === 'all' ? <p className="text-sm text-muted">This store has no discount presets yet. A manager adds them in the ERP.</p> : null}
         </section>
+
+        {line && lobbyClaims.length > 0 ? (
+          <section aria-label="Approved at the lobby" className="space-y-2">
+            <h3 className="text-sm font-semibold text-muted">Approved at the lobby</h3>
+            <div className="grid grid-cols-1 gap-2">
+              {lobbyClaims.map((c) => (
+                <button key={`${c.kind}-${c.dinerNo}`} type="button" data-erp-size="free" aria-pressed={choice?.type === c.kind && dinerNo === c.dinerNo} className={`${CHOICE} ${choice?.type === c.kind && dinerNo === c.dinerNo ? chosen : idle}`} onClick={() => (setChoice({ type: c.kind }), setDinerNo(c.dinerNo))}>
+                  {claimOfferLabel(c)}
+                </button>
+              ))}
+            </div>
+            <p className="text-sm text-muted">Check the card, then tap Add discount. Nothing is taken off until you do.</p>
+          </section>
+        ) : null}
 
         {choice?.type === 'custom' ? (
           <section aria-label="Custom amount" className="space-y-3">

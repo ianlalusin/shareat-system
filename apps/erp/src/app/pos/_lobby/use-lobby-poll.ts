@@ -6,11 +6,14 @@
  * It runs only when `enabled` (a paired tablet, online, record_sale); the Lobby tab reads the result from `PosContext`.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { listLobbyAction } from '../lobby/actions';
+import { approvedClaimsForSessionAction, listLobbyAction } from '../lobby/actions';
+import { loadApprovedClaims, type ApprovedClaimView } from './claims';
 import { createLobbyPoller, LOBBY_IDLE, LOBBY_POLL_MS, type LobbyPollState } from './logic';
 
 export interface LobbyPoll extends LobbyPollState {
   refresh: () => Promise<void>;
+  /** T-644 S4 (ruling 6): the senior / PWD claims approved for one table session, for the paying screen. Never throws; no answer is an empty list. */
+  approvedClaims: (sessionId: string) => Promise<ApprovedClaimView[]>;
 }
 
 export function useLobbyPoll({ enabled, storeId }: { enabled: boolean; storeId: string | null }): LobbyPoll {
@@ -31,5 +34,6 @@ export function useLobbyPoll({ enabled, storeId }: { enabled: boolean; storeId: 
     return () => clearInterval(t);
   }, [live, poller]);
   const refresh = useCallback(() => poller.poll(), [poller]);
-  return { ...state, refresh };
+  const approvedClaims = useCallback((sessionId: string) => loadApprovedClaims((id) => approvedClaimsForSessionAction({ sessionId: id }), sessionId), []);
+  return { ...state, refresh, approvedClaims };
 }
