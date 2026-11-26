@@ -1,5 +1,6 @@
 /** Server-only helpers for the item master. T-145. */
 import {
+  commissaryCatalogueRepo,
   expensesRepo,
   itemsRepo,
   type AliasRow,
@@ -16,7 +17,7 @@ import {
   type SupplierPrice,
 } from '@shareat/db';
 import { type Actor, can } from '@shareat/auth';
-import { suggestItemCode, type ItemCodeSuggestion } from '@shareat/domain';
+import { priceToStores, suggestItemCode, type ItemCodeSuggestion, type PriceToStores } from '@shareat/domain';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -171,4 +172,27 @@ export async function pendingRequestCodes(
 /** Presentation aid only (the domain stays the enforcement): may this person decide on items, so the override inputs are drawn? */
 export async function mayApproveItem(actor: Actor): Promise<boolean> {
   return withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'approve_item', {}));
+}
+
+/**
+ * ⭐ T-638. The price to stores shown on /items/[id]: the rule-and-history price (what the orders charge when no manual
+ * cost is involved) and, only when that cannot price the item, each commissary whose own manual cost does.
+ */
+export async function itemPriceToStores(
+  orgId: string,
+  itemId: string,
+): Promise<{ base: PriceToStores; basis: string | null; viaManual: { storeName: string; view: PriceToStores }[] }> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const base = await priceToStores(tx, orgId, null, itemId);
+    // The cost a markup rule would add to, whether or not a rule exists yet (the edit form's preview line names it).
+    const basis = (await itemsRepo.costBasisFor(tx, orgId, itemId))?.basis ?? null;
+    const viaManual: { storeName: string; view: PriceToStores }[] = [];
+    if (base.price === null) {
+      for (const o of await commissaryCatalogueRepo.activeOfferingsForItem(tx, orgId, itemId)) {
+        const view = await priceToStores(tx, orgId, o.commissaryStoreId, itemId);
+        if (view.price !== null) viaManual.push({ storeName: o.storeName, view });
+      }
+    }
+    return { base, basis, viaManual };
+  });
 }

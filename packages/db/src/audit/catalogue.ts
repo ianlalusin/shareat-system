@@ -109,6 +109,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('item_alias.removed', 'stock', 'normal', 'org', 'item_aliases', 'T-502'),
   def('item.expense_category_set', 'stock', 'normal', 'org', 'items', 'T-502'),
   def('item.merged', 'stock', 'normal', 'org', 'items', 'T-502'),
+  def('item_pricing.set', 'stock', 'normal', 'org', 'item_pricing', 'T-638'),
   def('item.imported', 'stock', 'normal', 'org', 'items', 'T-502'),
   def('expense_subcategory.created', 'settings', 'normal', 'org', 'expense_subcategories', 'T-502'),
   def('expense_subcategory.renamed', 'settings', 'normal', 'org', 'expense_subcategories', 'T-502'),
@@ -138,6 +139,21 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-584: HR documents (dotted: new). Payloads carry ids, a number, a kind and a reason, never the document text or a PIN. A document with no store (an org-wide memo) is scope 'either'.
   def('document_template.version_saved', 'settings', 'normal', 'org', 'document_templates', 'T-584'),
   def('document_template.retired', 'settings', 'normal', 'org', 'document_templates', 'T-584'),
+  // T-637: the org's own list of document kinds (entity = the document_kinds row). Org-level, no store.
+  def('document_kind.created', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
+  def('document_kind.renamed', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
+  def('document_kind.retired', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
+  def('document_kind.reactivated', 'settings', 'normal', 'org', 'document_kinds', 'T-637'),
+  // T-640: the AI hub (org level, admin-readable). Payloads carry the provider, the last 4 characters of a key and ids, NEVER key material, a ciphertext, a prompt or a reply.
+  def('ai_key.saved', 'security', 'high', 'org', 'ai_provider_keys', 'T-640', ADMIN),
+  def('ai_key.removed', 'security', 'high', 'org', 'ai_provider_keys', 'T-640', ADMIN),
+  def('ai_model.activated', 'settings', 'high', 'org', 'ai_models', 'T-640', ADMIN),
+  def('ai_model.deactivated', 'settings', 'high', 'org', 'ai_models', 'T-640', ADMIN),
+  def('ai_model.order_set', 'settings', 'normal', 'org', 'ai_models', 'T-640', ADMIN),
+  // T-640: the AI switch, the monthly cap, the daily limit, the peso rate, the warning percent, or one store's switch (after.store names the store when it is a store).
+  def('ai_settings.changed', 'settings', 'high', 'org', 'ai_settings', 'T-640', ADMIN),
+  // T-640: one store's AI switch (entity = the ai_store_switches row; after.store is the store id; org scope, so no store_id on the audit row).
+  def('ai_store_switch.set', 'settings', 'normal', 'org', 'ai_store_switches', 'T-640', ADMIN),
   def('document.issued', 'staff', 'normal', 'either', 'issued_documents', 'T-584'),
   def('document.revised', 'staff', 'high', 'either', 'issued_documents', 'T-584'),
   def('document.signed', 'security', 'high', 'either', 'issued_documents', 'T-584'),
@@ -244,6 +260,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-627: a store charge (leftover, an extra griller) set from the ERP screen (entity = the pos_charge_presets row; created, or its amount / per-unit changed) or retired (the row is kept: past sales name it).
   def('pos.charge_preset_set', 'settings', 'normal', 'store', 'pos_charge_presets', 'T-627'),
   def('pos.charge_preset_retired', 'settings', 'normal', 'store', 'pos_charge_presets', 'T-627'),
+  // T-633: a table number retired from the ERP Tables section (entity = the pos_stands row; before/after = number and status). The row is kept and the number is never reused.
+  def('pos.stand_retired', 'settings', 'normal', 'store', 'pos_stands', 'T-633'),
   // T-627: a charge put on / taken off a table at the till (entity = the table_session_charges row). Money: it changes what the table owes. Payloads carry the name, unit amount and quantity.
   def('pos.charge_added', 'money', 'normal', 'store', 'table_session_charges', 'T-627'),
   def('pos.charge_removed', 'money', 'normal', 'store', 'table_session_charges', 'T-627'),

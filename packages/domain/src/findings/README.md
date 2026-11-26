@@ -3,7 +3,7 @@
 Integrity findings, the standing books watchdog (T-135), plus the manager scorecard and observation log built on it. A finding is derived on every read; only an acknowledgement is stored, so a finding disappears only when its condition does.
 
 ## Interface
-- `index.ts`: `ACKNOWLEDGEMENT_DAYS` (30), `SPEED_HORIZON_DAYS` (14), `WEIGHT_CLEAR_RATE` (0.4), `WEIGHT_SPEED` (0.3), `listFindings`, `listCashCustodyFindings`, `acknowledgeFinding`, `closeReadiness`, `readinessOf`, `keyPeriod`, `recordFindingObservations`, `compositeScore`, `managerScorecard`, `logFindingView`, types `FindingStatus`, `Finding`, `FindingsFeed`, `ObservationResult`, `StoreScore`, `Scorecard`.
+- `index.ts`: `ACKNOWLEDGEMENT_DAYS` (30), `SPEED_HORIZON_DAYS` (14), `WEIGHT_CLEAR_RATE` (0.4), `WEIGHT_SPEED` (0.3), `expenseAlertThresholds` (T-639), `listFindings`, `listCashCustodyFindings`, `acknowledgeFinding`, `closeReadiness`, `readinessOf`, `keyPeriod`, `recordFindingObservations`, `compositeScore`, `managerScorecard`, `logFindingView`, types `FindingStatus`, `Finding`, `FindingsFeed`, `ObservationResult`, `StoreScore`, `Scorecard`.
 
 ## Invariants
 - This module never writes to the ledger; every detector is a question, not a correction.

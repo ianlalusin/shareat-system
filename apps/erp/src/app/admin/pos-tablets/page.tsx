@@ -3,9 +3,10 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { staffStoresFor } from '../../staff/lib';
 import { clearLockAction, registerTabletAction, revokeTabletAction } from './actions';
-import { deviceTail, loadChargeOptions, loadCopyStores, loadDiscounts, loadPosTablets, loadStoreCharges, loadTills, revokeConfirmName, type PosTabletLinkView, type TerminalLockView } from './lib';
+import { deviceTail, loadChargeOptions, loadCopyStores, loadDiscounts, loadPosTablets, loadStoreCharges, loadTables, loadTills, revokeConfirmName, type PosTabletLinkView, type TerminalLockView } from './lib';
 import { TillsSection } from './TillsSection';
 import { ChargesSection } from './ChargesSection';
+import { TablesSection } from './TablesSection';
 import { ChargeOptionsSection } from './ChargeOptionsSection';
 import { CHARGE_OPTION_EDIT } from './typed-forms';
 import { typedFor } from '@/lib/keep-typing';
@@ -106,6 +107,8 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
   const charges = await loadStoreCharges(actor, store.id);
   // T-389: a refused Edit of a charge reopens it with what was typed.
   const chargeTyped = Object.fromEntries(chargeOptions.options.map((o) => [o.id, typedFor(sp, CHARGE_OPTION_EDIT, o.id, actor.personId)]));
+  // T-633: the store's table numbers (active and retired), the same right as the discounts.
+  const tables = await loadTables(actor, store.id);
   const copyStores = discounts.canManage ? await loadCopyStores(actor, store.id) : null;
   const activeLock = active ? terminals.find((t) => t.personId === active.terminalPersonId) : undefined;
   const otherLogins = terminals.filter((t) => t.personId !== active?.terminalPersonId);
@@ -255,6 +258,7 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
 
       <DiscountsSection store={store} presets={discounts.presets} canManage={discounts.canManage} copyStores={copyStores} />
       <ChargesSection store={store} rows={charges.rows} canManage={charges.canManage} />
+      <TablesSection store={store} active={tables.active} retired={tables.retired} canManage={tables.canManage} />
 
       <TillsSection store={store} tills={tills} returnTo={RETURN_TO} />
     </Page>

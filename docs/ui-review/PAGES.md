@@ -167,6 +167,7 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /sales-days/new | apps/erp/src/app/sales-days/new/page.tsx | 2026-11-15 | fix | G3 | T-589 B3a, T-589 B3d, #288, #283, T-589 B4b, #294, T-589 B8, #301, T-599 S7 | could improve: Store appears twice (dropdown plus read-only field), adding clutter at both widths. |
 | /service-charge | apps/erp/src/app/service-charge/page.tsx | 2026-11-15 | minor | G4 | T-589 B3d, #289, #288 | good: Clean and readable at both widths; empty state says nothing is held. |
 | /settings | apps/erp/src/app/settings/page.tsx | 2026-11-15 | minor | G3 |  | good: Clear grouped menu at both widths; search box sits at the top. |
+| /settings/ai-hub | apps/erp/src/app/settings/ai-hub/page.tsx | - | not reviewed | - | - | new page, not reviewed |
 | /settings/attendance | apps/erp/src/app/settings/attendance/page.tsx | 2026-11-15 | fix | G3 | #278, #289, #279 | good: Clear summary and leave list at both widths; main action visible. |
 | /settings/business-rules | apps/erp/src/app/settings/business-rules/page.tsx | 2026-11-15 | minor | G3 | T-589 B3d, #288, T-589 B4b, #294 | good: Grouped rules with visible change buttons, readable at both widths. |
 | /settings/expense-categories | apps/erp/src/app/settings/expense-categories/page.tsx | 2026-11-15 | fix | G3 | T-589 B3d, #288, T-599 S9 | could improve: Desktop table is very long and crowded; phone list is long with tiny text. |
@@ -192,3 +193,5 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /wastage/[id] | apps/erp/src/app/wastage/[id]/page.tsx | 2026-11-15 | not captured | G2 | T-589 B3c, #287 | not captured: no record in the synthetic data |
 | /pos/reservations | apps/erp/src/app/pos/reservations/page.tsx | - | not reviewed | - | - | new page, not reviewed |
 | /pos-reservations | apps/erp/src/app/pos-reservations/page.tsx | - | not reviewed | - | - | new page, not reviewed |
+| /documents/templates/new | apps/erp/src/app/documents/templates/new/page.tsx | - | not reviewed | - | - | new page, not reviewed |
+| /documents/templates/[id] | apps/erp/src/app/documents/templates/[id]/page.tsx | - | not reviewed | - | - | new page, not reviewed |

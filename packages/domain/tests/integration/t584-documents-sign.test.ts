@@ -84,7 +84,7 @@ interface World {
 }
 async function world(hint: string, slots: Array<'issuer' | 'employee'> = ['issuer', 'employee'], who: 'employee' | 'noSignature' = 'employee'): Promise<World> {
   const f = await documentFixture(sql, hint);
-  const t = await asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.admin.actor, { name: 'COE', kind: 'coe', body: BODY_TEMPLATE, signatureSlots: slots }));
+  const t = await asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.admin.actor, { name: 'COE', kindId: f.kind.coe, body: BODY_TEMPLATE, signatureSlots: slots }));
   const r = await asOrg(f.orgId, (tx) =>
     issueDocument(tx, f.managerA.actor, { templateId: t.templateId, employmentId: f[who].employmentId, body: 'Certificate for the test employee.' }),
   );
@@ -179,7 +179,7 @@ describe('T-584 S4 - the right person with the right PIN signs (test 5)', () => 
     expect(await sentenceOf(sign(w, w.f.managerA.actor, 'issuer', w.f.managerA))).toMatch(/already/i);
 
     const f = await documentFixture(sql, 'memo-slots');
-    const t = await asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.admin.actor, { name: 'Memo', kind: 'memo', body: 'x', signatureSlots: ['issuer', 'employee'] }));
+    const t = await asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.admin.actor, { name: 'Memo', kindId: f.kind.memo, body: 'x', signatureSlots: ['issuer', 'employee'] }));
     const m = await asOrg(f.orgId, (tx) => issueDocument(tx, f.managerA.actor, { templateId: t.templateId, storeId: f.storeA, body: 'A memo.' }));
     const w2: World = { f, documentId: m.documentId, number: m.number };
     expect(await sentenceOf(sign(w2, f.managerA.actor, 'employee', f.employee))).toMatch(/employee/i);
@@ -338,7 +338,7 @@ describe('T-584 R7 - a signature keeps the signer\'s name as it was', () => {
 describe('T-584 organisation-wide documents: the signature image is readable by a store manager (Ian, 15 Nov)', () => {
   it('a manager at any store sees the image on a storeless document the admin signed; staff do not [kills: a signed memo image only an administrator can open]', async () => {
     const f = await documentFixture(sql, 'storeless-image');
-    const t = await asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.admin.actor, { name: 'Memo', kind: 'memo', body: 'x', signatureSlots: ['issuer'] }));
+    const t = await asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.admin.actor, { name: 'Memo', kindId: f.kind.memo, body: 'x', signatureSlots: ['issuer'] }));
     const m = await asOrg(f.orgId, (tx) => issueDocument(tx, f.admin.actor, { templateId: t.templateId, body: 'Everyone, signed.' }));
     for (const row of await sql<{ storage_path: string }[]>`select storage_path from stored_files where org_id = ${f.orgId}`) driver.files.set(row.storage_path, new Uint8Array([9, 9, 9]));
     await asOrg(f.orgId, (tx) => signDocument(tx, f.admin.actor, { documentId: m.documentId, slot: 'issuer', versionNo: 1, employeeId: '', pin: f.admin.pin }));

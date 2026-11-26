@@ -193,18 +193,65 @@ export async function resolveBranchRate(
   commissaryStoreId: string,
   itemId: string,
 ): Promise<ResolvedRate | null> {
+  return (await resolveBranchRateDetail(tx, orgId, commissaryStoreId, itemId)).resolved;
+}
+
+/**
+ * ⭐ T-638. `resolveBranchRate` plus the figures it worked from, so a screen can say HOW the price was reached from the very
+ * same walk the orders use (never a second copy of the tiers). `commissaryStoreId` null skips the manual-cost tier: the item
+ * page has no commissary in hand, so it shows the rule-and-history price only.
+ */
+export async function resolveBranchRateDetail(
+  tx: Tx,
+  orgId: string,
+  commissaryStoreId: string | null,
+  itemId: string,
+): Promise<{ resolved: ResolvedRate | null; bp: Awaited<ReturnType<typeof branchPriceFor>> }> {
   // DEF-897: a price that normalises to ₱0.00 is "unpriced", not a price — fall through to the next tier.
   const bp = await branchPriceFor(tx, orgId, itemId);
   if (bp) {
     const rate = normaliseRate(bp.price, 'branch price');
-    if (compare(rate, ZERO) > 0) return { rate, from: 'branch_price' };
+    if (compare(rate, ZERO) > 0) return { resolved: { rate, from: 'branch_price' }, bp };
   }
-  const manual = await lowStockRepo.offeringCost(tx, orgId, commissaryStoreId, itemId);
-  if (manual !== null && manual !== undefined) {
-    const rate = normaliseRate(manual, 'manual cost');
-    if (compare(rate, ZERO) > 0) return { rate, from: 'manual_cost' };
+  if (commissaryStoreId) {
+    const manual = await lowStockRepo.offeringCost(tx, orgId, commissaryStoreId, itemId);
+    if (manual !== null && manual !== undefined) {
+      const rate = normaliseRate(manual, 'manual cost');
+      if (compare(rate, ZERO) > 0) return { resolved: { rate, from: 'manual_cost' }, bp };
+    }
   }
-  return null;
+  return { resolved: null, bp };
+}
+
+/** ⭐ T-638. What a commissary charges a store for an item right now, with the figures that explain it. A read model: plain data. */
+export interface PriceToStores {
+  /** The peso price in force (2 dp), or null: nothing can cost the item ("Needs a cost"; never ₱0). */
+  price: string | null;
+  from: ResolvedRate['from'] | null;
+  /** The item's rule (null: none set), the cost it works from, and where that cost came from. */
+  rule: Awaited<ReturnType<typeof itemsRepo.getItemPricing>> | null;
+  basis: string | null;
+  basisFrom: 'own' | 'linked' | null;
+  /** The margin alert fires on the price shown (never for a manual-cost price: there is no rule margin to judge). */
+  marginAlert: boolean;
+}
+
+export async function priceToStores(
+  tx: Tx,
+  orgId: string,
+  commissaryStoreId: string | null,
+  itemId: string,
+): Promise<PriceToStores> {
+  const { resolved, bp } = await resolveBranchRateDetail(tx, orgId, commissaryStoreId, itemId);
+  const rule = (await itemsRepo.getItemPricing(tx, orgId, itemId)) ?? null;
+  return {
+    price: resolved ? String(resolved.rate) : null,
+    from: resolved?.from ?? null,
+    rule,
+    basis: bp ? bp.basis : null,
+    basisFrom: bp ? bp.basisFrom : null,
+    marginAlert: resolved?.from === 'branch_price' && bp?.marginAlert === true,
+  };
 }
 
 /** An automatic note on the order's thread — the audit trail of the conversation (T-175). */

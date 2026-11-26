@@ -4,7 +4,7 @@
  * Every function takes the caller's transaction first and filters by org AND store; RLS is the backstop.
  */
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
-import { chargeOptions, posChargePresets, posDiscountPresets, posStands, type ChargeOptionRow, type PosChargePresetRow, type PosDiscountPresetRow, type PosStandRow } from '../../schema/pos-v2';
+import { chargeOptions, posChargePresets, posDiscountPresets, posStands, tableSessions, type ChargeOptionRow, type PosChargePresetRow, type PosDiscountPresetRow, type PosStandRow } from '../../schema/pos-v2';
 import { posV1StoreLinks } from '../../schema/pos-v1';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
@@ -20,6 +20,35 @@ export async function getStandByNumber(tx: Tx, orgId: string, storeId: string, n
 export async function insertStand(tx: Tx, input: { orgId: string; storeId: string; number: number; createdBy: string }): Promise<PosStandRow> {
   const [row] = await tx.insert(posStands).values({ ...input, status: 'active' }).returning();
   return row!;
+}
+
+/** T-633: every stand of the store, active and retired, in number order (the Tables section lists both). */
+export async function listStands(tx: Tx, orgId: string, storeId: string): Promise<PosStandRow[]> {
+  return tx
+    .select()
+    .from(posStands)
+    .where(and(eq(posStands.orgId, orgId), eq(posStands.storeId, storeId)))
+    .orderBy(posStands.number);
+}
+
+/** T-633: retire an ACTIVE stand. False when it was already retired (nothing written). The number is never reused (the unique key covers retired rows). */
+export async function retireStand(tx: Tx, orgId: string, storeId: string, standId: string): Promise<boolean> {
+  const rows = await tx
+    .update(posStands)
+    .set({ status: 'retired', updatedAt: new Date() })
+    .where(and(eq(posStands.id, standId), eq(posStands.orgId, orgId), eq(posStands.storeId, storeId), eq(posStands.status, 'active')))
+    .returning({ id: posStands.id });
+  return rows.length > 0;
+}
+
+/** T-633: does a table session at this stand still have an open bill? */
+export async function standHasOpenSession(tx: Tx, orgId: string, storeId: string, standId: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: tableSessions.id })
+    .from(tableSessions)
+    .where(and(eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId), eq(tableSessions.standId, standId), eq(tableSessions.status, 'open')))
+    .limit(1);
+  return rows.length > 0;
 }
 
 /** The ACTIVE preset of this name (case-insensitive, the same key the unique index uses), or undefined. */
@@ -72,8 +101,8 @@ export async function retirePreset(tx: Tx, orgId: string, storeId: string, prese
   return rows.length > 0;
 }
 
-// ---- T-634 (0282): the org's master list of charges, and each store's switch for one -----------------------------------
-// A store's `pos_charge_presets` row IS its switch (status active = on); its name, amount and per_unit are a mirror the 0282 trigger sets from the option.
+// ---- T-634 (0287): the org's master list of charges, and each store's switch for one -----------------------------------
+// A store's `pos_charge_presets` row IS its switch (status active = on); its name, amount and per_unit are a mirror the 0287 trigger sets from the option.
 
 /** Every option of the org, active and retired, in sort order then name. */
 export async function listChargeOptions(tx: Tx, orgId: string): Promise<ChargeOptionRow[]> {
@@ -101,7 +130,7 @@ export async function insertChargeOption(tx: Tx, input: { orgId: string; name: s
   return row!;
 }
 
-/** The name is never changed (the 0282 guard refuses it): a rename is retire + add. */
+/** The name is never changed (the 0287 guard refuses it): a rename is retire + add. */
 export async function updateChargeOptionRow(tx: Tx, orgId: string, id: string, set: { amount?: Money; perUnit?: boolean; status?: 'active' | 'retired' }): Promise<void> {
   await tx
     .update(chargeOptions)
@@ -130,7 +159,7 @@ export async function latestChargeSwitch(tx: Tx, orgId: string, storeId: string,
   return row;
 }
 
-/** A first switch-on at this store. name / amount / per_unit are passed for the column types; the 0282 trigger overwrites them from the option. */
+/** A first switch-on at this store. name / amount / per_unit are passed for the column types; the 0287 trigger overwrites them from the option. */
 export async function insertChargeSwitch(
   tx: Tx,
   input: { orgId: string; storeId: string; chargeOptionId: string; name: string; amount: Money; perUnit: boolean; createdBy: string },

@@ -1,4 +1,4 @@
--- 0282 - T-634: one master list of charges per org; each store switches them on. docs/tasks/634-central-charges.md; hand-authored per ADR-012 s5.
+-- 0287 - T-634: one master list of charges per org; each store switches them on. docs/tasks/634-central-charges.md; hand-authored per ADR-012 s5.
 -- Journal idx 282, `when` = 0281's (T-637) + 86400000: renumbered from 0278 on 25 Nov 2026 because main took 0279 (T-635) and T-637 holds 0281.
 -- The shape is 0277's (payment options).
 --

@@ -174,3 +174,6 @@ export * from './business-rules';
 
 // T-398 S6 - the franchisor view of a franchisee: agreements and the append-only access log (migration 0220).
 export * from './franchise';
+
+// T-640 - the AI hub: provider keys (encrypted), models, caps, store switches and the call log (migration 0284).
+export * from './ai-hub';

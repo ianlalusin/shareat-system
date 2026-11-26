@@ -31,6 +31,8 @@ import { TopBar } from './TopBar';
 import { Breadcrumbs } from './Breadcrumbs';
 import { PhoneTableCards } from './PhoneTableCards';
 import { ScreenState } from './ScreenState';
+// T-641: the Ask ERP button and side panel, for a person who holds `use_ask_erp`.
+import { AskErpLauncher } from '../ask-erp/AskErpLauncher';
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const session = await currentSession();
@@ -70,6 +72,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
+    <>
     <SidebarProvider initialState={initialState}>
       <div className="flex min-h-dvh">
         <Sidebar allowedHrefs={allowedHrefs} signedInAs={signedInAs} />
@@ -79,5 +82,8 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     </SidebarProvider>
+    {/* Presentation only (like the sidebar links): the action behind it authorizes again. Not rendered for /pos, /clock or sign-in, which return bare children above. */}
+    {(held as ReadonlySet<string>).has('use_ask_erp') ? <AskErpLauncher /> : null}
+    </>
   );
 }

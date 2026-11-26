@@ -266,6 +266,8 @@ vi.mock('../src/app/items/lib', async (importOriginal) => {
     unitHistoryExists: (...a: unknown[]) => unitHistoryExistsMock(...a),
     // T-383 S2a: the Retire section's readout; I2 proves labels only, so an empty answer.
     retireReadout: async () => ({ onHand: [], activePosMaps: 0, activeRecipes: 0 }),
+    // T-638: the price-to-stores block; I2 proves labels only (the item is not sold wholesale), so an empty answer.
+    itemPriceToStores: async () => ({ base: { price: null, rule: null }, basis: null, viaManual: [] }),
     // T-378 S4 (DEF-600): the item page now asks the approve_item gate (withOrgPrincipal + authorize).
     // I2 proves only a label, so the gate is stubbed to allow.
     withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}),
@@ -297,6 +299,9 @@ vi.mock('../src/app/items/actions', () => ({
   addItemAliasAction: vi.fn(),
   removeItemAliasAction: vi.fn(),
   setItemExpenseCategoryAction: vi.fn(),
+  // T-638: the price-to-stores form's two actions (imported by ItemPricingFields).
+  setItemPricingAction: vi.fn(),
+  previewItemPricingAction: vi.fn(),
 }));
 
 const whoSellsMock = vi.fn();

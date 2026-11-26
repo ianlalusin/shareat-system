@@ -1,7 +1,7 @@
 /**
- * T-634 (0282) - a store charge row needs its org charge option (charge_option_id is NOT NULL). Tests that used to insert a `pos_charge_presets` row straight away
+ * T-634 (0287) - a store charge row needs its org charge option (charge_option_id is NOT NULL). Tests that used to insert a `pos_charge_presets` row straight away
  * call this instead: it finds or makes the org's option of that name (same a-z0-9 key as the unique index) at that amount / per unit, then inserts the store's
- * switch row for it. The 0282 trigger copies the option's name, amount and per unit onto the row, as in production.
+ * switch row for it. The 0287 trigger copies the option's name, amount and per unit onto the row, as in production.
  */
 type Sql = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>;
 

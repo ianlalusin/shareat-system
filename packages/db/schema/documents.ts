@@ -1,9 +1,11 @@
 /**
  * Documents - templated HR documents (COE, memo, NTE, contract). T-584, docs/tasks/584-documents.md s4. Migration 0259 (hand-authored, ADR-012).
  *
- * Five tables:
+ * Six tables (`document_kinds` came with T-637, migration 0281):
+ *  - `document_kinds`              the org's own list of document kinds (Certificate of employment, Memo, ...), edited on screen. A template points at one by `kind_id`.
  *  - `document_templates`          the library entry: name, kind, retired. Wording lives in its versions.
- *  - `document_template_versions`  APPEND-ONLY. Every save of a template is a new version; an old one is never edited.
+ *  - `document_template_versions`  APPEND-ONLY. Every save of a template is a new version; an old one is never edited. T-637: `body_doc` is the JSON document, with the page settings
+ *                                  (margins, header, footer); `body` is its plain text. A version from before 0281 has `body_doc` NULL and is read through the converter.
  *  - `issued_documents`            the document itself: number, who, when, for whom. Only the void columns may change after insert.
  *  - `issued_document_versions`    APPEND-ONLY (R7). The text of every version of an issued document. A revision is version N+1.
  *  - `issued_document_signatures`  APPEND-ONLY. One row per (version, slot): who signed, when, and which saved signature file,
@@ -22,8 +24,10 @@ import { persons } from './persons';
 import { storedFiles } from './stored-files';
 import { stores } from './stores';
 
-export const DOCUMENT_KINDS = ['coe', 'memo', 'nte', 'contract', 'other'] as const;
-export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+export const DOCUMENT_KIND_STATUSES = ['active', 'retired'] as const;
+export type DocumentKindStatus = (typeof DOCUMENT_KIND_STATUSES)[number];
+export const DOCUMENT_MARGINS = ['narrow', 'normal', 'wide'] as const;
+export type DocumentMargins = (typeof DOCUMENT_MARGINS)[number];
 
 export const SIGNATURE_SLOTS = ['issuer', 'employee'] as const;
 export type SignatureSlot = (typeof SIGNATURE_SLOTS)[number];
@@ -44,8 +48,45 @@ export interface DocumentLetterhead {
   storeAddress: string | null;
   storeContact: string | null;
   templateName: string;
-  templateKind: DocumentKind;
+  /** Before 0281 the kind code ('coe'); from T-637 the kind's NAME as it was when the version was written (same value as `kindName`). */
+  templateKind: string;
+  /** T-637: the kind's name as it was when this version was written. Absent on a version from before 0281. */
+  kindName?: string;
+  /** T-637: the page this version prints on, header and footer ALREADY FILLED. Absent on a version from before 0281 (it prints the old built-in letterhead above). */
+  page?: DocumentPageSnapshot;
 }
+
+export interface DocumentPageSnapshot {
+  margins: DocumentMargins;
+  /** A JSON document (see packages/domain documents/doc.ts), or null for none. */
+  headerDoc: unknown;
+  footerDoc: unknown;
+}
+
+/**
+ * T-637. The org's own list of document kinds, edited on /documents/templates. Names are unique per org ignoring case; retiring one is refused while an ACTIVE template uses it
+ * (the domain, under a lock on this row). NOTE: the case-insensitive unique index, the name CHECKs, RLS, the grants and the seed are hand-added in migration 0281.
+ */
+export const documentKinds = pgTable(
+  'document_kinds',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    status: text('status', { enum: DOCUMENT_KIND_STATUSES }).notNull().default('active'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    unique('document_kinds_org_id_id_unique').on(t.orgId, t.id),
+    // NOTE: UNIQUE (org_id, lower(name)) is an expression index, hand-added in 0281 as document_kinds_org_name_unique.
+    check('document_kinds_name_check', sql`char_length(${t.name}) between 1 and 40 and ${t.name} = btrim(${t.name})`),
+    check('document_kinds_status_check', sql`${t.status} in ('active', 'retired')`),
+  ],
+);
 
 export const documentTemplates = pgTable(
   'document_templates',
@@ -55,7 +96,9 @@ export const documentTemplates = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
-    kind: text('kind', { enum: DOCUMENT_KINDS }).notNull(),
+    kindId: uuid('kind_id')
+      .notNull()
+      .references(() => documentKinds.id, { onDelete: 'restrict' }),
     retiredAt: timestamp('retired_at', { withTimezone: true }),
     createdBy: uuid('created_by')
       .notNull()
@@ -65,12 +108,17 @@ export const documentTemplates = pgTable(
   (t) => [
     unique('document_templates_org_id_id_unique').on(t.orgId, t.id),
     index('document_templates_org_idx').on(t.orgId),
-    check('document_templates_kind_check', sql`${t.kind} in ('coe', 'memo', 'nte', 'contract', 'other')`),
+    index('document_templates_kind_idx').on(t.kindId),
     check('document_templates_name_check', sql`btrim(${t.name}) <> '' and ${t.name} = btrim(${t.name})`),
     foreignKey({
       columns: [t.orgId, t.createdBy],
       foreignColumns: [persons.orgId, persons.id],
       name: 'document_templates_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.kindId],
+      foreignColumns: [documentKinds.orgId, documentKinds.id],
+      name: 'document_templates_kind_same_org_fk',
     }).onDelete('restrict'),
   ],
 );
@@ -86,7 +134,15 @@ export const documentTemplateVersions = pgTable(
       .notNull()
       .references(() => documentTemplates.id, { onDelete: 'restrict' }),
     versionNo: integer('version_no').notNull(),
+    /** The plain text of `body_doc` (`{{field}}` for each tag), or for a version from before 0281 the original wording. */
     body: text('body').notNull(),
+    /** T-637: the JSON document (validated on the server at save). NULL for a version from before 0281: it is read through `legacyBodyToDoc(body)`. */
+    bodyDoc: jsonb('body_doc').$type<unknown>(),
+    /** T-637: page margins, `narrow` / `normal` / `wide` (A4 is the only page size). */
+    margins: text('margins', { enum: DOCUMENT_MARGINS }).notNull().default('normal'),
+    /** T-637: optional letterhead header and footer, each a JSON document that may hold fields. */
+    headerDoc: jsonb('header_doc').$type<unknown>(),
+    footerDoc: jsonb('footer_doc').$type<unknown>(),
     /** A subset of `issuer`, `employee`; empty means the document needs no signature. Hand-added CHECK in 0259 (array subset). */
     signatureSlots: text('signature_slots').array().notNull().default(sql`'{}'::text[]`),
     createdBy: uuid('created_by')
@@ -100,6 +156,11 @@ export const documentTemplateVersions = pgTable(
     index('document_template_versions_org_idx').on(t.orgId),
     check('document_template_versions_version_no_check', sql`${t.versionNo} >= 1`),
     check('document_template_versions_body_check', sql`btrim(${t.body}) <> '' and length(${t.body}) <= 50000`),
+    check('document_template_versions_margins_check', sql`${t.margins} in ('narrow', 'normal', 'wide')`),
+    check(
+      'document_template_versions_docs_check',
+      sql`(${t.bodyDoc} is null or jsonb_typeof(${t.bodyDoc}) = 'object') and (${t.headerDoc} is null or jsonb_typeof(${t.headerDoc}) = 'object') and (${t.footerDoc} is null or jsonb_typeof(${t.footerDoc}) = 'object')`,
+    ),
     foreignKey({
       columns: [t.orgId, t.templateId],
       foreignColumns: [documentTemplates.orgId, documentTemplates.id],
@@ -187,6 +248,8 @@ export const issuedDocumentVersions = pgTable(
       .references(() => issuedDocuments.id, { onDelete: 'restrict' }),
     versionNo: integer('version_no').notNull(),
     body: text('body').notNull(),
+    /** T-637: the JSON document of this version. NULL for a version from before 0281 (it keeps the stored `body` and prints from it). */
+    bodyDoc: jsonb('body_doc').$type<unknown>(),
     /** NULL for version 1; a revision (version 2 and later) always says why. */
     reason: text('reason'),
     /** Frozen at the time of THIS version (see DocumentLetterhead). */
@@ -206,6 +269,7 @@ export const issuedDocumentVersions = pgTable(
       sql`(${t.versionNo} = 1 and ${t.reason} is null) or (${t.versionNo} > 1 and coalesce(btrim(${t.reason}), '') <> '' and length(${t.reason}) <= 500)`,
     ),
     check('issued_document_versions_letterhead_check', sql`jsonb_typeof(${t.letterhead}) = 'object'`),
+    check('issued_document_versions_body_doc_check', sql`${t.bodyDoc} is null or jsonb_typeof(${t.bodyDoc}) = 'object'`),
     foreignKey({
       columns: [t.orgId, t.issuedDocumentId],
       foreignColumns: [issuedDocuments.orgId, issuedDocuments.id],

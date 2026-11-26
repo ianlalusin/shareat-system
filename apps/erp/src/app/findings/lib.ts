@@ -121,6 +121,12 @@ export const KIND_LABEL: Record<string, string> = {
   inter_entity_balance_gap: 'Balance with the other company disagrees',
   openingDateContradicted: 'Opening date contradicted by recorded sales',
   assetHeldPastOpening: 'Asset waiting on its store to open',
+  expenseCategorySpike: 'Category spending above its usual week',
+  expenseFrequencySpike: 'Many more expenses than usual in a category',
+  expenseOutlier: 'Single expense far above its usual',
+  expenseDuplicate: 'Possible duplicate expense',
+  expenseSelfApproved: 'Expense approved by the person who recorded it',
+  expenseOverBudget: 'Spending over the budget cap',
 };
 
 /** A finding's plain title; an id with no label becomes readable words ("someNewCheck" shows "Some new check"), never the raw id. */

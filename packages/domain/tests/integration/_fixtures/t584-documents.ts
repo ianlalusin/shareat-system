@@ -5,6 +5,7 @@
 import type postgres from 'postgres';
 import { hashPin, pinLookupHash } from '@shareat/auth';
 import type { Actor } from '@shareat/auth';
+import { seedDocumentKinds } from '../../../../db/seed/document-kinds';
 
 let seq = 0;
 let pinSeq = 0;
@@ -24,6 +25,8 @@ export interface Person {
 
 export interface DocFixture {
   orgId: string;
+  /** T-637: the seeded document kinds of this org by their old short names (the five the enum had), as ids. */
+  kind: Record<'coe' | 'memo' | 'nte' | 'contract' | 'other', string>;
   storeA: string;
   storeB: string;
   admin: Person;
@@ -48,6 +51,15 @@ export async function documentFixture(sql: postgres.Sql, hint: string): Promise<
   const [o] = await sql<{ id: string }[]>`
     insert into organizations (name, code, legal_name, tin) values (${`Test Org ${code}`}, ${code}, 'Test Org Incorporated', '123456789') returning id`;
   const orgId = o!.id;
+  await seedDocumentKinds(sql, orgId);
+  const kindOf = async (name: string) => (await sql<{ id: string }[]>`select id from document_kinds where org_id = ${orgId} and name = ${name}`)[0]!.id;
+  const kind = {
+    coe: await kindOf('Certificate of employment'),
+    memo: await kindOf('Memo'),
+    nte: await kindOf('Notice to explain'),
+    contract: await kindOf('Contract'),
+    other: await kindOf('Other'),
+  };
   const mkStore = async (label: string, address: string, branch: string) =>
     (
       await sql<{ id: string }[]>`
@@ -120,6 +132,7 @@ export async function documentFixture(sql: postgres.Sql, hint: string): Promise<
   const noSignature = await person('Staff E', 'staff', [storeA], { employAt: storeA });
   return {
     orgId,
+    kind,
     storeA,
     storeB,
     admin,

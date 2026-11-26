@@ -528,6 +528,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/components/documents/DocumentDoc.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 1
+  },
+  {
     "file": "apps/erp/src/components/expenses/InvoiceBatchRecord.tsx",
     "tables": 1,
     "sharedTables": 0,

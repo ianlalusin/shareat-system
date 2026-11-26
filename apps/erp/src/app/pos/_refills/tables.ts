@@ -9,6 +9,8 @@ export interface RefillTableSource {
   packageVariantId?: string | null;
   /** Every package variant the table holds (T-524 `listRefillableTables`). Absent: just `packageVariantId`. */
   packageVariantIds?: string[];
+  /** T-643: the flavour names chosen at seating (the package line's options). */
+  seatFlavours?: string[];
 }
 export interface RefillTable {
   sessionId: string;
@@ -17,6 +19,8 @@ export interface RefillTable {
   packageVariantId: string;
   /** Present when the server listed every package on the table; the picker offers the meats of ALL of them. */
   packageVariantIds?: string[];
+  /** T-643: the table's seating flavours; they lead the flavour pills (v1 sorts, never limits). */
+  seatFlavours: string[];
 }
 
 export function refillTables(rows: readonly RefillTableSource[], packageVariantBySession?: Readonly<Record<string, string | null | undefined>>): RefillTable[] {
@@ -25,7 +29,7 @@ export function refillTables(rows: readonly RefillTableSource[], packageVariantB
     const packageVariantId = packageVariantBySession ? packageVariantBySession[r.sessionId] : r.packageVariantId;
     if (r.mode === 'take_out' || r.standNumber === null || !packageVariantId) continue;
     const all = !packageVariantBySession && r.packageVariantIds && r.packageVariantIds.length > 0 ? { packageVariantIds: r.packageVariantIds } : {};
-    out.push({ sessionId: r.sessionId, standNumber: r.standNumber, label: `Stand ${r.standNumber}`, packageVariantId, ...all });
+    out.push({ sessionId: r.sessionId, standNumber: r.standNumber, label: `Stand ${r.standNumber}`, packageVariantId, seatFlavours: r.seatFlavours ?? [], ...all });
   }
   return out.sort((a, b) => a.standNumber - b.standNumber);
 }

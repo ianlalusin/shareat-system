@@ -4,6 +4,7 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
+      "@shareat/ai": ["../../packages/ai/src/index.ts"],
       "@shareat/core": ["../../packages/core/src/index.ts"],
       "@shareat/core/*": ["../../packages/core/src/*"],
       "@shareat/db": ["../../packages/db/src/index.ts"],
@@ -18,6 +19,7 @@
       "@shareat/domain/field-rules": ["../../packages/domain/src/field-rules/index.ts"],
       "@shareat/domain/business-rules": ["../../packages/domain/src/business-rules/index.ts"],
       "@shareat/domain/expenses/allocate": ["../../packages/domain/src/expenses/allocate.ts"],
+      "@shareat/domain/documents/doc": ["../../packages/domain/src/documents/doc.ts"],
       "@shareat/domain/refusal-leaf": ["../../packages/domain/src/shared/refusal-leaf.ts"],
       "@shareat/domain/attendance/fingerprint": ["../../packages/domain/src/attendance/fingerprint/index.ts"],
       "@shareat/domain/pos/price": ["../../packages/domain/src/pos/price.ts"],

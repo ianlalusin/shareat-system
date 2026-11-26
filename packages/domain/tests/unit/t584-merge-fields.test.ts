@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { MERGE_FIELDS, fieldsIn, fillBody, longDate, missingIn, parseBody, unknownFields } from '../../src/documents/merge-fields';
+import { MERGE_FIELDS, fieldsIn, longDate, parseBody, unknownFields } from '../../src/documents/merge-fields';
 
 /**
  * T-584 - the merge-field whitelist and the plain-text markup (docs/tasks/584-documents.md s5, s6). Pure: no database.
  * Test 3 (unknown field refused, missing blocks issue) at the unit level, and test 8 (`<script>` stays literal text) at the parser level.
  */
 describe('T-584 merge fields', () => {
-  it('the whitelist is exactly the spec list, fifteen names [kills: a field added or dropped without a decision]', () => {
+  it('the whitelist is exactly the spec list, the fifteen of T-584 plus the six T-637 added whose data is really stored [kills: a field added or dropped without a decision]', () => {
     expect([...MERGE_FIELDS].sort()).toEqual(
       [
         'employee.full_name', 'employee.staff_code', 'employee.position', 'employee.status', 'employee.started_on', 'employee.ended_on',
         'store.name', 'store.address', 'store.tin_branch_code', 'org.legal_name', 'org.trading_name', 'org.tin', 'issuer.full_name', 'issuer.position', 'today',
+        'employee.first_name', 'employee.last_name', 'employee.email', 'employee.phone', 'employee.length_of_service', 'store.phone',
       ].sort(),
     );
   });
@@ -22,21 +23,7 @@ describe('T-584 merge fields', () => {
     expect(unknownFields('{{today}} {{org.legal_name}}')).toEqual([]);
   });
 
-  it('fillBody fills values and writes a visible marker for a missing, null or blank one [kills: a blank silently printed]', () => {
-    const out = fillBody('{{employee.full_name}} / {{employee.ended_on}} / {{store.address}} / {{today}}', {
-      'employee.full_name': 'Pat Example',
-      'employee.ended_on': null,
-      'store.address': '   ',
-      today: '15 November 2026',
-    });
-    expect(out).toBe('Pat Example / [missing: employee.ended_on] / [missing: store.address] / 15 November 2026');
-    expect(missingIn(out)).toEqual(['employee.ended_on', 'store.address']);
-    expect(missingIn('all filled in')).toEqual([]);
-  });
-
-  it('a value that itself contains {{...}} is not filled twice [kills: injecting a field through a value]', () => {
-    expect(fillBody('{{employee.full_name}}', { 'employee.full_name': '{{org.tin}}', 'org.tin': '999' })).toBe('{{org.tin}}');
-  });
+  // fillBody and missingIn (plain-text filling) were replaced by fillDoc / missingInDoc in T-637; their cases live in t637-doc.test.ts.
 
   it('longDate prints the long form with no time zone shift, and null for junk [kills: an off-by-one day]', () => {
     expect(longDate('2026-11-15')).toBe('15 November 2026');

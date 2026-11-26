@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
 /**
- * T-634 - central charges (migration 0282): the org's ONE list of charges, each store's on/off switch, the mirror, and what a change does (and does not do) to a
+ * T-634 - central charges (migration 0287): the org's ONE list of charges, each store's on/off switch, the mirror, and what a change does (and does not do) to a
  * table already open. docs/tasks/634-central-charges.md. Real Postgres on a scratch "_test" database through the T-525 fixture (the DATABASE is the oracle; the
  * snapshot is the real `buildPosSnapshot`; charges reach a table through the real inbox). Not run on the builder's PC (no database): CI runs it.
  */

@@ -12,6 +12,7 @@ Parent blueprint: [up one directory](../README.md).
 - [page.tsx](./page.tsx) — `SettingsPage`.
 - [attendance](./attendance/README.md) — Attendance & payroll settings at `/settings/attendance`. One attendance and payroll policy per store: shift hours, late policy, overtime, holiday pay, leave and the pay period.
 - business-rules — Business rules at `/settings/business-rules` (no README of its own yet). The figures the system checks money against: payout tolerance, loan rounding, withholding and VAT rates.
+- ai-hub — AI hub at `/settings/ai-hub` (super admin only, `manage_ai_hub`). Provider keys (typed here, stored encrypted, only the last 4 characters shown), tested models and their order, the monthly cap and daily limit, the AI switches and this month's spend. T-640.
 - [expense-categories](./expense-categories/README.md) — Expense categories at `/settings/expense-categories`. Which account each expense category and subcategory posts to; a category with no account blocks posting.
 - [organization](./organization/README.md) — Organisation at `/settings/organization`. The registered name, TIN and tax type the books are kept under; printed on documents.
 - [pos-link](./pos-link/README.md) — POS link at `/settings/pos-link`. Which POS store each store sells under; a linked store takes its sales days from POS instead of typing them.

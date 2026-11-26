@@ -1680,24 +1680,24 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'derivation',
     reason: 'A renamed option copies its name onto the store tenders that mirror it (0277, T-629).',
   },
-  // T-634 (0282) - the charge master: three origin triggers (they read another row's CURRENT state: no ALWAYS).
+  // T-634 (0287) - the charge master: three origin triggers (they read another row's CURRENT state: no ALWAYS).
   pos_charge_presets_mirror_option: {
     table: 'pos_charge_presets',
     mode: 'origin',
     kind: 'derivation',
-    reason: 'A store charge row takes its name, amount and per unit FROM its charge option, cannot change option, cannot be switched on while the option is retired (0282, T-634). An insert without an option fails on NOT NULL.',
+    reason: 'A store charge row takes its name, amount and per unit FROM its charge option, cannot change option, cannot be switched on while the option is retired (0287, T-634). An insert without an option fails on NOT NULL.',
   },
   charge_options_guard: {
     table: 'charge_options',
     mode: 'origin',
     kind: 'validator',
-    reason: 'Reads the store charge rows of the option: retiring is refused while any store has it switched on; the org and the name never change (0282, T-634).',
+    reason: 'Reads the store charge rows of the option: retiring is refused while any store has it switched on; the org and the name never change (0287, T-634).',
   },
   charge_options_mirror_presets: {
     table: 'charge_options',
     mode: 'origin',
     kind: 'derivation',
-    reason: 'A changed amount or per unit is copied onto every store charge row that mirrors the option (0282, T-634). A charge already on a table is a snapshot and does not move.',
+    reason: 'A changed amount or per unit is copied onto every store charge row that mirrors the option (0287, T-634). A charge already on a table is a snapshot and does not move.',
   },
   // T-534 S1 (0265) - the post-sale documents: eight history guards, all ENABLE ALWAYS (ALWAYS 62 -> 70). Raise 23001 restrict_violation.
   pos_payment_conversions_frozen: {

@@ -59,6 +59,7 @@ const WRITE: Record<string, { caps: string[]; files: string[] }> = {
   '/settings/organization': { caps: ['manage_chart_of_accounts'], files: [`${D}/organizations/index.ts`] },
   '/settings/expense-categories': { caps: ['manage_chart_of_accounts'], files: [`${D}/expenses/categories.ts`] },
   '/settings/business-rules': { caps: ['manage_business_rules'], files: [`${D}/business-rules/registry.ts`, `${D}/business-rules/rules.ts`] },
+  '/settings/ai-hub': { caps: ['manage_ai_hub'], files: [`${D}/ai/shared.ts`] }, // T-640: the route key IS the write word, so the pill can never show
   '/payroll/rates': { caps: ['manage_payroll_rates'], files: [`${D}/payroll/rates.ts`] },
   '/settings/usage-tolerance': { caps: ['set_menu_depletion'], files: [`${D}/stock/usage-tolerance.ts`] },
   '/menu/usage-source': { caps: ['switch_usage_source', 'manage_pos_map'], files: [`${D}/pos/depletion-source.ts`] },
@@ -100,11 +101,11 @@ beforeEach(() => {
 });
 
 describe('T-587 S2 - the View only pill, one test per row', () => {
-  it('there is one entry per hub row (22), so no row is left untested', () => {
+  it('there is one entry per hub row (23), so no row is left untested', () => {
     const src = read(`${A}/settings/page.tsx`);
     const hubHrefs = [...src.matchAll(/<SettingsRow\s+href="([^"]+)"/g)].map((m) => m[1]);
     expect([...hubHrefs].sort()).toEqual([...HREFS].sort());
-    expect(HREFS.length).toBe(22);
+    expect(HREFS.length).toBe(23); // T-640: 22 -> 23 (+/settings/ai-hub)
   });
 
   it.each(HREFS)('%s: without its write capability the row is View only (hidden when the route needs that same word); with it, no pill', async (href) => {

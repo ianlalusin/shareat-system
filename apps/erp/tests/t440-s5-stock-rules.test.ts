@@ -31,6 +31,8 @@ type Row = {
   bad: Array<[value: string, sentence: string]>;
   /** The sentence for a blank (required rules only). */
   blank?: string;
+  /** Sibling values a rule that applies only `when` another field has a value needs, so the server half judges it (T-638). */
+  given?: Record<string, string>;
 };
 
 const BLANK = '   ';
@@ -46,6 +48,12 @@ const optDate = (label: string): Row => ({ ok: '2026-10-01', bad: [REAL_DATE(lab
 const num0 = (label: string): Row => ({
   ok: '3.5',
   bad: [['abc', `${label} must be a number of 0 or more.`], ['-1', `${label} must be a number of 0 or more.`]],
+  blank: `${label} is required.`,
+});
+/** number, min `min` (a figure that must be more than nothing) */
+const numMin = (label: string, min: string): Row => ({
+  ok: '3.5',
+  bad: [['abc', `${label} must be a number of ${min} or more.`], ['-1', `${label} must be a number of ${min} or more.`]],
   blank: `${label} is required.`,
 });
 const optNum0 = (label: string): Row => ({ ok: '3.5', bad: [['abc', `${label} must be a number of 0 or more.`], ['-1', `${label} must be a number of 0 or more.`]] });
@@ -96,6 +104,12 @@ const ROWS: Record<string, Row> = {
   'items.renameItem.name': req('Give the item a name people will recognise.'),
   'items.renameItem.code': req('Give the item a code.'),
   'items.changeItemUnit.baseUnit': req('Choose the unit this item is measured in: pcs, kg, g, ltr, ml or roll.'),
+  // T-638: three figures apply only `when` the pricing rule names them, so each row hands over the rule that switches it on.
+  'items.setItemPricing.pricingMode': req('Choose how the price to stores is worked out.'),
+  'items.setItemPricing.fixedAmount': { ...numMin('The fixed price', '0.01'), given: { pricingMode: 'fixed' } },
+  'items.setItemPricing.fixedMarkupAmount': { ...num0('The markup amount'), given: { pricingMode: 'fixed_markup' } },
+  'items.setItemPricing.markupPercent': { ...num0('The markup percent'), given: { pricingMode: 'percent_markup' } },
+  'items.setItemPricing.marginAlertThresholdPct': optNum0('The margin alert'),
   // ---- commissary
   'commissary.upsertCommissaryLink.branchStoreId': req('Choose the branch to link.'),
   // T-589 B8: the empty-state link form names the commissary too.
@@ -185,10 +199,10 @@ const ALL_SETS = Object.values(FILES).flatMap(setsOf);
 const keyOf = (set: FieldRuleSetLike, r: FieldRule) => `${set.form}.${r.name}`;
 const ALL_RULES = ALL_SETS.flatMap((set) => rulesOf(set).map((r) => ({ set, rule: r, key: keyOf(set, r) })));
 
-function goodInput(set: FieldRuleSetLike): Record<string, string> {
+function goodInput(set: FieldRuleSetLike, given: Record<string, string> = {}): Record<string, string> {
   const out: Record<string, string> = {};
   for (const r of rulesOf(set)) out[r.name] = ROWS[keyOf(set, r)]?.ok ?? '';
-  return out;
+  return { ...out, ...given };
 }
 /** A short value ("0", "-1") can sit inside a sentence by accident; only a value of 3+ characters can be an echo. */
 const echoes = (text: string, typed: string) => typed.trim().length >= 3 && text.includes(typed);
@@ -224,7 +238,7 @@ describe('T-440 S5 stock and menu: client rule === server refusal, exact sentenc
         const want = row.stored === undefined ? row.ok : row.stored;
         expect(checkField(r, row.ok)).toEqual({ ok: true, value: want });
         expect(checkField(r, `  ${row.ok} `)).toEqual({ ok: true, value: want });
-        expect(assertFieldRules(set, goodInput(set))[r.name]).toBe(want);
+        expect(assertFieldRules(set, goodInput(set, row.given))[r.name]).toBe(want);
       });
 
       for (const [value, sentence] of row.bad) {
@@ -235,7 +249,7 @@ describe('T-440 S5 stock and menu: client rule === server refusal, exact sentenc
           expect(c.requirement).toBe(sentence);
           let thrown: unknown;
           try {
-            assertFieldRules(set, { ...goodInput(set), [r.name]: value });
+            assertFieldRules(set, { ...goodInput(set, row.given), [r.name]: value });
           } catch (e) {
             thrown = e;
           }
@@ -267,7 +281,7 @@ describe('T-440 S5 stock and menu: client rule === server refusal, exact sentenc
             expect(c.progress).toBe('Required');
             let thrown: unknown;
             try {
-              assertFieldRules(set, { ...goodInput(set), [r.name]: blank });
+              assertFieldRules(set, { ...goodInput(set, row.given), [r.name]: blank });
             } catch (e) {
               thrown = e;
             }

@@ -25,7 +25,7 @@ async function world(): Promise<Fx> {
 const send = (f: Fx, events: Ev[]) => applyPosEvents({ pairing: { pairingId: f.pairingId, orgId: f.orgId, storeId: f.storeId }, events }, RATES);
 const statuses = (r: Awaited<ReturnType<typeof send>>) => r.results.map((x) => (x.status === 'applied' || x.status === 'duplicate' ? x.status : `${x.status}: ${x.error}`));
 
-/** T-634 (0282): a store charge row is the store's switch for an org charge option; the helper makes the option too. */
+/** T-634 (0287): a store charge row is the store's switch for an org charge option; the helper makes the option too. */
 async function preset(f: Fx, name: string, amount: string, perUnit: boolean, status: 'active' | 'retired' = 'active') {
   return chargePresetRow(sql as never, { orgId: f.orgId, storeId: f.storeId, name, amount, perUnit, status, createdBy: f.adminId });
 }

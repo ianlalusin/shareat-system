@@ -14,14 +14,16 @@
  * `manage_store_settings` at the store first and own every rule and refusal sentence. Both are safe to repeat (same value: nothing written; already retired:
  * nothing written), so they carry no request key.
  *
+ * T-633: `addTablesAction` and `retireTableAction` (the Tables section) are the same, over `addPosStands` / `retirePosStand`.
+ *
  * T-634: the charges are one org list. `createChargeOptionAction`, `updateChargeOptionAction` and `setChargeOptionStatusAction` (the "Charges (all stores)"
  * section, `manage_menu` org) and `setStoreChargeAction` (a store's switches, `manage_store_settings` at the store) replace T-627's per-store save and retire.
  */
 import { revalidatePath } from 'next/cache';
 import { posTerminalLinksRepo, refuse } from '@shareat/db';
 import { authorize, resetApprovalPinCap } from '@shareat/auth';
-import { assertFieldRules, createChargeOption, setChargeOptionStatus, setStoreCharge, updateChargeOption, createTerminal, linkTerminal, provisionPosTerminalLink, retirePosDiscountPreset, revokePosTerminalLink, setTerminalPrinter, upsertPosDiscountPreset } from '@shareat/domain';
-import { POS_CHARGE_AMOUNT_RULES, POS_CHARGE_RULES, POS_DISCOUNT_RULES, POS_TABLET_REGISTER_RULES, POS_TILL_ADD_RULES } from '@shareat/domain/field-rules';
+import { addPosStands, assertFieldRules, createChargeOption, setChargeOptionStatus, setStoreCharge, updateChargeOption, createTerminal, linkTerminal, provisionPosTerminalLink, retirePosDiscountPreset, retirePosStand, revokePosTerminalLink, setTerminalPrinter, upsertPosDiscountPreset } from '@shareat/domain';
+import { POS_CHARGE_AMOUNT_RULES, POS_CHARGE_RULES, POS_DISCOUNT_RULES, POS_TABLET_REGISTER_RULES, POS_TABLE_ADD_RULES, POS_TILL_ADD_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '../../../lib/flash';
@@ -30,7 +32,7 @@ import { retypeMatches } from '@/lib/retype';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { keepTyping } from '../../../lib/keep-typing';
 import { CHARGE_OPTION_EDIT } from './typed-forms';
-import { deviceTail, normaliseDeviceId, revokeConfirmName } from './lib';
+import { addTablesSentence, deviceTail, normaliseDeviceId, revokeConfirmName } from './lib';
 
 const RETURN_TO = '/admin/pos-tablets';
 /** T-546: the Tills section also lives on the manager's page; the form says which page to come back to, and only these two are believed. */
@@ -272,6 +274,42 @@ export async function setStoreChargeAction(fd: FormData): Promise<void> {
       r.outcome === 'unchanged'
         ? `${r.name} was already ${on ? 'on' : 'off'} here. Nothing changed.`
         : `${r.name} is ${on ? 'on' : 'off'} at this store. The tablet shows the change after its next refresh.`;
+  } catch (err) {
+    return await redirectWithFlash(RETURN_TO, { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath(RETURN_TO);
+  return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok });
+}
+
+/**
+ * T-633: add one table number or a range ("1-20") at the store. Authorize first, then the form's rule; `addPosStands` authorizes again, parses, and adds every
+ * number in this ONE transaction (a refusal adds none). Safe to repeat: a number already there is counted, not added twice; a retired one stays retired.
+ */
+export async function addTablesAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(RETURN_TO);
+  const storeId = str(fd, 'storeId');
+  let ok: string;
+  try {
+    if (!UUID.test(storeId)) throw refuse(`addTablesAction: store ${storeId} is not an id`, 'Pick a store.');
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_store_settings', { storeId }));
+    const checked = assertFieldRules(POS_TABLE_ADD_RULES, fd);
+    const result = await withOrgPrincipal(actor.orgId, (tx) => addPosStands(tx, actor, { storeId, numbers: checked.numbers }));
+    ok = addTablesSentence(result);
+  } catch (err) {
+    return await redirectWithFlash(RETURN_TO, { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath(RETURN_TO);
+  return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok });
+}
+
+/** T-633: retire a table number. Refused while that table has an open bill. Nothing is deleted and the number is never reused. */
+export async function retireTableAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(RETURN_TO);
+  const storeId = str(fd, 'storeId');
+  let ok: string;
+  try {
+    const { outcome, number } = await withOrgPrincipal(actor.orgId, (tx) => retirePosStand(tx, actor, { storeId, standId: str(fd, 'standId') }));
+    ok = outcome === 'retired' ? `Table ${number} retired. The tablet stops showing it after its next refresh. The number is not reused.` : `Table ${number} was already retired. Nothing changed.`;
   } catch (err) {
     return await redirectWithFlash(RETURN_TO, { store: storeId }, { error: errorMessage(err) });
   }

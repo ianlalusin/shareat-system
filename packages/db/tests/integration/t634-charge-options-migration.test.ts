@@ -1,5 +1,5 @@
 /**
- * T-634 - migration 0282: the org's charge master list and the backfill of every existing store charge. `docs/tasks/634-central-charges.md`.
+ * T-634 - migration 0287: the org's charge master list and the backfill of every existing store charge. `docs/tasks/634-central-charges.md`.
  *
  * As t629: the backfill is the DO block INSIDE the migration file; this test cuts that block out of the file and runs it on realistic old-shape rows (store charges
  * with no option), inside a transaction that is always rolled back, so what is proven is the migration's own text, not a copy of it. Raw SQL on the migration role.
@@ -26,7 +26,7 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-const FILE = readFileSync(resolve(__dirname, '..', '..', 'migrations', '0282_t634_charge_options.sql'), 'utf8');
+const FILE = readFileSync(resolve(__dirname, '..', '..', 'migrations', '0287_t634_charge_options.sql'), 'utf8');
 const BACKFILL = FILE.slice(FILE.indexOf('DO $do$'), FILE.indexOf('$do$;') + '$do$;'.length);
 
 let seq = 0;
@@ -34,7 +34,7 @@ const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 class Rollback extends Error {}
 type Tx = postgres.TransactionSql;
 
-/** Puts the database in its pre-0282 shape inside a transaction (no options, store charges without one, no mirror trigger), runs `fn`, and always rolls back. */
+/** Puts the database in its pre-0287 shape inside a transaction (no options, store charges without one, no mirror trigger), runs `fn`, and always rolls back. */
 async function inOldWorld<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
   let out: T | undefined;
   try {
@@ -83,7 +83,7 @@ const rowsOf = (tx: Tx, orgId: string) =>
     select id, store_id, charge_option_id, name, amount::text, per_unit, status from pos_charge_presets where org_id = ${orgId} order by created_at`;
 const errorOf = async (p: Promise<unknown>) => ((await p.then(() => null, (e: unknown) => e)) as { message?: string } | null)?.message ?? 'no error';
 
-describe('0282 backfill', () => {
+describe('0287 backfill', () => {
   it('groups the same charge across stores by its normalised name into ONE option; every store row points at it and takes its spelling', async () => {
     const out = await inOldWorld(async (tx) => {
       const w = await world(tx, 't634b1');
