@@ -43,7 +43,8 @@ const seatLines = async (f: Fx, picks: (string[] | undefined)[]) => {
   await asOrg(f.orgId, (tx) =>
     openStand(tx, f.counter, {
       storeId: f.storeId, pairingId: f.pairingId, sessionId, mode: 'dine_in', standId: stand.id, headsCashier: 2, openedAtDevice: nowIso(),
-      lines: picks.map((optionValueIds) => ({ lineId: uuid(), menuItemId: f.menu.unli.itemId, variantId: f.menu.unli.variantId, qty: 2, addedAtDevice: nowIso(), ...(optionValueIds ? { optionValueIds } : {}) })),
+      // Each line is stamped one second after the last: the table list orders lines by that stamp, and equal stamps fall back to the random line id (order would flip run to run).
+      lines: picks.map((optionValueIds, i) => ({ lineId: uuid(), menuItemId: f.menu.unli.itemId, variantId: f.menu.unli.variantId, qty: 2, addedAtDevice: new Date(Date.now() + i * 1000).toISOString(), ...(optionValueIds ? { optionValueIds } : {}) })),
     }),
   );
   return sessionId;
