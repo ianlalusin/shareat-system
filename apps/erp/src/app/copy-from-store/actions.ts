@@ -18,9 +18,9 @@ import { copyStoreChoices } from './lib';
 /** The kinds of copy, for the browser window (a type only: the client file must not import the domain barrel). */
 export type CopyKindName = CopyKind;
 
-const PATH: Record<CopyKind, string> = { hours: '/menu/hours', prices: '/menu/prices', kitchen: '/kitchen', presets: '/admin/pos-tablets', charges: '/admin/pos-tablets' };
-const CAPABILITY: Record<CopyKind, Capability> = { hours: 'manage_store_settings', prices: 'set_menu_price', kitchen: 'manage_store_settings', presets: 'manage_store_settings', charges: 'manage_store_settings' };
-const isKind = (v: unknown): v is CopyKind => v === 'hours' || v === 'prices' || v === 'kitchen' || v === 'presets' || v === 'charges';
+const PATH: Record<CopyKind, string> = { hours: '/menu/hours', prices: '/menu/prices', kitchen: '/kitchen', presets: '/admin/pos-tablets' };
+const CAPABILITY: Record<CopyKind, Capability> = { hours: 'manage_store_settings', prices: 'set_menu_price', kitchen: 'manage_store_settings', presets: 'manage_store_settings' };
+const isKind = (v: unknown): v is CopyKind => v === 'hours' || v === 'prices' || v === 'kitchen' || v === 'presets';
 
 export type CopyPreviewResult =
   | { storeId: string; ok: true; name: string; counts: CopyCounts; lines: CopyLine[] }

@@ -16,19 +16,22 @@
  *
  * T-633: `addTablesAction` and `retireTableAction` (the Tables section) are the same, over `addPosStands` / `retirePosStand`.
  *
- * T-627: `saveChargeAction` and `retireChargeAction` (the Charges section) are the same, over `upsertPosChargePreset` / `retirePosChargePreset`.
+ * T-634: the charges are one org list. `createChargeOptionAction`, `updateChargeOptionAction` and `setChargeOptionStatusAction` (the "Charges (all stores)"
+ * section, `manage_menu` org) and `setStoreChargeAction` (a store's switches, `manage_store_settings` at the store) replace T-627's per-store save and retire.
  */
 import { revalidatePath } from 'next/cache';
 import { posTerminalLinksRepo, refuse } from '@shareat/db';
 import { authorize, resetApprovalPinCap } from '@shareat/auth';
-import { addPosStands, assertFieldRules, createTerminal, linkTerminal, provisionPosTerminalLink, retirePosChargePreset, retirePosStand, retirePosDiscountPreset, revokePosTerminalLink, setTerminalPrinter, upsertPosChargePreset, upsertPosDiscountPreset } from '@shareat/domain';
-import { POS_CHARGE_RULES, POS_DISCOUNT_RULES, POS_TABLET_REGISTER_RULES, POS_TABLE_ADD_RULES, POS_TILL_ADD_RULES } from '@shareat/domain/field-rules';
+import { addPosStands, assertFieldRules, createChargeOption, setChargeOptionStatus, setStoreCharge, updateChargeOption, createTerminal, linkTerminal, provisionPosTerminalLink, retirePosDiscountPreset, retirePosStand, revokePosTerminalLink, setTerminalPrinter, upsertPosDiscountPreset } from '@shareat/domain';
+import { POS_CHARGE_AMOUNT_RULES, POS_CHARGE_RULES, POS_DISCOUNT_RULES, POS_TABLET_REGISTER_RULES, POS_TABLE_ADD_RULES, POS_TILL_ADD_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '../../../lib/flash';
 import { retypeRefusalError } from '@/lib/destructive';
 import { retypeMatches } from '@/lib/retype';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { keepTyping } from '../../../lib/keep-typing';
+import { CHARGE_OPTION_EDIT } from './typed-forms';
 import { addTablesSentence, deviceTail, normaliseDeviceId, revokeConfirmName } from './lib';
 
 const RETURN_TO = '/admin/pos-tablets';
@@ -196,39 +199,86 @@ export async function retirePresetAction(fd: FormData): Promise<void> {
   return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok: 'Discount retired. Cashiers stop seeing it. Past sales keep it.' });
 }
 
-/** T-627: add a named charge, or change the amount / per-unit of the active one with that name (the name is the key; the domain decides which). */
-export async function saveChargeAction(fd: FormData): Promise<void> {
+// ---- T-634: the org's master list of charges ("Charges (all stores)") and each store's switch -------------------------------
+// `createChargeOption` / `updateChargeOption` / `setChargeOptionStatus` authorize `manage_menu` (org) first; `setStoreCharge` authorizes `manage_store_settings` at
+// the store first. Each owns every rule, refusal sentence and audit row; these read the form, call them and show the sentence. All are safe to repeat.
+
+/** T-634: add a charge to the org's list (one name, amount and per unit for every store). It starts switched off everywhere. */
+export async function createChargeOptionAction(fd: FormData): Promise<void> {
   const actor = await requireActor(RETURN_TO);
   const storeId = str(fd, 'storeId');
-  const name = str(fd, 'name').trim();
   let ok: string;
   try {
-    // Authorize first, then the form's own rules (T-440 S9); the domain call decides again and owns every refusal sentence and audit row.
-    if (!UUID.test(storeId)) throw refuse(`saveChargeAction: store ${storeId} is not an id`, 'Pick a store.');
-    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_store_settings', { storeId }));
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_menu', {}));
     const checked = assertFieldRules(POS_CHARGE_RULES, fd);
-    const { outcome } = await withOrgPrincipal(actor.orgId, (tx) =>
-      upsertPosChargePreset(tx, actor, { storeId, name: checked.name, amount: checked.amount, perUnit: str(fd, 'perUnit') === 'on' }, 'web'),
+    await withOrgPrincipal(actor.orgId, (tx) => createChargeOption(tx, actor, { name: checked.name, amount: checked.amount, perUnit: str(fd, 'perUnit') === 'on' }));
+    ok = `Added the charge ${checked.name} for all stores. Switch it on at each store that uses it.`;
+  } catch (err) {
+    return await redirectWithFlash(RETURN_TO, storeId ? { store: storeId } : {}, { error: errorMessage(err) });
+  }
+  revalidatePath(RETURN_TO);
+  return await redirectWithFlash(RETURN_TO, storeId ? { store: storeId } : {}, { ok });
+}
+
+/** T-634: change a charge's amount (and per unit) for every store from now on. Charges already on a table keep the amount they were added at. */
+export async function updateChargeOptionAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(RETURN_TO);
+  const storeId = str(fd, 'storeId');
+  let ok: string;
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_menu', {}));
+    const checked = assertFieldRules(POS_CHARGE_AMOUNT_RULES, fd);
+    const r = await withOrgPrincipal(actor.orgId, (tx) =>
+      updateChargeOption(tx, actor, { chargeOptionId: str(fd, 'chargeOptionId'), amount: checked.amount, perUnit: str(fd, 'perUnit') === 'on' }),
     );
-    ok = outcome === 'created' ? `Added the charge ${name}. Cashiers see it after the tablet's next refresh.` : outcome === 'updated' ? `Changed ${name}. Cashiers see it after the tablet's next refresh.` : `${name} already has that amount. Nothing changed.`;
+    ok =
+      r.outcome === 'unchanged'
+        ? 'That charge already has that amount. Nothing changed.'
+        : `Charge changed for all stores (${r.storesOn} ${r.storesOn === 1 ? 'store has' : 'stores have'} it on). Charges already on a table keep their amount.`;
+  } catch (err) {
+    // T-389: a refused save reopens the Edit with what was typed
+    return await redirectWithFlash(RETURN_TO, storeId ? { store: storeId } : {}, {
+      error: errorMessage(err),
+      typed: keepTyping(fd, CHARGE_OPTION_EDIT, str(fd, 'chargeOptionId'), { actorId: actor.personId, stale: false }),
+    });
+  }
+  revalidatePath(RETURN_TO);
+  return await redirectWithFlash(RETURN_TO, storeId ? { store: storeId } : {}, { ok });
+}
+
+/** T-634: retire a charge for all stores (refused while any store has it on), or bring it back. */
+export async function setChargeOptionStatusAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(RETURN_TO);
+  const storeId = str(fd, 'storeId');
+  const status = str(fd, 'status');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => setChargeOptionStatus(tx, actor, { chargeOptionId: str(fd, 'chargeOptionId'), status }));
+  } catch (err) {
+    return await redirectWithFlash(RETURN_TO, storeId ? { store: storeId } : {}, { error: errorMessage(err) });
+  }
+  revalidatePath(RETURN_TO);
+  return await redirectWithFlash(RETURN_TO, storeId ? { store: storeId } : {}, {
+    ok: status === 'retired' ? 'Charge retired for all stores. Past bills keep it.' : 'Charge brought back. Switch it on at each store that uses it.',
+  });
+}
+
+/** T-634: switch one charge on or off at this store. Off keeps the row (past bills point at it); the tablet stops showing it after its next refresh. */
+export async function setStoreChargeAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(RETURN_TO);
+  const storeId = str(fd, 'storeId');
+  const on = str(fd, 'on') === '1';
+  let ok: string;
+  try {
+    const r = await withOrgPrincipal(actor.orgId, (tx) => setStoreCharge(tx, actor, { storeId, chargeOptionId: str(fd, 'chargeOptionId'), on }));
+    ok =
+      r.outcome === 'unchanged'
+        ? `${r.name} was already ${on ? 'on' : 'off'} here. Nothing changed.`
+        : `${r.name} is ${on ? 'on' : 'off'} at this store. The tablet shows the change after its next refresh.`;
   } catch (err) {
     return await redirectWithFlash(RETURN_TO, { store: storeId }, { error: errorMessage(err) });
   }
   revalidatePath(RETURN_TO);
   return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok });
-}
-
-/** T-627: retire a named charge. Nothing is deleted: past sales keep it; cashiers stop seeing it. */
-export async function retireChargeAction(fd: FormData): Promise<void> {
-  const actor = await requireActor(RETURN_TO);
-  const storeId = str(fd, 'storeId');
-  try {
-    await withOrgPrincipal(actor.orgId, (tx) => retirePosChargePreset(tx, actor, { storeId, presetId: str(fd, 'presetId') }));
-  } catch (err) {
-    return await redirectWithFlash(RETURN_TO, { store: storeId }, { error: errorMessage(err) });
-  }
-  revalidatePath(RETURN_TO);
-  return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok: 'Charge retired. Cashiers stop seeing it. Past sales keep it.' });
 }
 
 /**

@@ -22,13 +22,14 @@ import { verifySalesDay } from '@shareat/domain';
 import { sendV1Bridge } from '../../src/pos';
 import { D1, asOrg, close, closeAll, fakeWriter, journalLines, manila, pinOf, reading, salesDaysOf, sell, sql, world, type World } from './_fixtures/t531-day-close';
 
+import { chargePresetRow } from './_fixtures/t634-charges';
 afterAll(closeAll);
 
 const AT = manila(D1, '22:30');
 
 async function presets(w: World) {
   const mk = async (name: string, amount: string, perUnit: boolean) =>
-    (await sql<{ id: string }[]>`insert into pos_charge_presets (org_id, store_id, name, amount, per_unit, created_by) values (${w.orgId}, ${w.storeId}, ${name}, ${amount}, ${perUnit}, ${w.adminId}) returning id`)[0]!.id;
+    chargePresetRow(sql as never, { orgId: w.orgId, storeId: w.storeId, name, amount, perUnit, createdBy: w.adminId }); // T-634: through the org option
   return { leftover: await mk('Leftover', '100.00', true), griller: await mk('Extra griller', '150.00', false) };
 }
 
