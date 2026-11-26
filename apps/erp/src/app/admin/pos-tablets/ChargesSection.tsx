@@ -1,94 +1,80 @@
-import { POS_CHARGE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { peso } from '@/lib/format';
-import { CheckedForm } from '@/components/forms';
-import { Button, Checkbox, ConfirmDestructive, DialogActions, Field, FormGrid, FormModal, Input } from '@/components/ui';
-import { CopyFromStoreDialog } from '../../copy-from-store/CopyFromStoreDialog';
-import type { CopyStoreChoice } from '../../copy-from-store/lib';
-import { retireChargeAction, saveChargeAction } from './actions';
-import { chargeText, type ChargePresetView } from './lib';
+import { Button, ConfirmDestructive, Table, Td, Th } from '@/components/ui';
+import { setStoreChargeAction } from './actions';
+import { chargeText, type ChargeOptionView } from './lib';
 
 /**
- * T-627 (docs/tasks/627-pos-charges.md): the store's named charges, the ones a cashier adds to a bill on the till (Leftover, Extra griller). Add and Change are the same
- * window (Change locks the name: the name is the key, so a rename is Retire then Add). Retire is a light confirm. A charge is added AFTER discounts and VAT and stays
- * out of the VAT amount (as in v1). `canManage` (`manage_store_settings` at the store) only decides whether the controls are drawn; the domain gates every write again.
+ * T-634 (docs/tasks/634-central-charges.md): the store's Charges are now on/off switches over the org's one list ("Charges (all stores)" above); the name and
+ * amount are the brand's, never set per store. The T-631 compact-table look: Charge / Amount / Status / the switch. On is one tap; Off asks once (cashiers stop
+ * seeing it; past bills keep it). `canManage` (`manage_store_settings` at the store) only decides whether the switches are drawn; the domain gates every write again.
  */
-function ChargeForm({ storeId, preset }: { storeId: string; preset?: ChargePresetView }) {
-  return (
-    <CheckedForm rules={POS_CHARGE_RULES} action={saveChargeAction} className="space-y-3 text-sm">
-      <input type="hidden" name="storeId" value={storeId} />
-      <FormGrid layout="fields">
-        <Field label="Name (up to 40 letters)" width="name" rule={POS_CHARGE_RULES.name}>
-          <Input {...nativeAttrs(POS_CHARGE_RULES.name)} defaultValue={preset?.name ?? ''} readOnly={!!preset} autoComplete="off" placeholder="Leftover" />
-        </Field>
-        <Field label="Amount in pesos" width="short" rule={POS_CHARGE_RULES.amount}>
-          <Input {...nativeAttrs(POS_CHARGE_RULES.amount)} defaultValue={preset?.amount ?? ''} autoComplete="off" />
-        </Field>
-      </FormGrid>
-      <Checkbox name="perUnit" defaultChecked={preset?.perUnit ?? false} label="The cashier enters how many (for example per 100 g or per tray)" />
-      <p className="text-xs text-muted">Leave it unticked for a charge taken once per bill.</p>
-      {preset && <p className="text-xs text-muted">The name stays. To rename a charge, retire it and add a new one.</p>}
-      <DialogActions>
-        <Button type="submit" variant="primary">
-          Save
-        </Button>
-      </DialogActions>
-    </CheckedForm>
-  );
-}
-
-export function ChargesSection({
-  store,
-  presets,
-  canManage,
-  copyStores,
-}: {
-  store: { id: string; name: string };
-  presets: ChargePresetView[];
-  canManage: boolean;
-  copyStores: CopyStoreChoice[] | null;
-}) {
+export function ChargesSection({ store, rows, canManage }: { store: { id: string; name: string }; rows: { option: ChargeOptionView; on: boolean }[]; canManage: boolean }) {
+  const onCount = rows.filter((r) => r.on).length;
   return (
     <section data-charges className="space-y-3 rounded-lg border border-surface-border p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-medium">Charges</h2>
-        {canManage && (
-          <div className="flex flex-wrap items-center gap-2">
-            {copyStores && <CopyFromStoreDialog kind="charges" currentStoreId={store.id} stores={copyStores} />}
-            <FormModal trigger="+ Add charge" title="Add a charge" size="md">
-              <ChargeForm storeId={store.id} />
-            </FormModal>
-          </div>
-        )}
+        <h2 className="font-medium">
+          Charges at {store.name}{' '}
+          <span className="ml-1 inline-flex rounded-full bg-canvas px-2 py-0.5 text-xs font-normal text-muted">
+            {onCount} of {rows.length} on
+          </span>
+        </h2>
       </div>
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        The extra charges a cashier at {store.name} can add to a bill (for example Leftover or Extra griller). A charge is added after discounts and VAT and is not part of the VAT amount.
-        Any cashier can add or remove one. A change reaches the tablet after its next refresh. To rename one, retire it and add it again.
+        Which of the brand&apos;s charges a cashier at {store.name} can add to a bill. Any cashier can add or remove one on a bill. A change reaches the tablet after its next
+        refresh. The names and amounts are set once for all stores, in the list above.
       </p>
-      {presets.length === 0 ? (
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">No charges at {store.name} yet.{canManage ? ' Add one, or copy them from another store.' : ''}</p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">No charges yet. They are added once for all stores, in the list above.</p>
       ) : (
-        <ul className="divide-y divide-surface-border text-sm">
-          {presets.map((p) => (
-            <li key={p.id} data-charge className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-              <div className="min-w-0">
-                <span className="font-medium text-ink">{p.name}</span>
-                <span className="ml-2 tabular-nums text-muted">{chargeText(p, peso)}</span>
-              </div>
-              {canManage && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <FormModal trigger="Change" triggerIcon={null} triggerVariant="secondary" triggerLabel={`Change ${p.name}`} title={`Change ${p.name}`} size="md">
-                    <ChargeForm storeId={store.id} preset={p} />
-                  </FormModal>
-                  <form action={retireChargeAction}>
-                    <input type="hidden" name="storeId" value={store.id} />
-                    <input type="hidden" name="presetId" value={p.id} />
-                    <ConfirmDestructive tier="confirm" label="Retire" quiet consequence={`Retire ${p.name}? Cashiers stop seeing it at once. Past sales keep it.`} />
-                  </form>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+        <Table label={`Charges at ${store.name}`} card={{ title: 'Charge', subtitle: 'Amount', keys: ['Status'] }}>
+          <thead>
+            <tr>
+              <Th>Charge</Th>
+              <Th>Amount</Th>
+              <Th>Status</Th>
+              <Th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ option, on }) => (
+              <tr key={option.id} data-charge>
+                <Td className="font-medium">{option.name}</Td>
+                <Td className="tabular-nums">{chargeText(option, peso)}</Td>
+                <Td>
+                  {on ? (
+                    <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">On</span>
+                  ) : (
+                    <span className="text-muted">Off</span>
+                  )}
+                </Td>
+                <Td className="text-right whitespace-nowrap">
+                  {canManage && (
+                    <div data-card-ignore className="flex items-center justify-end">
+                      <form action={setStoreChargeAction}>
+                        <input type="hidden" name="storeId" value={store.id} />
+                        <input type="hidden" name="chargeOptionId" value={option.id} />
+                        <input type="hidden" name="on" value={on ? '0' : '1'} />
+                        {on ? (
+                          <ConfirmDestructive
+                            tier="confirm"
+                            quiet
+                            label="Off"
+                            consequence={`Switch ${option.name} off at ${store.name}? Cashiers stop seeing it after the tablet's next refresh. Past bills keep it.`}
+                          />
+                        ) : (
+                          <Button type="submit" variant="secondary" aria-label={`Switch ${option.name} on at ${store.name}`}>
+                            On
+                          </Button>
+                        )}
+                      </form>
+                    </div>
+                  )}
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
       )}
     </section>
   );

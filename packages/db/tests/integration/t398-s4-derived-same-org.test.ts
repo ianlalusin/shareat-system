@@ -95,7 +95,8 @@ const REGISTRY_BEFORE_S4 = 100;
 // T-627 0275 (the store charges): +3 (table_session_charges_guard, pos_sales_receipt_charges_append_only, pos_sales_receipt_charges_append_guard history guards): 91 -> 94; registry size 246 -> 249.
 // T-628 0276 (reservations and deposits): +3 (pos_reservations_guard, pos_reservation_deposits_frozen, pos_reservation_deposits_guard history guards): 94 -> 97; registry size 249 -> 252.
 // T-629 0277 (payment options): +3 (tenders_mirror_option, payment_options_guard, payment_options_rename_tenders: origin derivation / validator): 97 -> 100; registry size 252 -> 255.
-const REGISTRY_ADDED_AFTER_S4 = 100;
+// T-634 0287 (central charges): +3 (pos_charge_presets_mirror_option, charge_options_guard, charge_options_mirror_presets: origin derivation / validator): 100 -> 103; registry size 255 -> 258.
+const REGISTRY_ADDED_AFTER_S4 = 103;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;

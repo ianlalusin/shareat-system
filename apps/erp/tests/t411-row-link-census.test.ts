@@ -85,6 +85,8 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/trade/orders/[id]/print/page.tsx', // T-433 S2: the printable delivery receipt, a print page with no row destination
   'app/page.tsx', // T-401 S6: the usage check scorecard on the dashboard, one row per store, no row destination
   'app/admin/access-defaults/grid.tsx',
+  'app/admin/pos-tablets/ChargeOptionsSection.tsx', // T-634: the brand's charge list; each row's own Change and Retire controls, no row destination
+  'app/admin/pos-tablets/ChargesSection.tsx', // T-634: the store's on/off switch per charge, no row destination
   'app/attendance/lane/page.tsx',
   'app/attendance/terminals/page.tsx',
   'app/franchise/access-log/page.tsx', // T-398 S6d: the owner's log, no per-row record page

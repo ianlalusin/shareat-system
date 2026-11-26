@@ -398,7 +398,47 @@ export const tableSessionLineDiscounts = pgTable(
 );
 
 // ---------------------------------------------------------------------------------------------------------------------
+// T-634 (migration 0287) charge_options - the ORG's one master list of charges (leftover, an extra griller...). keep.
+// ---------------------------------------------------------------------------------------------------------------------
+export const CHARGE_OPTION_STATUSES = ['active', 'retired'] as const;
+export type ChargeOptionStatus = (typeof CHARGE_OPTION_STATUSES)[number];
+
+/**
+ * T-634 (0287): one brand-wide name, amount and per-unit per charge. A store switches a charge on by holding an ACTIVE `pos_charge_presets` row for it; the
+ * option owns the name, amount and per_unit (the preset's own columns are a mirror the `pos_charge_presets_mirror_option` trigger keeps equal).
+ * `docs/tasks/634-central-charges.md`.
+ */
+export const chargeOptions = pgTable(
+  'charge_options',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    /** Pesos, for one unit (or once per bill when per_unit is false). */
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    perUnit: boolean('per_unit').notNull().default(false),
+    sortOrder: integer('sort_order').notNull().default(0),
+    status: text('status', { enum: CHARGE_OPTION_STATUSES }).notNull().default('active'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    // The target of pos_charge_presets' same-org composite FK.
+    unique('charge_options_org_id_id_unique').on(t.orgId, t.id),
+    check('charge_options_status_check', sql`${t.status} in ('active','retired')`),
+    check('charge_options_name_check', sql`char_length(btrim(${t.name})) between 1 and 40`),
+    check('charge_options_amount_check', sql`${t.amount} > 0 and ${t.amount} <= 100000`),
+    check('charge_options_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    // NOTE: charge_options_org_name_unique UNIQUE (org_id, the a-z0-9 key of name) (expression index, as payment_options) is hand-added in migration 0287.
+    // NOTE: the charge_options_guard (org and name frozen; retire refused while any store has it on) and charge_options_mirror_presets triggers are hand-added in 0287.
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------------------------------
 // T-627 (migration 0275) pos_charge_presets - a store's named charges (leftover, an extra griller...). keep.
+// T-634 (0287): the store's SWITCH for a charge option (status active = on); name, amount and per_unit mirror the option.
 // ---------------------------------------------------------------------------------------------------------------------
 export const posChargePresets = pgTable(
   'pos_charge_presets',
@@ -406,11 +446,15 @@ export const posChargePresets = pgTable(
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     orgId: orgIdCol(),
     storeId: storeIdCol(),
+    /** T-634 (0287): the master charge this row switches on at the store. NOT NULL, same org by the composite FK, one ACTIVE row per (store, option). */
+    chargeOptionId: uuid('charge_option_id').notNull(),
+    /** A MIRROR of the option's name (the `pos_charge_presets_mirror_option` trigger, 0287): the option is the one source, readers keep reading this. */
     name: text('name').notNull(),
-    /** Pesos, for one unit (or once per bill when per_unit is false). */
+    /** Pesos, for one unit (or once per bill when per_unit is false). A mirror of the option's amount. */
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
-    /** True: the cashier enters a quantity (leftover per 100 g, per tray). False: once per bill. */
+    /** True: the cashier enters a quantity (leftover per 100 g, per tray). False: once per bill. A mirror of the option's. */
     perUnit: boolean('per_unit').notNull().default(false),
+    /** T-634: active = switched on at this store. */
     status: text('status', { enum: POS_PRESET_STATUSES }).notNull().default('active'),
     createdBy: personCol('created_by').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -429,6 +473,13 @@ export const posChargePresets = pgTable(
     check('pos_charge_presets_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
     foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_charge_presets_store_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.orgId, t.createdBy], foreignColumns: [persons.orgId, persons.id], name: 'pos_charge_presets_created_by_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.chargeOptionId], foreignColumns: [chargeOptions.orgId, chargeOptions.id], name: 'pos_charge_presets_charge_option_same_org_fk' }).onDelete('restrict'),
+    // T-634 (0287): one ACTIVE row per (store, option); older retired rows of the same option are history past bills point at (not a full UNIQUE on purpose).
+    uniqueIndex('pos_charge_presets_store_option_active_key')
+      .on(t.storeId, t.chargeOptionId)
+      .where(sql`${t.status} = 'active'`),
+    index('pos_charge_presets_option_idx').on(t.chargeOptionId),
+    // NOTE: the pos_charge_presets_mirror_option trigger (name, amount, per_unit come from the option; the option cannot change; a retired option cannot be switched on) is hand-added in 0287.
   ],
 );
 
@@ -1208,6 +1259,7 @@ export type PosDiscountPresetRow = typeof posDiscountPresets.$inferSelect;
 export type PosReservationRow = typeof posReservations.$inferSelect;
 export type PosReservationDepositRow = typeof posReservationDeposits.$inferSelect;
 export type PosChargePresetRow = typeof posChargePresets.$inferSelect;
+export type ChargeOptionRow = typeof chargeOptions.$inferSelect;
 export type TableSessionChargeRow = typeof tableSessionCharges.$inferSelect;
 export type PosSalesReceiptChargeRow = typeof posSalesReceiptCharges.$inferSelect;
 export type TableSessionLineDiscountRow = typeof tableSessionLineDiscounts.$inferSelect;

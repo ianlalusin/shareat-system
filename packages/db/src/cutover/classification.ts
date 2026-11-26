@@ -1701,6 +1701,10 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'keep',
     reason: 'The org’s master list of payment options (T-629: Cash, GCash, Maya, QRPH, Credit card, Debit card) is standing master data that every store’s tenders point at, kept with them; nothing booked lives only here.',
   },
+  charge_options: {
+    class: 'keep',
+    reason: 'The org’s master list of charges (T-634: one brand-wide name, amount and per unit) is standing master data that every store’s charge switches (pos_charge_presets) point at, kept with them; a charge on a bill is a snapshot, so nothing booked lives only here.',
+  },
   pos_reservations: {
     class: 'purge',
     reason:
