@@ -24,6 +24,7 @@ import { assertActiveAccount, checkDraw } from '../money-accounts/overdraft';
 import { EXPENSE_FUNDING_ACCOUNTS } from '../expenses/routing';
 import {
   AGENCIES,
+  agenciesToSkip,
   computeStatutory,
   type Agency,
   type AgencyPrior,
@@ -179,8 +180,10 @@ export interface PayslipDraft {
   taxablePay: Money;
   /** Minimum-wage earner: the daily rate is at or under the store's minimum wage, so no withholding. */
   isMwe: boolean;
-  /** Agencies NOT deducted (employee AND employer share 0) because the person has no number on file. */
+  /** Agencies NOT deducted (employee AND employer share 0): no number on file, or unticked on the staff page (T-636). */
   skippedAgencies: Agency[];
+  /** T-636: the skipped agencies that were UNTICKED (a deliberate choice, not a warning). The preview shows "Not deducted (unticked): SSS". Not stored. */
+  untickedAgencies: Agency[];
   /** The rate rows used; null for a skipped agency. */
   sssRateId: string | null;
   philhealthRateId: string | null;
@@ -190,7 +193,7 @@ export interface PayslipDraft {
 export interface PayRunPreview {
   /** T-190. What is NOT yet confirmed (each names the agency, the withholding table or the minimum wage). A POST refuses while any is. */
   unconfirmedRates: string[];
-  /** T-190. Every person and agency with no number on file: that agency is not deducted for them. */
+  /** T-190. Every person and agency with no number on file: that agency is not deducted for them. T-636: an UNTICKED agency is not listed here (it is a choice). */
   missingGovernmentIds: { personId: string; personName: string; agency: Agency }[];
   slips: PayslipDraft[];
   /** T-635. Slice records that cannot be priced (no rate in force, a unit that is not kg or g, no job that day). Shown as warnings: such a record is skipped and stays unpaid, and never blocks the run. */
@@ -478,7 +481,7 @@ async function buildPreview(
 
 type StatutoryDraftKeys =
   | 'sssEe' | 'philhealthEe' | 'pagibigEe' | 'withholding' | 'sssEr' | 'sssEc' | 'philhealthEr' | 'pagibigEr'
-  | 'taxablePay' | 'isMwe' | 'skippedAgencies' | 'sssRateId' | 'philhealthRateId' | 'pagibigRateId';
+  | 'taxablePay' | 'isMwe' | 'skippedAgencies' | 'untickedAgencies' | 'sssRateId' | 'philhealthRateId' | 'pagibigRateId';
 
 function emptyPrior(): AgencyPrior {
   return { base: ZERO, ee: ZERO, er: ZERO, ec: ZERO };
@@ -560,12 +563,9 @@ async function applyStatutory(
   for (const b of bases) grossOfPerson.set(b.personId, add(grossOfPerson.get(b.personId) ?? ZERO, b.grossPay));
   const agreedOfPerson = new Map<string, Money>();
   for (const b of bases) {
-    const gid = ids.get(b.personId);
-    const skipped: Agency[] = [];
-    if (!gid?.sssNo) skipped.push('sss');
-    if (!gid?.philhealthNo) skipped.push('philhealth');
-    if (!gid?.pagibigNo) skipped.push('pagibig');
-    for (const agency of skipped) missingGovernmentIds.push({ personId: b.personId, personName: b.personName, agency });
+    // T-636: an agency is skipped when it is unticked on the staff page OR its number is missing; only a MISSING number is a warning.
+    const { skipped, missing, unticked } = agenciesToSkip(ids.get(b.personId));
+    for (const agency of missing) missingGovernmentIds.push({ personId: b.personId, personName: b.personName, agency });
 
     const isMwe = b.dailyRate !== null && compare(b.dailyRate, minimum) <= 0;
     const prior = priorOf.get(b.personId)!;
@@ -616,6 +616,7 @@ async function applyStatutory(
       taxablePay: r.taxablePay,
       isMwe,
       skippedAgencies: skipped,
+      untickedAgencies: unticked,
       sssRateId: skipped.includes('sss') ? null : rates.sss.id,
       philhealthRateId: skipped.includes('philhealth') ? null : rates.philhealth.id,
       pagibigRateId: skipped.includes('pagibig') ? null : rates.pagibig.id,
@@ -788,6 +789,7 @@ export async function postPayRun(
           taxablePay: slip.taxablePay,
           isMwe: slip.isMwe,
           skippedAgencies: slip.skippedAgencies,
+          untickedAgencies: slip.untickedAgencies,
           sssRateId: slip.sssRateId,
           philhealthRateId: slip.philhealthRateId,
           pagibigRateId: slip.pagibigRateId,

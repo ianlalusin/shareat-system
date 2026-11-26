@@ -37,7 +37,7 @@ if (!isTestDatabaseUrl(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, transaction, APP_ROLE, RefusalError, type Tx } from '@shareat/db';
+import { closeDb, transaction, APP_ROLE, RefusalError, statutoryPaymentsRepo, type Tx } from '@shareat/db';
 import { agree } from './_fixtures/t519-agreements';
 import { fundAccount } from './_fixtures/fund-account';
 import { AuthorizationError, type Actor } from '@shareat/auth';
@@ -47,6 +47,7 @@ import {
   addWithholdingBracketSet,
   confirmStatutoryRate,
   setGovernmentIds,
+  setStatutoryDeductions,
   post13thMonthRun,
   postPayRun,
   previewPayRun,
@@ -941,5 +942,112 @@ describe('T-190 audit gap 6 - discarding an unconfirmed table', () => {
     const text = await refusalText(asOrg(f.orgId, (tx) => discardMinimumWage(tx, f.admin, { id: confirmed!.id })));
     expect(text, 'a confirmed minimum wage was discarded').not.toBeNull();
     expect(await sql`select 1 from minimum_wages where id = ${confirmed!.id}`).toHaveLength(1);
+  });
+});
+
+// =====================================================================================================================
+// T-636 (migration 0288): tick each government contribution on or off, per person. docs/tasks/636-statutory-toggles.md. CI runs these (no database on the
+// builder's PC). Mutants proven at unit level: packages/domain/tests/t636-statutory-toggles.test.ts.
+
+const untick = (f: Fixture, who: Actor, flags: { deductSss?: boolean; deductPhilhealth?: boolean; deductPagibig?: boolean }) =>
+  asOrg(f.orgId, (tx) =>
+    setStatutoryDeductions(tx, who, {
+      personId: f.workerId,
+      storeId: f.storeId,
+      deductSss: flags.deductSss ?? true,
+      deductPhilhealth: flags.deductPhilhealth ?? true,
+      deductPagibig: flags.deductPagibig ?? true,
+    }),
+  );
+const flagsOf = async (personId: string) =>
+  (await sql<{ deduct_sss: boolean; deduct_philhealth: boolean; deduct_pagibig: boolean }[]>`
+    select deduct_sss, deduct_philhealth, deduct_pagibig from persons where id = ${personId}`)[0]!;
+
+describe('T-636 - per-person tick boxes for SSS / PhilHealth / Pag-IBIG', () => {
+  it('test 1: SSS unticked (number on file) - SSS ee/er/EC 0 and no SSS legs; PhilHealth and Pag-IBIG as case 1; net = gross - deductions  [mutant: untick ignored -> SSS 525]', async () => {
+    const f = await ready('t636a');
+    await untick(f, f.admin, { deductSss: false });
+    await addDays(f, dates('2026-01', 1, 13));
+    const p = await preview(f, H1);
+    expect(p.slips[0]).toMatchObject({ skippedAgencies: ['sss'], untickedAgencies: ['sss'] });
+    expect(p.missingGovernmentIds).toEqual([]); // an untick is a choice, not a warning
+    const out = await post(f, H1);
+    const [r] = await slips(out.runId);
+    expect(r).toMatchObject({
+      sss_ee: '0.00', sss_er: '0.00', sss_ec: '0.00', philhealth_ee: '260.00', philhealth_er: '260.00', pagibig_ee: '200.00', pagibig_er: '200.00',
+      taxable_pay: '9940.00', net_pay: '9940.00', skipped_agencies: ['sss'],
+    });
+    // the net pay identity: gross - every employee deduction - withholding - advance
+    const deductions = Number(r!.sss_ee) + Number(r!.philhealth_ee) + Number(r!.pagibig_ee) + Number(r!.withholding) + Number(r!.advance_recovered);
+    expect((Number(r!.gross_pay) - deductions).toFixed(2)).toBe(r!.net_pay);
+    const l = await legsOf(out.runId);
+    expect(l['2210']).toBeUndefined();
+    expect(l['6110']).toBeUndefined();
+    expect((await sql<{ u: string[] }[]>`select unticked_agencies as u from payslips where run_id = ${out.runId}`)[0]!.u).toEqual(['sss']);
+  });
+
+  it('test 2: unticked with a number is NOT in missingGovernmentIds; a missing number with the tick on still is', async () => {
+    const f = await ready('t636b', { numbers: ['philhealth', 'pagibig'] }); // no SSS number
+    await untick(f, f.admin, { deductPagibig: false }); // Pag-IBIG has a number but is unticked
+    await addDays(f, dates('2026-01', 1, 13));
+    const p = await preview(f, H1);
+    expect(p.missingGovernmentIds.map((m) => m.agency)).toEqual(['sss']);
+    expect(p.slips[0]).toMatchObject({ skippedAgencies: ['sss', 'pagibig'], untickedAgencies: ['pagibig'] });
+    expect(p.slips[0]).toMatchObject({ sssEe: '0.00', pagibigEe: '0.00', pagibigEr: '0.00', philhealthEe: '260.00' });
+  });
+
+  it('test 3: defaults - an existing person keeps every tick on and keeps deducting (the 0288 backfill is DEFAULT true)', async () => {
+    const f = await ready('t636c');
+    expect(await flagsOf(f.workerId)).toEqual({ deduct_sss: true, deduct_philhealth: true, deduct_pagibig: true });
+    await addDays(f, dates('2026-01', 1, 13));
+    const p = await preview(f, H1);
+    expect(p.slips[0]).toMatchObject({ sssEe: '525.00', philhealthEe: '260.00', pagibigEe: '200.00', skippedAgencies: [], untickedAgencies: [] });
+  });
+
+  it('test 4: authorize first - the staff member is refused and nothing changes; the audit row holds before/after of the changed ticks only', async () => {
+    const f = await ready('t636d');
+    const err = await untick(f, f.worker, { deductSss: false }).then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(AuthorizationError);
+    expect(await flagsOf(f.workerId)).toEqual({ deduct_sss: true, deduct_philhealth: true, deduct_pagibig: true });
+    expect(await untick(f, f.manager, { deductSss: false, deductPhilhealth: false })).toEqual({ changed: ['deductSss', 'deductPhilhealth'] });
+    const rows = await sql<{ actor_person_id: string; entity_id: string; before: unknown; after: unknown }[]>`
+      select actor_person_id::text, entity_id::text, before, after from audit_log where org_id = ${f.orgId} and action = 'person.statutory_deduction_set'`;
+    expect(rows).toEqual([
+      { actor_person_id: f.managerId, entity_id: f.workerId, before: { deductSss: true, deductPhilhealth: true }, after: { deductSss: false, deductPhilhealth: false } },
+    ]);
+    // the same ticks again write nothing
+    expect(await untick(f, f.manager, { deductSss: false, deductPhilhealth: false })).toEqual({ changed: [] });
+    expect(await sql`select 1 from audit_log where org_id = ${f.orgId} and action = 'person.statutory_deduction_set'`).toHaveLength(1);
+  });
+
+  it('test 5: a posted payslip is unchanged by a later untick (it stores its amounts)', async () => {
+    const f = await ready('t636e');
+    await addDays(f, dates('2026-01', 1, 13));
+    const out = await post(f, H1);
+    const before = await slips(out.runId);
+    await untick(f, f.admin, { deductSss: false, deductPhilhealth: false, deductPagibig: false });
+    expect(await slips(out.runId)).toEqual(before);
+    expect(before[0]).toMatchObject({ sss_ee: '525.00', skipped_agencies: [] });
+  });
+
+  it('test 6: the statutory-payments month detail leaves an unticked person out for that agency (a missing number keeps its 0.00 row)', async () => {
+    const f = await ready('t636f');
+    await untick(f, f.admin, { deductSss: false });
+    await addDays(f, dates('2026-01', 1, 13));
+    await post(f, H1);
+    const detail = (agency: 'sss' | 'philhealth') => asOrg(f.orgId, (tx) => statutoryPaymentsRepo.monthDetail(tx, f.orgId, agency, '2026-01-01'));
+    expect((await detail('sss')).map((r) => r.personId)).not.toContain(f.workerId);
+    expect((await detail('philhealth')).find((r) => r.personId === f.workerId)).toMatchObject({ ee: '260.00', notDeducted: false });
+  });
+
+  it('test 7: a person TICKED for SSS with no SSS number keeps a 0.00 notDeducted row in the month detail, while an UNTICKED person is dropped  [mutant: filter on skipped_agencies instead of unticked_agencies -> red]', async () => {
+    const f = await ready('t636g', { numbers: ['philhealth', 'pagibig'] }); // SSS ticked (default) but no SSS number on file
+    await addDays(f, dates('2026-01', 1, 13));
+    await post(f, H1);
+    const sssRows = () => asOrg(f.orgId, (tx) => statutoryPaymentsRepo.monthDetail(tx, f.orgId, 'sss', '2026-01-01'));
+    expect((await sssRows()).find((r) => r.personId === f.workerId)).toMatchObject({ ee: '0.00', notDeducted: true });
+    // Same slip, but the SSS tick is now off on the stored payslip: the person is dropped. Filtering on skipped_agencies would keep the row above AND drop it here wrongly.
+    await sql`update payslips set unticked_agencies = '{sss}' where person_id = ${f.workerId}`;
+    expect((await sssRows()).map((r) => r.personId)).not.toContain(f.workerId);
   });
 });
