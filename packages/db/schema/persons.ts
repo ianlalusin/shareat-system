@@ -66,6 +66,14 @@ export const persons = pgTable(
     pagibigNo: text('pagibig_no'),
     tin: text('tin'),
     /**
+     * T-636 (migration 0288) - deduct this agency at all? Default true (today's behaviour). Unticked = the pay run skips the agency (employee AND employer
+     * share) even when the number is on file; a missing number still skips it too. Person-level, set beside the numbers on the staff page and audited.
+     * Ian: for staff who are not covered, such as on-call staff, after checking with the accountant.
+     */
+    deductSss: boolean('deduct_sss').notNull().default(true),
+    deductPhilhealth: boolean('deduct_philhealth').notNull().default(true),
+    deductPagibig: boolean('deduct_pagibig').notNull().default(true),
+    /**
      * T-434, migration 0204. The person's CURRENT signature (a PNG filed through the broker, purpose `staff_signature`).
      * On the PERSON, not the employment: a signature is the human's legal mark. Never selected by a list, a wall or an
      * export; read only through the signature rule in `@shareat/domain` (people/signature).

@@ -125,11 +125,22 @@ export async function governmentIdsFor(
   actor: Actor,
   personId: string,
   storeId: string,
-): Promise<{ sssNo: string | null; philhealthNo: string | null; pagibigNo: string | null; tin: string | null } | null> {
+): Promise<{
+  sssNo: string | null;
+  philhealthNo: string | null;
+  pagibigNo: string | null;
+  tin: string | null;
+  /** T-636: the deduct-this-agency ticks (false = unticked: the pay run skips that agency). */
+  deductSss: boolean;
+  deductPhilhealth: boolean;
+  deductPagibig: boolean;
+} | null> {
   return withOrgPrincipal(actor.orgId, async (tx) => {
     if (!(await can(tx, actor, 'enrol_staff', { storeId }))) return null;
     const [row] = await statutoryRepo.governmentIdsFor(tx, actor.orgId, [personId]);
-    return row ? { sssNo: row.sssNo, philhealthNo: row.philhealthNo, pagibigNo: row.pagibigNo, tin: row.tin } : null;
+    return row
+      ? { sssNo: row.sssNo, philhealthNo: row.philhealthNo, pagibigNo: row.pagibigNo, tin: row.tin, deductSss: row.deductSss, deductPhilhealth: row.deductPhilhealth, deductPagibig: row.deductPagibig }
+      : null;
   });
 }
 
