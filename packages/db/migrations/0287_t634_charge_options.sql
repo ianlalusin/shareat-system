@@ -1,5 +1,5 @@
 -- 0287 - T-634: one master list of charges per org; each store switches them on. docs/tasks/634-central-charges.md; hand-authored per ADR-012 s5.
--- Journal idx 282, `when` = 0281's (T-637) + 86400000: renumbered from 0278 on 25 Nov 2026 because main took 0279 (T-635) and T-637 holds 0281.
+-- Journal idx 287, `when` = 0286's (T-641) + 86400000: renumbered from 0278 → 0282 (25 Nov) → 0287 (26 Nov 2026) because main took 0279-0286 first.
 -- The shape is 0277's (payment options).
 --
 -- WHY. Ian, 24 Nov: "charges i guess shall be centralized so charges are uniform across the brand". A store's charges (T-627, 0275) were typed per store, so
