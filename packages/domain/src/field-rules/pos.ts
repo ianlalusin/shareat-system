@@ -30,3 +30,10 @@ export const POS_RESERVATION_RULES = defineFieldRules('pos.reservation', {
   phone: { label: 'The phone number', optional: true, kind: 'text', min: 3, max: 30, requires: 'The phone number must be 3 to 30 characters.' },
   note: { label: 'The note', optional: true, kind: 'text', max: 200, requires: 'The note can be up to 200 characters.' },
 });
+
+/** T-644 S1: a walk-in parked on the lobby line (the columns' CHECKs: name 1-40, phone 30 at most, note 60 at most). The party size is its own 1-30 stepper. */
+export const POS_LOBBY_WALKIN_RULES = defineFieldRules('pos.lobbyWalkIn', {
+  displayName: { label: 'The name', kind: 'text', max: 40, requires: 'Enter the name (up to 40 characters).' },
+  phone: { label: 'The phone number', optional: true, kind: 'text', max: 30, requires: 'The phone number can be up to 30 characters.' },
+  note: { label: 'The note', optional: true, kind: 'text', max: 60, requires: 'The note can be up to 60 characters.' },
+});

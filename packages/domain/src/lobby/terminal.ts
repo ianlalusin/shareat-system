@@ -8,8 +8,8 @@
  * `tx: Tx` first, no transaction opened here (DEF-421). Audit rows: actor = the terminal person, source 'pos', `after.cashier` = the
  * staff member's name; never a diner name, phone or the join link.
  */
-import { auditLogRepo, lobbyRepo, type Tx } from '@shareat/db';
-import { callCore, listCore, parkCore, removeCore, seatCore, type CoreListRow, type MoveCtx, type ParkInput, type SeatInput, type StoreGuard } from './core';
+import type { Tx } from '@shareat/db';
+import { callCore, listAndStampCore, parkCore, removeCore, seatCore, setPausedCore, type CoreLine, type CoreListRow, type MoveCtx, type ParkInput, type SeatInput, type StoreGuard } from './core';
 import { lobbyRefusal } from './refusal';
 
 export interface TerminalActor {
@@ -20,15 +20,7 @@ export interface TerminalActor {
   readonly cashierName: string;
 }
 
-export interface TerminalLine {
-  readonly lineKind: 'package' | 'a_la_carte';
-  readonly qty: number;
-  readonly variantId: string;
-  readonly optionValueIds: string[];
-  readonly label: string;
-  /** The store's ACTIVE POS v1 link key, or null: the screen then shows `label` as text to tap in by hand. */
-  readonly posItemKey: string | null;
-}
+export type TerminalLine = CoreLine;
 
 export interface TerminalListRow extends CoreListRow {
   readonly lines: TerminalLine[];
@@ -45,17 +37,7 @@ export async function listForTerminal(
   tx: Tx,
   actor: TerminalActor,
 ): Promise<{ lobbyEnabled: boolean; paused: boolean; entries: TerminalListRow[] }> {
-  const store = await lobbyRepo.getLobbyStore(tx, actor.orgId, actor.erpStoreId, 0, false);
-  if (store) await lobbyRepo.stampPosSeen(tx, actor.orgId, actor.erpStoreId);
-  const rows = await listCore(tx, actor.orgId, actor.erpStoreId);
-  const lines = await lobbyRepo.listLinesForEntries(tx, actor.orgId, actor.erpStoreId, rows.map((r) => r.entryId));
-  const entries = rows.map((r) => ({
-    ...r,
-    lines: lines
-      .filter((l) => l.entryId === r.entryId)
-      .map((l) => ({ lineKind: l.lineKind, qty: l.qty, variantId: l.variantId, optionValueIds: l.optionValueIds, label: l.label, posItemKey: l.posItemKey })),
-  }));
-  return { lobbyEnabled: store?.enabled ?? false, paused: store?.paused ?? false, entries };
+  return listAndStampCore(tx, actor.orgId, actor.erpStoreId);
 }
 
 export async function parkForTerminal(
@@ -81,16 +63,5 @@ export async function removeForTerminal(tx: Tx, actor: TerminalActor, entryId: s
 
 /** Flip the store's pause switch (audit `lobby.pause` / `lobby.resume`). A store with no `lobby_stores` row is LOBBY_NOT_FOUND. */
 export async function setLobbyPausedForTerminal(tx: Tx, actor: TerminalActor, paused: boolean): Promise<{ paused: boolean }> {
-  const ok = await lobbyRepo.setPaused(tx, actor.orgId, actor.erpStoreId, paused);
-  if (!ok) throw lobbyRefusal('LOBBY_NOT_FOUND', 'lobby store');
-  await auditLogRepo.append(tx, actor.orgId, {
-    actorPersonId: actor.terminalPersonId,
-    action: paused ? 'lobby.pause' : 'lobby.resume',
-    storeId: actor.erpStoreId,
-    entityId: actor.erpStoreId,
-    before: { paused: !paused },
-    after: { paused, cashier: actor.cashierName },
-    source: 'pos',
-  });
-  return { paused };
+  return setPausedCore(tx, ctxOf(actor), actor.erpStoreId, paused);
 }
