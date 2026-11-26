@@ -23,6 +23,8 @@ apps/pos (pos2) is the ONLY caller of the 16 `*ForTerminal` lobby / birthday / c
 4. **joinUrl = null.** ERP has no join-link source. The diner's phone shows the counter message (seatCore accepts null, core.ts:156).
 5. **Birthday audio:** copy the two mp3s into apps/erp/public/sounds and play them with a plain `<audio>` element. No native plugin. If the real-tablet test fails, that becomes a follow-up (copy BirthdaySongPlugin into apps/pos-shell).
 6. **Claims `statutoryDinerRef` = `${sessionId}:${dinerNo}`** (1-80 chars). Approving a claim does not apply a discount by itself. At payment, `DiscountSheet` pre-fills senior/PWD diner rows from the session's APPROVED claims: name, ID and diner number. The cashier still confirms. The money rule stays at payment (bill.ts:274), unchanged.
+   - **Amended by BOSS, 26 Nov 2026 (S4):** the database wipes the claim's name and ID number on approval (`lobby_discount_claims_personal_data_check`, T-455 privacy design). So the payment pre-fill is the kind, the diner number and the ID's last 4 only, shown as a quick-pick plus "check it against the card". The cashier types the name and ID from the card. No migration keeps personal data longer.
+
 
 ## Slices (each its own PR, in order)
 **S1 — Lobby line (read + act, no seating).**
