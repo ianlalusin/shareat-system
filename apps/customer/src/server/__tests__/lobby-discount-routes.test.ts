@@ -50,6 +50,8 @@ let seq = 0;
 const uid = (p: string) => `${p}-${Date.now().toString(36)}-${++seq}-${randomBytes(3).toString('hex')}Q`;
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 const hmacHex = (v: string) => createHmac('sha256', SECRET).update(v).digest('hex');
+// UUIDs are random hex and can contain the needle digits by chance (DEF flake, 26 Nov 2026)
+const withoutUuids = (s: string) => s.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<uuid>');
 
 beforeAll(async () => {
   const code = uid('t455s7a');
@@ -176,11 +178,11 @@ const expectPlainRefusal = (r: Reply, status: number) => {
   expect(r.body.ok).toBe(false);
   expect(r.body.error).toMatch(/^[A-Z][^\n]{8,160}[.]$/);
   expect(r.body.error).not.toMatch(/LOBBY_|violates|constraint|duplicate|relation|lobby_/i);
-  expect(r.body.error).not.toMatch(/Quillfeather|Zanzibar|0042|5566|1187/);
+  expect(withoutUuids(r.body.error)).not.toMatch(/Quillfeather|Zanzibar|0042|5566|1187/);
 };
 /** No reply ever carries the name or any part of the ID number beyond the masked last four. */
 const expectNoPii = (r: Reply) => {
-  const t = JSON.stringify(r.body);
+  const t = withoutUuids(JSON.stringify(r.body));
   expect(t, 'holder name in a reply').not.toMatch(/Quillfeather|Zanzibar/);
   expect(t, 'ID number in a reply').not.toMatch(/0042|5566|00425566/);
   expect(t, 'party name in a reply').not.toMatch(/Tuckerman/);
@@ -313,7 +315,7 @@ describe('A. POST /api/lobby/discount', () => {
       await cancel(s, d.cookie, { storeCode: s.code, claimId: first.body.claims[0].claimId });
     });
     for (const needle of ['Quillfeather', 'Zanzibar', '0042', '5566', '00425566', '7788', 'Tuckerman', d.cookie]) {
-      expect(text.includes(needle), `${needle} in a log`).toBe(false);
+      expect(withoutUuids(text).includes(needle), `${needle} in a log`).toBe(false);
     }
   });
 });
