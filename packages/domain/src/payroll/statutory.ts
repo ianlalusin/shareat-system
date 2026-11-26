@@ -129,7 +129,7 @@ export interface StatutoryResult {
   netPay: Money;
 }
 
-/** What a person has on file for one pay run: the three numbers and the three deduct ticks (T-636, migration 0283). */
+/** What a person has on file for one pay run: the three numbers and the three deduct ticks (T-636, migration 0288). */
 export interface DeductionFacts {
   readonly sssNo: string | null;
   readonly philhealthNo: string | null;

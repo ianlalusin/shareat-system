@@ -61,6 +61,9 @@
       "@shareat/domain/*": [
         "./packages/domain/src/*"
       ],
+      "@shareat/ai": [
+        "./packages/ai/src/index.ts"
+      ],
       "@shareat/auth": [
         "./packages/auth/src/index.ts"
       ],

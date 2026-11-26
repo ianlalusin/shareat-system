@@ -65,6 +65,8 @@ const alias = {
   '@shareat/domain/business-rules': `${root}packages/domain/src/business-rules/index.ts`,
   // T-502 s12 - the batch-payment allocator is a client-safe leaf (the invoice page's live preview imports it); exact entry before the bare name.
   '@shareat/domain/expenses/allocate': `${root}packages/domain/src/expenses/allocate.ts`,
+  // T-637 - the document model (editor, renderer and server share it); db-free leaf, exact entry before the bare name.
+  '@shareat/domain/documents/doc': `${root}packages/domain/src/documents/doc.ts`,
   // T-528 — the pure pricing leaf the POS tablet runs on the device; exact match before the bare name.
   '@shareat/domain/pos/price': `${root}packages/domain/src/pos/price.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,
@@ -72,6 +74,8 @@ const alias = {
   // T-237's `@shareat/auth/errors` leaf (the error classes without `@shareat/db` behind them) is
   // otherwise left to node resolution, which does not read this workspace's `exports` map here.
   // Same reason `@shareat/core/env` and `@shareat/db/schema` are listed above.
+  // T-640 - the AI package: the only code that talks to a model provider (adapters, model list, prices, privacy guard, key cipher).
+  '@shareat/ai': `${root}packages/ai/src/index.ts`,
   '@shareat/auth/errors': `${root}packages/auth/src/errors.ts`,
   '@shareat/auth': `${root}packages/auth/src/index.ts`,
   '@shareat/etl/run': `${root}packages/etl/src/run.ts`,

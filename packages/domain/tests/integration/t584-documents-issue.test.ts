@@ -77,7 +77,7 @@ interface World {
 async function world(hint: string): Promise<World> {
   const f = await documentFixture(sql, hint);
   const mk = (name: string, kind: 'coe' | 'nte', body: string) =>
-    asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.admin.actor, { name, kind, body, signatureSlots: ['issuer', 'employee'] }));
+    asOrg(f.orgId, (tx) => saveDocumentTemplate(tx, f.admin.actor, { name, kindId: f.kind[kind], body, signatureSlots: ['issuer', 'employee'] }));
   return { f, coe: await mk('COE', 'coe', COE), ended: await mk('Ended', 'nte', ENDED) };
 }
 const draftFor = (w: World, actor: Actor, templateId: string, employmentId: string | null, storeId: string | null = null) =>
@@ -97,7 +97,7 @@ describe('T-584 S3 - the draft fills the merge fields from the database (s5)', (
     expect(d.body).toContain('Test Org Incorporated, TIN 123456789');
     expect(d.body).toContain('Issued ' + new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Manila' }).format(new Date()));
     expect(d.body).toContain('by Manager A, Test Manager.');
-    expect(d.template).toMatchObject({ id: w.coe.templateId, versionNo: 1, kind: 'coe', signatureSlots: ['issuer', 'employee'] });
+    expect(d.template).toMatchObject({ id: w.coe.templateId, versionNo: 1, kindName: 'Certificate of employment', signatureSlots: ['issuer', 'employee'] });
   });
 
   it('a value that does not exist becomes a visible [missing: ...] marker, and the draft says which [kills: a blank printed as if it were fine]', async () => {
@@ -183,7 +183,7 @@ describe('T-584 S3 - a [missing: ...] marker blocks Issue; the body is frozen (t
   it('a template edit makes v2, but a document issued from v1 still shows v1\'s text and v1\'s id [kills: a document that follows its template]', async () => {
     const w = await world('frozen');
     const r = await issue(w, w.f.managerA.actor, { employmentId: w.f.employee.employmentId, body: 'Frozen text from template v1.' });
-    await asOrg(w.f.orgId, (tx) => saveDocumentTemplate(tx, w.f.admin.actor, { templateId: w.coe.templateId, name: 'COE', kind: 'coe', body: 'Entirely new wording.', signatureSlots: [] }));
+    await asOrg(w.f.orgId, (tx) => saveDocumentTemplate(tx, w.f.admin.actor, { templateId: w.coe.templateId, name: 'COE', kindId: w.f.kind.coe, body: 'Entirely new wording.', signatureSlots: [] }));
     const got = await asOrg(w.f.orgId, (tx) => getIssuedDocument(tx, w.f.managerA.actor, r.documentId));
     expect(got.document.templateVersionId).toBe(w.coe.versionId);
     expect(got.document.templateVersionNo).toBe(1);
@@ -247,7 +247,7 @@ describe('T-584 S3 - the register (s3 item 4)', () => {
     const rows = await asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, w.f.admin.actor, {}));
     expect(rows.map((r) => r.id)).toEqual([two.documentId, one.documentId]);
     expect((await asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, w.f.admin.actor, { employmentId: w.f.employee.employmentId! }))).map((r) => r.id)).toEqual([one.documentId]);
-    expect((await asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, w.f.admin.actor, { kind: 'nte' }))).map((r) => r.id)).toEqual([two.documentId]);
+    expect((await asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, w.f.admin.actor, { kindId: w.f.kind.nte }))).map((r) => r.id)).toEqual([two.documentId]);
     expect((await asOrg(w.f.orgId, (tx) => listIssuedDocuments(tx, w.f.admin.actor, { storeId: w.f.storeB }))).length).toBe(0);
     expect(rows.every((r) => r.currentVersionNo === 1)).toBe(true);
   });
@@ -323,7 +323,7 @@ describe('T-584 S3 - revise: a new version, every earlier one kept (R7, test 10)
 describe('T-584 S3 - what the issue screen may offer', () => {
   it("a manager is offered only their own store's staff and stores, never a retired template; an admin also the whole company; staff are refused [kills: a picker that leaks another store's staff]", async () => {
     const w = await world('options');
-    const extra = await asOrg(w.f.orgId, (tx) => saveDocumentTemplate(tx, w.f.admin.actor, { name: 'Old memo', kind: 'memo', body: 'old', signatureSlots: [] }));
+    const extra = await asOrg(w.f.orgId, (tx) => saveDocumentTemplate(tx, w.f.admin.actor, { name: 'Old memo', kindId: w.f.kind.memo, body: 'old', signatureSlots: [] }));
     await asOrg(w.f.orgId, (tx) => retireDocumentTemplate(tx, w.f.admin.actor, extra.templateId));
     const opt = (actor: Actor) => asOrg(w.f.orgId, (tx) => documentIssueOptions(tx, actor));
     const m = await opt(w.f.managerA.actor);
@@ -348,17 +348,17 @@ describe('T-584 R7 - a version is kept as it was, letterhead included', () => {
     const print = (versionNo?: number) => asOrg(w.f.orgId, (tx) => documentPrintData(tx, w.f.admin.actor, r.documentId, versionNo));
     const before = (await print(1)).letterhead;
     expect(before).toMatchObject({ legalName: 'Test Org Incorporated', tin: '123456789', storeName: 'Test Store A', storeAddress: '1 Test Street, Test City', tinBranchCode: '00001', templateName: 'COE' });
-    expect((await print(1)).kind).toBe('coe');
+    expect((await print(1)).kind).toBe('Certificate of employment');
     await sql`update organizations set legal_name = 'Renamed Company Corp', tin = '987654321' where id = ${w.f.orgId}`;
     await sql`update stores set address = '99 New Avenue', name = 'Renamed Store', tin_branch_code = '00009', contact_number = '0999' where id = ${w.f.storeA}`;
-    await sql`update document_templates set name = 'Renamed template', kind = 'memo' where id = ${w.coe.templateId}`;
+    await sql`update document_templates set name = 'Renamed template', kind_id = ${w.f.kind.memo} where id = ${w.coe.templateId}`;
     expect((await print(1)).letterhead).toEqual(before);
     expect((await print()).letterhead).toEqual(before);
     await asOrg(w.f.orgId, (tx) => reviseDocument(tx, w.f.admin.actor, { documentId: r.documentId, body: 'Second version.', reason: 'New facts' }));
     expect((await print(1)).letterhead).toEqual(before);
     expect((await print(2)).letterhead).toMatchObject({ legalName: 'Renamed Company Corp', tin: '987654321', storeName: 'Renamed Store', storeAddress: '99 New Avenue', tinBranchCode: '00009', templateName: 'Renamed template' });
-    expect((await print(2)).kind).toBe('memo');
-    expect((await print(1)).kind).toBe('coe');
+    expect((await print(2)).kind).toBe('Memo');
+    expect((await print(1)).kind).toBe('Certificate of employment');
   });
 });
 

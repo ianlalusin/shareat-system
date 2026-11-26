@@ -293,7 +293,7 @@ export const payslips = pgTable(
     isMwe: boolean('is_mwe').notNull().default(false),
     /** Agencies NOT deducted because the person had no number on file when this slip was posted. */
     skippedAgencies: text('skipped_agencies').array().notNull().default(sql`'{}'::text[]`),
-    /** T-636 (0283): the skipped agencies that were UNTICKED on the staff page (a choice), not missing a number. Always a subset of skipped_agencies. */
+    /** T-636 (0288): the skipped agencies that were UNTICKED on the staff page (a choice), not missing a number. Always a subset of skipped_agencies. */
     untickedAgencies: text('unticked_agencies').array().notNull().default(sql`'{}'::text[]`),
     /** ⭐ The rate rows used (the "re-read March in June" rule, as `pay_rate_id`); null where the agency was skipped. */
     sssRateId: uuid('sss_rate_id').references(() => statutoryRates.id, { onDelete: 'restrict' }),

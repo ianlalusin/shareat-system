@@ -384,7 +384,7 @@ export function setGovernmentIds(
 }
 
 /**
- * T-636 (migration 0283): tick each government contribution on or off for one person. Ian, 25 Nov 2026: for staff who are not covered, such as on-call staff,
+ * T-636 (migration 0288): tick each government contribution on or off for one person. Ian, 25 Nov 2026: for staff who are not covered, such as on-call staff,
  * after checking with the accountant (PH rules generally make these compulsory for employees; the app records the choice and who made it, it does not judge it).
  * Same capability as the numbers (`enrol_staff` at the person's store), authorized FIRST. One audit row (`person.statutory_deduction_set`) carrying the before
  * and after of each CHANGED tick; no change writes nothing. A posted payslip keeps its stored amounts; the next pay run reads the new ticks.

@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { peso } from '@/lib/format';
-import { asStoreMenu, closedPackages, closedPackagesText, displayUnitPrice, goneLines, isOptionChoiceValid, needsChoiceSheet, orderableVariants, pickerCatalog, type MenuLike, type PickerItem, type Variant } from './menu-filter';
+import { asStoreMenu, closedPackages, closedPackagesText, displayUnitPrice, goneLines, groupHint, isOptionChoiceValid, needsChoiceSheet, orderableVariants, pickerCatalog, type MenuLike, type PickerItem, type Variant } from './menu-filter';
 import { POS_NOTICE_DISMISS_MS } from '../_shell/constants';
 import { NOTE_MAX, type CartLine } from './payloads';
 
@@ -83,8 +83,7 @@ function ChoiceSheet({ item, onAdd, onCancel }: { item: PickerItem; onAdd: (line
       {variant.optionGroups.map((g) => (
         <fieldset key={g.id} className="space-y-2">
           <legend className="text-sm font-semibold text-muted">
-            {g.name}
-            {g.minSelections > 0 ? ' (choose)' : ' (optional)'}
+            {g.name} {groupHint(g)}
           </legend>
           <div className="flex flex-wrap gap-2">
             {g.values

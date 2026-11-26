@@ -25,3 +25,14 @@ export function refillMeats(menu: MenuLike, packageVariantId: string): RefillMea
     return [{ itemId, name: item.name, flavours: onSale.flatMap((g) => g.values.map((v) => ({ id: v.id, name: v.name }))), flavourRequired: onSale.some((g) => g.min > 0) }];
   });
 }
+
+const norm = (s: string) => s.trim().toLowerCase();
+/**
+ * T-643 (v1's sort): the pills whose name matches a seating flavour come first (case and spaces ignored, the package group and the refill group are different value rows),
+ * the rest keep their order. Nothing is removed and nothing is chosen for the cashier.
+ */
+export function flavoursLedBy<F extends { name: string }>(flavours: readonly F[], seatFlavours: readonly string[]): { flavour: F; seat: boolean }[] {
+  const seat = new Set(seatFlavours.map(norm));
+  const tagged = flavours.map((flavour) => ({ flavour, seat: seat.has(norm(flavour.name)) }));
+  return [...tagged.filter((t) => t.seat), ...tagged.filter((t) => !t.seat)];
+}

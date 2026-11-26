@@ -38,5 +38,7 @@ export * from './clock';
 export * from './pos-tablets';
 export * from './kitchen';
 export * from './pos';
+export * from './ask-erp'; // T-641
 export * from './documents';
 export * from './slicer-pay';
+export * from './ai-hub';

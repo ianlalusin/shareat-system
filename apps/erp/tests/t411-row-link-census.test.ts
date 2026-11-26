@@ -70,6 +70,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/channel-settlements/upload/page.tsx',
   // T-511 S5b, 6 Nov 2026: app/channel-settlements/review/DayDetail.tsx left this list; its orders, charges, loan lines and other lines are lists now (a phone card cut their labels), so it renders no table.
   // Reports (9)
+  'components/documents/DocumentDoc.tsx', // T-637: a table INSIDE a document's wording (content the author typed), not a data list: there is no row to open
   'components/reports/ApAgingTable.tsx',
   'components/reports/ArAgingTable.tsx',
   'components/reports/BalanceSheetTable.tsx',

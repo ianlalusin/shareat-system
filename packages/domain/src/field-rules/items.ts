@@ -43,3 +43,24 @@ export const ITEMS_RENAME_RULES = defineFieldRules('items.renameItem', {
 export const ITEMS_UNIT_RULES = defineFieldRules('items.changeItemUnit', {
   baseUnit: { label: 'The unit', kind: 'text', requires: UNIT_SAYS },
 });
+
+/**
+ * T-638: what a commissary charges stores for an item (the Wholesale row on /items/[id]). One pricing rule, and only the
+ * figure that rule needs is judged; the others are ignored. The domain parses each figure to its column's shape.
+ */
+export const ITEMS_PRICING_RULES = defineFieldRules('items.setItemPricing', {
+  pricingMode: { label: 'The pricing rule', kind: 'text', requires: 'Choose how the price to stores is worked out.' },
+  fixedAmount: {
+    label: 'The fixed price', kind: 'number', min: 0.01,
+    when: { field: 'pricingMode', equals: ['fixed'], says: 'Only used for a fixed price' },
+  },
+  fixedMarkupAmount: {
+    label: 'The markup amount', kind: 'number', min: 0,
+    when: { field: 'pricingMode', equals: ['fixed_markup'], says: 'Only used for a markup in pesos' },
+  },
+  markupPercent: {
+    label: 'The markup percent', kind: 'number', min: 0,
+    when: { field: 'pricingMode', equals: ['percent_markup'], says: 'Only used for a markup in percent' },
+  },
+  marginAlertThresholdPct: { label: 'The margin alert', optional: true, kind: 'number', min: 0 },
+});

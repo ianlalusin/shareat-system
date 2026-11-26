@@ -1,6 +1,6 @@
--- 0283 - T-636: tick each government contribution on or off, per staff member. docs/tasks/636-statutory-toggles.md; hand-authored per ADR-012 s5.
--- Journal idx 283, `when` = 0282's (T-634) + 86400000 = 1810524707084: renumbered from 0280 on 25 Nov 2026 because main took 0279 (T-635), T-637 holds
--- 0281 and T-634 holds 0282. The journal test allows gaps, so this applies in order whichever of them lands first.
+-- 0288 - T-636: tick each government contribution on or off, per staff member. docs/tasks/636-statutory-toggles.md; hand-authored per ADR-012 s5.
+-- Journal idx 288, `when` = 0287's (T-634, 1810870307084) + 86400000 = 1810956707084: renumbered 0280 -> 0283 -> 0288 on 26 Nov 2026 because main holds up to 0286
+-- and T-634 takes 0287. The journal test allows gaps, so this applies in order whichever of them lands first.
 --
 -- WHY. Ian, 25 Nov 2026: "individual government contributions can be ticked off individually coz sometimes we have staff who is not regular like on call and we
 -- dont pay sss philhealth for them". Recorded caution: PH rules generally make SSS / PhilHealth / Pag-IBIG compulsory for employees; Ian confirms with the

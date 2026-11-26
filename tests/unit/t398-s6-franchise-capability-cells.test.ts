@@ -39,7 +39,7 @@ describe('T-398 S6a -- view_franchise_access_log, cell by cell', () => {
     // T-511 S2a (2026-11-03): 120 -> 123 (upload_settlement_files, edit_platform_store_code, edit_loan_repayment_amount). RED until built.
     // T-510 S2, 5 Nov 2026: +pair_menu_dayparts (BOSS approved)
     // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (`manage_business_rules`).
-    expect(CAPABILITIES.length).toBe(131); // T-584: 128 -> 131
+    expect(CAPABILITIES.length).toBe(133); // T-641 (25 Nov 2026): 132 -> 133 (+use_ask_erp, org, manager yes). Before: T-640: 131 -> 132 (+manage_ai_hub, org, super_admin only), re-measured on main 83f8faa. Before: T-584: 128 -> 131
     // T-524: 125 -> 128 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
   });
 

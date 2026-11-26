@@ -183,6 +183,7 @@ function routeOfActionFile(file: string): string {
  * The guard still fails for a new action folder that is neither mapped nor listed here.
  */
 const SHARED_ACTION_FOLDERS: Readonly<Record<string, string>> = {
+  '/ask-erp': "T-641: no page; the Ask ERP button and panel are mounted by AppShell on every ERP page, only for a person who holds use_ask_erp; askErp authorizes use_ask_erp first and reads every record through that record's own capability",
   '/copy-from-store': 'T-611: no page; the dialog sits on /kitchen, /menu/hours and /admin/pos-tablets (all mapped); the domain checks admin role, the store edit right and an administrator PIN',
 };
 

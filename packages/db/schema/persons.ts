@@ -66,7 +66,7 @@ export const persons = pgTable(
     pagibigNo: text('pagibig_no'),
     tin: text('tin'),
     /**
-     * T-636 (migration 0283) - deduct this agency at all? Default true (today's behaviour). Unticked = the pay run skips the agency (employee AND employer
+     * T-636 (migration 0288) - deduct this agency at all? Default true (today's behaviour). Unticked = the pay run skips the agency (employee AND employer
      * share) even when the number is on file; a missing number still skips it too. Person-level, set beside the numbers on the staff page and audited.
      * Ian: for staff who are not covered, such as on-call staff, after checking with the accountant.
      */

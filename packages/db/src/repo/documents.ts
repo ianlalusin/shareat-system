@@ -9,18 +9,20 @@
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import {
+  documentKinds,
   documentTemplates,
   documentTemplateVersions,
   issuedDocuments,
   issuedDocumentVersions,
   issuedDocumentSignatures,
-  type DocumentKind,
+  type DocumentKindStatus,
   type DocumentLetterhead,
+  type DocumentMargins,
   type SignatureSlot,
 } from '../../schema/documents';
 import { employmentPositions, employments, positions } from '../../schema/employment';
 import { organizations } from '../../schema/organizations';
-import { persons } from '../../schema/persons';
+import { personIdentities, persons } from '../../schema/persons';
 import { storedFiles } from '../../schema/stored-files';
 import { stores } from '../../schema/stores';
 import { lockDocumentNumbering } from './advisory-locks';
@@ -31,7 +33,8 @@ import { lockDocumentNumbering } from './advisory-locks';
 export interface TemplateRow {
   id: string;
   name: string;
-  kind: DocumentKind;
+  kindId: string;
+  kindName: string;
   retiredAt: Date | null;
   createdAt: Date;
 }
@@ -40,13 +43,18 @@ export interface TemplateVersionRow {
   templateId: string;
   versionNo: number;
   body: string;
+  /** T-637: the JSON document, or null on a version from before 0281 (the caller converts `body`). */
+  bodyDoc: unknown;
+  margins: DocumentMargins;
+  headerDoc: unknown;
+  footerDoc: unknown;
   signatureSlots: SignatureSlot[];
   createdBy: string;
   createdByName: string;
   createdAt: Date;
 }
 
-export async function insertTemplate(tx: Tx, input: { orgId: string; name: string; kind: DocumentKind; createdBy: string }): Promise<string> {
+export async function insertTemplate(tx: Tx, input: { orgId: string; name: string; kindId: string; createdBy: string }): Promise<string> {
   const [row] = await tx.insert(documentTemplates).values(input).returning({ id: documentTemplates.id });
   return row!.id;
 }
@@ -54,22 +62,33 @@ export async function insertTemplate(tx: Tx, input: { orgId: string; name: strin
 /** The template row, locked, so two saves of one template queue and number their versions one after the other. */
 export async function getTemplateForUpdate(tx: Tx, orgId: string, templateId: string): Promise<TemplateRow | null> {
   const rows = await tx.execute(sql`
-    select id, name, kind, retired_at, created_at from document_templates
-    where org_id = ${orgId} and id = ${templateId} for update`);
+    select t.id, t.name, t.kind_id, k.name as kind_name, t.retired_at, t.created_at from document_templates t
+    join document_kinds k on k.id = t.kind_id
+    where t.org_id = ${orgId} and t.id = ${templateId} for update of t`);
   const r = (rows as unknown as Record<string, unknown>[])[0];
-  return r ? { id: String(r.id), name: String(r.name), kind: r.kind as DocumentKind, retiredAt: (r.retired_at as Date | null) ?? null, createdAt: r.created_at as Date } : null;
+  return r ? { id: String(r.id), name: String(r.name), kindId: String(r.kind_id), kindName: String(r.kind_name), retiredAt: (r.retired_at as Date | null) ?? null, createdAt: r.created_at as Date } : null;
 }
+
+const templateColumns = {
+  id: documentTemplates.id,
+  name: documentTemplates.name,
+  kindId: documentTemplates.kindId,
+  kindName: documentKinds.name,
+  retiredAt: documentTemplates.retiredAt,
+  createdAt: documentTemplates.createdAt,
+} as const;
 
 export async function getTemplate(tx: Tx, orgId: string, templateId: string): Promise<TemplateRow | null> {
   const [row] = await tx
-    .select({ id: documentTemplates.id, name: documentTemplates.name, kind: documentTemplates.kind, retiredAt: documentTemplates.retiredAt, createdAt: documentTemplates.createdAt })
+    .select(templateColumns)
     .from(documentTemplates)
+    .innerJoin(documentKinds, eq(documentKinds.id, documentTemplates.kindId))
     .where(and(eq(documentTemplates.orgId, orgId), eq(documentTemplates.id, templateId)))
     .limit(1);
   return row ?? null;
 }
 
-export async function updateTemplateHead(tx: Tx, orgId: string, templateId: string, set: { name: string; kind: DocumentKind }): Promise<void> {
+export async function updateTemplateHead(tx: Tx, orgId: string, templateId: string, set: { name: string; kindId: string }): Promise<void> {
   await tx.update(documentTemplates).set(set).where(and(eq(documentTemplates.orgId, orgId), eq(documentTemplates.id, templateId)));
 }
 
@@ -90,7 +109,18 @@ export async function nextTemplateVersionNo(tx: Tx, orgId: string, templateId: s
 
 export async function insertTemplateVersion(
   tx: Tx,
-  input: { orgId: string; templateId: string; versionNo: number; body: string; signatureSlots: SignatureSlot[]; createdBy: string },
+  input: {
+    orgId: string;
+    templateId: string;
+    versionNo: number;
+    body: string;
+    bodyDoc: unknown;
+    margins: DocumentMargins;
+    headerDoc: unknown;
+    footerDoc: unknown;
+    signatureSlots: SignatureSlot[];
+    createdBy: string;
+  },
 ): Promise<string> {
   const [row] = await tx.insert(documentTemplateVersions).values(input).returning({ id: documentTemplateVersions.id });
   return row!.id;
@@ -101,13 +131,17 @@ const versionColumns = {
   templateId: documentTemplateVersions.templateId,
   versionNo: documentTemplateVersions.versionNo,
   body: documentTemplateVersions.body,
+  bodyDoc: documentTemplateVersions.bodyDoc,
+  margins: documentTemplateVersions.margins,
+  headerDoc: documentTemplateVersions.headerDoc,
+  footerDoc: documentTemplateVersions.footerDoc,
   signatureSlots: documentTemplateVersions.signatureSlots,
   createdBy: documentTemplateVersions.createdBy,
   createdByName: persons.displayName,
   createdAt: documentTemplateVersions.createdAt,
 } as const;
 
-function asVersionRow(r: { id: string; templateId: string; versionNo: number; body: string; signatureSlots: string[]; createdBy: string; createdByName: string; createdAt: Date }): TemplateVersionRow {
+function asVersionRow(r: Omit<TemplateVersionRow, 'signatureSlots'> & { signatureSlots: string[] }): TemplateVersionRow {
   return { ...r, signatureSlots: r.signatureSlots as SignatureSlot[] };
 }
 
@@ -124,8 +158,9 @@ export async function listTemplateVersions(tx: Tx, orgId: string, templateId: st
 /** Every template with its latest version's number, body and slots (one row per template). */
 export async function listTemplatesWithLatest(tx: Tx, orgId: string): Promise<Array<TemplateRow & { latest: TemplateVersionRow }>> {
   const heads = await tx
-    .select({ id: documentTemplates.id, name: documentTemplates.name, kind: documentTemplates.kind, retiredAt: documentTemplates.retiredAt, createdAt: documentTemplates.createdAt })
+    .select(templateColumns)
     .from(documentTemplates)
+    .innerJoin(documentKinds, eq(documentKinds.id, documentTemplates.kindId))
     .where(eq(documentTemplates.orgId, orgId))
     .orderBy(asc(documentTemplates.name));
   if (heads.length === 0) return [];
@@ -144,6 +179,66 @@ export async function listTemplatesWithLatest(tx: Tx, orgId: string): Promise<Ar
 }
 
 // -------------------------------------------------------------------------------------------------------------------
+// Document kinds (T-637)
+// -------------------------------------------------------------------------------------------------------------------
+export interface DocumentKindRow {
+  id: string;
+  name: string;
+  sortOrder: number;
+  status: DocumentKindStatus;
+}
+
+const kindColumns = { id: documentKinds.id, name: documentKinds.name, sortOrder: documentKinds.sortOrder, status: documentKinds.status } as const;
+
+/** Every kind of the org, active first then by sort order and name. */
+export async function listKinds(tx: Tx, orgId: string): Promise<DocumentKindRow[]> {
+  return tx
+    .select(kindColumns)
+    .from(documentKinds)
+    .where(eq(documentKinds.orgId, orgId))
+    .orderBy(sql`(${documentKinds.status} = 'retired')`, asc(documentKinds.sortOrder), asc(documentKinds.name));
+}
+
+/** The kind row, LOCKED (`FOR UPDATE` to change it, `FOR SHARE` to point a template at it), so a retire and a save that uses the kind queue instead of crossing. */
+export async function getKindLocked(tx: Tx, orgId: string, kindId: string, mode: 'update' | 'share'): Promise<DocumentKindRow | null> {
+  const rows = (await (mode === 'update'
+    ? tx.execute(sql`select id, name, sort_order, status from document_kinds where org_id = ${orgId} and id = ${kindId} for update`)
+    : tx.execute(sql`select id, name, sort_order, status from document_kinds where org_id = ${orgId} and id = ${kindId} for share`))) as unknown as Record<string, unknown>[];
+  const r = rows[0];
+  return r ? { id: String(r.id), name: String(r.name), sortOrder: Number(r.sort_order), status: r.status as DocumentKindStatus } : null;
+}
+
+export async function findKindByName(tx: Tx, orgId: string, name: string): Promise<DocumentKindRow | null> {
+  const [row] = await tx
+    .select(kindColumns)
+    .from(documentKinds)
+    .where(and(eq(documentKinds.orgId, orgId), sql`lower(${documentKinds.name}) = lower(${name})`))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function insertKind(tx: Tx, input: { orgId: string; name: string; sortOrder: number }): Promise<string> {
+  const [row] = await tx.insert(documentKinds).values(input).returning({ id: documentKinds.id });
+  return row!.id;
+}
+
+export async function updateKind(tx: Tx, orgId: string, kindId: string, set: { name?: string; status?: DocumentKindStatus }): Promise<void> {
+  await tx
+    .update(documentKinds)
+    .set({ ...set, updatedAt: sql`now()` })
+    .where(and(eq(documentKinds.orgId, orgId), eq(documentKinds.id, kindId)));
+}
+
+/** How many ACTIVE (not retired) templates point at the kind. */
+export async function countActiveTemplatesOfKind(tx: Tx, orgId: string, kindId: string): Promise<number> {
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(documentTemplates)
+    .where(and(eq(documentTemplates.orgId, orgId), eq(documentTemplates.kindId, kindId), isNull(documentTemplates.retiredAt)));
+  return row?.n ?? 0;
+}
+
+// -------------------------------------------------------------------------------------------------------------------
 // Merge-field facts (what the whitelist resolves from)
 // -------------------------------------------------------------------------------------------------------------------
 export interface EmploymentFacts {
@@ -159,6 +254,24 @@ export interface EmploymentFacts {
   startedOn: string;
   endedOn: string | null;
   positionNames: string[];
+  /** T-637: the person's primary email and phone (see `primaryIdentity`), or null when none is on file. */
+  email: string | null;
+  phone: string | null;
+}
+
+/**
+ * The person's primary email or phone: a VERIFIED one before an unverified one, then the one on file longest, then the lowest id. Deterministic, so two renders of the same document read
+ * the same address. `person_identities` has no "primary" flag; a person may hold two phones.
+ */
+export async function primaryIdentity(tx: Tx, personId: string, kind: 'email' | 'phone'): Promise<string | null> {
+  const [row] = await tx
+    .select({ value: personIdentities.value })
+    .from(personIdentities)
+    .where(and(eq(personIdentities.personId, personId), eq(personIdentities.kind, kind)))
+    .orderBy(desc(personIdentities.isVerified), asc(personIdentities.createdAt), asc(personIdentities.id))
+    .limit(1);
+  const v = row?.value.trim();
+  return v ? v : null;
 }
 
 export async function getEmploymentFacts(tx: Tx, orgId: string, employmentId: string): Promise<EmploymentFacts | null> {
@@ -182,7 +295,8 @@ export async function getEmploymentFacts(tx: Tx, orgId: string, employmentId: st
     .limit(1);
   if (!row) return null;
   const pos = await positionNamesOf(tx, orgId, [row.id]);
-  return { ...row, startedOn: String(row.startedOn), endedOn: row.endedOn === null ? null : String(row.endedOn), positionNames: pos.get(row.id) ?? [] };
+  const [email, phone] = await Promise.all([primaryIdentity(tx, row.personId, 'email'), primaryIdentity(tx, row.personId, 'phone')]);
+  return { ...row, startedOn: String(row.startedOn), endedOn: row.endedOn === null ? null : String(row.endedOn), positionNames: pos.get(row.id) ?? [], email, phone };
 }
 
 async function positionNamesOf(tx: Tx, orgId: string, employmentIds: string[]): Promise<Map<string, string[]>> {
@@ -327,7 +441,7 @@ export async function insertDocument(
 
 export async function insertDocumentVersion(
   tx: Tx,
-  input: { orgId: string; issuedDocumentId: string; versionNo: number; body: string; reason: string | null; letterhead: DocumentLetterhead; createdBy: string },
+  input: { orgId: string; issuedDocumentId: string; versionNo: number; body: string; bodyDoc: unknown; reason: string | null; letterhead: DocumentLetterhead; createdBy: string },
 ): Promise<string> {
   const [row] = await tx.insert(issuedDocumentVersions).values(input).returning({ id: issuedDocumentVersions.id });
   return row!.id;
@@ -361,7 +475,9 @@ export interface DocumentRow {
   templateVersionId: string;
   templateVersionNo: number;
   templateName: string;
-  kind: DocumentKind;
+  kindId: string;
+  /** The kind's CURRENT name (the template's kind). A printed page uses the name frozen on its version instead. */
+  kindName: string;
   signatureSlots: SignatureSlot[];
   issuedBy: string;
   issuedByName: string;
@@ -391,7 +507,8 @@ function documentSelect(tx: Tx) {
       templateVersionId: issuedDocuments.templateVersionId,
       templateVersionNo: documentTemplateVersions.versionNo,
       templateName: documentTemplates.name,
-      kind: documentTemplates.kind,
+      kindId: documentTemplates.kindId,
+      kindName: documentKinds.name,
       signatureSlots: documentTemplateVersions.signatureSlots,
       issuedBy: issuedDocuments.issuedBy,
       issuedByName: issuer.displayName,
@@ -405,6 +522,7 @@ function documentSelect(tx: Tx) {
     .from(issuedDocuments)
     .innerJoin(documentTemplateVersions, eq(documentTemplateVersions.id, issuedDocuments.templateVersionId))
     .innerJoin(documentTemplates, eq(documentTemplates.id, documentTemplateVersions.templateId))
+    .innerJoin(documentKinds, eq(documentKinds.id, documentTemplates.kindId))
     .innerJoin(issuer, eq(issuer.id, issuedDocuments.issuedBy))
     .leftJoin(stores, eq(stores.id, issuedDocuments.storeId))
     .leftJoin(employments, eq(employments.id, issuedDocuments.employmentId));
@@ -428,7 +546,7 @@ export interface DocumentFilter {
   storeId?: string;
   employmentId?: string;
   personId?: string;
-  kind?: DocumentKind;
+  kindId?: string;
   limit?: number;
 }
 
@@ -450,7 +568,7 @@ export async function listDocuments(tx: Tx, orgId: string, f: DocumentFilter): P
         f.storeId ? eq(issuedDocuments.storeId, f.storeId) : undefined,
         f.employmentId ? eq(issuedDocuments.employmentId, f.employmentId) : undefined,
         f.personId ? eq(employments.personId, f.personId) : undefined,
-        f.kind ? eq(documentTemplates.kind, f.kind) : undefined,
+        f.kindId ? eq(documentTemplates.kindId, f.kindId) : undefined,
       ),
     )
     .orderBy(desc(issuedDocuments.issuedAt), desc(issuedDocuments.id))
@@ -462,6 +580,8 @@ export interface DocumentVersionRow {
   id: string;
   versionNo: number;
   body: string;
+  /** T-637: the JSON document, or null on a version from before 0281 (it prints from `body`). */
+  bodyDoc: unknown;
   reason: string | null;
   letterhead: DocumentLetterhead;
   createdBy: string;
@@ -474,6 +594,7 @@ export async function listDocumentVersions(tx: Tx, orgId: string, documentId: st
       id: issuedDocumentVersions.id,
       versionNo: issuedDocumentVersions.versionNo,
       body: issuedDocumentVersions.body,
+      bodyDoc: issuedDocumentVersions.bodyDoc,
       reason: issuedDocumentVersions.reason,
       letterhead: issuedDocumentVersions.letterhead,
       createdBy: issuedDocumentVersions.createdBy,

@@ -1,6 +1,6 @@
 # T-636: tick each government contribution on or off, per staff member
 
-**Owner:** builder (Sonnet). Auditor: Sonnet (payroll money). **Spec:** BOSS (Opus), 25 Nov 2026. **MIGRATION 0283** (reserved).
+**Owner:** builder (Sonnet). Auditor: Sonnet (payroll money). **Spec:** BOSS (Opus), 25 Nov 2026. **MIGRATION 0288** (reserved).
 
 **Ian, 25 Nov 2026:** "individual government contributions can be ticked off individually coz sometimes we have staff who is not regular like on call and we dont pay sss philhealth for them" → "yes build it".
 **Caution, recorded:** PH rules generally make SSS / PhilHealth / Pag-IBIG compulsory for employees. Ian confirms with the accountant which on-call staff may be excluded. The app records the choice and who made it; it does not judge legality.
@@ -46,10 +46,10 @@ Hand-authored migration (ADR-012 §5). persons is an existing table, so check wh
 
 ## As built (builder, 25 Nov 2026)
 
-- **Migration 0283** (`packages/db/migrations/0283_t636_statutory_deduction_flags.sql`): `persons.deduct_sss`, `deduct_philhealth`, `deduct_pagibig`
+- **Migration 0288** (`packages/db/migrations/0288_t636_statutory_deduction_flags.sql`): `persons.deduct_sss`, `deduct_philhealth`, `deduct_pagibig`
   (boolean NOT NULL DEFAULT true: every existing person keeps deducting; catalog-only ADD COLUMN). **Grants:** persons has no column-level UPDATE grant
-  (shareat_app's UPDATE comes from 0011's default privileges), so nothing is added; RLS unchanged. Journal idx 283 (renumbered from 0280 on 25 Nov:
-  main took 0279, T-637 holds 0281, T-634 holds 0282), `when` = 0282's + 1 day = 1810524707084; the journal test allows gaps.
+  (shareat_app's UPDATE comes from 0011's default privileges), so nothing is added; RLS unchanged. Journal idx 288 (renumbered from 0280 to 0283 to 0288 on 26 Nov:
+  main holds up to 0286, T-634 takes 0287), `when` = 0287's (1810870307084) + 1 day = 1810956707084; the journal test allows gaps.
 - **Addition beyond the spec, needed for rule 3 / test 6:** `payslips.unticked_agencies text[] NOT NULL DEFAULT '{}'`, CHECK `unticked_agencies <@
   skipped_agencies`. `skipped_agencies` (0206) records only THAT an agency was skipped, not why; the month detail must keep a missing-number row at 0.00
   (today's behaviour) but leave an unticked person out. Existing slips get '{}'.

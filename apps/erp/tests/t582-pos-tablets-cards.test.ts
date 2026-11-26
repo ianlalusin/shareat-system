@@ -19,10 +19,10 @@ vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unk
 vi.mock('../src/lib/flash', () => ({ withFlash: vi.fn(async (p: Promise<unknown>) => p), redirectWithFlash: vi.fn() }));
 vi.mock('../src/lib/page-access', () => ({ requirePageAccess: vi.fn(async () => ({ actor: { orgId: 'org-1', personId: 'admin-1' }, refusal: null })) }));
 vi.mock('../src/app/staff/lib', async () => ({ staffStoresFor: vi.fn(async () => [STORE]) }));
-vi.mock('../src/app/admin/pos-tablets/actions', () => ({ registerTabletAction: vi.fn(), revokeTabletAction: vi.fn(), clearLockAction: vi.fn(), createTillAction: vi.fn(), linkTillAction: vi.fn(), setTillPrinterAction: vi.fn(), savePresetAction: vi.fn(), retirePresetAction: vi.fn(), saveChargeAction: vi.fn(), retireChargeAction: vi.fn() }));
+vi.mock('../src/app/admin/pos-tablets/actions', () => ({ registerTabletAction: vi.fn(), revokeTabletAction: vi.fn(), clearLockAction: vi.fn(), createTillAction: vi.fn(), linkTillAction: vi.fn(), setTillPrinterAction: vi.fn(), savePresetAction: vi.fn(), retirePresetAction: vi.fn(), saveChargeAction: vi.fn(), retireChargeAction: vi.fn(), addTablesAction: vi.fn(), retireTableAction: vi.fn() }));
 vi.mock('../src/app/admin/pos-tablets/lib', async (orig) => {
   const actual = await orig<typeof import('../src/app/admin/pos-tablets/lib')>();
-  return { ...actual, loadPosTablets: vi.fn(async () => H.view), loadTills: vi.fn(async () => H.tills), loadCopyStores: vi.fn(async () => null), loadDiscounts: vi.fn(async () => ({ presets: [], canManage: false })), loadCharges: vi.fn(async () => ({ presets: [], canManage: false })), // T-627
+  return { ...actual, loadPosTablets: vi.fn(async () => H.view), loadTills: vi.fn(async () => H.tills), loadCopyStores: vi.fn(async () => null), loadDiscounts: vi.fn(async () => ({ presets: [], canManage: false })), loadCharges: vi.fn(async () => ({ presets: [], canManage: false })), loadTables: vi.fn(async () => ({ active: [], retired: [], canManage: false })), // T-633 // T-627
      };
 });
 

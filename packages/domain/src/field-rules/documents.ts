@@ -21,3 +21,8 @@ export const DOCUMENT_SIGN_RULES = defineFieldRules('documents.sign', {
   },
   pin: { label: 'The PIN', kind: 'digits', min: 6, max: 6, requires: 'A PIN must be exactly 6 digits.' },
 });
+
+/** T-637: a document kind's name, 1 to 40 characters (the table says the same). The form on /documents/templates shows this line; `createDocumentKind` and `renameDocumentKind` judge the same set. */
+export const DOCUMENT_KIND_RULES = defineFieldRules('documents.kind', {
+  name: { label: 'The kind name', kind: 'text', plainText: true, max: 40, requires: 'Give the kind a name of at most 40 characters, for example "Explanation letter".' },
+});

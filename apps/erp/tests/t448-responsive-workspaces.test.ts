@@ -45,8 +45,9 @@ describe('T-448 responsive dashboards and record details', () => {
   });
   it('covers the dashboard and every entity detail, excluding the weekly report drilldown', () => {
     expect(readFileSync(join(root, 'app/page.tsx'), 'utf8')).toContain('view="dashboard"');
-    const details = pages(join(root, 'app')).filter((p) => /\[[^/\\]+\][\\/]page\.tsx$/.test(p) && !p.includes(`${join('reports', 'dual-run')}`) && !p.includes(`${join('menu', 'stores')}`));
+    const details = pages(join(root, 'app')).filter((p) => /\[[^/\\]+\][\\/]page\.tsx$/.test(p) && !p.includes(`${join('reports', 'dual-run')}`) && !p.includes(`${join('menu', 'stores')}`) && !p.includes(`${join('documents', 'templates')}`));
     // T-632: app/menu/stores/[storeId] is a per-store LIST (every menu item, grouped by category), not an entity record; its category sections must stack, so it is not a detail page.
+    // T-637: app/documents/templates/[id] is the template EDITOR workspace (one full-width editor and its preview), not an entity record with sections, so it is not a detail page.
     // T-398 S5: 26 -> 27, new detail page app/inventory/deliveries/inbound/[shipmentId]/page.tsx
     // T-193 S5: 27 -> 28, new detail page app/payroll/statutory-payments/[id]/page.tsx
     // T-584: 28 -> 29, new detail page app/documents/[id]/page.tsx

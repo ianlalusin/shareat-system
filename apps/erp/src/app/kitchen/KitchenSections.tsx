@@ -69,7 +69,7 @@ export function KitchenSections({
       )}
 
       <section className={CARD}>
-        <h2 className="text-sm font-medium">Kitchen stations</h2>
+        <h2 className="text-sm font-medium">Stations</h2>
         <p className="text-xs text-neutral-500">A station is a place that cooks, like Grill or Drinks. Each item is sent to one station.</p>
         {hasStations ? (
           <ul className="divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
@@ -147,7 +147,13 @@ export function KitchenSections({
           Which station cooks each item sold at this store. All sizes of a dish go to the same station. An item with no station stays off the POS.
         </p>
         {setup.offeredItems.length === 0 ? (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">No item has a price at this store yet.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            No item has a price at this store yet.{' '}
+            <a href={`/menu/prices?store=${storeId}`} className={ACTION_LINK}>
+              Set prices on Menu prices
+            </a>
+            , then come back to choose stations.
+          </p>
         ) : !hasStations ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">Add a kitchen station first.</p>
         ) : (
