@@ -548,6 +548,6 @@ describe('wiring', () => {
     expect(birthday.length).toBeGreaterThan(500);
     expect(birthday).not.toMatch(/input\.storeId|storeId:\s*string/);
     expect(birthday.match(/onlyStoreId: storeId/g)).toHaveLength(3);
-    expect(birthday.match(/\n    true,\n/g)).toHaveLength(4); // every one of the four needs the pairing
+    expect(birthday.match(/\r?\n    true,\r?\n/g)).toHaveLength(4); // every one of the four needs the pairing
   });
 });
