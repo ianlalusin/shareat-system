@@ -3,10 +3,13 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { staffStoresFor } from '../../staff/lib';
 import { clearLockAction, registerTabletAction, revokeTabletAction } from './actions';
-import { deviceTail, loadCharges, loadCopyStores, loadDiscounts, loadPosTablets, loadTables, loadTills, revokeConfirmName, type PosTabletLinkView, type TerminalLockView } from './lib';
+import { deviceTail, loadChargeOptions, loadCopyStores, loadDiscounts, loadPosTablets, loadStoreCharges, loadTables, loadTills, revokeConfirmName, type PosTabletLinkView, type TerminalLockView } from './lib';
 import { TillsSection } from './TillsSection';
 import { ChargesSection } from './ChargesSection';
 import { TablesSection } from './TablesSection';
+import { ChargeOptionsSection } from './ChargeOptionsSection';
+import { CHARGE_OPTION_EDIT } from './typed-forms';
+import { typedFor } from '@/lib/keep-typing';
 import { DiscountsSection } from './DiscountsSection';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -99,11 +102,14 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
   const tills = await loadTills(actor, store.id);
   // T-622: the store's named discounts. T-611 S3: the Copy button sits in that section, for an administrator only (presentation; the domain and a PIN gate the write).
   const discounts = await loadDiscounts(actor, store.id);
-  // T-627: the store's named charges (leftover, an extra griller), beside the discounts. Both are the same right (manage_store_settings at the store).
-  const charges = await loadCharges(actor, store.id);
-  // T-633: the store's table numbers (active and retired), the same right again.
+  // T-634: the charges are ONE org list (manage_menu, org) at the top; this store only switches each on or off (manage_store_settings at the store).
+  const chargeOptions = await loadChargeOptions(actor);
+  const charges = await loadStoreCharges(actor, store.id);
+  // T-389: a refused Edit of a charge reopens it with what was typed.
+  const chargeTyped = Object.fromEntries(chargeOptions.options.map((o) => [o.id, typedFor(sp, CHARGE_OPTION_EDIT, o.id, actor.personId)]));
+  // T-633: the store's table numbers (active and retired), the same right as the discounts.
   const tables = await loadTables(actor, store.id);
-  const copyStores = discounts.canManage || charges.canManage ? await loadCopyStores(actor, store.id) : null;
+  const copyStores = discounts.canManage ? await loadCopyStores(actor, store.id) : null;
   const activeLock = active ? terminals.find((t) => t.personId === active.terminalPersonId) : undefined;
   const otherLogins = terminals.filter((t) => t.personId !== active?.terminalPersonId);
 
@@ -159,6 +165,9 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
       </div>
 
       <FlashBanner flash={sp} />
+
+      {/* T-634: the org's one list of charges, above the store picker because it is the same for every store. */}
+      <ChargeOptionsSection options={chargeOptions.options} canManage={chargeOptions.canManage} storeId={store.id} typedOf={chargeTyped} />
 
       <FilterRow>
         <label className="text-sm">
@@ -248,7 +257,7 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
       </section>
 
       <DiscountsSection store={store} presets={discounts.presets} canManage={discounts.canManage} copyStores={copyStores} />
-      <ChargesSection store={store} presets={charges.presets} canManage={charges.canManage} copyStores={copyStores} />
+      <ChargesSection store={store} rows={charges.rows} canManage={charges.canManage} />
       <TablesSection store={store} active={tables.active} retired={tables.retired} canManage={tables.canManage} />
 
       <TillsSection store={store} tills={tills} returnTo={RETURN_TO} />

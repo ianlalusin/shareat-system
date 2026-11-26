@@ -76,27 +76,45 @@ export async function loadDiscounts(actor: Actor, storeId: string): Promise<{ pr
   });
 }
 
-export interface ChargePresetView {
+/** T-634: one charge on the org's master list, with how many stores have it switched on. */
+export interface ChargeOptionView {
   readonly id: string;
   readonly name: string;
   /** Two decimals, as stored. */
   readonly amount: string;
   readonly perUnit: boolean;
+  readonly status: 'active' | 'retired';
+  readonly storesOn: number;
 }
 
-/** T-627: the store's active named charges for the Charges section; `canManage` as in `loadDiscounts`. */
-export async function loadCharges(actor: Actor, storeId: string): Promise<{ presets: ChargePresetView[]; canManage: boolean }> {
+/**
+ * T-634: the org's master list of charges for "Charges (all stores)". `canManage` is `manage_menu` (org), asked with the non-logging `can`: it only decides whether
+ * Add, Edit, Retire and Restore are drawn; every write is gated again in the domain.
+ */
+export async function loadChargeOptions(actor: Actor): Promise<{ options: ChargeOptionView[]; canManage: boolean }> {
   return withOrgPrincipal(actor.orgId, async (tx) => {
-    const rows = await posV2Repo.listActiveChargePresets(tx, actor.orgId, storeId);
-    return {
-      canManage: await can(tx, actor, 'manage_store_settings', { storeId }),
-      presets: rows.map((p) => ({ id: p.id, name: p.name, amount: p.amount, perUnit: p.perUnit })),
-    };
+    const rows = await posStoreSetupRepo.listChargeOptions(tx, actor.orgId);
+    const options: ChargeOptionView[] = [];
+    for (const o of rows) {
+      options.push({ id: o.id, name: o.name, amount: o.amount, perUnit: o.perUnit, status: o.status, storesOn: (await posStoreSetupRepo.storesWithChargeOn(tx, actor.orgId, o.id)).length });
+    }
+    return { canManage: await can(tx, actor, 'manage_menu', {}), options };
+  });
+}
+
+/** T-634: each ACTIVE charge of the org and whether this store has it on, for the store's Charges switches; `canManage` as in `loadDiscounts`. */
+export async function loadStoreCharges(actor: Actor, storeId: string): Promise<{ rows: { option: ChargeOptionView; on: boolean }[]; canManage: boolean }> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const on = new Set(await posStoreSetupRepo.chargeOptionsOnAt(tx, actor.orgId, storeId));
+    const rows = (await posStoreSetupRepo.listChargeOptions(tx, actor.orgId))
+      .filter((o) => o.status === 'active' || on.has(o.id))
+      .map((o) => ({ option: { id: o.id, name: o.name, amount: o.amount, perUnit: o.perUnit, status: o.status, storesOn: 0 }, on: on.has(o.id) }));
+    return { canManage: await can(tx, actor, 'manage_store_settings', { storeId }), rows };
   });
 }
 
 /** "150.00 each" or "150.00 once per bill" (display only; `peso` is the caller's money formatter). */
-export function chargeText(p: Pick<ChargePresetView, 'amount' | 'perUnit'>, peso: (v: string) => string): string {
+export function chargeText(p: Pick<ChargeOptionView, 'amount' | 'perUnit'>, peso: (v: string) => string): string {
   return p.perUnit ? `${peso(p.amount)} each` : `${peso(p.amount)} once per bill`;
 }
 

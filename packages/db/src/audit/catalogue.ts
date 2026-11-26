@@ -283,6 +283,12 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('payment_option.updated', 'money', 'normal', 'org', 'payment_options', 'T-629'),
   def('payment_option.retired', 'money', 'high', 'org', 'payment_options', 'T-629'),
   def('payment_option.reactivated', 'money', 'normal', 'org', 'payment_options', 'T-629'),
+  // T-634: the org's master list of charges (entity = the charge_options row): added, its amount / per unit changed (every store follows), retired (refused while
+  // any store has it on) or brought back. A store switching one on or off is pos.charge_preset_set / pos.charge_preset_retired (entity = its pos_charge_presets row).
+  def('charge_option.created', 'settings', 'normal', 'org', 'charge_options', 'T-634'),
+  def('charge_option.updated', 'settings', 'normal', 'org', 'charge_options', 'T-634'),
+  def('charge_option.retired', 'settings', 'normal', 'org', 'charge_options', 'T-634'),
+  def('charge_option.reactivated', 'settings', 'normal', 'org', 'charge_options', 'T-634'),
   // T-533 S1: a store's POS mode set or moved (off, test, live from a date, or the roll-back); entity = the pos_stores row. `high`: it decides whether real sales days come from the new POS.
   def('pos.store_mode_set', 'settings', 'high', 'store', 'pos_stores', 'T-533'),
   // T-531: the day close (the Z; entity = the pos_day_closes row, or the run id for the backlog), the ERP sales day it derives, and the December bridge to v1 (entity = the store).
