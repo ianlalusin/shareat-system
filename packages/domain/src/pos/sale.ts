@@ -468,6 +468,13 @@ const ticket = (r: Awaited<ReturnType<typeof posV2Repo.listQueuedLines>>[number]
   note: r.line.note, stationId: r.line.kitchenStationId, addedAtDevice: r.line.addedAtDevice, askedBy: r.askedBy,
 });
 
+/** T-643: append the names not already in `into`, ignoring case and spaces ("Garlic" and " garlic " are one flavour); the first spelling seen wins. */
+const flavourKey = (n: string) => n.replace(/\s+/g, '').toLowerCase();
+function addFlavours(into: string[], names: string[]): string[] {
+  for (const n of names) if (!into.some((x) => flavourKey(x) === flavourKey(n))) into.push(n);
+  return into;
+}
+
 /**
  * T-529: the open dine-in tables that hold a package (the refill stand picker and the heads list), one row per table, by stand number.
  * Needs `request_pos_refill` OR `confirm_pos_heads` at the store: a phone that may do either needs to see the tables.
@@ -481,10 +488,10 @@ export async function listRefillableTables(tx: Tx, actor: Actor, input: { storeI
   for (const r of await posV2Repo.listRefillableTables(tx, actor.orgId, input.storeId)) {
     if (r.packageVariantId === null) continue;
     const have = byTable.get(r.sessionId);
-    if (!have) byTable.set(r.sessionId, { sessionId: r.sessionId, standNumber: r.standNumber, packageVariantId: r.packageVariantId, packageVariantIds: [r.packageVariantId], seatFlavours: [...new Set(r.seatFlavours)], headsCashier: r.headsCashier, headsServer: r.headsServer });
+    if (!have) byTable.set(r.sessionId, { sessionId: r.sessionId, standNumber: r.standNumber, packageVariantId: r.packageVariantId, packageVariantIds: [r.packageVariantId], seatFlavours: addFlavours([], r.seatFlavours), headsCashier: r.headsCashier, headsServer: r.headsServer });
     else {
       if (!have.packageVariantIds.includes(r.packageVariantId)) have.packageVariantIds.push(r.packageVariantId);
-      for (const n of r.seatFlavours) if (!have.seatFlavours.includes(n)) have.seatFlavours.push(n);
+      addFlavours(have.seatFlavours, r.seatFlavours);
     }
   }
   return { tables: [...byTable.values()] };
