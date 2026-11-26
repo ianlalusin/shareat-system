@@ -57,8 +57,8 @@ describe('the stand picker lists only open dine-in package tables', () => {
     ];
     const out = refillTables(stands, { [stands[0]!.sessionId]: VAR.unli, [stands[1]!.sessionId]: VAR.unli, [stands[2]!.sessionId]: null, [stands[3]!.sessionId]: VAR.premium });
     expect(out).toEqual([
-      { sessionId: stands[0]!.sessionId, standNumber: 5, label: 'Stand 5', packageVariantId: VAR.unli },
-      { sessionId: stands[3]!.sessionId, standNumber: 12, label: 'Stand 12', packageVariantId: VAR.premium },
+      { sessionId: stands[0]!.sessionId, standNumber: 5, label: 'Stand 5', packageVariantId: VAR.unli, seatFlavours: [] },
+      { sessionId: stands[3]!.sessionId, standNumber: 12, label: 'Stand 12', packageVariantId: VAR.premium, seatFlavours: [] },
     ]);
   });
   it('sorts by stand number whatever order the server lists them', async () => {
