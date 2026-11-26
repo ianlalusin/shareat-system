@@ -37,3 +37,8 @@ export const POS_LOBBY_WALKIN_RULES = defineFieldRules('pos.lobbyWalkIn', {
   phone: { label: 'The phone number', optional: true, kind: 'text', max: 30, requires: 'The phone number can be up to 30 characters.' },
   note: { label: 'The note', optional: true, kind: 'text', max: 60, requires: 'The note can be up to 60 characters.' },
 });
+
+/** T-644 S2: the stand label recorded on a seated lobby entry (the diner's phone shows it): a stand number, so a short text. */
+export const POS_LOBBY_SEAT_RULES = defineFieldRules('pos.lobbySeat', {
+  standLabel: { label: 'The stand', kind: 'text', max: 20, requires: 'Choose a stand (up to 20 characters).' },
+});

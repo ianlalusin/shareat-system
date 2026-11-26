@@ -17,6 +17,8 @@ export interface LobbyLineView {
   lineKind: 'package' | 'a_la_carte';
   qty: number;
   variantId: string;
+  /** T-644 S2: the options the diner chose (ids), so the seat sheet can pre-fill the line. Absent on an answer from before S2. */
+  optionValueIds?: string[];
   label: string;
   /** The store's active POS v1 link key, or null: the line is shown as text to tap in by hand. */
   posItemKey: string | null;
@@ -79,7 +81,8 @@ export function lobbyRowSummary(e: Pick<LobbyEntryView, 'code' | 'displayName' |
 }
 
 /** The lines with no menu match on this store: the cashier taps these in by hand. */
-export const byHandLines = (e: Pick<LobbyEntryView, 'lines'>): string[] => e.lines.filter((l) => !l.posItemKey).map((l) => `${l.qty} x ${l.label} (tap in by hand)`);
+export const handLine = (l: Pick<LobbyLineView, 'qty' | 'label'>): string => `${l.qty} x ${l.label} (tap in by hand)`;
+export const byHandLines = (e: Pick<LobbyEntryView, 'lines'>): string[] => e.lines.filter((l) => !l.posItemKey).map(handLine);
 
 /**
  * The poll's traffic rule: ONE list call in flight. A poll asked for while one runs is skipped and remembered, then re-run once when the call ends; an answer
