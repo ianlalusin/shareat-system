@@ -93,12 +93,6 @@ const EXEMPT: Record<string, string> = {
     'JOB — T-533 S2: `loadStoreSetup` (packages/etl/src/pos-v2/load-store-setup.ts) calls it, run by the script scripts/pos-load-setup.ts (`npm run pos:load-setup`), a one-time operator load for Lipa. No ERP screen is planned for stands (row 371: a store keeps the fixed set v1 holds). Remove this row if a screen ever calls it.',
   listLobbyEntries:
     'UNWIRED — T-644 S1 lists through `listLobby` (it adds the lines and the pos_seen_at stamp), so this plain list has no screen. Remove this row if one ever calls it.',
-  seatEntry:
-    'UNWIRED — T-644 S2 (the Seat button on the ERP POS Lobby tab) is its caller; S1 ships without seating. Remove this row when S2 lands.',
-  listBirthdayRequests:
-    'UNWIRED — T-455 S6a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S6b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
-  markBirthdayPlayed:
-    'UNWIRED — T-455 S6a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S6b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
   listClaimRequests:
     'UNWIRED — T-455 S7a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S7b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
   openClaim:
