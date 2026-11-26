@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
  * Fixture: packages/domain/tests/integration/_fixtures/t525-pos.ts (counter = record_sale at store A; kitchen = NO record_sale; pairingToken = store A's tablet).
  *
  * MUTANT INDEX (each title ends with "[kills: ...]"): a list action that does not stamp pos_seen_at; any action that skips record_sale; a store taken from the body
- * on a paired tablet; call / remove of another store's entry through the pairing's store; a bad entry id reaching the database; pause that does not round-trip.
+ * on a paired tablet; call / remove of another store's entry through the pairing's store; a bad entry id reaching the database; pause that does not round-trip; a list that stamps with no pairing or with another store's pairing (drop the pairing check in `atStore(..., true)` -> red).
  */
 const HOLD = vi.hoisted(() => ({ actor: null as null | { orgId: string; personId: string }, token: null as string | null }));
 vi.mock('../../src/lib/session', () => {
@@ -85,6 +85,27 @@ describe('listLobbyAction: the list and the stamp', () => {
     const w = await act('parkWalkInAction', f.kitchen, { storeId: f.storeId, displayName: 'Nope', partySize: 2 }, f.pairingToken);
     expect(w.ok).toBe(false);
     expect(await countAt(f.storeId)).toBe(0);
+  });
+});
+
+describe('the list stamps only from a paired tablet of the same store', () => {
+  it('no pairing token (a laptop) is refused and pos_seen_at stays null [kills: a list that stamps for any record_sale holder with no pairing]', async () => {
+    const f = await fixture();
+    await withLobbyStore(f, f.storeId);
+    const r = await act('listLobbyAction', f.counter, { storeId: f.storeId }, null);
+    expect(r).toEqual({ ok: false, error: "Open the lobby on the store's paired tablet." });
+    expect((await lobbyRow(f.storeId))!.pos_seen_at).toBeNull();
+  });
+
+  it('a pairing of ANOTHER store cannot stamp this store [kills: a list that stamps the body's store after a pairing of a different store]', async () => {
+    const f = await fixture();
+    await withLobbyStore(f, f.storeId);
+    await withLobbyStore(f, f.store2Id);
+    const r = await act('listLobbyAction', f.admin, { storeId: f.store2Id }, f.pairingToken);
+    expect(r.ok).toBe(false);
+    oneSentence(r.error);
+    expect((await lobbyRow(f.store2Id))!.pos_seen_at).toBeNull();
+    expect((await lobbyRow(f.storeId))!.pos_seen_at).toBeNull();
   });
 });
 

@@ -11,6 +11,7 @@ import type { Actor } from '@shareat/auth';
 import type { Tx } from '@shareat/db';
 import { callEntry, listLobby, parkWalkIn, removeEntry, setLobbyPaused } from '@shareat/domain';
 import { requireActor } from '@/lib/session';
+import { tabletPairing } from '@/lib/pos-api';
 import { errorMessage } from '@/lib/constraint-messages';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { actionStore } from '../_shell/action-store';
@@ -18,13 +19,18 @@ import { BAD_ENTRY, type LobbyListView, type LobbyResult } from '../_lobby/logic
 
 const ROUTE = '/pos/lobby';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NOT_PAIRED = "Open the lobby on the store's paired tablet.";
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
 /** The one shape of every action: who is signed in, which store this tablet works at, then the domain call; a refusal becomes `{ ok: false, error }`. */
-async function atStore<T extends object>(input: unknown, run: (tx: Tx, actor: Actor, storeId: string) => Promise<T>): Promise<LobbyResult<T>> {
+async function atStore<T extends object>(input: unknown, run: (tx: Tx, actor: Actor, storeId: string) => Promise<T>, needsPairing = false): Promise<LobbyResult<T>> {
   const actor = await requireActor(ROUTE);
   const store = await actionStore(actor, isRecord(input) ? input.storeId : undefined);
   if ('error' in store) return { ok: false, error: store.error };
+  if (needsPairing) {
+    const pairing = await tabletPairing();
+    if (!pairing || pairing.orgId !== actor.orgId || pairing.storeId.toLowerCase() !== store.storeId) return { ok: false, error: NOT_PAIRED };
+  }
   try {
     return { ok: true, ...(await withOrgPrincipal(actor.orgId, (tx) => run(tx, actor, store.storeId))) };
   } catch (err) {
@@ -55,7 +61,7 @@ export async function listLobbyAction(input: { storeId: string }): Promise<Lobby
         lines: e.lines.map((l) => ({ lineKind: l.lineKind, qty: l.qty, variantId: l.variantId, label: l.label, posItemKey: l.posItemKey })),
       })),
     };
-  });
+  }, true);
 }
 
 /** The cashier parks a walk-in on the line. The domain trims and bounds the name, party size, phone and note. */
