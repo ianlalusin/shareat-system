@@ -23,6 +23,7 @@ import { refillEvent, refillRequestInput, stepQty } from './payloads';
 import { buildRefillRows } from './queue';
 import { RefillStandRow } from './RefillStandRow';
 import { refillTables, type RefillTableSource } from './tables';
+import { flavoursLedBy } from './meats';
 
 const CLOCK_MS = 15_000;
 const NO_CONNECTION = 'That did not send. Check the internet and try again.';
@@ -198,6 +199,8 @@ export function Refills() {
                 <RefillStandRow tables={tables} selectedSessionId={selected} onSelect={(id) => (setSelected(id), pendingIds.current = [], setQtys({}), setFlavours({}), setSent(null))} />
               )}
               {table ? (
+                <>
+                {table.seatFlavours.length > 0 ? <p className="text-sm text-muted">Flavours: {table.seatFlavours.join(', ')}</p> : null}
                 <ul className="space-y-1" aria-label={`Meats for ${table.label}`}>
                   {meats.map((m) => (
                     <li key={m.itemId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-1">
@@ -213,7 +216,7 @@ export function Refills() {
                       </span>
                       {m.flavours.length > 0 ? (
                         <div className="flex w-full flex-wrap gap-2" role="group" aria-label={`Flavour for ${m.name}${m.flavourRequired ? ' (required)' : ''}`}>
-                          {m.flavours.map((f) => {
+                          {flavoursLedBy(m.flavours, table.seatFlavours).map(({ flavour: f, seat }) => {
                             const on = flavourOf(m) === f.id;
                             return (
                               <button
@@ -221,11 +224,12 @@ export function Refills() {
                                 type="button"
                                 data-erp-size="free"
                                 aria-pressed={on}
-                                aria-label={`Flavour ${f.name}, ${m.name}`}
+                                aria-label={`Flavour ${f.name}${seat ? " (table's pick)" : ''}, ${m.name}`}
                                 className={`${CHIP} ${on ? 'border-ink bg-ink text-canvas' : 'border-surface-border bg-surface text-ink hover:bg-canvas'}`}
                                 onClick={() => (pendingIds.current = [], setFlavours((c) => (c[m.itemId] === f.id ? Object.fromEntries(Object.entries(c).filter(([k]) => k !== m.itemId)) : { ...c, [m.itemId]: f.id })))}
                               >
                                 {f.name}
+                                {seat ? <span className="ml-1 text-xs font-normal opacity-80">· Table&apos;s pick</span> : null}
                               </button>
                             );
                           })}
@@ -235,6 +239,7 @@ export function Refills() {
                   ))}
                   {meats.length === 0 ? <li className="text-sm text-muted">This package lists no refills.</li> : null}
                 </ul>
+                </>
               ) : null}
               {needsFlavour ? <p className="text-sm text-muted">Choose a flavour for each meat that needs one.</p> : null}
               {sent ? <p role="status" className="text-sm font-semibold text-success">{sent}</p> : null}

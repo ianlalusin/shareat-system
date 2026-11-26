@@ -155,3 +155,13 @@ export function isOptionChoiceValid(group: ProjectedOptionGroup, chosenValueIds:
   const n = new Set(chosenValueIds).size;
   return n >= group.minSelections && n <= group.maxSelections && (group.selectionMode !== 'single' || n <= 1);
 }
+
+/**
+ * The hint after a group's name in the choice sheet. A multi group says how many ("choose 1 to 3", never a bare "choose": T-643, the seating flavours); a single group keeps "choose".
+ */
+export function groupHint(group: ProjectedOptionGroup): string {
+  const { minSelections: min, maxSelections: max } = group;
+  if (group.selectionMode === 'single') return min > 0 ? '(choose)' : '(optional)';
+  if (min === 0) return `(optional, up to ${max})`;
+  return min === max ? `(choose ${min})` : `(choose ${min} to ${max})`;
+}
