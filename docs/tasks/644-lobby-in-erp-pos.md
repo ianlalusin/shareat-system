@@ -37,6 +37,8 @@ apps/pos (pos2) is the ONLY caller of the 16 `*ForTerminal` lobby / birthday / c
 - If the lobby step fails after the table opened, the row shows "Seated, link not saved — Retry". The retry is kept in localStorage, ids only, like pos2's lobbyPending.ts.
 - Tests: two-step order, retry path, mapping, and the offline refusal.
 
+**Known gap (S2).** If the server later refuses the queued `stand.opened` (for example "stand in use (race)"; the outbox drops conflicts), the lobby already says seated with no table. The cashier sees the outbox conflict notice and must seat the party again from Orders. Reconciliation is out of scope for S2.
+
 **S3 — Birthday songs.** List / accept (now or at a time) / decline (the 3 fixed reasons from pos2's birthdayPresets.ts) / played. The scheduler is a port of apps/pos/src/lib/birthday/scheduler.ts: 10 s countdown with Stop, localStorage per store with ids and times only, drops requests older than 30 min. Ruling 5 for audio. Use a banner, not a dialog, while the Orders sheet is open.
 
 **S4 — Discount claims.** Actor `claimStatus` twin. A claims strip on the Lobby tab and a claim dialog: open → name/ID kept in the dialog's memory only (masked in the list) → "card seen" tick → approve with ruling 6's ref, or reject with fixed reason chips only (no free text). `DiscountSheet` pre-fill per ruling 6. Tests: approve refused without cardSeen / without a seated session; free-text reject refused; no ID number in any list projection; the pre-fill never applies a discount without the cashier's confirm.

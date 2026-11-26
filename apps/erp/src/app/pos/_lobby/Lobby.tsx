@@ -35,7 +35,7 @@ const NAME_ATTRS = nativeAttrs(POS_LOBBY_WALKIN_RULES.displayName);
 const PHONE_ATTRS = nativeAttrs(POS_LOBBY_WALKIN_RULES.phone);
 const NOTE_ATTRS = nativeAttrs(POS_LOBBY_WALKIN_RULES.note);
 
-type Sheet = { kind: 'walkin' } | { kind: 'remove'; e: LobbyEntryView };
+type Sheet = { kind: 'walkin' } | { kind: 'remove'; e: LobbyEntryView } | { kind: 'dismiss'; e: LobbyEntryView };
 const nameOf = (e: LobbyEntryView) => e.displayName?.trim() || e.code;
 const NO_EVENTS: PosEvent[] = [];
 
@@ -212,12 +212,13 @@ export function Lobby() {
       setNotice(`${nameOf(e)} is seated.`);
     } else setProblem(r.message);
   };
-  /** Dismiss: stop asking. Only this tablet's note goes; the party stays on the line until it is removed (the table itself is open and stays). */
+  /** Dismiss (after a confirm): stop asking. Only this tablet's note goes; the party stays on the line until it is removed (the table itself is open and stays). */
   const dismiss = (e: LobbyEntryView) => {
     if (!storeId) return;
     clearPending(storeId, e.entryId);
     setPending(readPending(storeId));
     setProblem(null);
+    close();
   };
 
   const pausedNow = list?.lobbyEnabled === true && list.paused;
@@ -285,7 +286,7 @@ export function Lobby() {
                         <button type="button" className={SECONDARY} disabled={!ready || busy} onClick={() => void retry(e, stuck)}>
                           Retry
                         </button>
-                        <button type="button" className={SECONDARY} disabled={busy} onClick={() => dismiss(e)}>
+                        <button type="button" className={SECONDARY} disabled={busy} onClick={() => setSheet({ kind: 'dismiss', e })}>
                           Dismiss
                         </button>
                       </>
@@ -351,6 +352,19 @@ export function Lobby() {
                 </button>
                 <button type="button" className={SECONDARY} disabled={saving} onClick={close}>
                   Keep them
+                </button>
+              </div>
+            ) : null}
+          </Dialog>
+
+          <Dialog open={sheet?.kind === 'dismiss'} onClose={close} title={sheet?.kind === 'dismiss' ? `Dismiss the note for ${nameOf(sheet.e)}?` : 'Dismiss'} description="A table is already open for this party. Dismiss only hides this note — do not seat them again." size="sm">
+            {sheet?.kind === 'dismiss' ? (
+              <div className="flex flex-col gap-3">
+                <button type="button" className={PRIMARY} onClick={() => dismiss(sheet.e)}>
+                  Dismiss the note
+                </button>
+                <button type="button" className={SECONDARY} onClick={close}>
+                  Keep it
                 </button>
               </div>
             ) : null}

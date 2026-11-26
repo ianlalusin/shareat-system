@@ -68,6 +68,22 @@ describe('the party lines become order lines through the snapshot menu (variantI
   });
 });
 
+describe('a variant closed by its daypart at the test time', () => {
+  it('goes to hand entry even when its plain store offer is on, because the time decides [kills: storeAnswer(variant) without the time]', () => {
+    const offer = { orderable: true as const, amount: '40.00', bundleHeads: null, extraHeadAmount: null };
+    // 10:00 UTC is 18:00 in Manila: the only window (lunch, 08:00-17:00) is shut, while channels.store alone says orderable.
+    const dayparted = {
+      ...MENU,
+      hours: { timeZone: 'Asia/Manila', dayparts: [{ id: 'lunch', days: [0, 1, 2, 3, 4, 5, 6], start: '08:00', end: '17:00' }] },
+      items: MENU.items.map((i) => (i.id === IDS.plain ? { ...i, variants: i.variants.map((v) => ({ ...v, channels: { ...v.channels, store: offer }, slots: [{ daypartId: 'lunch', ...offer }] })) } : i)),
+    } as unknown as typeof MENU;
+    const r = mapLobbyLines([line()], dayparted, NOW);
+    expect(r.cart).toEqual([]);
+    expect(r.byHand).toEqual(['1 x Plain rice (tap in by hand)']);
+    expect(mapLobbyLines([line()], dayparted, new Date('2026-11-26T04:00:00.000Z')).cart, 'at 12:00 Manila the window is open').toHaveLength(1);
+  });
+});
+
 describe('the Seat button', () => {
   it('is off, with the one sentence, when the tablet is offline, whatever else is true [kills: a Seat that stays on offline and sends a table the lobby can never be told about]', () => {
     expect(seatButton({ ready: false, online: false, busy: false })).toEqual({ disabled: true, hint: SEAT_NEEDS_INTERNET });
@@ -215,6 +231,17 @@ describe('the wiring: Seat on the row opens the Orders seat sheet; the action ta
     expect(seat.indexOf('await d.submit(i.event)')).toBeGreaterThan(-1);
     expect(seat.indexOf('await d.submit(i.event)')).toBeLessThan(seat.indexOf('await tryLink(d, p)'));
     expect(read('_orders/OrderDialogs.tsx')).toContain('useState(prefill?.heads ?? START_HEADS)');
+  });
+
+  it('the Lobby calls keepOnly (parties that left), addPending (remember) and clearPending (forget), and Dismiss goes through the confirm [kills: a deleted keepOnly, addPending, clearPending call, or a Dismiss that clears at once]', () => {
+    const lobby = read('_lobby/Lobby.tsx');
+    expect(lobby, 'keepOnly( deleted: notes of parties that left stay forever').toContain('keepOnly(pendingStore,');
+    expect(lobby, 'addPending( deleted: a failed link is never remembered').toContain('addPending(storeId, p)');
+    expect(lobby, 'clearPending( deleted: a note is never forgotten').toContain('clearPending(storeId, entryId)');
+    expect(lobby, 'the Dismiss button must open the confirm, not clear').toContain("onClick={() => setSheet({ kind: 'dismiss', e })}");
+    expect(lobby).not.toContain('onClick={() => dismiss(e)}');
+    expect(lobby).toContain('A table is already open for this party. Dismiss only hides this note');
+    expect(lobby).toContain('onClick={() => dismiss(sheet.e)}');
   });
 
   it('the server action sends joinUrl null, passes the pairing store as onlyStoreId, and its body names no store [kills: a store read from the body, a join link made up]', () => {
