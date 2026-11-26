@@ -18,10 +18,10 @@ const alias = {
   // ⚠️ Single-app assumption, kept at ROOT deliberately, not scoped into a project's own
   // `resolve.alias`: the only project that runs `apps/erp/tests/*.test.ts` is `unit` below, and
   // `unit`'s own include glob already spans `packages/**` and `tests/unit/**` — repo-wide, not
-  // erp-scoped — plus `apps/**` for EVERY app, so a future `apps/pos`/`apps/customer` test would
+  // erp-scoped — plus `apps/**` for EVERY app, so a future `apps/customer` test would
   // land in that same project and inherit this alias either way. Moving it into `unit`'s block
-  // would look narrower without being narrower. `apps/pos`/`apps/customer` are reserved, not
-  // built today (RULES §"out of scope") — the day either gets its own `@/` imports under test,
+  // would look narrower without being narrower. `apps/customer` is reserved, not
+  // built today (RULES §"out of scope") — the day it gets its own `@/` imports under test,
   // `unit`'s glob needs splitting into a per-app project FIRST, and this alias follows that split.
   '@': `${root}apps/erp/src`,
   '@shareat/core/money': `${root}packages/core/src/money.ts`,
@@ -131,9 +131,8 @@ export default defineConfig({
           // BEFORE migrations are applied, so a DB-touching test here fails on a fresh
           // database with "relation does not exist". Convention: anything under a
           // `tests/integration/` directory, anywhere, is an integration test.
-          // T-422: apps/pos has its own vitest config (`@` -> apps/pos/src); the ERP alias must never resolve its files.
           // T-437: apps/customer has its own vitest config too (same reason).
-          exclude: ['**/node_modules/**', '**/.next/**', '**/tests/integration/**', 'apps/pos/**', 'apps/customer/**', ISOLATED_FILE],
+          exclude: ['**/node_modules/**', '**/.next/**', '**/tests/integration/**', 'apps/customer/**', ISOLATED_FILE],
           environment: 'node',
           // T-380 S1a / REV-2: an empty `next/headers` jar for any test that renders a page which
           // calls `withFlash` without mocking cookies itself (a test's own vi.mock still wins).

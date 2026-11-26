@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
  * T-455 S3 (TESTER) - the customer lobby SERVER side: docs/tasks/455-customer-lobby.md section 2.3, 2.6, 2.7, 3.1, 4 (1-3), the S3 row of
- * section 5, and "S2 rulings" / "S2 audit notes". Route handlers are called DIRECTLY with a `Request` (the POS v2 style, apps/pos/src/server/__tests__),
+ * section 5, and "S2 rulings" / "S2 audit notes". Route handlers are called DIRECTLY with a `Request` (the style the old POS v2 server tests used),
  * against real Postgres via TEST_DATABASE_URL (`_test` name guard). The routes call the S2 domain for real; nothing in the domain is mocked.
  *
  * RED TODAY, for one reason: apps/customer/src/app/api/lobby/{check-in,me,cancel}/route.ts do not exist yet. The shared contract (paths, shapes, cookie,

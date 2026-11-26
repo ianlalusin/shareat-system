@@ -1,6 +1,6 @@
 /**
  * T-455 S9a items 2, 4, 5, 6 -- the files that put the customer lobby on the production host: Caddy block, nightly purge unit + timer + script, the
- * customer unit, deploy.yml's customer blocks (executed with bash against a temp dir, like deploy-pos-failed-build.test.ts) and the runbook.
+ * customer unit, deploy.yml's customer blocks (executed with bash against a temp dir) and the runbook.
  * docs/tasks/455-customer-lobby.md "S9 rulings". No database, no network, never touches a host.
  *
  * MUTANT INDEX: Caddy block without header_up X-Real-IP / pointing at the wrong port / still saying nginx; customer unit on a public interface, as root, without
@@ -35,17 +35,18 @@ describe('S9a-2 Caddy sets the client address', () => {
     expect(b).not.toMatch(/X-Forwarded-For/i);
   });
 
-  it('C2 the existing ERP and POS blocks are untouched and the lobby block is appended, not a rewrite [kills: clobbering pos2 or the ERP domain]', () => {
+  it('C2 the existing ERP block is untouched and the lobby block is appended after it, not a rewrite; no pos2 block is left [kills: clobbering the ERP domain; the retired pos2 block coming back (T-588)]', () => {
     expect(prov).toContain('reverse_proxy 127.0.0.1:9008');
-    expect(prov).toContain('pos2.shareat.net {');
-    expect(prov.indexOf('order.shareat.net {')).toBeGreaterThan(prov.indexOf('pos2.shareat.net {'));
+    expect(prov).not.toContain('pos2.shareat.net');
+    expect(prov.indexOf('order.shareat.net {')).toBeGreaterThan(prov.indexOf('reverse_proxy 127.0.0.1:9008'));
     expect(prov.match(/cat > \/etc\/caddy\/Caddyfile/g)?.length).toBe(1);
   });
 
-  it('C3 the deploy user may restart shareat-customer.service (exact command) beside erp and pos [kills: sudoers without the customer restart; a wildcard]', () => {
+  it('C3 the deploy user may restart shareat-customer.service (exact command) beside erp, and no longer pos [kills: sudoers without the customer restart; a wildcard; the retired pos restart line coming back]', () => {
     expect(prov).toContain('shareat ALL=(root) NOPASSWD: /usr/bin/systemctl restart shareat-customer.service');
     expect(prov).toContain('shareat ALL=(root) NOPASSWD: /usr/bin/systemctl restart shareat-erp.service');
     expect(prov).not.toMatch(/NOPASSWD:[^\n]*\*/);
+    expect(prov).not.toContain('shareat-pos.service');
   });
 
   it('C4 no document or source comment still says nginx for the lobby [kills: a stale proxy name that sends the next reader to the wrong file]', () => {
@@ -124,7 +125,7 @@ describe('S9a-4 the nightly purge: script, service, timer', () => {
   it('N4 the scheduler-job-hosting guard knows lobby-nightly as a named platform job with a T- reason, and customer as a non-job service [kills: an unexplained unit pair]', () => {
     const g = rd('tests', 'unit', 'scheduler-job-hosting.test.ts');
     expect(g).toMatch(/'lobby-nightly':\s*\n?\s*'T-455/);
-    expect(g).toMatch(/NAMED_NON_JOB_SERVICE = \['erp', 'pos', 'customer'\]/);
+    expect(g).toMatch(/NAMED_NON_JOB_SERVICE = \['erp', 'customer'\]/);
   });
 });
 
@@ -158,7 +159,7 @@ describe('S9a-5 deploy.yml ships the customer app without ever blocking the ERP 
     expect(deploy).toMatch(/PATHS="\$PATHS apps\/customer\/\.next[^"]*apps\/customer\/\.customer-build-ok[^"]*apps\/customer\/package\.json/);
   });
 
-  it('D3 the artifact ships every local file apps/customer/next.config.mjs imports, and the config itself [kills: a config import missing on the box, the 22 Oct POS crash]', () => {
+  it('D3 the artifact ships every local file apps/customer/next.config.mjs imports, and the config itself [kills: a config import missing on the box, the 22 Oct crash `next start` had when an imported config file was not shipped]', () => {
     const cfg = rd('apps', 'customer', 'next.config.mjs');
     const local = [...cfg.matchAll(/from\s+['"]\.\/([^'"]+)['"]/g)].map((m) => m[1]!);
     const pathsLine = deploy.split('\n').find((l) => l.includes('PATHS="$PATHS apps/customer/.next'));
@@ -168,7 +169,7 @@ describe('S9a-5 deploy.yml ships the customer app without ever blocking the ERP 
     expect(shipped).toContain('apps/customer/next.config.mjs');
   });
 
-  // ---- execute the server-side blocks, as the POS test does ----
+  // ---- execute the server-side blocks ----
   const carry = () => block('carry-forward');
   const restart = () => block('restarts only once');
 
@@ -264,9 +265,9 @@ describe('S9a-5 deploy.yml ships the customer app without ever blocking the ERP 
     expect(r.out).toMatch(/restart failed/i);
   });
 
-  it('D10 the health check hits http://127.0.0.1:9010/lobby, tries 6 times, is skipped when the unit is not installed, and comes after the ERP and POS checks [kills: the wrong URL; a customer failure hiding a healthy ERP]', () => {
+  it('D10 the health check hits http://127.0.0.1:9010/lobby, tries 6 times, is skipped when the unit is not installed, and comes after the ERP check [kills: the wrong URL; a customer failure hiding a healthy ERP]', () => {
     const at = deploy.indexOf('- name: Confirm customer lobby is up');
-    expect(at).toBeGreaterThan(deploy.indexOf('- name: Confirm POS v2 is up'));
+    expect(at).toBeGreaterThan(deploy.indexOf('- name: Confirm the app is up'));
     const next = deploy.indexOf('\n      - name:', at + 10);
     const step = deploy.slice(at, next > 0 ? next : undefined);
     expect(step).toContain('http://127.0.0.1:9010/lobby');

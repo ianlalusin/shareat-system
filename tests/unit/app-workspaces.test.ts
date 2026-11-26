@@ -1,5 +1,5 @@
 /**
- * T-417 (phase S, PC-2) - `apps/pos` and `apps/customer` are real, empty, self-contained workspaces.
+ * T-417 (phase S, PC-2) - `apps/customer` is a real, self-contained workspace (T-588: `apps/pos` was retired).
  * `docs/tasks/417-pos-customer-monorepo-setup.md` acceptance cases 1, 3, 6, 7 and the version
  * rulings. Static file/config shape only; no build is run here.
  */
@@ -12,13 +12,12 @@ const read = (...p: string[]) => readFileSync(path.join(repoRoot, ...p), 'utf8')
 const readJson = (...p: string[]) => JSON.parse(read(...p)) as Record<string, any>;
 
 const APPS = {
-  pos: { port: 9009, appId: 'net.shareat.pos2' },
   customer: { port: 9010, appId: 'net.shareat.order' },
 } as const;
 type AppName = keyof typeof APPS;
 const names = Object.keys(APPS) as AppName[];
 
-/** `-p 9009` / `--port 9009` in an npm script line. */
+/** `-p 9010` / `--port 9010` in an npm script line. */
 function portOf(script: string | undefined): number | undefined {
   const m = /(?:-p|--port)[ =](\d+)/.exec(script ?? '');
   return m ? Number(m[1]) : undefined;
@@ -93,7 +92,7 @@ describe.each(names)('T-417 apps/%s is a real workspace', (app) => {
     expect(pkg.devDependencies?.['@capacitor/android']).toMatch(/^\^6/);
   });
 
-  it('has a root page and no API routes (ruling 3; T-422 for pos)', () => {
+  it('has a root page and no API routes (ruling 3)', () => {
     expect(existsSync(path.join(repoRoot, dir, 'src/app/layout.tsx'))).toBe(true);
     expect(existsSync(path.join(repoRoot, dir, 'src/app/page.tsx'))).toBe(true);
     const walk = (d: string): string[] =>
@@ -101,18 +100,13 @@ describe.each(names)('T-417 apps/%s is a real workspace', (app) => {
         e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)],
       );
     const srcApp = path.join(repoRoot, dir, 'src/app');
-    // T-424 Ruling 1: the POS v2 SERVER lives in apps/pos/src/app/api/pos2/** (build:cap stashes it, so the APK has none). Every other route handler stays forbidden.
     const routeHandlers = walk(srcApp)
       .filter((f) => /[\/]route\.(ts|js|tsx)$/.test(f))
-      .filter((f) => !(app === 'pos' && /[\/]app[\/]api[\/]pos2[\/]/.test(f)))
       // T-455 S3 (spec S3 row, amends ruling 3 for the lobby only): the customer lobby SERVER lives in
-      // apps/customer/src/app/api/lobby/** and build:cap stashes it, as POS does. Every other route stays forbidden.
+      // apps/customer/src/app/api/lobby/** and build:cap stashes it. Every other route stays forbidden.
       .filter((f) => !(app === 'customer' && /[\/]app[\/]api[\/]lobby[\/]/.test(f)));
     expect(routeHandlers).toEqual([]);
-    // T-422 filled apps/pos with POS v1's floor screens (its root page renders the login page), so
-    // for pos the app name is checked where the copy puts it: the root layout's title.
-    if (app === 'pos') expect(read(dir, 'src/app/layout.tsx')).toContain('Shareat POS v2');
-    else expect(read(dir, 'src/app/page.tsx')).toContain('Shareat Customer v2');
+    expect(read(dir, 'src/app/page.tsx')).toContain('Shareat Customer v2');
   });
 
   it('gitignores build output and signing material', () => {
@@ -140,14 +134,14 @@ describe('T-417 ports across all apps (case 6)', () => {
       }
     }
     expect(clashes).toEqual([]);
-    expect(seen.get(9009)).toBe('pos');
+    expect(seen.has(9009), 'port 9009 belonged to the retired apps/pos (T-588)').toBe(false);
     expect(seen.get(9010)).toBe('customer');
     expect(seen.get(9008)).toBe('erp');
   });
 
-  it('root dev:pos and dev:customer scripts exist; root build/dev/start stay ERP-only', () => {
+  it('root dev:customer exists and dev:pos is gone; root build/dev/start stay ERP-only', () => {
     const scripts = readJson('package.json').scripts as Record<string, string>;
-    expect(scripts['dev:pos']).toMatch(/@shareat\/pos/);
+    expect(scripts['dev:pos']).toBeUndefined();
     expect(scripts['dev:customer']).toMatch(/@shareat\/customer/);
     expect(scripts.build).toBe('npm run build -w @shareat/erp');
     expect(scripts.dev).toBe('npm run dev -w @shareat/erp');
@@ -180,8 +174,8 @@ describe('T-417 Android app ids (case 7)', () => {
     }
   });
 
-  it('the two apps have different ids', () => {
-    expect(idsOf('pos').cap).not.toBe(idsOf('customer').cap);
+  it('apps/customer does not take the retired POS v2 id. Mutant: net.shareat.pos2 reused', () => {
+    expect(idsOf('customer').cap).not.toBe('net.shareat.pos2');
   });
 
   it.each(names)('%s: release signing reads the RELEASE_* env vars, never a literal secret', (app) => {

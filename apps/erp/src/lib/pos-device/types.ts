@@ -2,8 +2,8 @@
  * T-530a — the POS v2 **server contract** for the tablet's outbox.
  *
  * These are the wire shapes the device queue stores and the server accepts. Nothing here computes
- * anything: the tablet writes a row, the server decides what it means. `apps/pos` is the v1 code
- * this replaces and is read as requirements only; these names and shapes are the v2 contract.
+ * anything: the tablet writes a row, the server decides what it means. the old Firebase POS code (POS v1)
+ * is what this replaces and is read as requirements only; these names and shapes are the v2 contract.
  */
 
 /** The twelve things a till action can be. Anything else is refused before it is stored. */

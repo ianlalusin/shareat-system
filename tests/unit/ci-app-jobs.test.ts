@@ -70,57 +70,50 @@ describe('T-417 ERP CI is untouched (case 13)', () => {
     expect(sha(lines.slice(s, e).join('\n').trimEnd())).toBe('0b3420dc93bec889ec9c1abca2f48b3cbca1cf1727f1d14ffda250c135e830a0');
   });
 
-  // Bible row 378: POS v2 ships beside the ERP. Its steps live only between `# >>> POS v2` and
-  // `# <<< POS v2` markers; with those blocks removed, every ERP byte is still 9c1704b's.
-  const stripPos = (s: string) => {
+  // The customer lobby's steps live only between `# >>> Customer lobby` and `# <<< Customer lobby` markers; with those blocks
+  // removed, every ERP byte is still 9c1704b's. (T-588: the POS v2 blocks were deleted with apps/pos; the pin is unchanged.)
+  const stripBlocks = (s: string) => {
     const out: string[] = [];
     let skip = false;
     for (const line of s.split('\n')) {
-      // T-455 S9a: the customer lobby's steps live between `# >>> Customer lobby` and `# <<< Customer lobby`, stripped the same way.
-      if (line.includes('# >>> POS v2') || line.includes('# >>> Customer lobby')) { skip = true; continue; }
-      if (line.includes('# <<< POS v2') || line.includes('# <<< Customer lobby')) { skip = false; continue; }
+      if (line.includes('# >>> Customer lobby')) { skip = true; continue; }
+      if (line.includes('# <<< Customer lobby')) { skip = false; continue; }
       if (!skip) out.push(line);
     }
     return out.join('\n');
   };
 
-  it('deploy.yml minus the POS v2 blocks is byte-identical to 9c1704b. Mutant: any ERP step edit', () => {
-    expect(sha(stripPos(readLf(wf('deploy.yml'))))).toBe('13612895e9ee2e0e61e6df03a0edbf150c8cad0d88112c5fd411fa12977cd505');
+  it('deploy.yml minus the customer lobby blocks is byte-identical to 9c1704b. Mutant: any ERP step edit', () => {
+    expect(sha(stripBlocks(readLf(wf('deploy.yml'))))).toBe('13612895e9ee2e0e61e6df03a0edbf150c8cad0d88112c5fd411fa12977cd505');
   });
 
-  it('a POS v2 failure can never block the ERP deploy. Mutant: fatal POS build or restart', () => {
+  it('a customer lobby failure can never block the ERP deploy. Mutant: fatal customer build or restart, or the success marker dropped', () => {
     const d = readLf(wf('deploy.yml'));
-    const opens = d.match(/# >>> POS v2/g)?.length ?? 0;
-    expect(opens).toBe(6); // T-473 / DEF-753 carry-forward block; T-476 / DEF-770 retention block
-    expect(d.match(/# <<< POS v2/g)?.length).toBe(6);
-    expect(d).toMatch(/- name: Build POS v2 \(web\)\n\s+continue-on-error: true/);
-    expect(d).toMatch(/if \[ -f apps\/pos\/\.pos-build-ok \]; then/); // gated on the success marker, not .next
-    expect(d).toMatch(/restart shareat-pos\.service \|\| \{ POS_UP=0; echo/);
-    expect(d.indexOf('Confirm POS v2 is up')).toBeGreaterThan(d.indexOf('- name: Confirm the app is up'));
+    expect(d.match(/# >>> Customer lobby/g)?.length).toBe(6);
+    expect(d.match(/# <<< Customer lobby/g)?.length).toBe(6);
+    expect(d).toMatch(/- name: Build customer lobby \(web\)\n\s+continue-on-error: true/);
+    expect(d).toMatch(/if \[ -f apps\/customer\/\.customer-build-ok \]; then/); // gated on the success marker, not .next
+    expect(d).toMatch(/restart shareat-customer\.service \|\| \{ CUSTOMER_UP=0; echo/);
+    expect(d.indexOf('Confirm customer lobby is up')).toBeGreaterThan(d.indexOf('- name: Confirm the app is up'));
   });
 
-  // 22 Oct: `next start` crashed on the box because next.config.mjs imports ./config/*, which the
-  // artifact did not ship. Every local file next.config.mjs imports must be in the POS PATHS.
-  it('the artifact ships every local file apps/pos/next.config.mjs imports. Mutant: drop apps/pos/config', () => {
-    const cfg = readLf(path.join(repoRoot, 'apps', 'pos', 'next.config.mjs'));
-    const local = [...cfg.matchAll(/from\s+['"]\.\/([^'"]+)['"]/g)].map((m) => m[1]!);
-    expect(local.length, 'next.config.mjs imports nothing local: re-check this guard').toBeGreaterThan(0);
-    const pathsLine = readLf(wf('deploy.yml')).split('\n').find((l) => l.includes('PATHS="$PATHS apps/pos/.next'));
-    expect(pathsLine, 'POS PATHS line not found').toBeDefined();
-    const shipped = pathsLine!.match(/apps\/pos\/[^\s"]+/g) ?? [];
-    for (const rel of local) {
-      const top = `apps/pos/${rel.split('/')[0]}`;
-      expect(shipped, `${top} is imported by next.config.mjs but not shipped`).toContain(top);
-    }
+  // T-588: apps/pos and its service are gone. Mutant: a POS build, restart or health probe is put back in the deploy.
+  it('deploy.yml has no POS v2 build, service restart or health probe left', () => {
+    const d = readLf(wf('deploy.yml'));
+    expect(d).not.toMatch(/apps\/pos(?![A-Za-z-])/);
+    expect(d).not.toContain('shareat-pos.service');
+    expect(d).not.toContain('@shareat/pos');
+    expect(d).not.toContain(':9009');
+    expect(d).not.toContain('POS v2');
   });
 });
 
 describe('T-417 ci.yml: change detection and app jobs (case 9)', () => {
-  it('the changes job exposes pos and customer outputs next to docs_only', () => {
+  it('the changes job exposes the customer output next to docs_only, and no pos output', () => {
     const changes = jobBlock(ci(), 'changes')!;
     expect(changes).toBeDefined();
     expect(changes).toMatch(/docs_only:\s*\$\{\{\s*steps\.check\.outputs\.docs_only\s*\}\}/);
-    expect(changes).toMatch(/^\s+pos:\s*\$\{\{\s*steps\.\w+\.outputs\.pos\s*\}\}/m);
+    expect(changes).not.toMatch(/^\s+pos:/m); // T-588: apps/pos is retired
     expect(changes).toMatch(/^\s+customer:\s*\$\{\{\s*steps\.\w+\.outputs\.customer\s*\}\}/m);
   });
 
@@ -138,7 +131,7 @@ describe('T-417 ci.yml: change detection and app jobs (case 9)', () => {
     expect(tail).toMatch(/GITHUB_OUTPUT/);
   });
 
-  it.each(['pos', 'customer'])('app-%s: needs changes, gated on its own output, calls app-build.yml with app: %s and secrets: inherit', (app) => {
+  it.each(['customer'])('app-%s: needs changes, gated on its own output, calls app-build.yml with app: %s and secrets: inherit', (app) => {
     const block = jobBlock(ci(), `app-${app}`);
     expect(block, `job app-${app} missing`).toBeDefined();
     expect(block).toMatch(/needs:\s*changes\b/);
@@ -148,13 +141,13 @@ describe('T-417 ci.yml: change detection and app jobs (case 9)', () => {
     expect(block).toMatch(/secrets:\s*inherit/);
   });
 
-  it('an app job reads only its OWN output (pos job never keys off customer, and vice versa)', () => {
-    expect(jobBlock(ci(), 'app-pos')).not.toMatch(/outputs\.customer/);
-    expect(jobBlock(ci(), 'app-customer')).not.toMatch(/outputs\.pos/);
+  it('there is no app-pos job and no job reads a pos output. Mutant: app-pos job back in ci.yml', () => {
+    expect(jobBlock(ci(), 'app-pos')).toBeUndefined();
+    expect(ci()).not.toMatch(/outputs\.pos(?![A-Za-z])/);
   });
 
   it('app jobs never use the self-hosted runner variable. Mutant: app job on vars.CI_RUNNER', () => {
-    for (const app of ['pos', 'customer']) {
+    for (const app of ['customer']) {
       const block = jobBlock(ci(), `app-${app}`);
       expect(block, `job app-${app} missing`).toBeDefined();
       expect(block).not.toContain('CI_RUNNER');

@@ -2,7 +2,7 @@ name: POS shell build
 
 # T-532 S3: a signed release APK of apps/pos-shell (the Android shell that opens https://erp2.shareat.net/pos).
 # Runs on changes under apps/pos-shell/** and on manual dispatch. Separate from ci.yml and app-build.yml on purpose:
-# the shell has no web build (its webDir is one static page), and `app-pos` (apps/pos) stays untouched.
+# the shell has no web build (its webDir is one static page), and ci.yml is untouched.
 # GitHub-hosted runner, never the self-hosted one that runs `verify`. Never built on a droplet.
 on:
   pull_request:

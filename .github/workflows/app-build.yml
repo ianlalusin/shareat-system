@@ -6,7 +6,7 @@ on:
   workflow_call:
     inputs:
       app:
-        description: 'App folder under apps/ (pos or customer)'
+        description: 'App folder under apps/ (customer)'
         required: true
         type: string
 

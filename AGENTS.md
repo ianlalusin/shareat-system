@@ -144,7 +144,7 @@ opening it. Read them as *requirements*, not as design (bible section 1.2b).
 
 ```
 packages/   core (money·datetime·logger·env) · db (schema·migrations·client)
-apps/       erp 9008 · pos 9003 · customer 9004 · website 9007
+apps/       erp 9008 · customer 9004 · website 9007
 docs/       decisions/ · discovery/ · plans/ · tasks/
 ```
 

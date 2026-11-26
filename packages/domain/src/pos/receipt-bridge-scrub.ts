@@ -4,7 +4,7 @@
  * number, no guest name, phone, email, PIN, card number, customer snapshot, free-text note.
  *
  * It is an allow-list on purpose: a deny-list loses to the next field name POS invents. A key not named here is dropped, at every
- * depth. Shapes read from `apps/pos/src/lib/types.ts` (Receipt, SessionBillLine, LineAdjustment) and the POS v1 repo.
+ * depth. Shapes read from the POS v1 repo (Receipt, SessionBillLine, LineAdjustment).
  *
  * One copy: the mapper in `etl-firestore` and the job both call this. Pure, no I/O.
  */

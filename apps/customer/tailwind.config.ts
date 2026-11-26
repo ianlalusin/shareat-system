@@ -1,6 +1,6 @@
 import type { Config } from 'tailwindcss';
 
-// Same token names as apps/pos (hsl(var(--x))), so the diner app looks like part of the Shareat family.
+// Same token names as the ERP's POS screens (hsl(var(--x))), so the diner app looks like part of the Shareat family.
 export default {
   darkMode: ['class'],
   content: ['./src/components/**/*.{ts,tsx}', './src/app/**/*.{ts,tsx}'],

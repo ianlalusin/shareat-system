@@ -1002,15 +1002,12 @@ detector consults it, T-135's rule is broken and v1's suppression defect is back
 test asserts this by deleting every row and re-reading the feed. The gap is real; closing it this
 way costs more than it buys.
 
-## `shareat-pos.service` — POS v2's web process (T-417, file only)
+## `shareat-pos.service` — retired (T-588, 26 Nov 2026)
 
-A second long-running `next start`, beside `shareat-erp.service`, on the production droplet
-(`159.223.46.224`). It binds `127.0.0.1:9009` and is capped at `MemoryMax=768M` so it cannot starve
-the ERP on the 4 GB box. Like the ERP unit it never builds: it runs a tree CI shipped.
-
-⚠️ **Not installed and not enabled.** `provision.sh` copies it with the other `shareat-*.service` files but
-enables only `shareat-erp.service`. Shipping a POS build in `deploy.yml`, the Caddy route and the memory
-check are a later task plus ops steps on the droplet.
+POS v2 is a module of the ERP (`/pos` on `erp2.shareat.net`), so the old Firebase POS v2 web process is gone from
+the repo: the unit file, its Caddy block, its log, its sudoers line and its deploy steps. The steps to take it off the
+production host (`159.223.46.224`) are in `docs/tasks/588-retire-pos2-addendum.md`, "Production". Ian runs them, after the
+usage check is clean and the repo change is deployed.
 
 ## Interface
 
