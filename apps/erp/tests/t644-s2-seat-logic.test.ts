@@ -70,13 +70,15 @@ describe('the party lines become order lines through the snapshot menu (variantI
 
 describe('a variant closed by its daypart at the test time', () => {
   it('goes to hand entry even when its plain store offer is on, because the time decides [kills: storeAnswer(variant) without the time]', () => {
-    const offer = { orderable: true as const, amount: '40.00', bundleHeads: null, extraHeadAmount: null };
+    type Offer = (typeof MENU)['items'][number]['variants'][number]['channels']['store'];
+    const offer: Offer = { orderable: true, amount: '40.00', bundleHeads: null, extraHeadAmount: null };
+    const noSale: Offer = { orderable: false, notOffered: 'no_offer' };
     // 10:00 UTC is 18:00 in Manila: the only window (lunch, 08:00-17:00) is shut, while channels.store alone says orderable.
-    const dayparted = {
+    const dayparted: typeof MENU = {
       ...MENU,
       hours: { timeZone: 'Asia/Manila', dayparts: [{ id: 'lunch', days: [0, 1, 2, 3, 4, 5, 6], start: '08:00', end: '17:00' }] },
-      items: MENU.items.map((i) => (i.id === IDS.plain ? { ...i, variants: i.variants.map((v) => ({ ...v, channels: { ...v.channels, store: offer }, slots: [{ daypartId: 'lunch', ...offer }] })) } : i)),
-    } as unknown as typeof MENU;
+      items: MENU.items.map((i) => (i.id === IDS.plain ? { ...i, variants: i.variants.map((v) => ({ ...v, channels: { ...v.channels, store: offer }, slots: [{ daypartId: 'lunch', store: offer, online: noSale }] })) } : i)),
+    };
     const r = mapLobbyLines([line()], dayparted, NOW);
     expect(r.cart).toEqual([]);
     expect(r.byHand).toEqual(['1 x Plain rice (tap in by hand)']);
