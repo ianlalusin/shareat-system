@@ -24,7 +24,7 @@ vi.mock('../src/lib/page-access', () => ({
 }));
 vi.mock('../src/app/staff/lib', async () => ({ staffStoresFor: vi.fn(async () => [STORE]) }));
 vi.mock('../src/app/admin/pos-tablets/actions', () => ({
-  registerTabletAction: vi.fn(), revokeTabletAction: vi.fn(), clearLockAction: vi.fn(), createTillAction: vi.fn(), linkTillAction: vi.fn(), setTillPrinterAction: vi.fn(), savePresetAction: vi.fn(), retirePresetAction: vi.fn(), saveChargeAction: vi.fn(), retireChargeAction: vi.fn(), addTablesAction: vi.fn(), retireTableAction: vi.fn(),
+  registerTabletAction: vi.fn(), revokeTabletAction: vi.fn(), clearLockAction: vi.fn(), createTillAction: vi.fn(), linkTillAction: vi.fn(), setTillPrinterAction: vi.fn(), savePresetAction: vi.fn(), retirePresetAction: vi.fn(), createChargeOptionAction: vi.fn(), updateChargeOptionAction: vi.fn(), setChargeOptionStatusAction: vi.fn(), setStoreChargeAction: vi.fn(), addTablesAction: vi.fn(), retireTableAction: vi.fn(),
 }));
 vi.mock('../src/app/admin/pos-tablets/lib', async (orig) => {
   const actual = await orig<typeof import('../src/app/admin/pos-tablets/lib')>();
@@ -32,7 +32,7 @@ vi.mock('../src/app/admin/pos-tablets/lib', async (orig) => {
     ...actual,
     loadPosTablets: vi.fn(async () => ({ active: null, revoked: [], terminals: [] })),
     loadCopyStores: vi.fn(async () => null), // T-611 S3
-    loadDiscounts: vi.fn(async () => ({ presets: [], canManage: false })), loadCharges: vi.fn(async () => ({ presets: [], canManage: false })), loadTables: vi.fn(async () => ({ active: [], retired: [], canManage: false })), // T-633 // T-627
+    loadDiscounts: vi.fn(async () => ({ presets: [], canManage: false })), loadChargeOptions: vi.fn(async () => ({ options: [], canManage: false })), loadStoreCharges: vi.fn(async () => ({ rows: [], canManage: false })), loadTables: vi.fn(async () => ({ active: [], retired: [], canManage: false })), // T-634 // T-633 // T-627
      // T-622
     loadTills: vi.fn(async () => {
       H.calls += 1;
