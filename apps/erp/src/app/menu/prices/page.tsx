@@ -13,7 +13,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
 import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
-import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { MENU_OPTION_PRICE_RULES, MENU_PRICE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import {
@@ -40,6 +40,7 @@ interface SearchParams {
 type Channel = 'store' | 'online';
 const CHANNELS: readonly Channel[] = ['store', 'online'];
 const CHANNEL_LABEL: Record<Channel, string> = { store: 'Store (counter and tables)', online: 'Online' };
+const CHANNEL_SHORT: Record<Channel, string> = { store: 'Store', online: 'Online' };
 
 /** A percent figure without its trailing zeros: 7.5000 reads 7.5. */
 const plainPercent = (v: string): string => (v.includes('.') ? v.replace(/0+$/, '').replace(/\.$/, '') : v);
@@ -154,15 +155,17 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
           {canPrice && !canPair && data.slots.some((r) => r.daypartId !== null) && (
             <p className="text-sm text-muted">Only a super admin can change which prices belong to menu hours. You can still change a price.</p>
           )}
-          <Link href={`/menu/stores/${store.id}`} className={NAV_LINK}>
-            What this store sells: switch items on or off
-          </Link>
-          {canHours && (
-            <Link href={`/menu/hours?store=${store.id}`} className={NAV_LINK}>
-              Change the menu hours
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <Link href={`/menu/stores/${store.id}`} className={NAV_LINK}>
+              What this store sells: switch items on or off
             </Link>
-          )}
-          {copyStores && <CopyFromStoreDialog kind="prices" currentStoreId={store.id} stores={copyStores} />}
+            {canHours && (
+              <Link href={`/menu/hours?store=${store.id}`} className={NAV_LINK}>
+                Change the menu hours
+              </Link>
+            )}
+            {copyStores && <CopyFromStoreDialog kind="prices" currentStoreId={store.id} stores={copyStores} />}
+          </div>
           <Grid data={data} storeId={store.id} canPrice={canPrice} canPair={canPair} q={q} clearHref={clearSearchHref('/menu/prices', { store: store.id })} />
           <OptionPrices data={data} storeId={store.id} canPrice={canPrice} />
         </>
@@ -187,23 +190,59 @@ function Grid({ data, storeId, canPrice, canPair, q, clearHref }: { data: Prices
       {byCategory.filter(({ items }) => items.some((i) => variantsOf(i).length > 0)).map(({ c, items }) => (
         <section key={c.id} className="space-y-3">
           <h2 className="text-lg font-semibold">{c.name}</h2>
-          {items.flatMap((i) =>
-            variantsOf(i).map((v) => (
-              <div key={v.id} className="space-y-3 rounded-[14px] border border-surface-border p-4">
-                <div className="flex flex-wrap items-baseline gap-3">
-                  <Link href={`/menu/items/${i.id}`} className="inline-flex min-h-6 items-center font-medium underline underline-offset-4">
-                    {i.name}
-                  </Link>
-                  {v.label ? <span className="text-muted">{v.label}</span> : null}
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
+          {/* T-647: a table from lg up (each price is the button that opens its form); the cards below lg. */}
+          <div className="hidden lg:block">
+            <Table label={`${c.name} prices`}>
+              <thead>
+                <tr>
+                  <Th>Item / variant</Th>
                   {CHANNELS.map((ch) => (
-                    <Panel key={ch} data={data} storeId={storeId} canPrice={canPrice} canPair={canPair} variantId={v.id} channel={ch} itemType={i.itemType} />
+                    <Th key={ch} numeric>
+                      {CHANNEL_LABEL[ch]}
+                    </Th>
                   ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.flatMap((i) =>
+                  variantsOf(i).map((v) => (
+                    <tr key={v.id}>
+                      <Td className="align-top">
+                        <Link href={`/menu/items/${i.id}`} className="inline-flex min-h-6 items-center font-medium underline underline-offset-4">
+                          {i.name}
+                        </Link>
+                        {i.variants.length > 1 && v.label ? <span className="block text-muted">{v.label}</span> : null}
+                      </Td>
+                      {CHANNELS.map((ch) => (
+                        <Td key={ch} className="align-top text-right tabular-nums">
+                          <Panel cell label={v.label && i.variants.length > 1 ? `${i.name} ${v.label}` : i.name} data={data} storeId={storeId} canPrice={canPrice} canPair={canPair} variantId={v.id} channel={ch} itemType={i.itemType} />
+                        </Td>
+                      ))}
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </Table>
+          </div>
+          <div className="space-y-3 lg:hidden">
+            {items.flatMap((i) =>
+              variantsOf(i).map((v) => (
+                <div key={v.id} className="space-y-3 rounded-[14px] border border-surface-border p-4">
+                  <div className="flex flex-wrap items-baseline gap-3">
+                    <Link href={`/menu/items/${i.id}`} className="inline-flex min-h-6 items-center font-medium underline underline-offset-4">
+                      {i.name}
+                    </Link>
+                    {v.label ? <span className="text-muted">{v.label}</span> : null}
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {CHANNELS.map((ch) => (
+                      <Panel key={ch} label={v.label ? `${i.name} ${v.label}` : i.name} data={data} storeId={storeId} canPrice={canPrice} canPair={canPair} variantId={v.id} channel={ch} itemType={i.itemType} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )),
-          )}
+              )),
+            )}
+          </div>
         </section>
       ))}
       {byCategory.length === 0 && <p className="text-sm text-muted">There are no active items to price yet.</p>}
@@ -255,6 +294,7 @@ function PriceForm({
   fixedDaypartId,
   whenChoices,
   defaultWhen,
+  triggerClassName,
 }: {
   channel: Channel;
   itemType: 'a_la_carte' | 'package' | 'refill';
@@ -267,9 +307,11 @@ function PriceForm({
   whenChoices?: DaypartView[];
   /** The When select starts on this daypart id ('' = all day). */
   defaultWhen?: string;
+  /** T-647: styles the trigger when it is a price figure in a table cell. */
+  triggerClassName?: string;
 }) {
   return (
-    <FormModal trigger={trigger} triggerIcon={null} triggerVariant="secondary" triggerLabel={triggerLabel ?? trigger} title={title} size="md">
+    <FormModal trigger={trigger} triggerIcon={null} triggerVariant="secondary" {...(triggerClassName ? { triggerClassName } : {})} triggerLabel={triggerLabel ?? trigger} title={title} size="md">
       <CheckedForm rules={MENU_PRICE_RULES} action={setPriceAction} className="space-y-3">
         {hidden}
         {fixedDaypartId !== undefined && <input type="hidden" name="daypartId" value={fixedDaypartId} />}
@@ -341,6 +383,8 @@ function Panel({
   variantId,
   channel,
   itemType,
+  label,
+  cell = false,
 }: {
   data: PricesPageData;
   storeId: string;
@@ -349,6 +393,10 @@ function Panel({
   variantId: string;
   channel: Channel;
   itemType: 'a_la_carte' | 'package' | 'refill';
+  /** The item (and variant) in words, for accessible names. */
+  label: string;
+  /** T-647: a table cell. The price figure is the button that opens the price form, and there is no panel chrome. */
+  cell?: boolean;
 }) {
   const row = data.inForce.find((r) => r.variantId === variantId && r.channel === channel);
   const later = data.scheduled.filter((r: ScheduledOffer) => r.variantId === variantId && r.channel === channel);
@@ -368,6 +416,8 @@ function Panel({
   // Slots exist but every one belongs to retired hours: only an all-day price can be set (anyone who may price can).
   const noActiveHours = dayparted && activeDayparts.length === 0;
   const canAdd = canPrice && (!dayparted ? true : noActiveHours || (canPair && freeWindows.length > 0));
+  // In a cell the price figure itself opens the form of an all-day price, so the separate "Set price" button is not drawn.
+  const showAdd = canAdd && !(cell && !dayparted);
   const whenChoices = canPair && activeDayparts.length > 0 ? (dayparted ? freeWindows : activeDayparts) : [];
   const scheduledLabel = (s: ScheduledOffer): string => (s.daypartId === null ? '' : `${dayOf.get(s.daypartId)?.d.name ?? 'Hours'}: `);
   const hidden = (
@@ -378,8 +428,8 @@ function Panel({
     </>
   );
   return (
-    <div className="space-y-3 rounded-[10px] bg-canvas p-3">
-      <h3 className="text-sm font-semibold">{CHANNEL_LABEL[channel]}</h3>
+    <div className={cell ? 'flex flex-col items-end gap-2' : 'space-y-3 rounded-[10px] bg-canvas p-3'}>
+      {!cell && <h3 className="text-sm font-semibold">{CHANNEL_LABEL[channel]}</h3>}
       {fault ? (
         <div className="space-y-2">
           <Badge tone="danger" label="Check this price" />
@@ -409,7 +459,7 @@ function Panel({
           )}
         </div>
       ) : dayparted ? (
-        <ul className="divide-y divide-surface-border">
+        <ul className={`divide-y divide-surface-border${cell ? ' w-full text-left' : ''}`}>
           {slots.map((slot) => {
             const info = dayOf.get(slot.daypartId as string)?.d;
             // An online rule follows the STORE price live now, not the raw per-window join: the on-now slot uses the domain-resolved row, a
@@ -456,14 +506,23 @@ function Panel({
         </ul>
       ) : (
         <div>
-          {row ? (
-            <>
-              <span className="font-medium tabular-nums">{figureText(row)}</span>
-              {resolved && <span className="block text-sm">{resolved}</span>}
-            </>
+          {cell && canAdd ? (
+            <PriceForm
+              channel={channel}
+              itemType={itemType}
+              hidden={hidden}
+              trigger={row ? figureText(row) : 'Not set'}
+              triggerLabel={`Set the ${CHANNEL_SHORT[channel]} price for ${label}`}
+              triggerClassName="tabular-nums"
+              title={`Set price — ${CHANNEL_LABEL[channel]}`}
+              {...(whenChoices.length > 0 ? { whenChoices } : {})}
+            />
+          ) : row ? (
+            <span className="font-medium tabular-nums">{figureText(row)}</span>
           ) : (
             <span className="text-muted">Not set</span>
           )}
+          {row && resolved && <span className="block text-sm">{resolved}</span>}
         </div>
       )}
       {!fault && notNow && <p className="text-sm text-muted">{notOfferedText(notNow, data.now)}</p>}
@@ -490,9 +549,9 @@ function Panel({
       {canPrice && canPair && dayparted && !noActiveHours && freeWindows.length === 0 && (
         <p className="text-sm text-muted">Every set of hours already has a price. Change a price above, or withdraw one first.</p>
       )}
-      {canPrice && (canAdd || (!dayparted && row && !row.withdrawn)) && (
+      {canPrice && (showAdd || (!dayparted && row && !row.withdrawn)) && (
         <div className="flex flex-wrap items-center gap-2">
-          {canAdd && (
+          {showAdd && (
             <PriceForm
               channel={channel}
               itemType={itemType}
@@ -508,7 +567,7 @@ function Panel({
           {!dayparted && row && !row.withdrawn && (
             <form action={withdrawPriceAction}>
               {hidden}
-              <Button type="submit" variant="ghost">
+              <Button type="submit" variant="ghost" aria-label={`Withdraw the ${CHANNEL_SHORT[channel]} price for ${label}`}>
                 Withdraw
               </Button>
             </form>
