@@ -15,7 +15,8 @@ import { clearSearchHref, matchesQuery, readQ } from '../src/lib/search';
 import { KeepParams, NoMatches, SearchBox, SearchCount } from '../src/components/SearchBox';
 
 const APP = resolve(__dirname, '..', 'src', 'app');
-const src = (rel: string) => readFileSync(resolve(APP, rel), 'utf8');
+// Windows checkouts are CRLF; the source regexes below are written for LF.
+const src = (rel: string) => readFileSync(resolve(APP, rel), 'utf8').replace(/\r\n/g, '\n');
 
 describe('matchesQuery', () => {
   it('requires every word, in any order and across fields', () => {
