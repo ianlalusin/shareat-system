@@ -98,6 +98,8 @@ export interface FormModalProps {
   readonly triggerLabel?: string;
   /** `null` keeps the trigger's own words instead of the icon the words imply ("Change price" would otherwise be a bare pencil). */
   readonly triggerIcon?: ButtonProps['icon'];
+  /** T-647: a trigger that is a switch ("Sell online") says so to assistive technology. */
+  readonly triggerAttrs?: { readonly role: 'switch'; readonly 'aria-checked': boolean };
   readonly title: ReactNode;
   readonly description?: ReactNode;
   readonly size?: DialogSize;
@@ -120,6 +122,7 @@ export function FormModal({
   triggerClassName,
   triggerLabel,
   triggerIcon,
+  triggerAttrs,
   title,
   description,
   size,
@@ -145,6 +148,7 @@ export function FormModal({
         className={triggerClassName}
         aria-label={triggerLabel}
         {...(triggerIcon !== undefined ? { icon: triggerIcon } : {})}
+        {...triggerAttrs}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >
