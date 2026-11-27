@@ -6,6 +6,8 @@ import { typedFor } from '@/lib/keep-typing';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
+import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Badge, Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
@@ -22,6 +24,7 @@ interface SearchParams {
   status?: string;
   filter?: string;
   store?: string;
+  q?: string;
 }
 
 const TYPE_LABEL: Record<string, string> = { a_la_carte: 'À la carte', package: 'Package', refill: 'Refill' };
@@ -47,13 +50,17 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
   for (const i of items) if (i.status === 'active') activeCount.set(i.categoryId, (activeCount.get(i.categoryId) ?? 0) + 1);
 
   const wantStatus = sp.status === 'retired' ? 'retired' : 'active';
-  const shown = items.filter(
+  const q = readQ(sp.q);
+  const beforeSearch = items.filter(
     (i) =>
       i.status === wantStatus &&
       (!sp.type || i.itemType === sp.type) &&
       (sp.filter !== 'no_rule' || i.missingRule) &&
       (sp.filter !== 'not_offered' || i.offeredAtStore === false),
   );
+  // T-645: item name, variant labels, category name. Searches the list the dropdowns left.
+  const catName = new Map(categories.map((c) => [c.id, c.name]));
+  const shown = beforeSearch.filter((i) => matchesQuery(q, i.name, catName.get(i.categoryId), ...i.variantLabels));
 
   return (
     <Page density="table" className="space-y-6">
@@ -153,6 +160,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
       {sp.ok && <Banner tone="success">{sp.ok}</Banner>}
 
       <FilterRow>
+        <SearchBox q={q} placeholder="Item, variant or category…" />
         <label className="text-sm">
           <span className="block text-muted">Type</span>
           <Select name="type" defaultValue={sp.type ?? ''}>
@@ -188,6 +196,10 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
           </Select>
         </label>
       </FilterRow>
+      <SearchCount q={q} shown={shown.length} total={beforeSearch.length} />
+      {q && shown.length === 0 && (
+        <NoMatches q={q} clearHref={clearSearchHref('/menu', { type: sp.type, status: sp.status, filter: sp.filter, store: sp.store })} />
+      )}
 
       {categories.length === 0 && <p className="text-sm text-muted">There are no categories yet.</p>}
 
@@ -234,7 +246,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
             )}
 
             {inCategory.length === 0 ? (
-              <p className="text-sm text-muted">No items to show here.</p>
+              <p className="text-sm text-muted">{q ? 'No items here match the search.' : 'No items to show here.'}</p>
             ) : (
               <ul className="divide-y divide-surface-border">
                 {inCategory.map((i) => (

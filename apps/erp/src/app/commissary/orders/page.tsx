@@ -16,6 +16,8 @@ import { Badge, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, 
 import { CheckedForm } from '@/components/forms';
 import { COMMISSARY_ORDER_NEW_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
+import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
@@ -27,6 +29,7 @@ interface SearchParams {
   store?: string;
   ok?: string;
   error?: string;
+  q?: string;
 }
 
 const LABEL = 'flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
@@ -55,6 +58,9 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
     newOrderPanelData(actor.orgId, storeId),
   ]);
   const store = stores.find((s) => s.id === storeId)!;
+  // T-645: both ends of the order and its stage label (the list has no document number).
+  const q = readQ(sp.q);
+  const shown = orders.filter((o) => matchesQuery(q, o.commissaryName, o.branchName, BRANCH_ORDER_STAGE_LABEL[branchOrderStage(o)]));
 
   return (
     <Page density="table">
@@ -80,7 +86,9 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
             ))}
           </Select>
         </label>
+        <SearchBox q={q} placeholder="Store or stage…" />
       </FilterRow>
+      <SearchCount q={q} shown={shown.length} total={orders.length} />
 
       <FlashBanner flash={sp} />
 
@@ -114,6 +122,8 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
           No internal orders yet. A store that runs low gets one drafted for it
           automatically. See <Link href="/inventory/low-stock" className="underline underline-offset-4">low stock</Link>.
         </p>
+      ) : shown.length === 0 ? (
+        <NoMatches q={q} clearHref={clearSearchHref('/commissary/orders', { store: sp.store })} />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table aria-label="Branch orders" className="w-full min-w-[640px] border-collapse text-sm">
@@ -128,7 +138,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
               </tr>
             </thead>
             <tbody>
-              {orders.map((o) => {
+              {shown.map((o) => {
                 const stage = branchOrderStage(o);
                 return (
                   <LinkRow key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">

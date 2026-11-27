@@ -18,6 +18,9 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { FilterRow } from '@/components/FilterRow';
+import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { matchesQuery, readQ } from '@/lib/search';
 import { withFlash } from '@/lib/flash';
 import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, FormGrid, FormSection, type FieldProps, FormModal, DialogActions } from '@/components/ui';
 
@@ -27,6 +30,7 @@ export const dynamic = 'force-dynamic';
 interface SearchParams {
   error?: string;
   ok?: string;
+  q?: string;
 }
 
 export default async function CustomersPage({
@@ -49,6 +53,10 @@ export default async function CustomersPage({
   const storeById = new Map(stores.map((s) => [s.id, s]));
   const orgById = new Map(orgs.map((o) => [o.id, o]));
   const listById = new Map(priceLists.map((l) => [l.id, l]));
+  // T-645: the customer record carries no email, TIN or code, so: name, contact no., address, group.
+  const q = readQ(sp.q);
+  const all = customers;
+  const shown = all.filter((c) => matchesQuery(q, c.name, c.contactNo, c.address, GROUP_LABEL[c.customerGroup] ?? c.customerGroup));
 
   return (
     <Page density="table">
@@ -66,7 +74,14 @@ export default async function CustomersPage({
 
       <FlashBanner flash={sp} />
 
-      {customers.length > 0 ? (
+      <FilterRow submitLabel="Search">
+        <SearchBox q={q} placeholder="Name, contact no., address…" />
+      </FilterRow>
+      <SearchCount q={q} shown={shown.length} total={all.length} />
+
+      {q && all.length > 0 && shown.length === 0 ? (
+        <NoMatches q={q} clearHref="/customers" />
+      ) : shown.length > 0 ? (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table aria-label="Customers" className="w-full min-w-[900px] border-collapse text-sm">
             <thead>
@@ -79,7 +94,7 @@ export default async function CustomersPage({
               </tr>
             </thead>
             <tbody>
-              {customers.map((c) => (
+              {shown.map((c) => (
                 <LinkRow
                   key={c.id}
                   className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${

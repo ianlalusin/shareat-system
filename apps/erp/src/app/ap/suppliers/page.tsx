@@ -17,6 +17,7 @@ import { CheckedForm } from '@/components/forms';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { SUPPLIER_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { NAV_LINK } from '@/components/action-link';
+import { readQ } from '@/lib/search';
 import { createSupplierAction } from '../actions';
 
 export const metadata = { title: 'Suppliers — Shareat System' };
@@ -45,7 +46,7 @@ export default async function SuppliersPage({
   if (refusal) return refusal;
 
   const all = await listSuppliersWithPosition(actor.orgId, await apStoreIds(actor)); // T-577: balances at the viewer's stores only
-  const q = sp.q ?? '';
+  const q = readQ(sp.q); // T-645
   const includeInactive = sp.show === 'all';
 
   const rows = all
