@@ -13,6 +13,9 @@ import { buildSupplierFacts } from '@shareat/domain/business-rules';
 import { InvoiceNumberCheck } from './InvoiceNumberCheck';
 import { SUPPLIER_INVOICE_LOG_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FILTER_CHIP, NAV_LINK } from '@/components/action-link';
+import { FilterRow } from '@/components/FilterRow';
+import { KeepParams, NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery } from '@/lib/search';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -25,6 +28,7 @@ interface SearchParams {
   selfVerified?: string;
   /** T-520: `pending` lists only invoices not verified yet. A flag; nothing typed in the URL. */
   status?: string;
+  q?: string;
 }
 
 export default async function ApPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -48,7 +52,10 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
   const supplierNames = Object.fromEntries(supplierName);
   // One load; both filters and the Not verified count read these same rows (newest first, as the repo orders them).
   const pendingCount = allInvoices.filter((i) => i.status === 'pending').length;
-  const invoices = allInvoices.filter((i) => (onlySelfVerified ? i.selfVerified : onlyPending ? i.status === 'pending' : true));
+  const beforeSearch = allInvoices.filter((i) => (onlySelfVerified ? i.selfVerified : onlyPending ? i.status === 'pending' : true));
+  // T-645: supplier name, invoice no., and the notes line (an invoice has no separate reference field).
+  const q = sp.q ?? '';
+  const invoices = beforeSearch.filter((i) => matchesQuery(q, supplierName.get(i.supplierId), i.invoiceNo, i.notes));
 
   return (
     <Page density="table">
@@ -178,7 +185,15 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
             )}
           </span>
         </div>
-        {invoices.length > 0 ? (
+        {/* T-645: the search keeps whichever filter chip is on (both are flags, so they ride along as hidden fields). */}
+        <FilterRow submitLabel="Search">
+          <SearchBox q={q} placeholder="Supplier, invoice no., notes…" />
+          <KeepParams params={{ status: sp.status, selfVerified: sp.selfVerified }} />
+        </FilterRow>
+        <SearchCount q={q} shown={invoices.length} total={beforeSearch.length} />
+        {q && beforeSearch.length > 0 && invoices.length === 0 ? (
+          <NoMatches q={q} clearHref={clearSearchHref('/ap', { status: sp.status, selfVerified: sp.selfVerified })} />
+        ) : invoices.length > 0 ? (
           <Table card={{ title: 'Supplier', subtitle: 'Date', keys: ['Verified'] }}>
             <caption className="sr-only">Supplier invoices</caption>
             <thead>

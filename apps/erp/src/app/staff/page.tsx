@@ -11,6 +11,8 @@ import { IssueAdminPinConfirm } from './IssueAdminPinConfirm';
 import { STAFF_PIN_RULES, STAFF_POSITION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery } from '@/lib/search';
 import { withFlash } from '@/lib/flash';
 import { can } from '@shareat/auth';
 import { accessRepo, employmentRepo, pinAttemptsRepo } from '@shareat/db';
@@ -28,6 +30,7 @@ interface SearchParams {
   error?: string;
   ok?: string;
   view?: string;
+  q?: string;
 }
 
 const INPUT =
@@ -65,10 +68,13 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     sp.view === 'roster' ? 'roster' : sp.view === 'positions' ? 'positions' : 'cards';
 
   // T-387 S7 - photos (only where the viewer may open them) and the live state (only for manage_attendance here).
+  // T-645: search the roster by name, staff code, any position held, and role. Cards and Roster views only.
+  const q = sp.q ?? '';
+  const rosterShown = roster.filter((r) => matchesQuery(q, r.displayName, r.staffCode, r.role, ...r.positions.map((p) => p.name)));
   let people: StaffPerson[] = [];
   let states: Record<string, LiveEntry> | null = null;
   if (view !== 'positions') {
-    const ids = roster.map((r) => r.id);
+    const ids = rosterShown.map((r) => r.id);
     const [photoIds, liveStates] = await Promise.all([
       withOrgPrincipal(actor.orgId, (tx) => employmentRepo.photoFileIds(tx, ids)),
       withOrgPrincipal(actor.orgId, async (tx): Promise<Record<string, LiveEntry> | null> => {
@@ -79,7 +85,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     ]);
     states = liveStates;
     people = await Promise.all(
-      roster.map(async (r) => {
+      rosterShown.map(async (r) => {
         const fileId = photoIds.get(r.id) ?? null;
         const primary = r.positions.find((p) => p.isPrimary);
         return {
@@ -140,6 +146,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
               ))}
             </select>
           </label>
+          {view !== 'positions' && <SearchBox q={q} placeholder="Name, code, position…" />}
         </FilterRow>
         <ViewSwitch view={view} storeId={storeId} />
       </div>
@@ -196,7 +203,10 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
       </section>
       ) : (
       <section className="space-y-3">
-        {people.length === 0 ? (
+        <SearchCount q={q} shown={rosterShown.length} total={roster.length} />
+        {q && roster.length > 0 && people.length === 0 ? (
+          <NoMatches q={q} clearHref={clearSearchHref('/staff', { store: storeId, view })} />
+        ) : people.length === 0 ? (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
             Nobody hired here yet. &ldquo;Hire&rdquo; above starts one.
           </p>
