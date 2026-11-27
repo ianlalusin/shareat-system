@@ -6,6 +6,7 @@ import { requirePageAccess } from '@/lib/page-access';
 import { withFlash, type FlashFields } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { Page } from '@/components/shell/Page';
+import { ChevronIcon } from '@/components/shell/icons';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import {
@@ -199,9 +200,12 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                     <Field label="Quantity per sale" className="text-sm" rule={MENU_DEPLETION_RULES.quantityPerSale}>
                       <Input {...nativeAttrs(MENU_DEPLETION_RULES.quantityPerSale)} className="w-full" />
                     </Field>
-                    <Field label="From (Manila time, empty = now)" className="text-sm">
-                      <Input type="datetime-local" name="effectiveFrom" className="w-full" />
-                    </Field>
+                    <details className="text-sm">
+                      <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 underline"><ChevronIcon aria-hidden="true" className="h-4 w-4 -rotate-90 transition-transform [details[open]_&]:rotate-0" />Schedule for later</summary>
+                      <Field label="From (Manila time, empty = now)" className="text-sm">
+                        <Input type="datetime-local" name="effectiveFrom" className="w-full" />
+                      </Field>
+                    </details>
                   </FormGrid>
                   <DialogActions>
                     <Button type="submit" variant="secondary">

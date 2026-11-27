@@ -348,6 +348,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/menu/prices/page.tsx",
+    "tables": 0,
+    "sharedTables": 1,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/menu/usage-source/page.tsx",
     "tables": 0,
     "sharedTables": 3,

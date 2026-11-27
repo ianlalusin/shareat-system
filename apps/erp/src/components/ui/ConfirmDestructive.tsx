@@ -14,7 +14,7 @@
  *                 says what will happen, then Confirm sends the form. The server rule is unchanged.
  * The browser never decides anything: no flag leaves this component except the typed text.
  */
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { retypeMatches } from '@/lib/retype';
@@ -31,14 +31,23 @@ export interface ConfirmDestructiveProps {
   readonly quiet?: boolean;
   /** The first button is still the red danger button, but shows its words instead of the label's icon (a lone red icon says nothing). */
   readonly showLabel?: boolean;
+  /** T-647: the first button is an ON switch (role=switch, name `name`, drawn `face`): one tap opens this confirm panel, nothing in between. */
+  readonly toggle?: { readonly name: string; readonly face: ReactNode; readonly className: string };
 }
 
-export function ConfirmDestructive({ tier, label, consequence, expectedName, quiet, showLabel }: ConfirmDestructiveProps) {
+export function ConfirmDestructive({ tier, label, consequence, expectedName, quiet, showLabel, toggle }: ConfirmDestructiveProps) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
   const [pin, setPin] = useState('');
 
   if (!open) {
+    if (toggle) {
+      return (
+        <Button type="button" variant="ghost" icon={null} role="switch" aria-checked={true} aria-label={toggle.name} className={toggle.className} onClick={() => setOpen(true)}>
+          {toggle.face}
+        </Button>
+      );
+    }
     return quiet ? (
       <Button type="button" variant="secondary" icon={null} onClick={() => setOpen(true)}>
         {label}

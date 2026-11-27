@@ -62,6 +62,8 @@ const ROW_LINK: readonly string[] = [
 
 /** Tables with no row destination: reports, editing grids, read-only detail lines. Untouched by T-411. */
 const NO_ROW_TARGET: readonly string[] = [
+  // T-647: the wide-screen menu price table; each price is its own button that opens its form, and no row has one destination
+  'app/menu/prices/page.tsx',
   // T-635: the slicer pay summary (per slicer, per period) and the rate history: figures, nothing to open
   'app/inventory/production/slicer-pay/page.tsx',
   // T-502 S4: the import preview rows are findings about lines of an uploaded file; there is nothing to open
