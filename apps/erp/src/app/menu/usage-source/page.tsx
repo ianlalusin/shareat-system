@@ -8,6 +8,8 @@ import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
+import { KeepParams, NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery } from '@/lib/search';
 import { Badge, Banner, Button, Checkbox, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
 import { linkItemAction, seedLinkAction, switchSourceAction, unlinkItemAction } from './actions';
 import { loadUsageSourcePage, type UsageSourcePageData } from './lib';
@@ -20,6 +22,7 @@ export const dynamic = 'force-dynamic';
 interface SearchParams {
   store?: string;
   compare?: string;
+  q?: string;
 }
 
 const SOURCE_LABEL = { menu_rules: 'Menu rules', v1_pos_map: 'POS item maps' } as const;
@@ -49,6 +52,7 @@ export default async function UsageSourcePage({ searchParams }: { searchParams: 
     };
   });
   const { stores, store, data, canLink, canSwitch } = loaded;
+  const q = sp.q ?? ''; // T-645
 
   return (
     <Page density="table" className="space-y-6">
@@ -83,6 +87,8 @@ export default async function UsageSourcePage({ searchParams }: { searchParams: 
                 ))}
               </Select>
             </label>
+            <SearchBox q={q} placeholder="POS item or menu item…" />
+            <KeepParams params={{ compare: sp.compare }} />
           </FilterRow>
 
           <section className="space-y-3">
@@ -93,7 +99,7 @@ export default async function UsageSourcePage({ searchParams }: { searchParams: 
             <History data={data} />
           </section>
 
-          <Links data={data} storeId={store.id} canLink={canLink} />
+          <Links data={data} storeId={store.id} canLink={canLink} q={q} clearHref={clearSearchHref('/menu/usage-source', { store: store.id, compare: sp.compare })} />
           <Compare data={data} storeId={store.id} canSwitch={canSwitch} />
         </>
       )}
@@ -127,7 +133,8 @@ function History({ data }: { data: UsageSourcePageData }) {
   );
 }
 
-function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId: string; canLink: boolean }) {
+function Links({ data, storeId, canLink, q, clearHref }: { data: UsageSourcePageData; storeId: string; canLink: boolean; q: string; clearHref: string }) {
+  const links = data.links.filter((l) => matchesQuery(q, l.posItemKey, l.posItemName, l.variantLabel, l.roomName));
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -205,8 +212,11 @@ function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId:
         A link says &quot;this POS item at this store is that menu item&quot;. Once the store is switched, a linked item uses the menu item&apos;s stock
         rule; an unlinked item keeps using its POS item map.
       </p>
+      <SearchCount q={q} shown={links.length} total={data.links.length} />
       {data.links.length === 0 ? (
         <p className="text-sm text-muted">Nothing is linked at this store yet.</p>
+      ) : links.length === 0 ? (
+        <NoMatches q={q} clearHref={clearHref} />
       ) : (
         <Table>
           <thead>
@@ -220,7 +230,7 @@ function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId:
             </tr>
           </thead>
           <tbody>
-            {data.links.map((l) => (
+            {links.map((l) => (
               <tr key={l.id}>
                 <Td>
                   {l.posItemKey}

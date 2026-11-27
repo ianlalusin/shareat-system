@@ -11,6 +11,8 @@ import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
+import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery } from '@/lib/search';
 import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { MENU_OPTION_PRICE_RULES, MENU_PRICE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -32,6 +34,7 @@ export const dynamic = 'force-dynamic';
 
 interface SearchParams {
   store?: string;
+  q?: string;
 }
 
 type Channel = 'store' | 'online';
@@ -110,6 +113,7 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
     return { stores, store, data, canPrice, canPair, canHours, copyStores };
   });
   const { stores, store, data, canPrice, canPair, canHours, copyStores } = loaded;
+  const q = sp.q ?? ''; // T-645
 
   return (
     <Page density="table" className="space-y-6">
@@ -144,6 +148,7 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
                 ))}
               </Select>
             </label>
+            <SearchBox q={q} placeholder="Item or variant…" />
           </FilterRow>
           {!canPrice && <p className="text-sm text-muted">You can read these prices but not change them at this store.</p>}
           {canPrice && !canPair && data.slots.some((r) => r.daypartId !== null) && (
@@ -158,7 +163,7 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
             </Link>
           )}
           {copyStores && <CopyFromStoreDialog kind="prices" currentStoreId={store.id} stores={copyStores} />}
-          <Grid data={data} storeId={store.id} canPrice={canPrice} canPair={canPair} />
+          <Grid data={data} storeId={store.id} canPrice={canPrice} canPair={canPair} q={q} clearHref={clearSearchHref('/menu/prices', { store: store.id })} />
           <OptionPrices data={data} storeId={store.id} canPrice={canPrice} />
         </>
       )}
@@ -166,17 +171,24 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
   );
 }
 
-function Grid({ data, storeId, canPrice, canPair }: { data: PricesPageData; storeId: string; canPrice: boolean; canPair: boolean }) {
+function Grid({ data, storeId, canPrice, canPair, q, clearHref }: { data: PricesPageData; storeId: string; canPrice: boolean; canPair: boolean; q: string; clearHref: string }) {
   const byCategory = data.categories
     .map((c) => ({ c, items: data.items.filter((i) => i.categoryId === c.id && i.variants.length > 0) }))
     .filter((x) => x.items.length > 0);
+  // T-645: search by item name or variant label; a variant row shows only if it matches.
+  const variantsOf = (i: { name: string; variants: PricesPageData['items'][number]['variants'] }) =>
+    i.variants.filter((v) => matchesQuery(q, i.name, v.label));
+  const total = byCategory.reduce((n, x) => n + x.items.reduce((m, i) => m + i.variants.length, 0), 0);
+  const shown = byCategory.reduce((n, x) => n + x.items.reduce((m, i) => m + variantsOf(i).length, 0), 0);
   return (
     <>
-      {byCategory.map(({ c, items }) => (
+      <SearchCount q={q} shown={shown} total={total} />
+      {q && total > 0 && shown === 0 && <NoMatches q={q} clearHref={clearHref} />}
+      {byCategory.filter(({ items }) => items.some((i) => variantsOf(i).length > 0)).map(({ c, items }) => (
         <section key={c.id} className="space-y-3">
           <h2 className="text-lg font-semibold">{c.name}</h2>
           {items.flatMap((i) =>
-            i.variants.map((v) => (
+            variantsOf(i).map((v) => (
               <div key={v.id} className="space-y-3 rounded-[14px] border border-surface-border p-4">
                 <div className="flex flex-wrap items-baseline gap-3">
                   <Link href={`/menu/items/${i.id}`} className="inline-flex min-h-6 items-center font-medium underline underline-offset-4">

@@ -176,6 +176,8 @@ export interface OverviewItem {
   missingRule: boolean;
   /** Some active variant has a price row in force that is not a withdrawal, on either channel, at the chosen store. null = no store chosen. */
   offeredAtStore: boolean | null;
+  /** T-645: the active variants' labels (a default variant has none), for the page search. */
+  variantLabels: string[];
 }
 
 export async function listOverviewItems(tx: Tx, orgId: string, storeId: string | null): Promise<OverviewItem[]> {
@@ -185,7 +187,7 @@ export async function listOverviewItems(tx: Tx, orgId: string, storeId: string |
     .where(eq(schema.menuItems.orgId, orgId))
     .orderBy(asc(schema.menuItems.sortOrder), asc(schema.menuItems.name), asc(schema.menuItems.id));
   const variants = await tx
-    .select({ id: schema.menuItemVariants.id, menuItemId: schema.menuItemVariants.menuItemId })
+    .select({ id: schema.menuItemVariants.id, menuItemId: schema.menuItemVariants.menuItemId, label: schema.menuItemVariants.label })
     .from(schema.menuItemVariants)
     .where(and(eq(schema.menuItemVariants.orgId, orgId), eq(schema.menuItemVariants.status, 'active')));
   const withRule = new Set(
@@ -200,6 +202,8 @@ export async function listOverviewItems(tx: Tx, orgId: string, storeId: string |
   }
   const byItem = new Map<string, string[]>();
   for (const v of variants) byItem.set(v.menuItemId, [...(byItem.get(v.menuItemId) ?? []), v.id]);
+  const labelsByItem = new Map<string, string[]>();
+  for (const v of variants) if (v.label) labelsByItem.set(v.menuItemId, [...(labelsByItem.get(v.menuItemId) ?? []), v.label]);
   return items.map((i) => {
     const vs = byItem.get(i.id) ?? [];
     return {
@@ -210,6 +214,7 @@ export async function listOverviewItems(tx: Tx, orgId: string, storeId: string |
       status: i.status,
       missingRule: vs.some((v) => !withRule.has(v)),
       offeredAtStore: offered ? vs.some((v) => (offered as Set<string>).has(v)) : null,
+      variantLabels: labelsByItem.get(i.id) ?? [],
     };
   });
 }
