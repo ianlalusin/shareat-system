@@ -178,15 +178,6 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
   );
 }
 
-/** The item's name, linking to the item. A component of its own so a price-table row carries no destination of its own (T-411 census). */
-function ItemLink({ id, name }: { id: string; name: string }) {
-  return (
-    <Link href={`/menu/items/${id}`} className="inline-flex min-h-6 items-center font-medium underline underline-offset-4">
-      {name}
-    </Link>
-  );
-}
-
 function Grid({ data, storeId, canPrice, canPair, q, clearHref }: { data: PricesPageData; storeId: string; canPrice: boolean; canPair: boolean; q: string; clearHref: string }) {
   const byCategory = data.categories
     .map((c) => ({ c, items: data.items.filter((i) => i.categoryId === c.id && i.variants.length > 0) }))
@@ -221,7 +212,7 @@ function Grid({ data, storeId, canPrice, canPair, q, clearHref }: { data: Prices
                   variantsOf(i).map((v) => (
                     <tr key={v.id}>
                       <Td className="align-top">
-                        <ItemLink id={i.id} name={i.name} />
+                        <span className="font-medium">{i.name}</span>
                         {i.variants.length > 1 && v.label ? <span className="block text-muted">{v.label}</span> : null}
                       </Td>
                       {CHANNELS.map((ch) => (
@@ -240,7 +231,9 @@ function Grid({ data, storeId, canPrice, canPair, q, clearHref }: { data: Prices
               variantsOf(i).map((v) => (
                 <div key={v.id} className="space-y-3 rounded-[14px] border border-surface-border p-4">
                   <div className="flex flex-wrap items-baseline gap-3">
-                    <ItemLink id={i.id} name={i.name} />
+                    <Link href={`/menu/items/${i.id}`} className="inline-flex min-h-6 items-center font-medium underline underline-offset-4">
+                      {i.name}
+                    </Link>
                     {v.label ? <span className="text-muted">{v.label}</span> : null}
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
