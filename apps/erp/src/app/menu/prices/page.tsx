@@ -12,7 +12,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { MENU_OPTION_PRICE_RULES, MENU_PRICE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -113,7 +113,7 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
     return { stores, store, data, canPrice, canPair, canHours, copyStores };
   });
   const { stores, store, data, canPrice, canPair, canHours, copyStores } = loaded;
-  const q = sp.q ?? ''; // T-645
+  const q = readQ(sp.q); // T-645
 
   return (
     <Page density="table" className="space-y-6">

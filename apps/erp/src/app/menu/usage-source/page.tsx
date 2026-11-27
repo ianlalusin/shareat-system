@@ -9,7 +9,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { KeepParams, NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { Badge, Banner, Button, Checkbox, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
 import { linkItemAction, seedLinkAction, switchSourceAction, unlinkItemAction } from './actions';
 import { loadUsageSourcePage, type UsageSourcePageData } from './lib';
@@ -52,7 +52,7 @@ export default async function UsageSourcePage({ searchParams }: { searchParams: 
     };
   });
   const { stores, store, data, canLink, canSwitch } = loaded;
-  const q = sp.q ?? ''; // T-645
+  const q = readQ(sp.q); // T-645
 
   return (
     <Page density="table" className="space-y-6">

@@ -12,7 +12,7 @@ import { STAFF_PIN_RULES, STAFF_POSITION_RULES, nativeAttrs } from '@shareat/dom
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { withFlash } from '@/lib/flash';
 import { can } from '@shareat/auth';
 import { accessRepo, employmentRepo, pinAttemptsRepo } from '@shareat/db';
@@ -68,9 +68,9 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     sp.view === 'roster' ? 'roster' : sp.view === 'positions' ? 'positions' : 'cards';
 
   // T-387 S7 - photos (only where the viewer may open them) and the live state (only for manage_attendance here).
-  // T-645: search the roster by name, staff code, any position held, and role. Cards and Roster views only.
-  const q = sp.q ?? '';
-  const rosterShown = roster.filter((r) => matchesQuery(q, r.displayName, r.staffCode, r.role, ...r.positions.map((p) => p.name)));
+  // T-645: search the roster by name, any position held, and role. Cards and Roster views only.
+  const q = readQ(sp.q);
+  const rosterShown = roster.filter((r) => matchesQuery(q, r.displayName, r.role, ...r.positions.map((p) => p.name)));
   let people: StaffPerson[] = [];
   let states: Record<string, LiveEntry> | null = null;
   if (view !== 'positions') {

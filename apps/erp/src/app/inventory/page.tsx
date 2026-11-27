@@ -5,7 +5,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { Card, EmptyState, NumTd, Select, Table, Td, Th } from '@/components/ui';
 
 export const metadata = { title: 'Stock on hand — Shareat System' };
@@ -36,7 +36,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const summary = await stockSummary(actor.orgId, storeId);
   // Peso values and the books total are for managers and up at this store (view_financial_reports); everyone else sees quantities.
   const showValues = await recordInScope(actor, '/reports/income-statement', storeId);
-  const q = sp.q ?? ''; // T-645
+  const q = readQ(sp.q); // T-645
   const rows = summary.rows.filter((r) => matchesQuery(q, r.name, r.code));
   const drift = (Number(summary.accountValue) - Number(summary.layerValue)).toFixed(2);
   const ties = drift === '0.00' || drift === '-0.00';

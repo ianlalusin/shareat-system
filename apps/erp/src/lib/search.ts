@@ -14,6 +14,12 @@ export function matchesQuery(q: string, ...fields: (string | null | undefined)[]
   return words.every((w) => hay.some((f) => f.includes(w)));
 }
 
+/** `?q=a&q=b` arrives as an array: take the first value, trimmed. Every search page reads q through this. */
+export function readQ(v: string | string[] | undefined): string {
+  const first = Array.isArray(v) ? v[0] : v;
+  return (first ?? '').trim();
+}
+
 /** The page's own URL without `q` (every other non-empty param kept), for the "Clear search" link. */
 export function clearSearchHref(path: string, params: Record<string, string | undefined>): string {
   const qs = new URLSearchParams();

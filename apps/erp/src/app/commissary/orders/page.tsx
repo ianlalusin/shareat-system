@@ -17,7 +17,7 @@ import { CheckedForm } from '@/components/forms';
 import { COMMISSARY_ORDER_NEW_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
@@ -59,7 +59,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
   ]);
   const store = stores.find((s) => s.id === storeId)!;
   // T-645: both ends of the order and its stage label (the list has no document number).
-  const q = sp.q ?? '';
+  const q = readQ(sp.q);
   const shown = orders.filter((o) => matchesQuery(q, o.commissaryName, o.branchName, BRANCH_ORDER_STAGE_LABEL[branchOrderStage(o)]));
 
   return (

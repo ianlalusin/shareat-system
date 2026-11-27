@@ -8,7 +8,7 @@ import { Page } from '@/components/shell/Page';
 import { ChevronIcon } from '@/components/shell/icons';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, FlashBanner, FormModal, LinkRow, RowLink, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -46,7 +46,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
   const [orders, form] = await Promise.all([orderRegister(actor.orgId, storeId), orderFormData(actor.orgId)]);
   const storeName = new Map(stores.map((s) => [s.id, s.name]));
   // T-645: customer, document reference, and both ends of the route.
-  const q = sp.q ?? '';
+  const q = readQ(sp.q);
   const shown = orders.filter((o) =>
     matchesQuery(q, o.customerName, o.referenceNo, storeName.get(o.storeId), o.counterpartyStoreId ? storeName.get(o.counterpartyStoreId) : null),
   );

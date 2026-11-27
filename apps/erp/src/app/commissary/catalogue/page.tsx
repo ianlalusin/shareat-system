@@ -18,7 +18,7 @@ import { CheckedForm } from '@/components/forms';
 import { COMMISSARY_FIRST_LINK_RULES, COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
 import { KeepParams, NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { PriceToStoresText } from '../../items/price-to-stores';
@@ -112,7 +112,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
   const storeName = new Map(stores.map((s) => [s.id, s.name]));
   const otherStores = stores.filter((s) => s.id !== commissaryStoreId);
   // T-645: the search is for the offerings list (the long one), by item name and code.
-  const q = sp.q ?? '';
+  const q = readQ(sp.q);
   const offeringsShown = offerings.filter((o) => matchesQuery(q, o.itemName, o.itemCode));
 
   const branchStoreId =

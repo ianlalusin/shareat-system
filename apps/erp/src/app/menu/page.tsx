@@ -7,7 +7,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Badge, Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
@@ -50,7 +50,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
   for (const i of items) if (i.status === 'active') activeCount.set(i.categoryId, (activeCount.get(i.categoryId) ?? 0) + 1);
 
   const wantStatus = sp.status === 'retired' ? 'retired' : 'active';
-  const q = sp.q ?? '';
+  const q = readQ(sp.q);
   const beforeSearch = items.filter(
     (i) =>
       i.status === wantStatus &&
@@ -197,7 +197,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
         </label>
       </FilterRow>
       <SearchCount q={q} shown={shown.length} total={beforeSearch.length} />
-      {q && shown.length === 0 && beforeSearch.length > 0 && (
+      {q && shown.length === 0 && (
         <NoMatches q={q} clearHref={clearSearchHref('/menu', { type: sp.type, status: sp.status, filter: sp.filter, store: sp.store })} />
       )}
 
@@ -206,7 +206,6 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
       {categories.map((c) => {
         const inCategory = shown.filter((i) => i.categoryId === c.id);
         const holds = activeCount.get(c.id) ?? 0;
-        if (q && inCategory.length === 0) return null; // T-645: a search hides categories with no hit
         return (
           <section key={c.id} className="space-y-3 rounded-[14px] border border-surface-border p-4">
             <div className="flex flex-wrap items-center gap-3">
@@ -247,7 +246,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
             )}
 
             {inCategory.length === 0 ? (
-              <p className="text-sm text-muted">No items to show here.</p>
+              <p className="text-sm text-muted">{q ? 'No items here match the search.' : 'No items to show here.'}</p>
             ) : (
               <ul className="divide-y divide-surface-border">
                 {inCategory.map((i) => (

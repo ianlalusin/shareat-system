@@ -39,7 +39,7 @@ import { Banner, Button, Checkbox, DialogActions, FlashBanner, Input, LinkRow, R
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { KeepParams, NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 
 export const metadata = { title: 'Items — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -52,7 +52,7 @@ export default async function ItemsPage({
   // T-443 R3: `kind` is not a flash key; read it from the raw params before `withFlash` consumes them.
   const rawParams = await searchParams;
   const kind = parseKindFilter(typeof rawParams.kind === 'string' ? rawParams.kind : undefined);
-  const q = typeof rawParams.q === 'string' ? rawParams.q : ''; // T-645
+  const q = readQ(rawParams.q); // T-645
   const sp = await withFlash(Promise.resolve(rawParams));
   // T-617: sign-in first (so the return trip keeps the kind filter), then the route gate on the bare path (a query string never matches a map key).
   await requireSession(kind ? `/items?kind=${kind}` : '/items');

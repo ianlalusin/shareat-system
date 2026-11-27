@@ -17,7 +17,7 @@ import { TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { NAV_LINK } from '@/components/action-link';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 
 export const metadata = { title: 'Money transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -52,7 +52,7 @@ export default async function MoneyTransfersPage({
   const settlementPairs = await listSettlementPairs(actor, usable);
   const storeById = new Map(stores.map((s) => [s.id, s]));
   // T-645: search the recent-transfers list by the two accounts and the reference.
-  const q = sp.q ?? '';
+  const q = readQ(sp.q);
   const shown = transfers.filter((t) => matchesQuery(q, t.fromName, t.toName, t.reference));
   const today = toBusinessDate();
 

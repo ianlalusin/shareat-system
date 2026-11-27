@@ -11,7 +11,7 @@ import { resolve } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { clearSearchHref, matchesQuery } from '../src/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '../src/lib/search';
 import { KeepParams, NoMatches, SearchBox, SearchCount } from '../src/components/SearchBox';
 
 const APP = resolve(__dirname, '..', 'src', 'app');
@@ -33,6 +33,20 @@ describe('matchesQuery', () => {
   it('null and undefined fields are safe, and a word found nowhere does not match', () => {
     expect(matchesQuery('abc', null, undefined, 'xabcx')).toBe(true);
     expect(matchesQuery('abc', null, undefined)).toBe(false);
+  });
+});
+
+describe('readQ', () => {
+  it('takes the first value of ?q=a&q=b, trimmed, and never throws on an array', () => {
+    expect(readQ(['  pork ', 'chicken'])).toBe('pork');
+    expect(readQ([])).toBe('');
+  });
+  it('passes a plain string through trimmed, and undefined to empty', () => {
+    expect(readQ('  belly ')).toBe('belly');
+    expect(readQ(undefined)).toBe('');
+  });
+  it('matchesQuery(readQ(array), ...) does not throw (the 500 the bare sp.q caused)', () => {
+    expect(() => matchesQuery(readQ(['a', 'b']), 'xax')).not.toThrow();
   });
 });
 
@@ -117,7 +131,18 @@ describe('pages keep their params while searching', () => {
     for (const p of params) expect(rowKeeps(row, p), `${file} loses ${p}`).toBe(true);
   });
 
-  it.each([
+  /** True when the const `id` is built by matchesQuery, directly or through one helper it calls. */
+  function derivesFromMatch(source: string, id: string, depth = 0): boolean {
+    const def = source.match(new RegExp(String.raw`(?:const|let) ${id}\b[^=]*=([\s\S]*?);\n`))?.[1];
+    if (!def) return false;
+    if (def.includes('matchesQuery(')) return true;
+    return depth < 2 && [...def.matchAll(/([a-zA-Z_]\w*)\(/g)].some((m) => derivesFromMatch(source, m[1] ?? '', depth + 1));
+  }
+  /** The first identifier of each `<SearchCount ... shown={EXPR}` expression. */
+  const shownRoots = (source: string): string[] =>
+    [...source.matchAll(/<SearchCount [^>]*?shown=\{(\w+)/g)].map((m) => m[1] ?? '');
+
+  const PAGES = [
     'items/page.tsx',
     'menu/page.tsx',
     'menu/prices/page.tsx',
@@ -131,11 +156,22 @@ describe('pages keep their params while searching', () => {
     'commissary/orders/page.tsx',
     'trade/orders/page.tsx',
     'money-transfers/page.tsx',
-  ])('%s: has a SearchBox inside a FilterRow, reads q, and filters with matchesQuery', (file) => {
+  ];
+
+  it.each(PAGES)('%s: reads q through readQ, counts and empties on the FILTERED list', (file) => {
     const s = src(file);
     expect(searchRow(s), `${file} has no SearchBox inside a FilterRow`).not.toBeNull();
-    expect(s).toMatch(/\bq\??: string/);
-    expect(s).toContain('matchesQuery(');
+    expect(s).toMatch(/const q = readQ\((?:sp|rawParams)\.q\)/);
     expect(s).toContain('<NoMatches');
+    const roots = shownRoots(s);
+    expect(roots.length, `${file} has no SearchCount`).toBeGreaterThan(0);
+    for (const id of roots) expect(derivesFromMatch(s, id), `${file}: SearchCount counts ${id}, which is not matchesQuery output`).toBe(true);
+  });
+
+  it('mutants: a bare sp.q, or a count over the unfiltered list, go red', () => {
+    const s = src('customers/page.tsx');
+    expect(s.replace('readQ(sp.q)', "sp.q ?? ''")).not.toMatch(/const q = readQ\(/);
+    const unfiltered = s.replace('shown={shown.length}', 'shown={all.length}');
+    expect(derivesFromMatch(unfiltered, shownRoots(unfiltered)[0] ?? '')).toBe(false);
   });
 });

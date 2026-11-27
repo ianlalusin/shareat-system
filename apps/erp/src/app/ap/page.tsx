@@ -15,7 +15,7 @@ import { SUPPLIER_INVOICE_LOG_RULES, nativeAttrs } from '@shareat/domain/field-r
 import { FILTER_CHIP, NAV_LINK } from '@/components/action-link';
 import { FilterRow } from '@/components/FilterRow';
 import { KeepParams, NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { clearSearchHref, matchesQuery } from '@/lib/search';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -54,7 +54,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
   const pendingCount = allInvoices.filter((i) => i.status === 'pending').length;
   const beforeSearch = allInvoices.filter((i) => (onlySelfVerified ? i.selfVerified : onlyPending ? i.status === 'pending' : true));
   // T-645: supplier name, invoice no., and the notes line (an invoice has no separate reference field).
-  const q = sp.q ?? '';
+  const q = readQ(sp.q);
   const invoices = beforeSearch.filter((i) => matchesQuery(q, supplierName.get(i.supplierId), i.invoiceNo, i.notes));
 
   return (

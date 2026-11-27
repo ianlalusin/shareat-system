@@ -20,7 +20,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
-import { matchesQuery } from '@/lib/search';
+import { matchesQuery, readQ } from '@/lib/search';
 import { withFlash } from '@/lib/flash';
 import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, FormGrid, FormSection, type FieldProps, FormModal, DialogActions } from '@/components/ui';
 
@@ -54,7 +54,7 @@ export default async function CustomersPage({
   const orgById = new Map(orgs.map((o) => [o.id, o]));
   const listById = new Map(priceLists.map((l) => [l.id, l]));
   // T-645: the customer record carries no email, TIN or code, so: name, contact no., address, group.
-  const q = sp.q ?? '';
+  const q = readQ(sp.q);
   const all = customers;
   const shown = all.filter((c) => matchesQuery(q, c.name, c.contactNo, c.address, GROUP_LABEL[c.customerGroup] ?? c.customerGroup));
 
