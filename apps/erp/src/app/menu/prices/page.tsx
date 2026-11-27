@@ -13,7 +13,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
 import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
-import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select, ConfirmDestructive } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { MENU_OPTION_PRICE_RULES, MENU_PRICE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import {
@@ -395,9 +395,12 @@ function Panel({
                       <form action={withdrawPriceAction}>
                         {hidden}
                         {r.daypartId !== null && <input type="hidden" name="daypartId" value={r.daypartId} />}
-                        <Button type="submit" variant="ghost" aria-label={`Withdraw the ${label} price`}>
-                          Withdraw
-                        </Button>
+                        <ConfirmDestructive
+                          tier="confirm"
+                          quiet
+                          label="Withdraw"
+                          consequence={`Stops offering this item at the ${label} price. It is not sold at that price until you set a new one.`}
+                        />
                       </form>
                     </li>
                   );
@@ -440,9 +443,12 @@ function Panel({
                       <form action={withdrawPriceAction}>
                         {hidden}
                         <input type="hidden" name="daypartId" value={slot.daypartId as string} />
-                        <Button type="submit" variant="ghost" aria-label={`Withdraw the ${info?.name ?? ''} price`}>
-                          Withdraw
-                        </Button>
+                        <ConfirmDestructive
+                          tier="confirm"
+                          quiet
+                          label="Withdraw"
+                          consequence={`Stops offering this item at the ${info?.name ?? 'hours'} price. It is not sold in those hours until you set a new price.`}
+                        />
                       </form>
                     )}
                   </div>
@@ -505,9 +511,12 @@ function Panel({
           {!dayparted && row && !row.withdrawn && (
             <form action={withdrawPriceAction}>
               {hidden}
-              <Button type="submit" variant="ghost">
-                Withdraw
-              </Button>
+              <ConfirmDestructive
+                tier="confirm"
+                quiet
+                label="Withdraw"
+                consequence="Stops offering this item at this price. It is not sold until you set a new price."
+              />
             </form>
           )}
         </div>

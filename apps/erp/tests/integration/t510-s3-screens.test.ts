@@ -104,7 +104,7 @@ describe('Lunch and Dinner side by side', () => {
     // super admin: the When select (All day + both windows) and the slot Withdraw controls
     expect(sa).toMatch(/<select[^>]*name="daypartId"/);
     expect(t).toContain('All day');
-    expect(sa).toContain('aria-label="Withdraw the Lunch price"');
+    expect(sa).toMatch(/>\s*Withdraw\s*</); // the slot's Withdraw trigger (a ConfirmDestructive since the 27 Nov UI audit; it has no per-slot aria-label)
     expect(t).not.toContain('Only a super admin can change which prices belong to lunch or dinner');
     // 'Change price' exists for the slot and posts that slot's daypart
     expect(sa).toContain(`name="daypartId" value="${w.lunch}"`);
@@ -116,7 +116,7 @@ describe('Lunch and Dinner side by side', () => {
     // manager: may change a slot's price, but no When select, no slot withdraw, and the one-line note
     expect(mg).toContain('aria-label="Change price"');
     expect(mg).not.toMatch(/<select[^>]*name="daypartId"/);
-    expect(mg).not.toContain('aria-label="Withdraw the Lunch price"');
+    expect(mg).not.toMatch(/>\s*Withdraw\s*</);
     expect(mt).toContain('Only a super admin can change which prices belong to menu hours');
   });
 
