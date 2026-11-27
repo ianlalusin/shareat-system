@@ -104,7 +104,7 @@ Only code-bearing directories and their ancestors receive EGM contracts. Hidden/
 - Apps import shared packages and never another app; packages never import apps.
 - Preserve server authorization, organization/store scoping, exact Money handling and append-only financial history. Per-module contracts locate the enforcement; they do not prove an untested guard.
 - Read-only reference repositories are requirements sources. All generated documentation lives in this rebuild.
-- Application dev/start ports come from current workspace manifests: ERP 9008, POS 9009, Customer 9010. Local PostgreSQL uses 5435.
+- Application dev/start ports come from current workspace manifests: ERP 9008, Customer 9010. Local PostgreSQL uses 5435.
 - Stop an app's dev server before building it. CI produces deployment artifacts; neither production droplet is a build host.
 
 ## Side Effects
@@ -119,7 +119,7 @@ From the repository root, the configured verification entry points are:
 
 - `npm run typecheck` — workspace TypeScript check.
 - `npm run test` — ERP/shared unit and golden project.
-- `npm test -w @shareat/pos` and `npm test -w @shareat/customer` — app-specific unit suites.
+- `npm test -w @shareat/customer` — the customer app's unit suite.
 - `npm run test:integration` — integration/invariant suite against real PostgreSQL; coordinate access to the shared test database.
 - `npm run build` — ERP build, only with its dev server stopped. Other apps own workspace build commands.
 - [docs/SMOKETEST.md](./docs/SMOKETEST.md) — the actual running-app smoke procedure.

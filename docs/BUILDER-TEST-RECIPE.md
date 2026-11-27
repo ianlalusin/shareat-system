@@ -14,7 +14,7 @@ This laptop has 15.6 GB. Never go above 90%: keep 1.6 GB free. CI runs the full 
 2. Census set, if you touched a page, form, domain directory, doc or table: `npm run census:write`, then commit the files it changed.
    It never raises a ceiling; a `NEEDS APPROVAL` line goes in your PR description.
 3. Typecheck only the app you touched (EST memory): `npx tsc -p apps/erp/tsconfig.json --noEmit` (2-2.8 GB; covers ERP
-   plus the packages it imports, not `tests/` or `scripts/`), `apps/pos/...` or `apps/customer/...` (1-1.5 GB).
+   plus the packages it imports, not `tests/` or `scripts/`), or `apps/customer/...` (1-1.5 GB).
    Root `npm run typecheck` takes 3.4 GB: leave it to CI.
 4. Integration, your own database whose name contains `_test`, one worker (leave `INTEGRATION_WORKERS` unset):
    `npx vitest run --project integration <file1> <file2>` (the files from the table below).

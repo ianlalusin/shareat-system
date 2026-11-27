@@ -6,9 +6,9 @@ import { sql as dsql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
 /**
- * T-455 S7a (TESTER) - the senior/PWD discount claim, DOMAIN, cashier + tablet side: docs/tasks/455-customer-lobby.md 3.2 (discount claim approval), 4.5 (OCR/typed is
+ * T-455 S7a (TESTER) - the senior/PWD discount claim, DOMAIN, cashier side: docs/tasks/455-customer-lobby.md 3.2 (discount claim approval), 4.5 (OCR/typed is
  * never trusted: approve needs a SEATED entry, this store's session, a pending claim), 4.6 (who sees a claim; open = audit row; every approve/reject audited),
- * 4.7, "S5 rulings" 1-2 (terminal actor), "S6a rulings" 1 (three doors, one core) and the S7a row of section 5. Real Postgres via TEST_DATABASE_URL.
+ * 4.7 and the S7a row of section 5. T-588: the POS tablet door (`...ForTerminal`) was deleted; its tests are gone. Real Postgres via TEST_DATABASE_URL.
  * PERSONAL DATA: every name and ID number is a SYNTHETIC test value. S7a does NOT touch POS: `sessionRef` / `statutoryDinerRef` are plain strings the POS (S7b) will pass.
  *
  * RED TODAY, for one reason: packages/domain/src/lobby/claims.ts does not exist (the import below fails to resolve).
@@ -16,9 +16,6 @@ import { afterAll, describe, expect, it } from 'vitest';
  * CONTRACT ASSUMED (the orchestrator rules on every ASSUMED line):
  *   Staff (an ERP person, authorize(record_sale) at the CLAIM's own store, like birthday.ts):
  *     listClaimRequests(tx, actor, storeId), openClaim(tx, actor, claimId), approveClaim(tx, actor, { claimId, cardSeen, sessionRef, statutoryDinerRef }), rejectClaim(tx, actor, { claimId, reason })
- *   Terminal (TerminalActor, no authorize(); another store's claim answers exactly like a ghost id = LOBBY_NOT_FOUND):
- *     listClaimsForTerminal(tx, t), openClaimForTerminal(tx, t, claimId), approveClaimForTerminal(tx, t, input), rejectClaimForTerminal(tx, t, input)
- *   One shared core for both doors.
  *   LIST ROW (pending claims of the store, oldest first, entries live OR seated; closed-unseated claims are already expired): { claimId, entryId, code, displayName, standLabel (null until seated),
  *     partySize, kind, idMasked ('****1187'), ocrAssisted, status: 'pending', createdAt }. NEVER holderName / idNumber / deviceHash / ipHash / handoffUrl / phone. The list writes NO audit row.
  *   OPEN ("Open claim"): the ONLY call that returns the full holderName + idNumber; pending claims only (a decided claim has nothing left: LOBBY_CLAIM_CLOSED). Writes ONE audit row
@@ -28,13 +25,13 @@ import { afterAll, describe, expect, it } from 'vitest';
  *     a retried approve is refused, not repeated). Writes status approved, session_ref, statutory_diner_ref, acted_by_person_id, card_seen_at, decided_at; name and ID become NULL (the DB CHECK).
  *     Audit 'lobby.claim_approve'. Result { claimId, status: 'approved' }.
  *   REJECT: reason trimmed 1..80 (else LOBBY_BAD_INPUT); pending only (else LOBBY_CLAIM_CLOSED); allowed on a live OR seated entry; name/ID NULL; reject_reason stored; slot freed. Audit 'lobby.claim_reject'.
- *   AUDIT: actions lobby.claim_open / lobby.claim_approve / lobby.claim_reject (catalogue cap raised by 3), entity_id = claim id, store_id = the entry's store, source 'pos', actor = the acting person
- *     (terminal: the terminal person, after.cashier = the cashier's name). Payloads hold the booking code, kind, status and idLast4 at most: NO holder name, NO ID number, NO diner name, NO session secret.
+ *   AUDIT: actions lobby.claim_open / lobby.claim_approve / lobby.claim_reject (catalogue cap raised by 3), entity_id = claim id, store_id = the entry's store, source 'pos', actor = the acting person.
+ *     Payloads hold the booking code, kind, status and idLast4 at most: NO holder name, NO ID number, NO diner name, NO session secret.
  *   A refused move is not audited. Order of checks: store guard first (ghost / other store), then state.
  *
  * MUTANT INDEX: approve on a waiting/called entry; approve with the wrong store's session; approve without cardSeen (false, missing, "true", 1); approve twice; approve not nulling name/ID; acted_by/card_seen missing;
  * statutory_diner_ref dropped; open without audit / audit with name or ID / open of a decided claim returning data; list leaking name or ID or showing other stores' / decided claims; a store-B cashier or
- * a role without record_sale approving/opening/rejecting; terminal calling authorize(); other store answered differently from a ghost id; reject without or with a huge reason; reject not freeing the
+ * a role without record_sale approving/opening/rejecting; other store answered differently from a ghost id; reject without or with a huge reason; reject not freeing the
  * slot; refused move audited; audit payload carrying the name or ID; approve/approve race double-writing.
  */
 config({ path: '.env.local' });
@@ -48,17 +45,12 @@ import { APP_ROLE, closeDb, transaction, type Tx } from '@shareat/db';
 import { AuthorizationError, flushSecurityEvents, type Actor } from '@shareat/auth';
 import {
   approveClaim,
-  approveClaimForTerminal,
   listClaimRequests,
-  listClaimsForTerminal,
   openClaim,
-  openClaimForTerminal,
   rejectClaim,
-  rejectClaimForTerminal,
   submitClaim,
 } from '../../src/lobby/claims';
 import { LobbyRefusal } from '../../src/lobby/refusal';
-import type { TerminalActor } from '../../src/lobby/terminal';
 
 const sql = postgres(url, { max: 6 });
 afterAll(async () => {
@@ -111,7 +103,6 @@ type Raw = Record<string, string | number | boolean | null>;
 const HOLDER = 'Zanzibar Quillfeather';
 const ID_NO = '0042-5566-1187'; // synthetic
 const DINER = 'Ana Tuckerman';
-const CASHIER = 'Cora Cashier';
 const SESSION = 'SESS-S7A-1';
 const SD_REF = 'SD-0001';
 
@@ -135,9 +126,7 @@ async function fx(hint: string) {
   const cashierA = await person('Cashier A', 'manager', [A.storeId]);
   const cashierB = await person('Cashier B', 'manager', [B.storeId]);
   const floorA = await person('Floor A', 'staff', [A.storeId]); // a role without record_sale
-  const terminal = await person('Terminal 01', null, []);
-  const tabletFor = (s: S): TerminalActor => ({ orgId, erpStoreId: s.storeId, terminalPersonId: terminal.personId, cashierName: CASHIER });
-  return { orgId, A, B, cashierA, cashierB, floorA, terminal, tabletFor };
+  return { orgId, A, B, cashierA, cashierB, floorA };
 }
 type Fx = Awaited<ReturnType<typeof fx>>;
 
@@ -178,7 +167,7 @@ const noPii = (o: unknown, what: string) => {
 };
 
 // ================================================================================================ A. the list
-describe('A. listClaimRequests / listClaimsForTerminal: masked, own store, pending only', () => {
+describe('A. listClaimRequests: masked, own store, pending only', () => {
   it('A1 the list holds only this store\'s PENDING claims (live and seated entries), oldest first, with exactly the row keys and ****1187; no name or full ID anywhere; no audit row is written [kills: leaking name/ID, other stores\' or decided claims, hashes, audit on list]', async () => {
     const f = await fx('a1');
     const waiting = await claim(f, f.A);
@@ -197,9 +186,6 @@ describe('A. listClaimRequests / listClaimsForTerminal: masked, own store, pendi
     expect(json).not.toContain('Quillfeather');
     expect(json).not.toMatch(/0042-5566|00425566/);
     expect(json).not.toMatch(/deviceHash|ipHash|handoffUrl|phone|idNumber|holderName/);
-    expect(await auditFor(f.A)).toHaveLength(0);
-    const viaTablet = await asOrg(f.orgId, (tx) => listClaimsForTerminal(tx, f.tabletFor(f.A)));
-    expect(viaTablet.map((r) => r.claimId)).toEqual([waiting.id, seated.id]);
     expect(await auditFor(f.A)).toHaveLength(0);
   });
 
@@ -228,21 +214,11 @@ describe('B. openClaim: the only call that returns the full name and ID, and it 
     expect((await rowOf(c.id)).status, 'viewing does not decide').toBe('pending');
   });
 
-  it('B2 the tablet door: same data, audit row by the terminal person with after.cashier; another store\'s claim answers like a ghost id and writes nothing [kills: terminal door unaudited, other store distinguishable]', async () => {
+  it('B2 a ghost id and a junk id answer LOBBY_NOT_FOUND at the cashier door and write nothing [kills: a raw error, a silent success, an audit row for a refused open]', async () => {
     const f = await fx('b2');
-    const c = await claim(f, f.A);
-    const full = await asOrg(f.orgId, (tx) => openClaimForTerminal(tx, f.tabletFor(f.A), c.id));
-    expect(full).toMatchObject({ holderName: HOLDER, idNumber: ID_NO });
-    const audit = await auditFor(f.A, 'lobby.claim_open');
-    expect(audit).toHaveLength(1);
-    expect(audit[0]!.actor_person_id).toBe(f.terminal.personId);
-    expect((audit[0]!.after as { cashier?: string }).cashier).toBe(CASHIER);
-    noPii(audit, 'tablet open audit');
-    const foreign = await claim(f, f.B);
-    expectRefusal(await refusedIn(f.orgId, (tx) => openClaimForTerminal(tx, f.tabletFor(f.A), foreign.id)), 'LOBBY_NOT_FOUND', 'other store\'s claim');
-    expectRefusal(await refusedIn(f.orgId, (tx) => openClaimForTerminal(tx, f.tabletFor(f.A), '00000000-0000-4000-8000-000000000000')), 'LOBBY_NOT_FOUND', 'ghost id');
-    expectRefusal(await refusedIn(f.orgId, (tx) => openClaimForTerminal(tx, f.tabletFor(f.A), 'junk')), 'LOBBY_NOT_FOUND', 'junk id');
-    expect(await auditFor(f.B)).toHaveLength(0);
+    expectRefusal(await refusedIn(f.orgId, (tx) => openClaim(tx, f.cashierA, '00000000-0000-4000-8000-000000000000')), 'LOBBY_NOT_FOUND', 'ghost id');
+    expectRefusal(await refusedIn(f.orgId, (tx) => openClaim(tx, f.cashierA, 'junk')), 'LOBBY_NOT_FOUND', 'junk id');
+    expect(await auditFor(f.A)).toHaveLength(0);
   });
 
   it('B3 a store-B cashier and a floor role cannot open store A\'s claim (AuthorizationError at the claim\'s own store); no audit, nothing returned [kills: open without authorize]', async () => {
@@ -358,27 +334,6 @@ describe('C. approve: seated, this store\'s session, card seen, pending', () => 
     expect(await rowOf(c.id)).toMatchObject({ status: 'pending', holder_name: HOLDER });
     expect(await auditFor(f.A)).toHaveLength(0);
   });
-
-  it('C8 THE TABLET DOOR approves with no role and no scope (the terminal person is not authorize()d): same writes, audit by the terminal person with after.cashier; another store\'s claim answers like a ghost id and stays pending [kills: terminal calling authorize(), another store\'s claim approved, cashier missing]', async () => {
-    const f = await fx('c8');
-    const c = await claim(f, f.A, { status: 'seated' });
-    const foreign = await claim(f, f.B, { status: 'seated' });
-    const out = await asOrg(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(c.id)));
-    expect(out).toEqual({ claimId: c.id, status: 'approved' });
-    expect(await rowOf(c.id)).toMatchObject({ status: 'approved', acted_by_person_id: f.terminal.personId, holder_name: null, id_number: null });
-    const audit = await auditFor(f.A, 'lobby.claim_approve');
-    expect(audit).toHaveLength(1);
-    expect(audit[0]!.actor_person_id).toBe(f.terminal.personId);
-    expect((audit[0]!.after as { cashier?: string }).cashier).toBe(CASHIER);
-    noPii(audit, 'tablet approve audit');
-    expectRefusal(await refusedIn(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(foreign.id))), 'LOBBY_NOT_FOUND', 'other store\'s claim');
-    expect((await rowOf(foreign.id)).status).toBe('pending');
-    // the tablet checks the same state rules as the cashier door
-    const waiting = await claim(f, f.A);
-    expectRefusal(await refusedIn(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(waiting.id))), 'LOBBY_CLAIM_NEEDS_SEAT', 'tablet unseated');
-    const noCard = await claim(f, f.A, { status: 'seated' });
-    expectRefusal(await refusedIn(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(noCard.id, { cardSeen: false }))), 'LOBBY_CLAIM_NEEDS_CARD', 'tablet no card');
-  });
 });
 
 // ================================================================================================ D. reject
@@ -411,7 +366,7 @@ describe('D. reject: a reason, any pending claim, name and ID gone', () => {
     expect((await rowOf(c.id)).reject_reason).toBe('r'.repeat(80));
   });
 
-  it('D3 a decided claim cannot be rejected (LOBBY_CLAIM_CLOSED, unchanged, not audited); other store and role without record_sale are AuthorizationError; the tablet rejects with its person and another store\'s claim is LOBBY_NOT_FOUND [kills: reject after decision, authorize missing, terminal door missing]', async () => {
+  it('D3 a decided claim cannot be rejected (LOBBY_CLAIM_CLOSED, unchanged, not audited); other store and role without record_sale are AuthorizationError; the cashier rejects a claim of her own store [kills: reject after decision, authorize missing]', async () => {
     const f = await fx('d3');
     const done = await claim(f, f.A, { status: 'seated' });
     await asOrg(f.orgId, (tx) => approveClaim(tx, f.cashierA, approveInput(done.id)));
@@ -422,12 +377,8 @@ describe('D. reject: a reason, any pending claim, name and ID gone', () => {
     expectAuthRefusal(await refusedIn(f.orgId, (tx) => rejectClaim(tx, f.cashierB, { claimId: c.id, reason: 'Nope' })), 'store-B cashier');
     expectAuthRefusal(await refusedIn(f.orgId, (tx) => rejectClaim(tx, f.floorA, { claimId: c.id, reason: 'Nope' })), 'floor role');
     expect((await rowOf(c.id)).status).toBe('pending');
-    const foreign = await claim(f, f.B);
-    expectRefusal(await refusedIn(f.orgId, (tx) => rejectClaimForTerminal(tx, f.tabletFor(f.A), { claimId: foreign.id, reason: 'Nope' })), 'LOBBY_NOT_FOUND', 'other store');
-    await asOrg(f.orgId, (tx) => rejectClaimForTerminal(tx, f.tabletFor(f.A), { claimId: c.id, reason: 'Not the cardholder' }));
-    expect(await rowOf(c.id)).toMatchObject({ status: 'rejected', acted_by_person_id: f.terminal.personId });
-    const rej = (await auditFor(f.A, 'lobby.claim_reject')).find((a) => a.entity_id === c.id)!;
-    expect((rej.after as { cashier?: string }).cashier).toBe(CASHIER);
+    await asOrg(f.orgId, (tx) => rejectClaim(tx, f.cashierA, { claimId: c.id, reason: 'Not the cardholder' }));
+    expect(await rowOf(c.id)).toMatchObject({ status: 'rejected', acted_by_person_id: f.cashierA.personId });
     noPii(await auditFor(f.A), 'all audit');
   });
 

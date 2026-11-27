@@ -6,9 +6,10 @@ import { sql as dsql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
 /**
- * T-455 S7b (BUILDER, BOSS ruling 2 Nov): claimStatusForTerminal returns { status } only; another store's claim answers like a ghost id; no audit row.
+ * T-455 S7b (BUILDER): one statutory diner is linked to one approved claim per entry, through the cashier door approveClaim.
+ * T-588: the tablet door (claimStatusForTerminal, approveClaimForTerminal) was deleted; the claim-status test went with it, this approve test now uses the cashier door.
  * Fixtures copied from t455-s7a-claims-staff.test.ts. Original header follows.
- * T-455 S7a (TESTER) - the senior/PWD discount claim, DOMAIN, cashier + tablet side: docs/tasks/455-customer-lobby.md 3.2 (discount claim approval), 4.5 (OCR/typed is
+ * T-455 S7a (TESTER) - the senior/PWD discount claim, DOMAIN, cashier side: docs/tasks/455-customer-lobby.md 3.2 (discount claim approval), 4.5 (OCR/typed is
  * never trusted: approve needs a SEATED entry, this store's session, a pending claim), 4.6 (who sees a claim; open = audit row; every approve/reject audited),
  * 4.7, "S5 rulings" 1-2 (terminal actor), "S6a rulings" 1 (three doors, one core) and the S7a row of section 5. Real Postgres via TEST_DATABASE_URL.
  * PERSONAL DATA: every name and ID number is a SYNTHETIC test value. S7a does NOT touch POS: `sessionRef` / `statutoryDinerRef` are plain strings the POS (S7b) will pass.
@@ -18,9 +19,6 @@ import { afterAll, describe, expect, it } from 'vitest';
  * CONTRACT ASSUMED (the orchestrator rules on every ASSUMED line):
  *   Staff (an ERP person, authorize(record_sale) at the CLAIM's own store, like birthday.ts):
  *     listClaimRequests(tx, actor, storeId), openClaim(tx, actor, claimId), approveClaim(tx, actor, { claimId, cardSeen, sessionRef, statutoryDinerRef }), rejectClaim(tx, actor, { claimId, reason })
- *   Terminal (TerminalActor, no authorize(); another store's claim answers exactly like a ghost id = LOBBY_NOT_FOUND):
- *     listClaimsForTerminal(tx, t), openClaimForTerminal(tx, t, claimId), approveClaimForTerminal(tx, t, input), rejectClaimForTerminal(tx, t, input)
- *   One shared core for both doors.
  *   LIST ROW (pending claims of the store, oldest first, entries live OR seated; closed-unseated claims are already expired): { claimId, entryId, code, displayName, standLabel (null until seated),
  *     partySize, kind, idMasked ('****1187'), ocrAssisted, status: 'pending', createdAt }. NEVER holderName / idNumber / deviceHash / ipHash / handoffUrl / phone. The list writes NO audit row.
  *   OPEN ("Open claim"): the ONLY call that returns the full holderName + idNumber; pending claims only (a decided claim has nothing left: LOBBY_CLAIM_CLOSED). Writes ONE audit row
@@ -48,9 +46,8 @@ if (!isTestDatabaseUrl(url)) {
 
 import { APP_ROLE, closeDb, transaction, type Tx } from '@shareat/db';
 import { AuthorizationError, flushSecurityEvents, type Actor } from '@shareat/auth';
-import { approveClaimForTerminal, claimStatusForTerminal } from '../../src/lobby/claims';
+import { approveClaim } from '../../src/lobby/claims';
 import { LobbyRefusal } from '../../src/lobby/refusal';
-import type { TerminalActor } from '../../src/lobby/terminal';
 
 const sql = postgres(url, { max: 6 });
 afterAll(async () => {
@@ -103,7 +100,6 @@ type Raw = Record<string, string | number | boolean | null>;
 const HOLDER = 'Zanzibar Quillfeather';
 const ID_NO = '0042-5566-1187'; // synthetic
 const DINER = 'Ana Tuckerman';
-const CASHIER = 'Cora Cashier';
 const SESSION = 'SESS-S7A-1';
 const SD_REF = 'SD-0001';
 
@@ -127,9 +123,7 @@ async function fx(hint: string) {
   const cashierA = await person('Cashier A', 'manager', [A.storeId]);
   const cashierB = await person('Cashier B', 'manager', [B.storeId]);
   const floorA = await person('Floor A', 'staff', [A.storeId]); // a role without record_sale
-  const terminal = await person('Terminal 01', null, []);
-  const tabletFor = (s: S): TerminalActor => ({ orgId, erpStoreId: s.storeId, terminalPersonId: terminal.personId, cashierName: CASHIER });
-  return { orgId, A, B, cashierA, cashierB, floorA, terminal, tabletFor };
+  return { orgId, A, B, cashierA, cashierB, floorA };
 }
 type Fx = Awaited<ReturnType<typeof fx>>;
 
@@ -169,45 +163,18 @@ const noPii = (o: unknown, what: string) => {
   expect(t, `${what}: full ID number`).not.toMatch(/0042|5566|00425566/);
 };
 
-describe('claimStatusForTerminal: the exact status of one claim, nothing else', () => {
-  it('pending, approved and rejected claims each answer { status } with no other key; no audit row; no name or ID', async () => {
-    const f = await fx('s7b-status');
-    const a = await claim(f, f.A, { status: 'seated' });
-    const r = await claim(f, f.A);
-    const before = (await auditFor(f.A)).length;
-    const pending = await asOrg(f.orgId, (tx) => claimStatusForTerminal(tx, f.tabletFor(f.A), a.id));
-    expect(pending).toEqual({ status: 'pending' });
-    await asOrg(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(a.id)));
-    const approved = await asOrg(f.orgId, (tx) => claimStatusForTerminal(tx, f.tabletFor(f.A), a.id));
-    expect(approved).toEqual({ status: 'approved' });
-    await sql`update lobby_discount_claims set status = 'rejected', holder_name = null, id_number = null, decided_at = now(), reject_reason = 'x' where id = ${r.id}`;
-    expect(await asOrg(f.orgId, (tx) => claimStatusForTerminal(tx, f.tabletFor(f.A), r.id))).toEqual({ status: 'rejected' });
-    noPii([pending, approved], 'status answers');
-    expect(await auditFor(f.A), 'the status read writes no audit row (only the approve did)').toHaveLength(before + 1);
-  });
-
-  it("another store's claim, a ghost id and junk all answer LOBBY_NOT_FOUND and write nothing", async () => {
-    const f = await fx('s7b-status-x');
-    const foreign = await claim(f, f.B);
-    expectRefusal(await refusedIn(f.orgId, (tx) => claimStatusForTerminal(tx, f.tabletFor(f.A), foreign.id)), 'LOBBY_NOT_FOUND', "other store's claim");
-    expectRefusal(await refusedIn(f.orgId, (tx) => claimStatusForTerminal(tx, f.tabletFor(f.A), '00000000-0000-4000-8000-000000000000')), 'LOBBY_NOT_FOUND', 'ghost id');
-    expectRefusal(await refusedIn(f.orgId, (tx) => claimStatusForTerminal(tx, f.tabletFor(f.A), 'junk')), 'LOBBY_NOT_FOUND', 'junk id');
-    expect(await auditFor(f.B)).toHaveLength(0);
-  });
-});
-
 describe('approve: one statutory diner is linked to one approved claim per entry (auditor ruling 1)', () => {
   it('claim B on the same entry cannot reuse the diner of claim A: LOBBY_CLAIM_DINER_TAKEN, B stays pending; another ref, or the same ref on another entry, is fine', async () => {
     const f = await fx('s7b-taken');
     const entryId = await entry(f.A, { status: 'seated', party: 4 });
     const a = await claim(f, f.A, { entryId });
     const b = await claim(f, f.A, { entryId, last4: '2200' });
-    await asOrg(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(a.id, { statutoryDinerRef: 'SD-A' })));
-    const e = expectRefusal(await refusedIn(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(b.id, { statutoryDinerRef: 'SD-A' }))), 'LOBBY_CLAIM_DINER_TAKEN', 'reused diner');
+    await asOrg(f.orgId, (tx) => approveClaim(tx, f.cashierA, approveInput(a.id, { statutoryDinerRef: 'SD-A' })));
+    const e = expectRefusal(await refusedIn(f.orgId, (tx) => approveClaim(tx, f.cashierA, approveInput(b.id, { statutoryDinerRef: 'SD-A' }))), 'LOBBY_CLAIM_DINER_TAKEN', 'reused diner');
     expect(e.userMessage).toBe('This senior / PWD diner is already linked to another claim on this table.');
     expect(await rowOf(b.id)).toMatchObject({ status: 'pending', statutory_diner_ref: null });
-    expect(await asOrg(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(b.id, { statutoryDinerRef: 'SD-B' })))).toMatchObject({ status: 'approved' });
+    expect(await asOrg(f.orgId, (tx) => approveClaim(tx, f.cashierA, approveInput(b.id, { statutoryDinerRef: 'SD-B' })))).toMatchObject({ status: 'approved' });
     const other = await claim(f, f.A, { status: 'seated' });
-    expect(await asOrg(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(other.id, { statutoryDinerRef: 'SD-A' })))).toMatchObject({ status: 'approved' });
+    expect(await asOrg(f.orgId, (tx) => approveClaim(tx, f.cashierA, approveInput(other.id, { statutoryDinerRef: 'SD-A' })))).toMatchObject({ status: 'approved' });
   });
 });

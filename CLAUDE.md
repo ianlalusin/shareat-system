@@ -172,7 +172,7 @@ on a branch, and never touches `main`. This one is a closer.
 | `packages/domain/sync/` | Firestore publisher (mirror) + ingestor (inbox) |
 | `packages/auth/` | The single `authorize()` module |
 | `packages/core/` | money · datetime · logger · env — shared by every front-end |
-| `apps/erp/` | ERP front-end, port 9008. `apps/{pos,customer,website}` reserved |
+| `apps/erp/` | ERP front-end, port 9008. `apps/{customer,website}` reserved (POS v2 is `/pos` inside `apps/erp`; the old Firebase POS app folder was deleted 26 Nov 2026, tag `archive/apps-pos-final`) |
 
 <!-- BEGIN:nextjs-agent-rules -->
 

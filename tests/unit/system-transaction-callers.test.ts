@@ -61,10 +61,6 @@ const REQUIRED_CALLERS = [
   'scripts/backfill-fiscal-periods.ts',
   // DEF-742 — enumerates every org; lists via listOrgsToRun on a bare transaction(), must move to systemTransaction.
   'scripts/backfill-store-attendance-config.ts',
-  // Practice copy (F43 PR) — the bootstrap-org.ts shape: creates a fake organisation, its stores and
-  // persons before any organisation-scoped session can exist. Run by a person on this machine only;
-  // refuses unless DATABASE_URL names a local `_test` database (scripts/lib/practice-env.mjs).
-  'scripts/practice-erp-seed.ts',
   // T-625 - the Firebase move: two READ-ONLY reads (live firebase credential uids, stored file paths) across every
   // organisation, run once by a person. Both tables are FORCE RLS; same shape and reason as scripts/backfill-file-links.ts.
   // db.ts has no insert/update/delete (tests/unit/t625-firebase-move.test.ts scans the folder for that).

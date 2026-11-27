@@ -1,11 +1,10 @@
 /**
  * T-455 S7a - the senior / PWD discount claim (docs/tasks/455-customer-lobby.md sections 2.2, 3.1, 3.2, 4.1, 4.4-4.7 and "S7a rulings").
  *
- * Three doors, one state logic (the birthday.ts template):
+ * Two doors, one state logic (the birthday.ts template):
  *   - the DINER (submitClaim / listMyClaims / cancelMyClaim), found by the cookie hash like the entry itself;
  *   - an ERP CASHIER (`actor: Actor`, `authorize(record_sale)` at the claim's own store);
- *   - the POS TABLET (`...ForTerminal`, a `TerminalActor`: no `authorize()`, S5 ruling 2; another store's claim answers exactly like a ghost id).
- * The cashier and tablet doors call the same `*Core` with a store guard, so the state logic exists once.
+ * The cashier door calls the same `*Core` with a store guard, so the state logic exists once.
  *
  * PERSONAL DATA (row 353, T-435). The holder name and ID number are stored ONLY while a claim is pending (the database CHECK nulls them on
  * approve, reject and expiry). They are returned by exactly one call, `openClaim*`, which writes a `lobby.claim_open` audit row each time. Every
@@ -18,7 +17,6 @@ import { authorize, type Actor } from '@shareat/auth';
 import { LOBBY_ENTRY_TTL_HOURS, type MyEntryKey } from './checkin';
 import type { MoveCtx, StoreGuard } from './core';
 import { lobbyRefusal, LOBBY_NAME_MAX } from './refusal';
-import type { TerminalActor } from './terminal';
 
 /** The ID number is 4..40 characters after trimming (4 so a last-4 exists; 40 so no image can ride in a text field, 4.4). */
 export const LOBBY_CLAIM_ID_MIN = 4;
@@ -360,32 +358,4 @@ export async function approvedClaimsForSession(tx: Tx, actor: Actor, input: { st
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
   const rows = await lobbyRepo.listApprovedClaimsOfSession(tx, actor.orgId, input.storeId, input.sessionId);
   return rows.map((r) => ({ kind: r.kind, idLast4: r.idLast4, statutoryDinerRef: r.statutoryDinerRef }));
-}
-
-// ------------------------------------------------------------------------------------------------ door 2: the POS tablet
-
-const terminalCtx = (a: TerminalActor): MoveCtx => ({ orgId: a.orgId, personId: a.terminalPersonId, cashier: a.cashierName });
-/** Another store's claim answers exactly like a ghost id. */
-const terminalGuard = (a: TerminalActor): StoreGuard => (claimStoreId) => {
-  if (claimStoreId !== a.erpStoreId) throw lobbyRefusal('LOBBY_NOT_FOUND');
-};
-
-export async function listClaimsForTerminal(tx: Tx, actor: TerminalActor): Promise<ClaimListRow[]> {
-  return listClaimsCore(tx, actor.orgId, actor.erpStoreId);
-}
-
-export async function openClaimForTerminal(tx: Tx, actor: TerminalActor, claimId: string): Promise<OpenClaimView> {
-  return openClaimCore(tx, terminalCtx(actor), claimId, terminalGuard(actor));
-}
-
-export async function approveClaimForTerminal(tx: Tx, actor: TerminalActor, input: ApproveClaimInput) {
-  return approveClaimCore(tx, terminalCtx(actor), input, terminalGuard(actor));
-}
-
-export async function claimStatusForTerminal(tx: Tx, actor: TerminalActor, claimId: string): Promise<{ status: ClaimStatus }> {
-  return claimStatusCore(tx, terminalCtx(actor), claimId, terminalGuard(actor));
-}
-
-export async function rejectClaimForTerminal(tx: Tx, actor: TerminalActor, input: RejectClaimInput) {
-  return rejectClaimCore(tx, terminalCtx(actor), input, terminalGuard(actor));
 }

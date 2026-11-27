@@ -12,7 +12,7 @@
  * file works in Node and in a test that has not installed a fake yet.
  *
  * ⚠️ **No other file may call `indexedDB.open`** — the "one opener" rule carried over from
- * `apps/pos/src/lib/terminal/db.ts`. A second opener makes version upgrades ambiguous.
+ * the old POS app's terminal db. A second opener makes version upgrades ambiguous.
  */
 import type { CachedSnapshot } from './types';
 

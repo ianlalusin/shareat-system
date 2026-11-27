@@ -1,12 +1,10 @@
 /**
  * T-455 S6a - the birthday-song request (docs/tasks/455-customer-lobby.md sections 2.4, 3.1, 3.2, 4.1, 4.6 and "S6a rulings").
  *
- * Three doors, one state logic:
+ * Two doors, one state logic:
  *   - the DINER (requestBirthday / getMyBirthday / cancelMyBirthday), found by the cookie hash like the entry itself;
  *   - an ERP CASHIER (`...Birthday` with `actor: Actor`, `authorize(record_sale)` at the request's own store);
- *   - the POS TABLET (`...ForTerminal`, a `TerminalActor`: no `authorize()`, the trust chain is the route's terminal link, S5 ruling 2;
- *     another store's request answers exactly like a ghost id).
- * The cashier and tablet doors call the same internal `*Core` with a store guard, so the state logic exists once.
+ * The cashier door calls the same internal `*Core` with a store guard, so the state logic exists once.
  *
  * Every function takes the caller's `tx: Tx` and opens no transaction (DEF-421). SQL lives only in `lobbyRepo`. The clock is the database's.
  * Audit rows carry the booking code, the status and the time, never a celebrant name, diner name or phone (4.6).
@@ -16,7 +14,6 @@ import { authorize, type Actor } from '@shareat/auth';
 import { LOBBY_ENTRY_TTL_HOURS, type MyEntryKey } from './checkin';
 import type { MoveCtx, StoreGuard } from './core';
 import { lobbyRefusal, LOBBY_NAME_MAX } from './refusal';
-import type { TerminalActor } from './terminal';
 
 /** An accepted request whose time passed this long ago and was never played is expired. */
 export const LOBBY_BIRTHDAY_EXPIRE_MINUTES = 30;
@@ -253,28 +250,4 @@ export async function declineBirthday(tx: Tx, actor: Actor, input: DeclineBirthd
 
 export async function markBirthdayPlayed(tx: Tx, actor: Actor, requestId: string, opts?: { onlyStoreId?: string }) {
   return markBirthdayPlayedCore(tx, staffCtx(actor), requestId, staffGuard(tx, actor, opts?.onlyStoreId));
-}
-
-// ------------------------------------------------------------------------------------------------ door 2: the POS tablet
-
-const terminalCtx = (a: TerminalActor): MoveCtx => ({ orgId: a.orgId, personId: a.terminalPersonId, cashier: a.cashierName });
-/** Another store's request answers exactly like a ghost id. */
-const terminalGuard = (a: TerminalActor): StoreGuard => (requestStoreId) => {
-  if (requestStoreId !== a.erpStoreId) throw lobbyRefusal('LOBBY_NOT_FOUND');
-};
-
-export async function listBirthdayForTerminal(tx: Tx, actor: TerminalActor): Promise<BirthdayListRow[]> {
-  return listBirthdayCore(tx, actor.orgId, actor.erpStoreId);
-}
-
-export async function acceptBirthdayForTerminal(tx: Tx, actor: TerminalActor, input: AcceptBirthdayInput) {
-  return acceptBirthdayCore(tx, terminalCtx(actor), input, terminalGuard(actor));
-}
-
-export async function declineBirthdayForTerminal(tx: Tx, actor: TerminalActor, input: DeclineBirthdayInput) {
-  return declineBirthdayCore(tx, terminalCtx(actor), input, terminalGuard(actor));
-}
-
-export async function markBirthdayPlayedForTerminal(tx: Tx, actor: TerminalActor, requestId: string) {
-  return markBirthdayPlayedCore(tx, terminalCtx(actor), requestId, terminalGuard(actor));
 }

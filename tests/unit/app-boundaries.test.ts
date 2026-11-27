@@ -138,17 +138,17 @@ const FIXTURES = join(fileURLToPath(new URL('.', import.meta.url)), 'fixtures', 
 const fixtureApps = (name: string) => join(FIXTURES, name, 'apps');
 
 describe('app boundaries — detector fixtures (T-417)', () => {
-  it('reports pos importing erp by relative path. Mutant: detector returns []', () => {
-    const v = appToAppViolations(fixtureApps('pos-relative'), FIXTURES);
+  it('reports customer importing erp by relative path. Mutant: detector returns []', () => {
+    const v = appToAppViolations(fixtureApps('customer-relative'), FIXTURES);
     expect(v).toHaveLength(1);
-    expect(v[0]).toContain('pos-relative/apps/pos/src/a.tsx');
+    expect(v[0]).toContain('customer-relative/apps/customer/src/a.tsx');
     expect(v[0]).toContain('(app: erp)');
   });
 
-  it('reports pos importing @shareat/erp/... by workspace name', () => {
-    const v = appToAppViolations(fixtureApps('pos-by-name'), FIXTURES);
+  it('reports customer importing @shareat/erp/... by workspace name', () => {
+    const v = appToAppViolations(fixtureApps('customer-by-name'), FIXTURES);
     expect(v).toHaveLength(1);
-    expect(v[0]).toContain('pos-by-name/apps/pos/src/a.tsx');
+    expect(v[0]).toContain('customer-by-name/apps/customer/src/a.tsx');
     expect(v[0]).toContain('(app: erp)');
   });
 
@@ -163,10 +163,10 @@ describe('app boundaries — detector fixtures (T-417)', () => {
     expect(appToAppViolations(fixtureApps('clean'), FIXTURES)).toEqual([]);
   });
 
-  it('does NOT report cross-app imports inside apps/pos/out/ or apps/pos/android/, and does not even list them. Mutant: built bundles scanned', () => {
+  it('does NOT report cross-app imports inside apps/customer/out/ or apps/customer/android/, and does not even list them. Mutant: built bundles scanned', () => {
     const apps = fixtureApps('skipped-dirs');
     expect(appToAppViolations(apps, FIXTURES)).toEqual([]);
-    const listed = sourceFiles(join(apps, 'pos')).map((f) => relative(apps, f).split(sep).join('/'));
-    expect(listed).toEqual(['pos/src/ok.tsx']);
+    const listed = sourceFiles(join(apps, 'customer')).map((f) => relative(apps, f).split(sep).join('/'));
+    expect(listed).toEqual(['customer/src/ok.tsx']);
   });
 });

@@ -1,4 +1,4 @@
-/** T-532 S3 — the POS shell workflow: triggers, secrets gate, artifact name, and that apps/pos and ci.yml are not what it builds. Text-level (no YAML parser in the repo). */
+/** T-532 S3 — the POS shell workflow: triggers, secrets gate, artifact name, and that no other app is what it builds. Text-level (no YAML parser in the repo). */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -9,10 +9,12 @@ describe('pos-shell-build.yml (T-532 S3)', () => {
   it('runs on apps/pos-shell changes and on manual dispatch, nothing wider', () => {
     expect(text).toContain("- 'apps/pos-shell/**'");
     expect(text).toContain('workflow_dispatch:');
-    expect(text).not.toContain("- 'apps/pos/**'");
+    // every app path trigger is the shell's own (T-588: apps/pos is gone; a sibling app path must never creep in)
+    expect([...text.matchAll(/- 'apps\/([^']*)'/g)].map((m) => m[1])).toEqual(['pos-shell/**', 'pos-shell/**']);
   });
   it('builds apps/pos-shell only and gates signing through apk-signing-gate with all four secrets', () => {
-    expect(text).not.toMatch(/apps\/pos\/|apps\/pos-shell\/\.\.\//);
+    expect([...text.matchAll(/apps\/([\w-]+)/g)].filter((m) => m[1] !== 'pos-shell')).toEqual([]);
+    expect(text).not.toMatch(/apps\/pos-shell\/\.\.\//);
     expect(text).toContain('node scripts/apk-signing-gate.mjs');
     for (const s of ['ANDROID_KEYSTORE_BASE64', 'ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD']) expect(text).toContain(`secrets.${s}`);
   });

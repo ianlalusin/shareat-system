@@ -10,7 +10,7 @@ import type { PrintLayout } from './types';
 
 /**
  * Columns per line. Font B (`small`) is denser than Font A, so it fits more characters on the same
- * paper. These are the v1 figures (`apps/pos/.../receiptFormatter.ts`), kept because the printers in
+ * paper. These are the v1 figures (the old POS app's `receiptFormatter.ts`), kept because the printers in
  * the stores are the ones v1 drove.
  */
 export function columnsFor(layout: PrintLayout): number {

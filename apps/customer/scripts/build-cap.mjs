@@ -3,7 +3,7 @@
 //
 // T-424 Ruling 1 (v1's build-capacitor.mjs pattern): a static export cannot carry route handlers or middleware, and the APK must hold none of the
 // POS v2 server. So `src/app/api`, `src/middleware.ts` and `src/server` (the server code and its tests, which import the route files) are moved
-// aside for the export and ALWAYS put back (finally), even if the build fails. No client file imports any of them (tests/unit/pos-v2-server-boundary.test.ts).
+// aside for the export and ALWAYS put back (finally), even if the build fails. No client file imports any of them.
 import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmdirSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';

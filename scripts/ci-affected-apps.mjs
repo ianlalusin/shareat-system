@@ -1,9 +1,9 @@
 // T-417: which app CI jobs run. Reads changed paths on stdin (one per line) or the literal UNKNOWN.
-// Prints `pos=true|false` and `customer=true|false`. Fails OPEN: UNKNOWN means both true.
+// Prints `customer=true|false`. Fails OPEN: UNKNOWN means true.
 // Node built-ins only, because the `changes` job runs before `npm ci`.
 import { readFileSync } from 'node:fs';
 
-const APPS = ['pos', 'customer'];
+const APPS = ['customer'];
 // Anything here can change every app's build, so it affects all apps.
 const SHARED_EXACT = new Set([
   'package.json',

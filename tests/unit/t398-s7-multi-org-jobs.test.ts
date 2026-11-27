@@ -21,7 +21,7 @@ const repoRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 const ALLOW: Readonly<Record<string, string>> = {
   'db-backup': 'backs up the whole database by design, not per company',
   'restore-drill': 'restores a whole-database backup by design, not per company',
-  start: 'the web server (shareat-erp, shareat-pos and, T-455 S9a, shareat-customer), not a job',
+  start: 'the web server (shareat-erp and, T-455 S9a, shareat-customer), not a job',
 };
 const LOOP = 'listOrgsToRun';
 
@@ -136,11 +136,11 @@ describe('O7 - every docs/ops/*.service runs per company or is allow-listed', ()
       expect(script, `${s}: if the SCRIPT itself held the loop the follow-through would be untested`).not.toMatch(new RegExp(`\\b${LOOP}\\b`));
     }
   });
-  it('the allow-list is EXACTLY db-backup, restore-drill, start (x3) and each is really used (mutant: a widened or stale list)', () => {
+  it('the allow-list is EXACTLY db-backup, restore-drill, start (x2) and each is really used (mutant: a widened or stale list)', () => {
     expect(Object.keys(ALLOW).sort()).toEqual(['db-backup', 'restore-drill', 'start']);
     const used = verdicts.filter((v) => v.via === 'allow-list');
-    expect(used.map((v) => v.npmScript).sort()).toEqual(['db-backup', 'restore-drill', 'start', 'start', 'start']);
-    expect(used.filter((v) => v.npmScript === 'start').map((v) => v.service).sort()).toEqual(['shareat-customer.service', 'shareat-erp.service', 'shareat-pos.service']);
+    expect(used.map((v) => v.npmScript).sort()).toEqual(['db-backup', 'restore-drill', 'start', 'start']);
+    expect(used.filter((v) => v.npmScript === 'start').map((v) => v.service).sort()).toEqual(['shareat-customer.service', 'shareat-erp.service']);
   });
   it('no dual-run service exists and none is allow-listed (K6)', () => {
     expect(services().some((s) => /dual-run/.test(s))).toBe(false);

@@ -1,7 +1,6 @@
 /**
- * T-455 S2/S5 - the ONE implementation of each cashier move on the lobby line. `staff.ts` (an ERP person, `authorize(record_sale)`) and
- * `terminal.ts` (a POS tablet, trust chain = the route's terminal link) both call these; the store check is passed in as `guard`, so
- * the state logic exists once. Nothing here authorises anything and nothing opens a transaction (DEF-421).
+ * T-455 S2/S5 - the ONE implementation of each cashier move on the lobby line. `staff.ts` (an ERP person, `authorize(record_sale)`) calls these (T-588: the POS tablet's `terminal.ts` was
+ * deleted with apps/pos); the store check is passed in as `guard`, so the state logic exists once. Nothing here authorises anything and nothing opens a transaction (DEF-421).
  */
 import { auditLogRepo, lobbyRepo, type Tx } from '@shareat/db';
 import { LOBBY_CODE_ATTEMPTS, LOBBY_ENTRY_TTL_HOURS, type LobbyEntryStatus } from './checkin';
@@ -136,7 +135,7 @@ export interface CoreLobbyList {
 /**
  * The cashier screen's list: the live line with each party's order lines, AND the `lobby_stores.pos_seen_at` stamp (the POS-is-up signal).
  * ⛔ The stamp is load-bearing: a diner can check in only while it is under 5 minutes old (checkin.ts), so every cashier list read goes through here.
- * Shared by `terminal.ts` (the pos2 tablet) and `staff.ts` (the ERP POS). No stamp is written for a store with no `lobby_stores` row (none is created).
+ * Called by `staff.ts` (the ERP POS). No stamp is written for a store with no `lobby_stores` row (none is created).
  */
 export async function listAndStampCore(tx: Tx, orgId: string, storeId: string): Promise<CoreLobbyList> {
   const store = await lobbyRepo.getLobbyStore(tx, orgId, storeId, 0, false);

@@ -130,3 +130,52 @@ describe('T-644 S1 call / remove with onlyStoreId (the paired tablet\'s store)',
     expect(await entryStatus(other.entryId)).toBe('waiting');
   });
 });
+
+// Moved here from t455-s5-lobby-terminal.test.ts E1 when the tablet door was deleted (T-588): the line mapping lives in the shared core, so the cashier's list is its caller now.
+describe('T-644 S1 listLobby: the cashier lines carry posItemKey from the ACTIVE link of the store; an unmapped line is kept as text', () => {
+  it('a linked variant carries its posItemKey and option ids; an unlinked one, one with only an INACTIVE link, and one linked only at ANOTHER store all come back with posItemKey null and a label naming the item [kills: a line dropped, an inactive or other-store link used, a label that hides the item]', async () => {
+    const f = await fixture();
+    await withLobbyStore(f, f.storeId);
+    const [grp] = await sql<{ id: string }[]>`
+      insert into menu_option_groups (org_id, name, selection_mode, min_selections, max_selections, status, created_by)
+      values (${f.orgId}, ${uid('Grp')}, 'single', 1, 1, 'active', ${f.adminId}) returning id`;
+    const [val] = await sql<{ id: string }[]>`
+      insert into menu_option_values (org_id, option_group_id, name, sort_order, status, created_by) values (${f.orgId}, ${grp!.id}, ${uid('Val')}, 0, 'active', ${f.adminId}) returning id`;
+    const link = async (storeId: string, variantId: string, key: string, status: 'active' | 'inactive' = 'active') => {
+      await sql`insert into menu_pos_v1_links (org_id, store_id, pos_item_key, variant_id, status, created_by) values (${f.orgId}, ${storeId}, ${key}, ${variantId}, 'active', ${f.adminId})`;
+      if (status === 'inactive') await sql`update menu_pos_v1_links set status = 'inactive' where store_id = ${storeId} and pos_item_key = ${key}`;
+    };
+    const nameOf = async (variantId: string) =>
+      (await sql<{ name: string }[]>`select i.name from menu_items i join menu_item_variants v on v.menu_item_id = i.id where v.id = ${variantId}`)[0]!.name;
+    const linked = f.menu.unli;
+    const unlinked = f.menu.pork;
+    const inactive = f.menu.cola;
+    const otherStoreOnly = f.menu.refillRice;
+    await link(f.storeId, linked.variantId, 'PKG-PORK-CHICKEN');
+    await link(f.storeId, inactive.variantId, 'OLD-KEY', 'inactive');
+    await link(f.store2Id, otherStoreOnly.variantId, 'ELSEWHERE-KEY');
+    const { entryId } = await park(f, f.storeId);
+    const addLine = async (variantId: string, qty: number, kind: 'package' | 'a_la_carte', withOption = false) => {
+      const [l] = await sql<{ id: string }[]>`insert into lobby_entry_lines (org_id, entry_id, variant_id, qty, line_kind) values (${f.orgId}, ${entryId}, ${variantId}, ${qty}, ${kind}) returning id`;
+      if (withOption) await sql`insert into lobby_entry_line_options (org_id, line_id, option_value_id) values (${f.orgId}, ${l!.id}, ${val!.id})`;
+    };
+    await addLine(linked.variantId, 5, 'package', true);
+    await addLine(unlinked.variantId, 2, 'a_la_carte');
+    await addLine(inactive.variantId, 1, 'a_la_carte');
+    await addLine(otherStoreOnly.variantId, 3, 'a_la_carte');
+    const r = await asOrg(f.orgId, (tx) => listLobby(tx, f.counter, { storeId: f.storeId }));
+    const lines = r.entries.find((e) => e.entryId === entryId)!.lines;
+    expect(lines.length, 'a line was dropped').toBe(4);
+    const by = (variantId: string) => lines.find((l) => l.variantId === variantId)!;
+    expect(by(linked.variantId)).toMatchObject({ lineKind: 'package', qty: 5, posItemKey: 'PKG-PORK-CHICKEN', optionValueIds: [val!.id] });
+    expect(by(linked.variantId).label).toContain(await nameOf(linked.variantId));
+    for (const [name, v, qty] of [['unlinked', unlinked, 2], ['inactive link', inactive, 1], ['other store link', otherStoreOnly, 3]] as const) {
+      const line = by(v.variantId);
+      expect(line, `${name}: line missing`).toBeDefined();
+      expect(line.posItemKey, `${name}: must be null`).toBeNull();
+      expect(line.qty).toBe(qty);
+      expect(line.label, `${name}: label must name the item so the cashier can tap it in by hand`).toContain(await nameOf(v.variantId));
+      expect(line.optionValueIds).toEqual([]);
+    }
+  });
+});

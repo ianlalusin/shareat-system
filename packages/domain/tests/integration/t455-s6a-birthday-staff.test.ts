@@ -7,29 +7,24 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 /**
  * T-455 S6a (TESTER) - the birthday-song request, DOMAIN, cashier side: docs/tasks/455-customer-lobby.md sections 2.4, 3.2 (birthday prompt),
- * 4.6 (every accept, decline and play is an audit_log row with the tablet's person), "S5 rulings" 1-2 (terminal actor, no authorize()), and the S6a
- * row of section 5. Real Postgres via TEST_DATABASE_URL.
+ * 4.6 (every accept, decline and play is an audit_log row), and the S6a row of section 5. T-588: the POS tablet door (`...ForTerminal`) was deleted; its tests are gone. Real Postgres via TEST_DATABASE_URL.
  *
  * RED TODAY, for one reason: packages/domain/src/lobby/birthday.ts does not exist (the import below fails to resolve).
  *
  * CONTRACT ASSUMED (see the hand-back; every line is an orchestrator ruling to confirm):
- *   WHO ACTS: BOTH doors, like every other lobby move - an ERP person (staff.ts style: authorize(record_sale) at the request's OWN store) and a POS
- *   tablet (terminal.ts style: TerminalActor, no authorize(), the request's store must be the tablet's store, another store's request answers exactly
- *   like a ghost id = LOBBY_NOT_FOUND). One shared core, as in S5.
+ *   WHO ACTS: an ERP person (staff.ts style: authorize(record_sale) at the request's OWN store).
  *   Staff:    listBirthdayRequests(tx, actor, storeId), acceptBirthday(tx, actor, { requestId, scheduledAt: Date }),
  *             declineBirthday(tx, actor, { requestId, reason: string }), markBirthdayPlayed(tx, actor, requestId)
- *   Terminal: listBirthdayForTerminal(tx, terminalActor), acceptBirthdayForTerminal(tx, terminalActor, { requestId, scheduledAt }),
- *             declineBirthdayForTerminal(tx, terminalActor, { requestId, reason }), markBirthdayPlayedForTerminal(tx, terminalActor, requestId)
  *   Results:  accept -> { requestId, status: 'accepted', scheduledAt: Date }; decline -> { requestId, status: 'declined' }; played -> { requestId, status: 'played' }
  *   List row: { requestId, entryId, code, displayName, standLabel, celebrantName, status ('requested' | 'accepted' only), scheduledAt, createdAt }, oldest first,
  *             requested + accepted only; never deviceHash / ipHash / handoffUrl / phone.
  *   decline reason: trimmed, 1..80 chars after trimming, free text (the POS offers three presets; the domain does not enumerate them).
  *   Audit actions (catalogue cap raised by 3): lobby.birthday_accept, lobby.birthday_decline, lobby.birthday_play. store_id = the entry's store, entity_id = the
- *   request id, source 'pos', actor = the acting person (terminal: the terminal person, after.cashier = the cashier's name). Payloads hold NO celebrant or diner name.
+ *   request id, source 'pos', actor = the acting person. Payloads hold NO celebrant or diner name.
  *
  * MUTANT INDEX: accept without a time (or a bogus time) allowed; decline with no/blank/huge reason; accept/decline/play on a request in the wrong state
  * (incl. cancelled-by-diner and expired); played straight from requested; scheduled_at or acted_by not stored; another store's request moved by a store-A
- * cashier or tablet (authorize missing, store taken from the caller); a role without record_sale allowed; terminal calling authorize(); another store's
+ * cashier (authorize missing, store taken from the caller); a role without record_sale allowed; another store's
  * request answered differently from a ghost id; audit missing, wrong actor, cashier missing, a name in the payload; a refused move still audited; list
  * leaking hashes or other stores' or closed requests.
  */
@@ -44,16 +39,11 @@ import { APP_ROLE, closeDb, transaction, type Tx } from '@shareat/db';
 import { AuthorizationError, flushSecurityEvents, type Actor } from '@shareat/auth';
 import {
   acceptBirthday,
-  acceptBirthdayForTerminal,
   declineBirthday,
-  declineBirthdayForTerminal,
-  listBirthdayForTerminal,
   listBirthdayRequests,
   markBirthdayPlayed,
-  markBirthdayPlayedForTerminal,
 } from '../../src/lobby/birthday';
 import { LobbyRefusal } from '../../src/lobby/refusal';
-import type { TerminalActor } from '../../src/lobby/terminal';
 
 const sql = postgres(url, { max: 6 });
 afterAll(async () => {
@@ -105,7 +95,6 @@ type S = { orgId: string; storeId: string };
 type Raw = Record<string, string | number | boolean | null>;
 const CELEBRANT = 'Benedict Quillfeather';
 const DINER = 'Zanzibar Tuckerman';
-const CASHIER = 'Cora Cashier';
 
 async function fx(hint: string) {
   const code = uid(`t455s6a-staff-${hint}`);
@@ -126,9 +115,7 @@ async function fx(hint: string) {
   };
   const cashierA = await person('Cashier A', 'manager', [A.storeId]);
   const floorA = await person('Floor A', 'staff', [A.storeId]); // role without record_sale
-  const terminal = await person('Terminal 01', null, []); // NO role, NO store scope: the tablet's person
-  const tabletFor = (s: S): TerminalActor => ({ orgId, erpStoreId: s.storeId, terminalPersonId: terminal.personId, cashierName: CASHIER });
-  return { orgId, A, B, cashierA, floorA, terminal, tabletFor };
+  return { orgId, A, B, cashierA, floorA };
 }
 type Fx = Awaited<ReturnType<typeof fx>>;
 
@@ -306,74 +293,9 @@ describe('B. staff permissions: record_sale at the request\'s own store; every a
   });
 });
 
-// ================================================================================================ C. the tablet door
-describe('C. the POS tablet (terminal actor, no capability): own store only, another store answers like a ghost', () => {
-  it('C1 the tablet accepts, declines and plays at its OWN store: the terminal person is the actor, source pos, after.cashier = the cashier\'s name [kills: authorize() demanded of a person with no role, actor not the terminal, cashier missing]', async () => {
-    const f = await fx('c1');
-    const a = await request(f, f.A, 'requested');
-    const d = await request(f, f.A, 'requested');
-    const p = await request(f, f.A, 'accepted');
-    await asOrg(f.orgId, async (tx) => {
-      await acceptBirthdayForTerminal(tx, f.tabletFor(f.A), { requestId: a.id, scheduledAt: inMin(15) });
-      await declineBirthdayForTerminal(tx, f.tabletFor(f.A), { requestId: d.id, reason: 'Not tonight' });
-      await markBirthdayPlayedForTerminal(tx, f.tabletFor(f.A), p.id);
-    });
-    expect((await rowOf(a.id)).status).toBe('accepted');
-    expect((await rowOf(a.id)).acted_by_person_id).toBe(f.terminal.personId);
-    expect(await rowOf(d.id)).toMatchObject({ status: 'declined', decline_reason: 'Not tonight', acted_by_person_id: f.terminal.personId });
-    expect((await rowOf(p.id)).status).toBe('played');
-    const audit = await auditFor(f.A);
-    expect(audit.map((x) => x.action).sort()).toEqual(['lobby.birthday_accept', 'lobby.birthday_decline', 'lobby.birthday_play']);
-    for (const row of audit) {
-      expect(row.actor_person_id, row.action).toBe(f.terminal.personId);
-      expect(row.source).toBe('pos');
-      expect((row.after as Record<string, unknown>).cashier, `${row.action} after.cashier`).toBe(CASHIER);
-    }
-  });
-
-  it('C2 ANOTHER STORE\'S request: accept, decline, play all answer LOBBY_NOT_FOUND - byte-for-byte what a ghost id answers - and change nothing [kills: store check missing, a distinguishable refusal that lets a tablet probe other stores]', async () => {
-    const f = await fx('c2');
-    const other = await request(f, f.B, 'requested');
-    const otherAccepted = await request(f, f.B, 'accepted');
-    const ghost = '019f0000-0000-7000-8000-000000000001';
-    const tablet = f.tabletFor(f.A);
-    const run = (name: 'accept' | 'decline' | 'play', id: string) =>
-      refusedIn(f.orgId, (tx) =>
-        name === 'accept'
-          ? acceptBirthdayForTerminal(tx, tablet, { requestId: id, scheduledAt: inMin(10) })
-          : name === 'decline'
-            ? declineBirthdayForTerminal(tx, tablet, { requestId: id, reason: 'No' })
-            : markBirthdayPlayedForTerminal(tx, tablet, id),
-      );
-    const beforeA = await rowOf(other.id);
-    const beforeB = await rowOf(otherAccepted.id);
-    for (const [name, id] of [['accept', other.id], ['decline', other.id], ['play', otherAccepted.id]] as const) {
-      const real = expectRefusal(await run(name, id), 'LOBBY_NOT_FOUND', `${name} other store`);
-      const ghosted = expectRefusal(await run(name, ghost), 'LOBBY_NOT_FOUND', `${name} ghost`);
-      expect(real.userMessage).toBe(ghosted.userMessage);
-    }
-    expect(await rowOf(other.id)).toEqual(beforeA);
-    expect(await rowOf(otherAccepted.id)).toEqual(beforeB);
-    expect(await auditFor(f.B)).toHaveLength(0);
-  });
-
-  it('C3 the tablet rules are the staff rules: accept without a time, decline without a reason, a wrong-state move all refuse the same way [kills: a second, looser copy of the state logic in the terminal door]', async () => {
-    const f = await fx('c3');
-    const r = await request(f, f.A, 'requested');
-    const tablet = f.tabletFor(f.A);
-    expectRefusal(await refusedIn(f.orgId, (tx) => acceptBirthdayForTerminal(tx, tablet, { requestId: r.id } as never)), 'LOBBY_BIRTHDAY_NEEDS_TIME', 'terminal accept, no time');
-    expectRefusal(await refusedIn(f.orgId, (tx) => declineBirthdayForTerminal(tx, tablet, { requestId: r.id, reason: ' ' })), 'LOBBY_BAD_INPUT', 'terminal decline, blank reason');
-    expectRefusal(await refusedIn(f.orgId, (tx) => markBirthdayPlayedForTerminal(tx, tablet, r.id)), 'LOBBY_BIRTHDAY_CLOSED', 'terminal play from requested');
-    const done = await request(f, f.A, 'played');
-    expectRefusal(await refusedIn(f.orgId, (tx) => acceptBirthdayForTerminal(tx, tablet, { requestId: done.id, scheduledAt: inMin(5) })), 'LOBBY_BIRTHDAY_CLOSED', 'terminal accept after play');
-    expect(await rowOf(r.id)).toMatchObject({ status: 'requested', scheduled_at: null });
-    expect(await auditFor(f.A)).toHaveLength(0);
-  });
-});
-
-// ================================================================================================ D. the list the tablet and the screen read
+// ================================================================================================ D. the list the screen reads
 describe('D. the birthday list', () => {
-  it('D1 the tablet list holds only OWN-store requested + accepted requests, oldest first, with code, stand, celebrant, party name and time - and no hash, hand-off link or phone [kills: other store\'s rows, closed requests, secrets in the list, wrong order]', async () => {
+  it('D1 the cashier list holds only OWN-store requested + accepted requests, oldest first, with code, stand, celebrant, party name and time - and no hash, hand-off link or phone [kills: other store\'s rows, closed requests, secrets in the list, wrong order]', async () => {
     const f = await fx('d1');
     const first = await request(f, f.A, 'requested', { seated: true });
     await new Promise((r) => setTimeout(r, 15));
@@ -383,7 +305,7 @@ describe('D. the birthday list', () => {
     await request(f, f.A, 'expired');
     await request(f, f.A, 'cancelled');
     const foreign = await request(f, f.B, 'requested');
-    const list = await asOrg(f.orgId, (tx) => listBirthdayForTerminal(tx, f.tabletFor(f.A)));
+    const list = await asOrg(f.orgId, (tx) => listBirthdayRequests(tx, f.cashierA, f.A.storeId));
     const rows = Array.isArray(list) ? list : (list as { requests: unknown[] }).requests;
     expect((rows as { requestId: string }[]).map((r) => r.requestId)).toEqual([first.id, second.id]);
     expect((rows as { requestId: string }[]).some((r) => r.requestId === foreign.id)).toBe(false);
@@ -408,7 +330,7 @@ describe('D. the birthday list', () => {
 
 // ================================================================================================ E. audit payloads carry no personal data
 describe('E. audit payloads: no celebrant, no diner name, no phone, no hash', () => {
-  it('E1 accept, decline and play by staff AND by the tablet leave audit payloads with none of the names or the hashes [kills: personal data in audit_log]', async () => {
+  it('E1 accept, decline and play by staff leave audit payloads with none of the names or the hashes [kills: personal data in audit_log]', async () => {
     const f = await fx('e1');
     const a = await request(f, f.A, 'requested');
     const d = await request(f, f.A, 'requested');
@@ -418,7 +340,7 @@ describe('E. audit payloads: no celebrant, no diner name, no phone, no hash', ()
       await acceptBirthday(tx, f.cashierA, { requestId: a.id, scheduledAt: inMin(15) });
       await declineBirthday(tx, f.cashierA, { requestId: d.id, reason: 'Not tonight' });
       await markBirthdayPlayed(tx, f.cashierA, p.id);
-      await acceptBirthdayForTerminal(tx, f.tabletFor(f.A), { requestId: a2.id, scheduledAt: inMin(20) });
+      await acceptBirthday(tx, f.cashierA, { requestId: a2.id, scheduledAt: inMin(20) });
     });
     const audit = await auditFor(f.A);
     expect(audit).toHaveLength(4);
