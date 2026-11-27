@@ -524,6 +524,7 @@ function Panel({
                           tier="confirm"
                           quiet
                           label="Withdraw"
+                          name={`Withdraw the ${label} price`}
                           consequence={`Stops offering this item at the ${label} price. It is not sold at that price until you set a new one.`}
                         />
                       </form>
@@ -605,6 +606,7 @@ function Panel({
                           tier="confirm"
                           quiet
                           label="Withdraw"
+                          name={`Withdraw the ${info?.name ?? ''} price`}
                           consequence={`Stops offering this item at the ${info?.name ?? 'hours'} price. It is not sold in those hours until you set a new price.`}
                         />
                       </form>
@@ -667,6 +669,7 @@ function Panel({
                 tier="confirm"
                 quiet
                 label="Withdraw"
+                name={`Withdraw the ${CHANNEL_SHORT[channel]} price for ${label}`}
                 consequence={`Stops offering ${label} at the ${CHANNEL_SHORT[channel]} price. It is not sold at that price until you set a new one.`}
               />
             </form>
