@@ -41,8 +41,11 @@ const withdrawOk = (source: string): boolean =>
   // the plain all-day Withdraw stays (the Store channel's), and is dropped only where the Sell online switch shows
   /\(showAdd \|\| \(!dayparted && row && !row\.withdrawn && !switchOff\)\)/.test(source) &&
   source.includes('{!dayparted && row && !row.withdrawn && !switchOff && (') &&
-  source.includes('aria-label={`Withdraw the ${CHANNEL_SHORT[channel]} price for ${label}`}') &&
-  source.includes("aria-label={`Withdraw the ${info?.name ?? ''} price`}");
+  // each Withdraw asks first (tier="confirm") and keeps its distinguishing accessible name (the button's visible words stay "Withdraw")
+  source.includes('name={`Withdraw the ${CHANNEL_SHORT[channel]} price for ${label}`}') &&
+  source.includes("name={`Withdraw the ${info?.name ?? ''} price`}") &&
+  source.includes('name={`Withdraw the ${label} price`}') &&
+  (source.match(/<ConfirmDestructive\s+tier="confirm"\s+quiet\s+label="Withdraw"/g) ?? []).length === 3;
 const statusOk = (source: string): boolean =>
   // a withdrawn / no-price status is plain text beside a small "Set price", never a pill
   source.includes('const isStatus = row !== undefined && (row.withdrawn ||') &&
@@ -145,7 +148,9 @@ describe('T-647 menu prices table', () => {
     // mutant: the plain online Withdraw is drawn beside the switch again
     expect(withdrawOk(s.replace('{!dayparted && row && !row.withdrawn && !switchOff && (', '{!dayparted && row && !row.withdrawn && ('))).toBe(false);
     // mutant: the per-slot Withdraw label gone
-    expect(withdrawOk(s.replace("aria-label={`Withdraw the ${info?.name ?? ''} price`}", ''))).toBe(false);
+    expect(withdrawOk(s.replace("name={`Withdraw the ${info?.name ?? ''} price`}", ''))).toBe(false);
+    // mutant: a Withdraw loses its confirm step
+    expect(withdrawOk(s.replace(/tier="confirm"(\s+quiet\s+label="Withdraw")/, 'tier="retype"$1'))).toBe(false);
   });
 
   it('a status (Withdrawn, Offered with no price) is plain text with a small Set price beside it', () => {

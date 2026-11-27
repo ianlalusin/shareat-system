@@ -77,9 +77,6 @@ export default async function StoreDetailPage({
   if (!readiness) {
     return (
       <Page view="detail" sectioned density="table" className="space-y-4">
-        <Link href="/admin/stores" className="text-sm underline underline-offset-2">
-          ← Stores
-        </Link>
         <h1 className="text-2xl font-semibold">
           {store.code} — {store.name}
         </h1>
@@ -103,10 +100,7 @@ export default async function StoreDetailPage({
   return (
     <Page view="detail" sectioned density="table">
       <div>
-        <Link href="/admin/stores" className="text-sm underline underline-offset-2">
-          ← Stores
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold">
+        <h1 className="text-2xl font-semibold">
           {store.code} — {store.name}
         </h1>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
