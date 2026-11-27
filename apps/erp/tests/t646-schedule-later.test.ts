@@ -15,25 +15,36 @@ const src = (rel: string) => readFileSync(resolve(APP, rel), 'utf8').replace(/\r
 
 const PAGES = ['menu/items/[id]/page.tsx', 'menu/prices/page.tsx'];
 const LABEL = 'From (Manila time, empty = now)';
-const WRAPPED = String.raw`<details className="text-sm">\s*<summary className="[^"]*">Schedule for later</summary>\s*<Field label="From \(Manila time, empty = now\)"[^>]*>[\s\S]*?</Field>\s*</details>`;
+// The summary carries a chevron (aria-hidden, rotates open) before its words.
+const WRAPPED = String.raw`<details className="text-sm">\s*<summary className="[^"]*"><ChevronIcon aria-hidden="true" [^>]*/>Schedule for later</summary>\s*<Field label="From \(Manila time, empty = now\)"[^>]*>[\s\S]*?</Field>\s*</details>`;
+const OPEN = /<details[^>]*\bopen\b/;
+
+const countLabels = (text: string): number => text.split(LABEL).length - 1;
+const countWrapped = (text: string): number => text.match(new RegExp(WRAPPED, 'g'))?.length ?? 0;
 
 describe('T-646 schedule-later disclosure', () => {
   it('every effective-from field sits inside a "Schedule for later" details block', () => {
     for (const rel of PAGES) {
       const text = src(rel);
-      const total = text.split(LABEL).length - 1;
-      const wrapped = text.match(new RegExp(WRAPPED, 'g'))?.length ?? 0;
-      expect(total, rel).toBeGreaterThan(0);
-      expect(wrapped, rel).toBe(total);
+      expect(countLabels(text), rel).toBeGreaterThan(0);
+      expect(countWrapped(text), rel).toBe(countLabels(text));
     }
   });
+  it('mutant: a field whose details wrapper is removed fails the wrapper check', () => {
+    const text = src('menu/prices/page.tsx');
+    const unwrapped = text.replace('<details className="text-sm">', '<div className="text-sm">');
+    expect(countWrapped(unwrapped)).not.toBe(countLabels(unwrapped));
+  });
   it('there are exactly three effective-from fields across the two pages', () => {
-    const total = PAGES.map((rel) => src(rel).split(LABEL).length - 1).reduce((a, b) => a + b, 0);
+    const total = PAGES.map((rel) => countLabels(src(rel))).reduce((a, b) => a + b, 0);
     expect(total).toBe(3);
   });
   it('no details block is open by default', () => {
     for (const rel of PAGES) {
-      expect(src(rel), rel).not.toMatch(String.raw`<details[^>]*\bopen\b`);
+      expect(src(rel), rel).not.toMatch(OPEN);
     }
+  });
+  it('mutant: a details block with `open` is caught', () => {
+    expect(src('menu/prices/page.tsx').replace('<details className="text-sm">', '<details className="text-sm" open>')).toMatch(OPEN);
   });
 });

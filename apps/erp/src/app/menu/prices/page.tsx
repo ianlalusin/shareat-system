@@ -9,6 +9,7 @@ import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess } from '@/lib/page-access';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
+import { ChevronIcon } from '@/components/shell/icons';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
@@ -41,6 +42,9 @@ type Channel = 'store' | 'online';
 const CHANNELS: readonly Channel[] = ['store', 'online'];
 const CHANNEL_LABEL: Record<Channel, string> = { store: 'Store (counter and tables)', online: 'Online' };
 const CHANNEL_SHORT: Record<Channel, string> = { store: 'Store', online: 'Online' };
+// T-647: a price in a table cell is a text-style button (24px target, no pill), so a long rule figure wraps like text.
+const FIGURE_TRIGGER = '!min-h-6 !gap-0 !rounded-md !px-1 !py-0.5 text-right font-medium tabular-nums underline-offset-4 hover:underline';
+const SET_PRICE_TRIGGER = '!min-h-6 !gap-0 !rounded-md !px-1 !py-0.5 text-sm font-medium underline underline-offset-4';
 
 /** A percent figure without its trailing zeros: 7.5000 reads 7.5. */
 const plainPercent = (v: string): string => (v.includes('.') ? v.replace(/0+$/, '').replace(/\.$/, '') : v);
@@ -174,6 +178,15 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
   );
 }
 
+/** The item's name, linking to the item. A component of its own so a price-table row carries no destination of its own (T-411 census). */
+function ItemLink({ id, name }: { id: string; name: string }) {
+  return (
+    <Link href={`/menu/items/${id}`} className="inline-flex min-h-6 items-center font-medium underline underline-offset-4">
+      {name}
+    </Link>
+  );
+}
+
 function Grid({ data, storeId, canPrice, canPair, q, clearHref }: { data: PricesPageData; storeId: string; canPrice: boolean; canPair: boolean; q: string; clearHref: string }) {
   const byCategory = data.categories
     .map((c) => ({ c, items: data.items.filter((i) => i.categoryId === c.id && i.variants.length > 0) }))
@@ -208,9 +221,7 @@ function Grid({ data, storeId, canPrice, canPair, q, clearHref }: { data: Prices
                   variantsOf(i).map((v) => (
                     <tr key={v.id}>
                       <Td className="align-top">
-                        <Link href={`/menu/items/${i.id}`} className="inline-flex min-h-6 items-center font-medium underline underline-offset-4">
-                          {i.name}
-                        </Link>
+                        <ItemLink id={i.id} name={i.name} />
                         {i.variants.length > 1 && v.label ? <span className="block text-muted">{v.label}</span> : null}
                       </Td>
                       {CHANNELS.map((ch) => (
@@ -229,9 +240,7 @@ function Grid({ data, storeId, canPrice, canPair, q, clearHref }: { data: Prices
               variantsOf(i).map((v) => (
                 <div key={v.id} className="space-y-3 rounded-[14px] border border-surface-border p-4">
                   <div className="flex flex-wrap items-baseline gap-3">
-                    <Link href={`/menu/items/${i.id}`} className="inline-flex min-h-6 items-center font-medium underline underline-offset-4">
-                      {i.name}
-                    </Link>
+                    <ItemLink id={i.id} name={i.name} />
                     {v.label ? <span className="text-muted">{v.label}</span> : null}
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -295,6 +304,7 @@ function PriceForm({
   whenChoices,
   defaultWhen,
   triggerClassName,
+  triggerVariant = 'secondary',
 }: {
   channel: Channel;
   itemType: 'a_la_carte' | 'package' | 'refill';
@@ -309,9 +319,10 @@ function PriceForm({
   defaultWhen?: string;
   /** T-647: styles the trigger when it is a price figure in a table cell. */
   triggerClassName?: string;
+  triggerVariant?: 'secondary' | 'ghost';
 }) {
   return (
-    <FormModal trigger={trigger} triggerIcon={null} triggerVariant="secondary" {...(triggerClassName ? { triggerClassName } : {})} triggerLabel={triggerLabel ?? trigger} title={title} size="md">
+    <FormModal trigger={trigger} triggerIcon={null} triggerVariant={triggerVariant} {...(triggerClassName ? { triggerClassName } : {})} triggerLabel={triggerLabel ?? trigger} title={title} size="md">
       <CheckedForm rules={MENU_PRICE_RULES} action={setPriceAction} className="space-y-3">
         {hidden}
         {fixedDaypartId !== undefined && <input type="hidden" name="daypartId" value={fixedDaypartId} />}
@@ -352,7 +363,7 @@ function PriceForm({
             </>
           )}
           <details className="text-sm">
-            <summary className="inline-flex min-h-6 cursor-pointer items-center underline">Schedule for later</summary>
+            <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 underline"><ChevronIcon aria-hidden="true" className="h-4 w-4 -rotate-90 transition-transform [details[open]_&]:rotate-0" />Schedule for later</summary>
             <Field label="From (Manila time, empty = now)" className="text-sm">
               <Input type="datetime-local" name="effectiveFrom" className="w-full" />
             </Field>
@@ -426,6 +437,21 @@ function Panel({
       <input type="hidden" name="variantId" value={variantId} />
       <input type="hidden" name="channel" value={channel} />
     </>
+  );
+  const figure = row ? figureText(row) : 'Not set';
+  const isStatus = row !== undefined && (row.withdrawn || (row.pricingMode === 'fixed' && row.amount === null));
+  const cellForm = (trigger: string, triggerLabel: string, triggerClassName: string) => (
+    <PriceForm
+      channel={channel}
+      itemType={itemType}
+      hidden={hidden}
+      trigger={trigger}
+      triggerLabel={triggerLabel}
+      triggerVariant="ghost"
+      triggerClassName={triggerClassName}
+      title={`Set price — ${CHANNEL_LABEL[channel]}`}
+      {...(whenChoices.length > 0 ? { whenChoices } : {})}
+    />
   );
   return (
     <div className={cell ? 'flex flex-col items-end gap-2' : 'space-y-3 rounded-[10px] bg-canvas p-3'}>
@@ -507,16 +533,15 @@ function Panel({
       ) : (
         <div>
           {cell && canAdd ? (
-            <PriceForm
-              channel={channel}
-              itemType={itemType}
-              hidden={hidden}
-              trigger={row ? figureText(row) : 'Not set'}
-              triggerLabel={`Set the ${CHANNEL_SHORT[channel]} price for ${label}`}
-              triggerClassName="tabular-nums"
-              title={`Set price — ${CHANNEL_LABEL[channel]}`}
-              {...(whenChoices.length > 0 ? { whenChoices } : {})}
-            />
+            // A priced figure is itself the button. A status (withdrawn, offered with no price) stays plain text beside a small "Set price".
+            isStatus ? (
+              <span className="inline-flex flex-wrap items-center justify-end gap-x-2">
+                <span className="text-muted">{figure}</span>
+                {cellForm('Set price', `Set price — ${CHANNEL_SHORT[channel]}, ${label}`, SET_PRICE_TRIGGER)}
+              </span>
+            ) : (
+              cellForm(figure, `${figure} — set the ${CHANNEL_SHORT[channel]} price for ${label}`, FIGURE_TRIGGER)
+            )
           ) : row ? (
             <span className="font-medium tabular-nums">{figureText(row)}</span>
           ) : (
@@ -622,7 +647,7 @@ function OptionPrices({ data, storeId, canPrice }: { data: PricesPageData; store
                           <Input {...nativeAttrs(MENU_OPTION_PRICE_RULES.priceDelta)} className="w-full" />
                         </Field>
                         <details className="text-sm">
-                          <summary className="inline-flex min-h-6 cursor-pointer items-center underline">Schedule for later</summary>
+                          <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 underline"><ChevronIcon aria-hidden="true" className="h-4 w-4 -rotate-90 transition-transform [details[open]_&]:rotate-0" />Schedule for later</summary>
                           <Field label="From (Manila time, empty = now)" className="text-sm">
                             <Input type="datetime-local" name="effectiveFrom" className="w-full" />
                           </Field>
