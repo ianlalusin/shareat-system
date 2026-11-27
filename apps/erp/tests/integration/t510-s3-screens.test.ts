@@ -262,7 +262,8 @@ describe('T-510 S3 audit fixes', () => {
     }
     const t = plain(await render(PRICES_PAGE, w.c.superAdmin, { search: { store: w.c.storeA } }));
     expect(t).not.toContain('no counter price');
-    expect((t.match(/Online price: 330\.00/g) ?? []).length, 'both online slots resolve to store price + 10 percent').toBe(2);
+    // T-647: the page renders every row twice (the lg table and the phone cards), so each line is counted per layout.
+    expect((t.match(/Online price: 330\.00/g) ?? []).length, 'both online slots resolve to store price + 10 percent, in both layouts').toBe(4);
 
     const w2 = await world('online-nostore');
     const v2 = await pkg(w2.c, 'Triple Feast');
@@ -271,7 +272,7 @@ describe('T-510 S3 audit fixes', () => {
     }
     const t2 = plain(await render(PRICES_PAGE, w2.c.superAdmin, { search: { store: w2.c.storeA } }));
     // the window open now has no store price to follow and says so; the closed one shows no resolved line rather than a wrong one
-    expect((t2.match(/no counter price/g) ?? []).length).toBe(1);
+    expect((t2.match(/no counter price/g) ?? []).length, 'once per layout (T-647 table + cards)').toBe(2);
   });
 
   it('cross: a cashier, and a manager of A using the daypart id of store B, are refused by updateDaypartAction and retireDaypartAction; nothing changes', async () => {
