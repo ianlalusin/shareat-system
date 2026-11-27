@@ -137,7 +137,7 @@ describe('pages keep their params while searching', () => {
     const def = source.match(new RegExp(String.raw`(?:const|let) ${id}\b[^=]*=([\s\S]*?);\n`))?.[1];
     if (!def) return false;
     if (def.includes('matchesQuery(')) return true;
-    return depth < 2 && [...def.matchAll(/([a-zA-Z_]\w*)\(/g)].some((m) => derivesFromMatch(source, m[1] ?? '', depth + 1));
+    return depth < 2 && [...def.matchAll(/\b([a-zA-Z_]\w*)\(/g)].some((m) => derivesFromMatch(source, m[1] ?? '', depth + 1));
   }
   /** The first identifier of each `<SearchCount ... shown={EXPR}` expression. */
   const shownRoots = (source: string): string[] =>
