@@ -17,6 +17,8 @@ import { Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid
 import { CheckedForm } from '@/components/forms';
 import { COMMISSARY_FIRST_LINK_RULES, COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
+import { KeepParams, NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { PriceToStoresText } from '../../items/price-to-stores';
@@ -29,6 +31,7 @@ interface SearchParams {
   branch?: string;
   error?: string;
   ok?: string;
+  q?: string;
 }
 
 export default async function CommissaryCataloguePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -108,6 +111,9 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
   ]);
   const storeName = new Map(stores.map((s) => [s.id, s.name]));
   const otherStores = stores.filter((s) => s.id !== commissaryStoreId);
+  // T-645: the search is for the offerings list (the long one), by item name and code.
+  const q = readQ(sp.q);
+  const offeringsShown = offerings.filter((o) => matchesQuery(q, o.itemName, o.itemCode));
 
   const branchStoreId =
     sp.branch && links.some((l) => l.branchStoreId === sp.branch) ? sp.branch : undefined;
@@ -136,6 +142,8 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
             ))}
           </Select>
         </label>
+        <SearchBox q={q} placeholder="Offered item name or code…" />
+        <KeepParams params={{ branch: sp.branch }} />
       </FilterRow>
 
       {/* ---- Links ---------------------------------------------------------------------- */}
@@ -252,8 +260,11 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           price, used only when the item has no store-price rule and no purchase history. The price to
           stores is read-only here: set it on the item&rsquo;s own page.
         </p>
+        <SearchCount q={q} shown={offeringsShown.length} total={offerings.length} />
         {offerings.length === 0 ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">No offerings yet.</p>
+        ) : offeringsShown.length === 0 ? (
+          <NoMatches q={q} clearHref={clearSearchHref('/commissary/catalogue', { commissary: commissaryStoreId, branch: sp.branch })} />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
             <table aria-label="What this commissary offers" className="w-full min-w-[720px] border-collapse text-sm">
@@ -268,7 +279,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                 </tr>
               </thead>
               <tbody>
-                {offerings.map((o) => (
+                {offeringsShown.map((o) => (
                   <LinkRow key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className="px-3 py-2">
                       {o.itemName} <span className="ml-1 font-mono text-xs text-neutral-500">{o.itemCode}</span>
@@ -385,6 +396,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
 
         <FilterRow>
           <input type="hidden" name="commissary" value={commissaryStoreId} />
+          <KeepParams params={{ q }} />
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
             <Select name="branch" defaultValue={branchStoreId ?? ''}>

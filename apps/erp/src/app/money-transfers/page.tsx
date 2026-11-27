@@ -15,6 +15,9 @@ import { Badge, Banner, ConfirmDestructive, Field, FlashBanner, Input, FormModal
 import { CheckedForm } from '@/components/forms';
 import { TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { NAV_LINK } from '@/components/action-link';
+import { FilterRow } from '@/components/FilterRow';
+import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 
 export const metadata = { title: 'Money transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -23,6 +26,7 @@ interface SearchParams {
   error?: string;
   ok?: string;
   warning?: string;
+  q?: string;
 }
 
 export default async function MoneyTransfersPage({
@@ -47,6 +51,9 @@ export default async function MoneyTransfersPage({
   // T-369 S9: the pairs of stores where one owes the other, only where this person holds `transfer_funds` at both.
   const settlementPairs = await listSettlementPairs(actor, usable);
   const storeById = new Map(stores.map((s) => [s.id, s]));
+  // T-645: search the recent-transfers list by the two accounts and the reference.
+  const q = readQ(sp.q);
+  const shown = transfers.filter((t) => matchesQuery(q, t.fromName, t.toName, t.reference));
   const today = toBusinessDate();
 
   // ⭐ Grouped by store because names REPEAT across stores — "Office safe" exists at every
@@ -307,6 +314,13 @@ export default async function MoneyTransfersPage({
       {transfers.length > 0 && (
         <section className="space-y-2">
           <h2 className="font-medium">Recent transfers</h2>
+          <FilterRow submitLabel="Search">
+            <SearchBox q={q} placeholder="Account or reference…" />
+          </FilterRow>
+          <SearchCount q={q} shown={shown.length} total={transfers.length} />
+          {shown.length === 0 ? (
+            <NoMatches q={q} clearHref={clearSearchHref('/money-transfers', {})} />
+          ) : (
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
             <table className="w-full min-w-[820px] border-collapse text-sm">
               <thead>
@@ -321,7 +335,7 @@ export default async function MoneyTransfersPage({
                 </tr>
               </thead>
               <tbody>
-                {transfers.map((t) => (
+                {shown.map((t) => (
                   <tr
                     key={t.id}
                     className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
@@ -383,6 +397,7 @@ export default async function MoneyTransfersPage({
               </tbody>
             </table>
           </div>
+          )}
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Reversing cancels a transfer but never deletes it. Both entries stay in the books.
           </p>

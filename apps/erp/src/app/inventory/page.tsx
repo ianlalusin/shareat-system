@@ -4,6 +4,8 @@ import { recordInScope, storePageScope } from '../../lib/store-scope';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
+import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { Card, EmptyState, NumTd, Select, Table, Td, Th } from '@/components/ui';
 
 export const metadata = { title: 'Stock on hand — Shareat System' };
@@ -11,6 +13,7 @@ export const dynamic = 'force-dynamic';
 
 interface SearchParams {
   store?: string;
+  q?: string;
 }
 
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -33,6 +36,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const summary = await stockSummary(actor.orgId, storeId);
   // Peso values and the books total are for managers and up at this store (view_financial_reports); everyone else sees quantities.
   const showValues = await recordInScope(actor, '/reports/income-statement', storeId);
+  const q = readQ(sp.q); // T-645
+  const rows = summary.rows.filter((r) => matchesQuery(q, r.name, r.code));
   const drift = (Number(summary.accountValue) - Number(summary.layerValue)).toFixed(2);
   const ties = drift === '0.00' || drift === '-0.00';
 
@@ -78,7 +83,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             ))}
           </Select>
         </label>
+        <SearchBox q={q} placeholder="Item name or code…" />
       </FilterRow>
+      <SearchCount q={q} shown={rows.length} total={summary.rows.length} />
 
       {/*
         **Bible invariant 6's inventory arm, on a screen.** It asks that the control accounts
@@ -131,6 +138,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             </Link>
           }
         />
+      ) : rows.length === 0 ? (
+        <NoMatches q={q} clearHref={clearSearchHref('/inventory', { store: storeId })} />
       ) : (
         <Table card={{ title: 'Item', subtitle: 'Where', keys: showValues ? ['On hand', 'Value'] : ['On hand'] }}>
           <thead>
@@ -142,7 +151,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             </tr>
           </thead>
           <tbody>
-            {summary.rows.map((row) => (
+            {rows.map((row) => (
               <tr key={row.itemId} className="align-top">
                 <Td>
                   <span className="font-medium">{row.name}</span>

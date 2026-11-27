@@ -37,6 +37,9 @@ import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 import { Banner, Button, Checkbox, DialogActions, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, FormModal, statusLabel } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { FilterRow } from '@/components/FilterRow';
+import { KeepParams, NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 
 export const metadata = { title: 'Items — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -44,11 +47,12 @@ export const dynamic = 'force-dynamic';
 export default async function ItemsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; ok?: string; warning?: string; kind?: string }>;
+  searchParams: Promise<{ error?: string; ok?: string; warning?: string; kind?: string; q?: string }>;
 }) {
   // T-443 R3: `kind` is not a flash key; read it from the raw params before `withFlash` consumes them.
   const rawParams = await searchParams;
   const kind = parseKindFilter(typeof rawParams.kind === 'string' ? rawParams.kind : undefined);
+  const q = readQ(rawParams.q); // T-645
   const sp = await withFlash(Promise.resolve(rawParams));
   // T-617: sign-in first (so the return trip keeps the kind filter), then the route gate on the bare path (a query string never matches a map key).
   await requireSession(kind ? `/items?kind=${kind}` : '/items');
@@ -64,7 +68,12 @@ export default async function ItemsPage({
     expenseCategoryOptions(actor.orgId),
     expenseSubcategoryOptions(actor.orgId),
   ]);
-  const rows = arrangeFamilies(items);
+  const categoryLabel = new Map(categoryOptions.map((c) => [c.id, c.label]));
+  // T-645: search the loaded list; a variation whose parent is filtered out is shown flat (arrangeFamilies).
+  const matched = items.filter((i) =>
+    matchesQuery(q, i.name, i.code, itemKindLabel(i.kind), i.expenseCategoryId ? categoryLabel.get(i.expenseCategoryId) : null),
+  );
+  const rows = arrangeFamilies(matched);
   const totalItems = Object.values(kindCounts).reduce((a, b) => a + b, 0);
   // T-386 R10. Presentation aids only (the domain stays the enforcement): who gets the override inputs, and what each pending
   // request would be coded if approved right now (its stored code is only the requester's frozen preview).
@@ -240,7 +249,15 @@ export default async function ItemsPage({
             );
           })}
         </nav>
-        {items.length > 0 ? (
+        {/* T-645: the search keeps the kind chip that is active. */}
+        <FilterRow submitLabel="Search">
+          <SearchBox q={q} placeholder="Name, code, kind, category…" />
+          <KeepParams params={{ kind }} />
+        </FilterRow>
+        <SearchCount q={q} shown={matched.length} total={items.length} />
+        {q && items.length > 0 && matched.length === 0 ? (
+          <NoMatches q={q} clearHref={clearSearchHref('/items', { kind })} />
+        ) : items.length > 0 ? (
           <div data-screen-scroll="catalogue" className="catalogue-table min-w-0 rounded-lg border border-surface-border bg-surface">
             <table data-card-title="Item" data-card-subtitle="Kind" data-card-keys="Code" className="w-full min-w-[560px] border-collapse text-sm">
               <thead>
