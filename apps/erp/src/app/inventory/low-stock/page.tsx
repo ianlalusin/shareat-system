@@ -9,6 +9,8 @@ import { INVENTORY_THRESHOLD_RULES, nativeAttrs } from '@shareat/domain/field-ru
 import { Button, Card, EmptyState, Field, FlashBanner, HelpTip, Input, NumTd, Select, Table, Td, Th } from '@/components/ui';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery } from '@/lib/search';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -21,6 +23,7 @@ export const dynamic = 'force-dynamic';
 interface SearchParams {
   store?: string;
   error?: string;
+  q?: string;
 }
 
 export default async function LowStockPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -59,6 +62,11 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
   });
 
   const thresholdByItem = new Map(thresholds.map((t) => [t.itemId, t.threshold]));
+  // T-645: one box searches both lists on this page, by item name (the thresholds list also by code).
+  const q = sp.q ?? '';
+  const lowShown = low.filter((r) => matchesQuery(q, r.itemName));
+  const itemsShown = items.filter((i) => matchesQuery(q, i.name, i.code));
+  const clearHref = clearSearchHref('/inventory/low-stock', { store: storeId });
 
   return (
     <Page density="table" className="">
@@ -85,10 +93,14 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
             ))}
           </Select>
         </label>
+        <SearchBox q={q} placeholder="Item name or code…" />
       </FilterRow>
+      <SearchCount q={q} shown={itemsShown.length} total={items.length} />
 
       <h2 className="mt-8 text-lg font-semibold">At or below threshold</h2>
-      {low.length === 0 ? (
+      {q && low.length > 0 && lowShown.length === 0 ? (
+        <NoMatches q={q} clearHref={clearHref} />
+      ) : low.length === 0 ? (
         <EmptyState
           illustration="magnifier"
           title="Nothing is low"
@@ -105,7 +117,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
             </tr>
           </thead>
           <tbody>
-            {low.map((row) => (
+            {lowShown.map((row) => (
               <tr key={row.itemId}>
                 <Td className="font-medium">{row.itemName}</Td>
                 <NumTd>
@@ -152,6 +164,9 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
           threshold entirely — a different state, and the item then falls off the list.
         </HelpTip>
       </h2>
+      {q && itemsShown.length === 0 ? (
+        <NoMatches q={q} clearHref={clearHref} />
+      ) : (
       <Table card={{ title: 'Item', subtitle: 'Unit' }}>
         <thead>
           <tr>
@@ -166,7 +181,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => (
+          {itemsShown.map((item) => (
             <tr key={item.id}>
               <Td>
                 <span className="font-medium">{item.name}</span>
@@ -218,6 +233,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
           ))}
         </tbody>
       </Table>
+      )}
     </Page>
   );
 }

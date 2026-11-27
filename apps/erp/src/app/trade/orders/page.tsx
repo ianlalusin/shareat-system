@@ -7,6 +7,8 @@ import { StoreNotAvailable } from '../../../lib/page-access';
 import { Page } from '@/components/shell/Page';
 import { ChevronIcon } from '@/components/shell/icons';
 import { FilterRow } from '@/components/FilterRow';
+import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
+import { clearSearchHref, matchesQuery } from '@/lib/search';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, FlashBanner, FormModal, LinkRow, RowLink, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -20,6 +22,7 @@ interface SearchParams {
   store?: string;
   error?: string;
   ok?: string;
+  q?: string;
 }
 
 export default async function TradeOrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -42,6 +45,11 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
 
   const [orders, form] = await Promise.all([orderRegister(actor.orgId, storeId), orderFormData(actor.orgId)]);
   const storeName = new Map(stores.map((s) => [s.id, s.name]));
+  // T-645: customer, document reference, and both ends of the route.
+  const q = sp.q ?? '';
+  const shown = orders.filter((o) =>
+    matchesQuery(q, o.customerName, o.referenceNo, storeName.get(o.storeId), o.counterpartyStoreId ? storeName.get(o.counterpartyStoreId) : null),
+  );
 
   return (
     <Page density="table">
@@ -69,7 +77,9 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
             ))}
           </Select>
         </label>
+        <SearchBox q={q} placeholder="Customer, reference, store…" />
       </FilterRow>
+      <SearchCount q={q} shown={shown.length} total={orders.length} />
 
       <div className="flex justify-end">
         <FormModal
@@ -100,6 +110,8 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
           No trade orders at this store yet. Draft one with the button above.
         </p>
+      ) : shown.length === 0 ? (
+        <NoMatches q={q} clearHref={clearSearchHref('/trade/orders', { store: sp.store })} />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full min-w-[720px] border-collapse text-sm">
@@ -114,7 +126,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
               </tr>
             </thead>
             <tbody>
-              {orders.map((o) => (
+              {shown.map((o) => (
                 <LinkRow key={o.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                   <td className="px-3 py-2 tabular-nums">
                     <RowLink href={`/trade/orders/${o.id}`}>
