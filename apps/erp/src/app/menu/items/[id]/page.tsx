@@ -199,9 +199,12 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                     <Field label="Quantity per sale" className="text-sm" rule={MENU_DEPLETION_RULES.quantityPerSale}>
                       <Input {...nativeAttrs(MENU_DEPLETION_RULES.quantityPerSale)} className="w-full" />
                     </Field>
-                    <Field label="From (Manila time, empty = now)" className="text-sm">
-                      <Input type="datetime-local" name="effectiveFrom" className="w-full" />
-                    </Field>
+                    <details className="text-sm">
+                      <summary className="inline-flex min-h-6 cursor-pointer items-center underline">Schedule for later</summary>
+                      <Field label="From (Manila time, empty = now)" className="text-sm">
+                        <Input type="datetime-local" name="effectiveFrom" className="w-full" />
+                      </Field>
+                    </details>
                   </FormGrid>
                   <DialogActions>
                     <Button type="submit" variant="secondary">

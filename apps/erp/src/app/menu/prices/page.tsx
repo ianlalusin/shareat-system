@@ -309,9 +309,12 @@ function PriceForm({
               </Field>
             </>
           )}
-          <Field label="From (Manila time, empty = now)" className="text-sm">
-            <Input type="datetime-local" name="effectiveFrom" className="w-full" />
-          </Field>
+          <details className="text-sm">
+            <summary className="inline-flex min-h-6 cursor-pointer items-center underline">Schedule for later</summary>
+            <Field label="From (Manila time, empty = now)" className="text-sm">
+              <Input type="datetime-local" name="effectiveFrom" className="w-full" />
+            </Field>
+          </details>
         </FormGrid>
         {(whenChoices || fixedDaypartId !== undefined) && (
           <p className="text-xs text-muted">
@@ -559,9 +562,12 @@ function OptionPrices({ data, storeId, canPrice }: { data: PricesPageData; store
                         <Field label="Price change" className="text-sm" rule={MENU_OPTION_PRICE_RULES.priceDelta}>
                           <Input {...nativeAttrs(MENU_OPTION_PRICE_RULES.priceDelta)} className="w-full" />
                         </Field>
-                        <Field label="From (Manila time, empty = now)" className="text-sm">
-                          <Input type="datetime-local" name="effectiveFrom" className="w-full" />
-                        </Field>
+                        <details className="text-sm">
+                          <summary className="inline-flex min-h-6 cursor-pointer items-center underline">Schedule for later</summary>
+                          <Field label="From (Manila time, empty = now)" className="text-sm">
+                            <Input type="datetime-local" name="effectiveFrom" className="w-full" />
+                          </Field>
+                        </details>
                       </FormGrid>
                       <div className="flex flex-wrap gap-3">
                         <Button type="submit" variant="secondary">
