@@ -502,7 +502,7 @@ function Panel({
       )}
     </div>
   ));
-  const faultBlock = (
+  const faultBlock = fault && (
         <div className="space-y-2">
           <Badge tone="danger" label="Check this price" />
           <p role="alert" className="text-sm text-danger">

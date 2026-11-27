@@ -96,7 +96,7 @@ const switchOffOk = (source: string): boolean => {
 };
 /** A fault is drawn before the OFF early return as well, so it is never hidden. */
 const faultOk = (source: string): boolean => {
-  const decl = source.indexOf('const faultBlock = (');
+  const decl = source.indexOf('const faultBlock = fault && (');
   const early = source.indexOf('if (!isOn) {');
   return decl !== -1 && early !== -1 && decl < early && offBlock(source).includes('{fault && faultBlock}');
 };
@@ -203,7 +203,7 @@ describe('T-647 menu prices table', () => {
     // mutant: the OFF return forgets the fault
     expect(faultOk(s.replace('        {fault && faultBlock}\n', ''))).toBe(false);
     // mutant: the fault block is built after the early return
-    expect(faultOk(s.replace('  const faultBlock = (', '  const faultBlockLate = ('))).toBe(false);
+    expect(faultOk(s.replace('  const faultBlock = fault && (', '  const faultBlockLate = fault && ('))).toBe(false);
   });
 
   it('Sell online adds no server action and no schema import', () => {
