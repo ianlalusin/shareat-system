@@ -52,7 +52,7 @@ export function NoMatches({ q, clearHref }: { readonly q: string; readonly clear
   return (
     <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
       Nothing matches “{q}”.{' '}
-      <Link href={clearHref} className="underline">
+      <Link href={clearHref} className="inline-flex min-h-6 items-center underline">
         Clear search
       </Link>
     </p>
