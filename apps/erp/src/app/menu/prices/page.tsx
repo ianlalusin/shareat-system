@@ -321,7 +321,7 @@ function PriceForm({
   /** The accessible name when it says more than the visible words. */
   triggerLabel?: string;
   /** T-647: the trigger is a switch. */
-  triggerAttrs?: { role?: 'switch'; 'aria-checked'?: boolean };
+  triggerAttrs?: { role: 'switch'; 'aria-checked': boolean };
   title: string;
   fixedDaypartId?: string;
   whenChoices?: DaypartView[];
@@ -454,7 +454,7 @@ function Panel({
   const sellOnline = channel === 'online';
   const isOn = !sellOnline || (row !== undefined && !row.withdrawn) || data.slots.some((r) => r.variantId === variantId && r.channel === 'online' && !r.withdrawn);
   const soldText = isOn ? 'Sold online' : 'Not sold online';
-  const sellName = `Sell ${label} online`;
+  const sellName = `Sell online: ${label}`;
   // Turning ON = the ordinary Set price form for Online, opened by the switch itself (saving it is the ON; closing it leaves OFF).
   const switchOn = sellOnline && !isOn && canAdd && (
     <PriceForm
@@ -473,28 +473,15 @@ function Panel({
   );
   // Turning OFF = the existing Withdraw form for the all-day online price, behind a confirm. With time-of-day prices each one is withdrawn below.
   const switchOff = sellOnline && isOn && canPrice && !dayparted && (
-    <FormModal
-      trigger={<SwitchFace on text="Sell online" />}
-      triggerIcon={null}
-      triggerVariant="ghost"
-      triggerClassName={SWITCH_TRIGGER}
-      triggerLabel={sellName}
-      triggerAttrs={{ role: 'switch', 'aria-checked': true }}
-      title={`Stop selling ${label} online`}
-      size="sm"
-    >
-      <form action={withdrawPriceAction} className="space-y-3 text-sm">
-        {hidden}
-        <p>Takes {label} off the online menu at this store.</p>
-        <DialogActions>
-          <ConfirmDestructive
-            tier="confirm"
-            label="Stop selling online"
-            consequence={`Stop selling ${label} online? Its online price is not kept; you will type it again to turn it back on.`}
-          />
-        </DialogActions>
-      </form>
-    </FormModal>
+    <form action={withdrawPriceAction} className="w-full min-w-0 text-sm">
+      {hidden}
+      <ConfirmDestructive
+        tier="confirm"
+        label="Stop selling online"
+        consequence={`Stop selling ${label} online? Its online price is not kept; you will type it again to turn it back on.`}
+        toggle={{ name: sellName, face: <SwitchFace on text="Sell online" />, className: SWITCH_TRIGGER }}
+      />
+    </form>
   );
   // Who cannot flip it (or whose ON state is by time of day) sees the state as words, never a dead switch.
   const soldLine = sellOnline && !switchOn && !switchOff && (
@@ -515,36 +502,7 @@ function Panel({
       )}
     </div>
   ));
-  const frame = cell ? 'flex flex-col items-end gap-2' : 'space-y-3 rounded-[10px] bg-canvas p-3';
-  // OFF: only the switch, plus any future-dated price (so nothing is hidden). No "Not set", no Withdraw.
-  if (!isOn) {
-    return (
-      <div className={frame}>
-        {!cell && <h3 className="text-sm font-semibold">{CHANNEL_LABEL[channel]}</h3>}
-        {switchOn || soldLine}
-        {laterLines}
-      </div>
-    );
-  }
-  const isStatus = row !== undefined && (row.withdrawn || (row.pricingMode === 'fixed' && row.amount === null));
-  const cellForm = (trigger: string, triggerLabel: string, triggerClassName: string) => (
-    <PriceForm
-      channel={channel}
-      itemType={itemType}
-      hidden={hidden}
-      trigger={trigger}
-      triggerLabel={triggerLabel}
-      triggerVariant="ghost"
-      triggerClassName={triggerClassName}
-      title={`Set price — ${CHANNEL_LABEL[channel]}`}
-      {...(whenChoices.length > 0 ? { whenChoices } : {})}
-    />
-  );
-  return (
-    <div className={frame}>
-      {!cell && <h3 className="text-sm font-semibold">{CHANNEL_LABEL[channel]}</h3>}
-      {switchOff || soldLine}
-      {fault ? (
+  const faultBlock = (
         <div className="space-y-2">
           <Badge tone="danger" label="Check this price" />
           <p role="alert" className="text-sm text-danger">
@@ -572,6 +530,39 @@ function Panel({
             </ul>
           )}
         </div>
+  );
+  const frame = cell ? 'flex flex-col items-end gap-2' : 'space-y-3 rounded-[10px] bg-canvas p-3';
+  // OFF: only the switch, plus any future-dated price (so nothing is hidden). No "Not set", no Withdraw.
+  if (!isOn) {
+    return (
+      <div className={frame}>
+        {!cell && <h3 className="text-sm font-semibold">{CHANNEL_LABEL[channel]}</h3>}
+        {switchOn || soldLine}
+        {fault && faultBlock}
+        {laterLines}
+      </div>
+    );
+  }
+  const isStatus = row !== undefined && (row.withdrawn || (row.pricingMode === 'fixed' && row.amount === null));
+  const cellForm = (trigger: string, triggerLabel: string, triggerClassName: string) => (
+    <PriceForm
+      channel={channel}
+      itemType={itemType}
+      hidden={hidden}
+      trigger={trigger}
+      triggerLabel={triggerLabel}
+      triggerVariant="ghost"
+      triggerClassName={triggerClassName}
+      title={`Set price — ${CHANNEL_LABEL[channel]}`}
+      {...(whenChoices.length > 0 ? { whenChoices } : {})}
+    />
+  );
+  return (
+    <div className={frame}>
+      {!cell && <h3 className="text-sm font-semibold">{CHANNEL_LABEL[channel]}</h3>}
+      {switchOff || soldLine}
+      {fault ? (
+        faultBlock
       ) : dayparted ? (
         <ul className={`divide-y divide-surface-border${cell ? ' w-full text-left' : ''}`}>
           {slots.map((slot) => {
@@ -648,7 +639,7 @@ function Panel({
       {canPrice && canPair && dayparted && !noActiveHours && freeWindows.length === 0 && (
         <p className="text-sm text-muted">Every set of hours already has a price. Change a price above, or withdraw one first.</p>
       )}
-      {canPrice && (showAdd || (!dayparted && row && !row.withdrawn)) && (
+      {canPrice && (showAdd || (!dayparted && row && !row.withdrawn && !switchOff)) && (
         <div className="flex flex-wrap items-center gap-2">
           {showAdd && (
             <PriceForm
@@ -663,7 +654,7 @@ function Panel({
               {...(dayparted ? { defaultWhen: freeWindows[0]?.id ?? '' } : {})}
             />
           )}
-          {!dayparted && row && !row.withdrawn && (
+          {!dayparted && row && !row.withdrawn && !switchOff && (
             <form action={withdrawPriceAction}>
               {hidden}
               <Button type="submit" variant="ghost" aria-label={`Withdraw the ${CHANNEL_SHORT[channel]} price for ${label}`}>

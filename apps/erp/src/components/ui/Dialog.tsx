@@ -99,7 +99,7 @@ export interface FormModalProps {
   /** `null` keeps the trigger's own words instead of the icon the words imply ("Change price" would otherwise be a bare pencil). */
   readonly triggerIcon?: ButtonProps['icon'];
   /** T-647: a trigger that is a switch ("Sell online") says so to assistive technology. */
-  readonly triggerAttrs?: { readonly role?: 'switch'; readonly 'aria-checked'?: boolean };
+  readonly triggerAttrs?: { readonly role: 'switch'; readonly 'aria-checked': boolean };
   readonly title: ReactNode;
   readonly description?: ReactNode;
   readonly size?: DialogSize;

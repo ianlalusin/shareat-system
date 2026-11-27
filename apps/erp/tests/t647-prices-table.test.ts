@@ -38,7 +38,9 @@ const triggerOk = (source: string): boolean =>
   /<FormModal trigger=\{trigger\} [^>]*triggerLabel: accessibleName/.test(source);
 const withdrawOk = (source: string): boolean =>
   source.includes('const showAdd = canAdd && !(cell && !dayparted);') &&
-  /\(showAdd \|\| \(!dayparted && row && !row\.withdrawn\)\)/.test(source) &&
+  // the plain all-day Withdraw stays (the Store channel's), and is dropped only where the Sell online switch shows
+  /\(showAdd \|\| \(!dayparted && row && !row\.withdrawn && !switchOff\)\)/.test(source) &&
+  source.includes('{!dayparted && row && !row.withdrawn && !switchOff && (') &&
   source.includes('aria-label={`Withdraw the ${CHANNEL_SHORT[channel]} price for ${label}`}') &&
   source.includes("aria-label={`Withdraw the ${info?.name ?? ''} price`}");
 const statusOk = (source: string): boolean =>
@@ -69,21 +71,34 @@ const switchTriggerOk = (source: string): boolean => {
     on.includes('trigger={<SwitchFace on={false} text="Sell online" />}') &&
     on.includes("triggerAttrs={{ role: 'switch', 'aria-checked': false }}") &&
     on.includes('triggerLabel={sellName}') &&
-    source.includes('const sellName = `Sell ${label} online`;') &&
+    // WCAG 2.5.3: the accessible name contains the visible words "Sell online"
+    source.includes('const sellName = `Sell online: ${label}`;') &&
     /<FormModal trigger=\{trigger\} [^>]*\{\.\.\.\(triggerAttrs \? \{ triggerAttrs \} : \{\}\)\}/.test(source)
   );
 };
-/** Turning OFF goes through the existing withdraw form, behind a confirm; only someone who may price gets the switch. */
+/** Turning OFF: the ON switch is the confirm's own first button, inside the existing Withdraw form, for the online all-day price only. */
 const switchOffOk = (source: string): boolean => {
   const off = between(source, 'const switchOff =', 'const soldLine =');
   return (
-    off.includes('canPrice &&') &&
-    off.includes("triggerAttrs={{ role: 'switch', 'aria-checked': true }}") &&
+    off.includes('sellOnline && isOn && canPrice && !dayparted &&') &&
     off.includes('<form action={withdrawPriceAction}') &&
+    // the hidden fields (store, variant, channel) are the panel's own, and the channel there is "online"
+    off.includes('{hidden}') &&
+    source.includes('<input type="hidden" name="channel" value={channel} />') &&
     off.includes('<ConfirmDestructive') &&
     off.includes('tier="confirm"') &&
-    off.includes('Its online price is not kept; you will type it again to turn it back on.')
+    off.includes('toggle={{ name: sellName, face: <SwitchFace on text="Sell online" />') &&
+    off.includes('Its online price is not kept; you will type it again to turn it back on.') &&
+    // two taps, no modal and no extra button in between
+    !off.includes('<FormModal') &&
+    !off.includes('<Button')
   );
+};
+/** A fault is drawn before the OFF early return as well, so it is never hidden. */
+const faultOk = (source: string): boolean => {
+  const decl = source.indexOf('const faultBlock = (');
+  const early = source.indexOf('if (!isOn) {');
+  return decl !== -1 && early !== -1 && decl < early && offBlock(source).includes('{fault && faultBlock}');
 };
 const ACTIONS = ['cancelScheduledOptionPriceAction', 'cancelScheduledPriceAction', 'setOptionPriceAction', 'setPriceAction', 'withdrawPriceAction'];
 const exportedActions = (source: string): string[] => [...source.matchAll(/export async function (\w+)/g)].map((m) => m[1] ?? '').sort();
@@ -124,7 +139,11 @@ describe('T-647 menu prices table', () => {
   it('Withdraw is still reachable from the table path (all-day and time-of-day cells)', () => {
     expect(withdrawOk(s)).toBe(true);
     // mutant: the actions row gated on showAdd alone would lose the all-day Withdraw
-    expect(withdrawOk(s.replace('(showAdd || (!dayparted && row && !row.withdrawn))', '(showAdd)'))).toBe(false);
+    expect(withdrawOk(s.replace('(showAdd || (!dayparted && row && !row.withdrawn && !switchOff))', '(showAdd)'))).toBe(false);
+    // mutant: the plain Withdraw is gone altogether (the Store channel would lose it)
+    expect(withdrawOk(s.replace('{!dayparted && row && !row.withdrawn && !switchOff && (', '{false && ('))).toBe(false);
+    // mutant: the plain online Withdraw is drawn beside the switch again
+    expect(withdrawOk(s.replace('{!dayparted && row && !row.withdrawn && !switchOff && (', '{!dayparted && row && !row.withdrawn && ('))).toBe(false);
     // mutant: the per-slot Withdraw label gone
     expect(withdrawOk(s.replace("aria-label={`Withdraw the ${info?.name ?? ''} price`}", ''))).toBe(false);
   });
@@ -139,9 +158,9 @@ describe('T-647 menu prices table', () => {
   it('Sell online: OFF shows only the switch (and any scheduled price)', () => {
     expect(offOnlySwitchOk(s)).toBe(true);
     // mutant: the OFF cell also draws the price figure ("Not set")
-    expect(offOnlySwitchOk(s.replace('{switchOn || soldLine}\n        {laterLines}', '{figure}{switchOn || soldLine}\n        {laterLines}'))).toBe(false);
+    expect(offOnlySwitchOk(s.replace('{switchOn || soldLine}\n        {fault && faultBlock}', '{figure}{switchOn || soldLine}\n        {fault && faultBlock}'))).toBe(false);
     // mutant: the scheduled line is hidden when OFF
-    expect(offOnlySwitchOk(s.replace('{switchOn || soldLine}\n        {laterLines}', '{switchOn || soldLine}'))).toBe(false);
+    expect(offOnlySwitchOk(s.replace('        {laterLines}\n      </div>\n    );\n  }', '      </div>\n    );\n  }'))).toBe(false);
   });
 
   it('Sell online: ON/OFF is "a live online price that is not withdrawn", by the day or by time of day', () => {
@@ -166,10 +185,25 @@ describe('T-647 menu prices table', () => {
     expect(switchOffOk(s)).toBe(true);
     // mutant: no confirm
     expect(switchOffOk(s.replace('<ConfirmDestructive', '<Button'))).toBe(false);
+    // mutant: the form loses the panel's hidden fields (store, variant, channel)
+    expect(switchOffOk(s.replace('      {hidden}\n      <ConfirmDestructive', '      <ConfirmDestructive'))).toBe(false);
+    // mutant: offered when the price is by time of day, or when nothing is on, or for anyone
+    expect(switchOffOk(s.replace('sellOnline && isOn && canPrice && !dayparted &&', 'sellOnline && isOn && canPrice &&'))).toBe(false);
+    expect(switchOffOk(s.replace('sellOnline && isOn && canPrice && !dayparted &&', 'sellOnline && canPrice && !dayparted &&'))).toBe(false);
+    // mutant: a modal and an extra button between the switch and the confirm
+    expect(switchOffOk(s.replace('    <form action={withdrawPriceAction} className="w-full min-w-0 text-sm">', '    <FormModal><form action={withdrawPriceAction} className="w-full min-w-0 text-sm">'))).toBe(false);
     // mutant: the form posts to another action
-    expect(switchOffOk(s.replace('<form action={withdrawPriceAction} className="space-y-3 text-sm">', '<form action={cancelScheduledPriceAction} className="space-y-3 text-sm">'))).toBe(false);
+    expect(switchOffOk(s.replace('<form action={withdrawPriceAction} className="w-full min-w-0 text-sm">', '<form action={cancelScheduledPriceAction} className="w-full min-w-0 text-sm">'))).toBe(false);
     // mutant: the confirm no longer says the price is lost
     expect(switchOffOk(s.replace('Its online price is not kept; ', ''))).toBe(false);
+  });
+
+  it('Sell online: a fault is drawn even when the switch is OFF', () => {
+    expect(faultOk(s)).toBe(true);
+    // mutant: the OFF return forgets the fault
+    expect(faultOk(s.replace('        {fault && faultBlock}\n', ''))).toBe(false);
+    // mutant: the fault block is built after the early return
+    expect(faultOk(s.replace('  const faultBlock = (', '  const faultBlockLate = ('))).toBe(false);
   });
 
   it('Sell online adds no server action and no schema import', () => {
