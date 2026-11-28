@@ -218,7 +218,7 @@ export async function variantsOfItem(tx: Tx, orgId: string, menuItemId: string):
     .select()
     .from(menuItemVariants)
     .where(and(eq(menuItemVariants.menuItemId, menuItemId), eq(menuItemVariants.orgId, orgId)))
-    .orderBy(asc(menuItemVariants.sortOrder), asc(menuItemVariants.createdAt));
+    .orderBy(desc(menuItemVariants.isDefault), asc(menuItemVariants.sortOrder), asc(sql`lower(coalesce(${menuItemVariants.label}, ''))`), asc(menuItemVariants.id));
 }
 
 export async function insertVariant(

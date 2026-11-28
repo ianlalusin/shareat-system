@@ -210,14 +210,13 @@ export async function editOptionValueAction(fd: FormData): Promise<void> {
     const id = requireId(fd, 'id', 'Choose an option.');
     const name = opt(fd, 'name');
     const status = opt(fd, 'status');
-    const sortOrder = wholeNumber(fd, 'sortOrder', 'The sort order');
     await withOrgPrincipal(actor.orgId, async (tx) => {
       // T-440 S9 (iii): the name check is conditional (the Retire / Restore button posts no name; a rename must send a real one),
       // so it stays here, and runs only for a caller `editOptionValue`'s first authorize() ('manage_menu') would let in.
       if (fd.has('name') && (await can(tx, actor, 'manage_menu', {}))) assertFieldRules(MENU_OPTION_VALUE_RULES, fd);
       return editOptionValue(
         actor,
-        { id, ...(name !== undefined ? { name } : {}), ...(sortOrder !== undefined ? { sortOrder } : {}), ...(status !== undefined ? { status: status as MenuStatus } : {}) },
+        { id, ...(name !== undefined ? { name } : {}), ...(status !== undefined ? { status: status as MenuStatus } : {}) },
         tx,
       );
     });

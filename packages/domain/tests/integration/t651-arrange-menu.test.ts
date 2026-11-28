@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import { menuRepo } from '@shareat/db';
 import { addMenuVariant, addOptionValue, createMenuCategory, createMenuItem, loadStoreMenu, reorderMenuCategories, reorderMenuItems, reorderMenuOptionValues, reorderMenuVariants } from '@shareat/domain';
 
 import { asOrg, attempt, auditCount, cast, expectSentence, rawItem, rawOption, rawRule, sql, uid, type Cast } from './_fixtures/t401-s2-menu';
@@ -113,6 +114,65 @@ describe('T-651: reorder', () => {
     const second = await load();
     expect(second.menu.items.map((i) => i.id)).toEqual([d, b, a]);
     expect(second.contentHash).not.toBe(first.contentHash);
+  });
+});
+
+describe('T-651: sizes and options, stale sets, other parents, and the one tie-break', () => {
+  const orders = async (itemId: string, groupId: string) => ({
+    v: await sql`select id, sort_order from menu_item_variants where menu_item_id = ${itemId} order by id`,
+    o: await sql`select id, sort_order from menu_option_values where option_group_id = ${groupId} order by id`,
+  });
+
+  it('8: a stale set, another item sizes, another group options, or a non-list are refused in the sentence, with nothing written', async () => {
+    const c = await cast('t651-8');
+    const a = await rawItem(c, 'a_la_carte', 'Soda');
+    const b = await rawItem(c, 'a_la_carte', 'Juice');
+    const small = await asOrg(c.orgId, (tx) => addMenuVariant(c.superAdmin, { menuItemId: a.itemId, label: 'Small' }, tx));
+    const other = await asOrg(c.orgId, (tx) => addMenuVariant(c.superAdmin, { menuItemId: b.itemId, label: 'Large' }, tx));
+    const g1 = await rawOption(c);
+    const g2 = await rawOption(c);
+    const extra = await asOrg(c.orgId, (tx) => addOptionValue(c.admin, { optionGroupId: g1.groupId, name: 'Second' }, tx));
+    const before = await auditCount(c.orgId);
+    const written = await orders(a.itemId, g1.groupId);
+    const variantCases: [string, string[]][] = [
+      ['sizes: missing the default', [small.id]],
+      ['sizes: another item size in place of its own', [a.variantId, other.id]],
+      ['sizes: another item whole list', [b.variantId, other.id]],
+    ];
+    for (const [label, ids] of variantCases) {
+      const r = await attempt(() => asOrg(c.orgId, (tx) => reorderMenuVariants(c.admin, { menuItemId: a.itemId, ids }, tx)));
+      expectSentence(r, label);
+      expect((r.error as { userMessage?: string }).userMessage, label).toBe(STALE);
+    }
+    const valueCases: [string, string[]][] = [
+      ['options: missing one', [g1.valueId]],
+      ['options: another group value in place of its own', [g1.valueId, g2.valueId]],
+      ['options: a repeated id', [g1.valueId, g1.valueId]],
+    ];
+    for (const [label, ids] of valueCases) {
+      const r = await attempt(() => asOrg(c.orgId, (tx) => reorderMenuOptionValues(c.admin, { optionGroupId: g1.groupId, ids }, tx)));
+      expectSentence(r, label);
+      expect((r.error as { userMessage?: string }).userMessage, label).toBe(STALE);
+    }
+    for (const bad of [5, null, undefined] as unknown as string[][]) {
+      const r = await attempt(() => asOrg(c.orgId, (tx) => reorderMenuOptionValues(c.admin, { optionGroupId: g1.groupId, ids: bad }, tx)));
+      expectSentence(r, `options: ids is ${String(bad)}`);
+      expect((r.error as { userMessage?: string }).userMessage).toBe(STALE);
+    }
+    expect(await orders(a.itemId, g1.groupId)).toEqual(written);
+    expect(await auditCount(c.orgId)).toBe(before);
+    expect(extra.id).toBeTruthy();
+  });
+
+  it('9: tied sort orders with mixed-case names read by name, default size first (the shared tie-break)', async () => {
+    const c = await cast('t651-9');
+    const it1 = await rawItem(c, 'a_la_carte', 'Soda');
+    await sql`update menu_item_variants set sort_order = 50 where id = ${it1.variantId}`;
+    for (const label of ['banana', 'Apple', 'cherry']) {
+      await sql`insert into menu_item_variants (org_id, menu_item_id, label, is_default, sort_order, status, created_by) values (${c.orgId}, ${it1.itemId}, ${label}, false, 0, 'active', ${c.admin.personId})`;
+    }
+    const rows = await asOrg(c.orgId, (tx) => menuRepo.variantsOfItem(tx, c.orgId, it1.itemId));
+    expect(rows.map((r) => r.label)).toEqual([null, 'Apple', 'banana', 'cherry']);
   });
 });
 

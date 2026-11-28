@@ -185,7 +185,7 @@ export async function listOverviewItems(tx: Tx, orgId: string, storeId: string |
     .select()
     .from(schema.menuItems)
     .where(eq(schema.menuItems.orgId, orgId))
-    .orderBy(asc(schema.menuItems.sortOrder), asc(schema.menuItems.name), asc(schema.menuItems.id));
+    .orderBy(asc(schema.menuItems.sortOrder), asc(sql`lower(${schema.menuItems.name})`), asc(schema.menuItems.id));
   const variants = await tx
     .select({ id: schema.menuItemVariants.id, menuItemId: schema.menuItemVariants.menuItemId, label: schema.menuItemVariants.label })
     .from(schema.menuItemVariants)
@@ -335,7 +335,7 @@ export async function loadItemPage(tx: Tx, actor: Actor, itemId: string): Promis
           .select()
           .from(schema.menuOptionValues)
           .where(and(eq(schema.menuOptionValues.orgId, orgId), inArray(schema.menuOptionValues.optionGroupId, groupIds)))
-          .orderBy(asc(schema.menuOptionValues.sortOrder), asc(schema.menuOptionValues.name), asc(schema.menuOptionValues.id));
+          .orderBy(asc(schema.menuOptionValues.sortOrder), asc(sql`lower(${schema.menuOptionValues.name})`), asc(schema.menuOptionValues.id));
   const optionGroups: OptionGroupView[] = allLinks.map((l) => ({
     linkId: l.link.id,
     variantId: l.link.variantId,
@@ -495,7 +495,7 @@ export async function loadPricesPage(tx: Tx, orgId: string, storeId: string): Pr
     .select({ id: schema.menuItems.id, categoryId: schema.menuItems.categoryId, name: schema.menuItems.name, itemType: schema.menuItems.itemType })
     .from(schema.menuItems)
     .where(and(eq(schema.menuItems.orgId, orgId), eq(schema.menuItems.status, 'active')))
-    .orderBy(asc(schema.menuItems.sortOrder), asc(schema.menuItems.name), asc(schema.menuItems.id));
+    .orderBy(asc(schema.menuItems.sortOrder), asc(sql`lower(${schema.menuItems.name})`), asc(schema.menuItems.id));
   const variantRows = await tx
     .select({ id: schema.menuItemVariants.id, menuItemId: schema.menuItemVariants.menuItemId, label: schema.menuItemVariants.label })
     .from(schema.menuItemVariants)
@@ -535,7 +535,7 @@ export async function loadPricesPage(tx: Tx, orgId: string, storeId: string): Pr
     .from(schema.menuOptionValues)
     .innerJoin(schema.menuOptionGroups, eq(schema.menuOptionGroups.id, schema.menuOptionValues.optionGroupId))
     .where(and(eq(schema.menuOptionValues.orgId, orgId), eq(schema.menuOptionValues.status, 'active'), eq(schema.menuOptionGroups.status, 'active')))
-    .orderBy(asc(schema.menuOptionGroups.name), asc(schema.menuOptionValues.sortOrder), asc(schema.menuOptionValues.name), asc(schema.menuOptionValues.id));
+    .orderBy(asc(schema.menuOptionGroups.name), asc(schema.menuOptionValues.sortOrder), asc(sql`lower(${schema.menuOptionValues.name})`), asc(schema.menuOptionValues.id));
   const optionInForce = await menuRepo.optionOffersInForce(tx, storeId, now);
   const optionScheduled = await tx
     .select({

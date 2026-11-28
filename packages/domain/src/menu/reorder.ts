@@ -20,7 +20,7 @@ const STALE = 'The list changed since you opened it. Reload and try again.';
 /** Checks the ids are exactly the list, writes 10, 20, 30... Returns the id order before, or null when nothing changed (nothing to audit). */
 async function reorder(trx: Tx, list: menuRepo.OrderList, ids: readonly string[], what: string): Promise<string[] | null> {
   const rows = await menuRepo.orderedRows(trx, list, true);
-  const wanted = new Set(ids);
+  const wanted = new Set(Array.isArray(ids) ? ids : []);
   if (!Array.isArray(ids) || wanted.size !== ids.length || ids.length !== rows.length || !rows.every((r) => wanted.has(r.id))) {
     throw refuse(`${what}: the ids are not exactly the ${rows.length} active rows of this list.`, STALE);
   }

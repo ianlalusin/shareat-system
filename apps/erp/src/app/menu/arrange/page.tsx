@@ -95,7 +95,7 @@ export default async function ArrangeMenuPage({ searchParams }: { searchParams: 
               <ArrangeList
                 key={`v:${variants.map((v) => v.id).join()}`}
                 rows={variants.filter((v) => !v.isDefault).map((v) => ({ id: v.id, label: v.label }))}
-                pinned={variants.filter((v) => v.isDefault).map((v) => ({ id: v.id, label: 'Regular (the default size)' }))}
+                pinned={variants.filter((v) => v.isDefault).map((v) => ({ id: v.id, label: v.label || 'Regular' }))}
                 action={reorderVariantsAction}
                 hidden={{ menuItemId: item.id, category: category.id }}
                 noun="size"
