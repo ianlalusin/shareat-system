@@ -307,29 +307,6 @@ export async function markVoided(
 }
 
 /**
- * The rate this customer's price list quotes for an item, or undefined when it quotes none.
- *
- * ⚠️ Read ONCE, at line creation, and then captured onto the line. Nothing downstream re-reads
- * this — that is the whole point of `trade_order_lines.rate` existing as a column.
- */
-export async function quotedRate(
-  tx: Tx,
-  orgId: string,
-  customerId: string,
-  itemId: string,
-): Promise<{ rate: string; unit: string | null } | undefined> {
-  const [row] = (await tx.execute(sql`
-    select pli.rate::text as rate, pli.unit
-    from customers c
-    join price_list_items pli on pli.price_list_id = c.price_list_id and pli.org_id = c.org_id
-    where c.org_id = ${orgId} and c.id = ${customerId} and pli.item_id = ${itemId}
-    limit 1
-  `)) as unknown as Record<string, string | null>[];
-  if (!row) return undefined;
-  return { rate: String(row.rate), unit: row.unit ?? null };
-}
-
-/**
  * ⭐ T-165. `dispatchOrder`'s own output, persisted so `confirmReceipt` can read back what the
  * DISPATCHED quantity cost — never `rate`, which carries the margin (T-133 §5's whole point).
  */
