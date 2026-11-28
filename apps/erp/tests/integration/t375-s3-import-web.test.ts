@@ -60,7 +60,7 @@ vi.mock('../../src/lib/session', () => ({
     actor: h.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01'),
   })),
 }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('@shareat/core/env', async (orig) => {
   const real = await orig<typeof import('@shareat/core/env')>();
   return { ...real, env: () => ({ ...real.env(), POS_API_URL: h.posUrl, POS_API_KEY: h.posKey }) };

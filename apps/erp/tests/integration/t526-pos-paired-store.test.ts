@@ -32,7 +32,7 @@ vi.mock('../../src/lib/session', () => {
     readPosTabletToken: vi.fn(async () => HOLD.token),
   };
 });
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 
 import { closeDb } from '@shareat/db';
 import { posTabletTokenHash, resolvePosTablet } from '@shareat/auth';

@@ -94,8 +94,8 @@ describe('T-640 /settings/ai-hub', () => {
 
   it('two columns from lg with a sticky right column, one column below it in the order spend, fallback, providers, caps, stores [kills: a page that scrolls to the bottom for the order]', () => {
     expect(page).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]');
-    expect(page).toMatch(/lg:sticky lg:top-4/);
-    expect(page).toMatch(/lg:max-h-\[calc\(100dvh-2rem\)\][^"]*lg:overflow-y-auto/);
+    expect(page).toMatch(/lg:sticky lg:top-20/); // T-652: under the sticky page header
+    expect(page).toMatch(/lg:max-h-\[calc\(100dvh-6rem\)\][^"]*lg:overflow-y-auto/);
     expect(page).toContain('order-1 lg:order-none');
     expect(page).toContain('order-2 lg:order-none');
     expect(page).toContain('order-3 space-y-3 lg:order-none');

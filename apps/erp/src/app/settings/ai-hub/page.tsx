@@ -88,7 +88,7 @@ export default async function AiHubPage({ searchParams }: { searchParams: Promis
           </section>
         </div>
 
-        <div className="contents lg:sticky lg:top-4 lg:-m-1 lg:flex lg:max-h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-col lg:gap-8 lg:overflow-y-auto lg:p-1">
+        <div className="contents lg:sticky lg:top-20 lg:-m-1 lg:flex lg:max-h-[calc(100dvh-6rem)] lg:min-w-0 lg:flex-col lg:gap-8 lg:overflow-y-auto lg:p-1">
           <div className="order-2 lg:order-none">
             <Order view={view} sync={sp.ok ?? sp.error ?? ''} />
           </div>

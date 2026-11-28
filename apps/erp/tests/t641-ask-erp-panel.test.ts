@@ -69,7 +69,8 @@ describe('T-641 the action returns data and goes through askErp', () => {
 
 describe('T-641 where the button is mounted', () => {
   it('AppShell mounts it only when use_ask_erp is held, after the early return that sign-in, /clock and /pos take [kills: a button for people who may not ask; a button on the kiosk]', () => {
-    expect(shell).toMatch(/\.has\('use_ask_erp'\) \? <AskErpLauncher \/> : null/);
+    expect(shell).toContain("const askErp = (held as ReadonlySet<string>).has('use_ask_erp')"); // T-652: one flag drives the mount and the page's bottom clearance
+    expect(shell).toContain('{askErp ? <AskErpLauncher /> : null}');
     const early = shell.indexOf('return <>{children}</>;');
     const mount = shell.indexOf('<AskErpLauncher />');
     expect(early).toBeGreaterThan(0);
@@ -89,6 +90,6 @@ describe('T-641 what is rendered', () => {
     expect(panel).toContain('NAV_LINK');
     expect(panel).toContain('role="log"');
     expect(panel).toContain('aria-label="Ask ERP"');
-    expect(panel).not.toMatch(/<button\b/);
+    expect(panel.split('<button').length - 1).toBe(1); // T-652: only the dockable closed tab is hand-rolled (it needs pointer capture); the open panel uses house Buttons
   });
 });

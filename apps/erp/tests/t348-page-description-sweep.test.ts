@@ -141,19 +141,23 @@ describe('T-348 S2 — the sweep ratchet (SW1/SW2)', () => {
   });
 });
 
-describe('T-348 S2 — the two neutral-500 prose sites move too (SW3)', () => {
-  it('SW3: the element PAIRED with admin/stores\' and admin/users\' <h1> is a <PageDescription>, not just present somewhere in the file', () => {
-    // T-540 (7 Nov 2026, BOSS approved): admin/users moved onto <Page title description>, so it has no hand-written <h1>
-    // pair any more; the prose still renders through PageHeader's PageDescription. admin/stores (a rule-2 skip) stays.
-    for (const rel of ['admin/stores/page.tsx']) {
-      const tag = tagPairedWithH1(resolve(appRoot, rel));
-      expect(tag, `${rel}: expected an <h1>-then-<PageDescription> pair`).toBe('PageDescription');
+describe('T-348 S2 / T-652 — a page on <PageHeader actions> carries its prose through the header (SW3)', () => {
+  it('SW3: no page that renders <PageHeader ... actions=> also hand-writes an <h1> with a <PageDescription> pair', () => {
+    // T-540: admin/users and T-652: admin/stores (and the 35 swept pages) moved onto the shared header; the prose renders through PageHeader's own PageDescription.
+    const onHeader = walk(appRoot).filter((f) => {
+      const src = readFileSync(f, 'utf8');
+      return /<PageHeader[\s\S]*?actions=/.test(src);
+    });
+    expect(onHeader.length).toBeGreaterThan(30); // the sweep is real: this is not an empty loop
+    for (const f of onHeader) {
+      const tag = tagPairedWithH1(f);
+      expect(tag, `${f}: a page on PageHeader must not also hand-write an <h1> + <PageDescription> pair`).not.toBe('PageDescription');
     }
   });
 });
 
 describe('T-348 S2 — the population lands exactly, nothing dropped or doubled (SW4)', () => {
-  it('SW4: exactly 122 <PageDescription> call sites exist under app/', () => {
+  it('SW4: exactly 85 <PageDescription> call sites exist under app/', () => {
     let count = 0;
     for (const file of walk(appRoot)) {
       const content = readFileSync(file, 'utf8');
@@ -187,8 +191,9 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 120 -> 119, T-599: a redrawn long page moved its prose onto the page header; measured by walking app/.
     // 119 -> 120, T-628: /pos-reservations carries its <PageDescription>; measured by walking app/.
     // 120 -> 119, T-637: /documents/templates moved onto <Page title description actions> (its call site left app/), and the new editor screen passes its prose to the same header, so the net change is -1; measured by walking app/.
-    // 119 -> 120, T-651: /menu/arrange carries its <PageDescription>; measured by walking app/.
-    expect(count).toBe(120);
+    // 119 -> 84, T-652: the top-row sweep moved 35 header descriptions onto <PageHeader title description actions> (sticky header), whose own <PageDescription> lives in Page.tsx; measured by walking app/.
+    // 84 -> 85, T-651 (merged): /menu/arrange carries its <PageDescription>; measured by walking app/.
+    expect(count).toBe(85);
   });
 });
 

@@ -39,7 +39,7 @@ const HOUR = 3_600_000;
 
 vi.mock('../../src/lib/session', () => ({ requireSession: vi.fn() }));
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 
 type Role = 'admin' | 'manager' | 'staff';
 

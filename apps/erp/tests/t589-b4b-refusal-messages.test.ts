@@ -20,7 +20,7 @@ vi.mock('../src/lib/session', () => ({
 // T-617: the route gate and the store check are stubbed open; this file is about the refusal messages (the gates are proved in t617-gate-awaiting-routes.test.ts).
 vi.mock('../src/lib/page-access', () => ({ requirePageAccess: vi.fn(async () => ({ actor: ACTOR, refusal: null })) }));
 vi.mock('../src/lib/store-scope', () => ({ recordInScope: vi.fn(async () => true) }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 const M = vi.hoisted(() => ({ deliveryReceiptData: vi.fn(), orderDetail: vi.fn(), orderView: vi.fn() }));
 vi.mock('../src/app/trade/orders/lib', async (orig) => ({
   ...(await orig<typeof import('../src/app/trade/orders/lib')>()),

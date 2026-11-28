@@ -59,7 +59,7 @@ vi.mock('@/lib/flash', async (orig) => {
   const real = await orig<typeof import('../../src/lib/flash')>();
   return { ...real, withFlash: async (sp: Promise<object>) => (h.flash ? { ...(await sp), ...h.flash } : real.withFlash(sp as never)) };
 });
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('@/components/shell/PageDescription', () => ({ PageDescription: () => null }));
 vi.mock('@/components/shell/DetailLayout', () => ({
   DetailLayout: ({ summary, children }: { summary: unknown; children: unknown }) => [summary, children],

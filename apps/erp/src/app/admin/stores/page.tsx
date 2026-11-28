@@ -2,8 +2,7 @@ import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '../../../lib/page-access';
 import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select , FormSection, FormModal, DialogActions} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { CheckedForm } from '@/components/forms';
@@ -39,15 +38,12 @@ export default async function StoresPage({
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Stores</h1>
-          <PageDescription>
+      <PageHeader title="Stores" description={<>
             Adding a store sets up its first stock room and gives every admin access to it. What is left
             to fill in is the business side.
-          </PageDescription>
-        </div>
-        {/* T-448: the create form lives in a dialog; the header button replaces the old "Open a branch" disclosure. */}
+          </>} actions={
+        <>
+          {/* T-448: the create form lives in a dialog; the header button replaces the old "Open a branch" disclosure. */}
         <FormModal trigger="+ Add store" title="Add a store" size="lg" defaultOpen={Boolean(sp.error)}>
         <CheckedForm
           rules={ADMIN_STORE_CREATE_RULES}
@@ -129,7 +125,8 @@ export default async function StoresPage({
           </DialogActions>
         </CheckedForm>
         </FormModal>
-      </div>
+        </>
+      } />
 
       <FlashBanner flash={sp} />
 
