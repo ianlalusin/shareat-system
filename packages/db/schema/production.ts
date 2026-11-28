@@ -81,7 +81,7 @@ export const productionRecipes = pgTable(
     check('production_recipes_output_quantity_positive_check', sql`${t.outputQuantity} > 0`),
     index('production_recipes_org_idx').on(t.orgId),
     check('production_recipes_standard_labour_cost_check', sql`${t.standardLabourCost} is null or ${t.standardLabourCost} >= 0`),
-    check('production_recipes_standard_labour_cost_finite_check', sql`${t.standardLabourCost} is null or (${t.standardLabourCost} > '-Infinity'::numeric and ${t.standardLabourCost} < 'Infinity'::numeric)`),
+    check('production_recipes_standard_labour_cost_finite_check', sql`${t.standardLabourCost} > '-Infinity'::numeric and ${t.standardLabourCost} < 'Infinity'::numeric`),
     check('production_recipes_output_quantity_finite_check', sql`${t.outputQuantity} > '-Infinity'::numeric and ${t.outputQuantity} < 'Infinity'::numeric`),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
     // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a

@@ -557,7 +557,8 @@ describe('invariant 9 - exactly one audit row per write, with the R5 action and 
   /** quantities compared as numbers (the spec fixes the keys, not the decimal text); lines sorted by item. */
   const norm = (j: unknown) => {
     const o = j as { name: string; outputItemId: string; outputQuantity: string | number; lines: { itemId: string; quantity: string | number; unit: string }[] };
-    expect(Object.keys(o).sort()).toEqual(['lines', 'name', 'outputItemId', 'outputQuantity']);
+    // T-650 S2: the audit snapshot carries the whole recipe, so it also has the labour per batch and the stores it is limited to.
+    expect(Object.keys(o).sort()).toEqual(['lines', 'name', 'outputItemId', 'outputQuantity', 'standardLabourCost', 'storeIds']);
     for (const l of o.lines) expect(Object.keys(l).sort()).toEqual(['itemId', 'quantity', 'unit']);
     return {
       name: o.name, outputItemId: o.outputItemId, outputQuantity: Number(o.outputQuantity),

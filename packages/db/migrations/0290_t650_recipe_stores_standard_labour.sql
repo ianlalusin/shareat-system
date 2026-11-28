@@ -12,6 +12,7 @@
 --   production_recipes.standard_labour_cost numeric(14,2) NULL  the labour for ONE batch of output_quantity; NULL = none; >= 0 and finite.
 -- GRANTS (ADR-012 s5 4a). shareat_app: SELECT, INSERT, DELETE on production_recipe_stores (a recipe edit replaces its list); no UPDATE (a row is a pair). production_recipes
 -- keeps its table-level UPDATE (0011 default privileges predate 0169), so the new column needs no grant. RLS ENABLE + FORCE, one org_isolation policy via app_current_org().
+-- The finite CHECK has the one house shape (t327 pins it by value); a NULL passes it (NULL > x is unknown), so the column stays optional.
 -- LOCK BUDGET. lock_timeout 5s first; one new empty table, one nullable ADD COLUMN (metadata only), two CHECKs on production_recipes (a small table).
 
 SET LOCAL lock_timeout = '5s';
@@ -21,7 +22,7 @@ ALTER TABLE "production_recipes" ADD COLUMN "standard_labour_cost" numeric(14, 2
 --> statement-breakpoint
 ALTER TABLE "production_recipes" ADD CONSTRAINT "production_recipes_standard_labour_cost_check" CHECK ("standard_labour_cost" IS NULL OR "standard_labour_cost" >= 0);
 --> statement-breakpoint
-ALTER TABLE "production_recipes" ADD CONSTRAINT "production_recipes_standard_labour_cost_finite_check" CHECK ("standard_labour_cost" IS NULL OR ("standard_labour_cost" > '-Infinity'::numeric AND "standard_labour_cost" < 'Infinity'::numeric));
+ALTER TABLE "production_recipes" ADD CONSTRAINT "production_recipes_standard_labour_cost_finite_check" CHECK ("standard_labour_cost" > '-Infinity'::numeric AND "standard_labour_cost" < 'Infinity'::numeric);
 --> statement-breakpoint
 
 CREATE TABLE "production_recipe_stores" (
