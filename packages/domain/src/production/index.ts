@@ -222,6 +222,7 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
   return { ok: true, recordId, ...(labourNote === undefined ? {} : { labourNote }) };
 }
 
+export const COOKBOOK_NOT_PRODUCED_SENTENCE = 'A cookbook recipe is not produced into stock; a dish that uses it takes its ingredients when sold.';
 const COOK_INGREDIENTS_MISMATCH_PREFIX = 'The ingredients on this cook record do not match';
 const COOK_WITHOUT_RECIPE_SENTENCE = 'This cook record has no recipe. Void it and record it again from a recipe.';
 
@@ -249,9 +250,11 @@ async function sliceCategoryRefusal(
 async function deriveCookInputs(
   tx: Tx,
   orgId: string,
-  recipe: { readonly id: string; readonly name: string; readonly outputItemId: string; readonly outputQuantity: string },
+  recipe: { readonly id: string; readonly name: string; readonly outputItemId: string | null; readonly outputQuantity: string; readonly purpose: string },
   outputs: readonly { itemId: string; quantity: Quantity; unit: string }[],
 ): Promise<{ ok: true; inputs: { itemId: string; quantity: Quantity; unit: string }[]; target: Quantity } | { ok: false; reason: string }> {
+  // T-650 S3: a cookbook recipe is a way of cooking a dish, not a production into stock. Refused at save AND at post (this runs for both).
+  if (recipe.purpose === 'kitchen' || recipe.outputItemId === null) return { ok: false, reason: COOKBOOK_NOT_PRODUCED_SENTENCE };
   if (outputs.length !== 1) {
     return { ok: false, reason: `A cook has exactly one output: what the recipe '${recipe.name}' makes.` };
   }

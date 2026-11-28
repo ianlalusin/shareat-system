@@ -13,6 +13,7 @@ import {
   productionRecordLines,
   productionRecords,
   type ProductionKind,
+  type ProductionRecipePurpose,
   type ProductionLineDirection,
   type ProductionRecipeStatus,
   type ProductionStatus,
@@ -78,8 +79,13 @@ export interface RecipeRow {
   readonly id: string;
   readonly orgId: string;
   readonly name: string;
-  readonly outputItemId: string;
+  /** Null only for a kitchen recipe (T-650 S3). */
+  readonly outputItemId: string | null;
   readonly outputQuantity: string;
+  /** T-650 S3: 'product' (makes a stock item) or 'kitchen' (the cookbook). */
+  readonly purpose: ProductionRecipePurpose;
+  /** T-650 S3: the steps, plain text. */
+  readonly method: string | null;
   /** T-650 S2: the labour for ONE batch of `outputQuantity`, or null when the recipe carries none. */
   readonly standardLabourCost: string | null;
   readonly status: ProductionRecipeStatus;
@@ -87,8 +93,8 @@ export interface RecipeRow {
 
 /** T-371 C2 — `outputQuantity` is a `Decimal<'14,3'>` minted by `decimal()`. */
 export type InsertRecipeInput = Required<
-  Pick<SafeInsert<typeof productionRecipes>, 'orgId' | 'name' | 'outputItemId' | 'createdBy'>
-> & { outputQuantity: Quantity; standardLabourCost?: Money | null };
+  Pick<SafeInsert<typeof productionRecipes>, 'orgId' | 'name' | 'createdBy'>
+> & { outputQuantity: Quantity; outputItemId?: string | null; purpose?: ProductionRecipePurpose; method?: string | null; standardLabourCost?: Money | null };
 
 export async function insertRecipe(tx: Tx, input: InsertRecipeInput): Promise<{ id: string }> {
   const [row] = await tx
@@ -96,7 +102,9 @@ export async function insertRecipe(tx: Tx, input: InsertRecipeInput): Promise<{ 
     .values({
       orgId: input.orgId,
       name: input.name,
-      outputItemId: input.outputItemId,
+      outputItemId: input.outputItemId ?? null,
+      purpose: input.purpose ?? 'product',
+      method: input.method ?? null,
       outputQuantity: input.outputQuantity,
       standardLabourCost: input.standardLabourCost ?? null,
       createdBy: input.createdBy,
@@ -136,6 +144,8 @@ export async function getRecipe(tx: Tx, orgId: string, id: string): Promise<Reci
       name: productionRecipes.name,
       outputItemId: productionRecipes.outputItemId,
       outputQuantity: productionRecipes.outputQuantity,
+      purpose: productionRecipes.purpose,
+      method: productionRecipes.method,
       standardLabourCost: productionRecipes.standardLabourCost,
       status: productionRecipes.status,
     })
@@ -144,8 +154,9 @@ export async function getRecipe(tx: Tx, orgId: string, id: string): Promise<Reci
   return row;
 }
 
-export async function listRecipes(tx: Tx, orgId: string, includeInactive = false): Promise<RecipeRow[]> {
+export async function listRecipes(tx: Tx, orgId: string, includeInactive = false, purpose?: ProductionRecipePurpose): Promise<RecipeRow[]> {
   const conditions = [eq(productionRecipes.orgId, orgId)];
+  if (purpose) conditions.push(eq(productionRecipes.purpose, purpose));
   if (!includeInactive) conditions.push(eq(productionRecipes.status, 'active'));
   return tx
     .select({
@@ -154,6 +165,8 @@ export async function listRecipes(tx: Tx, orgId: string, includeInactive = false
       name: productionRecipes.name,
       outputItemId: productionRecipes.outputItemId,
       outputQuantity: productionRecipes.outputQuantity,
+      purpose: productionRecipes.purpose,
+      method: productionRecipes.method,
       standardLabourCost: productionRecipes.standardLabourCost,
       status: productionRecipes.status,
     })
@@ -192,11 +205,11 @@ export async function updateRecipe(
   tx: Tx,
   orgId: string,
   id: string,
-  patch: { name: string; outputItemId: string; outputQuantity: Quantity; standardLabourCost: Money | null },
+  patch: { name: string; outputItemId: string | null; outputQuantity: Quantity; standardLabourCost: Money | null; method?: string | null },
 ): Promise<void> {
   await tx
     .update(productionRecipes)
-    .set({ name: patch.name, outputItemId: patch.outputItemId, outputQuantity: patch.outputQuantity, standardLabourCost: patch.standardLabourCost, updatedAt: sql`now()` })
+    .set({ name: patch.name, outputItemId: patch.outputItemId, outputQuantity: patch.outputQuantity, standardLabourCost: patch.standardLabourCost, ...(patch.method === undefined ? {} : { method: patch.method }), updatedAt: sql`now()` })
     .where(and(eq(productionRecipes.id, id), eq(productionRecipes.orgId, orgId)));
 }
 

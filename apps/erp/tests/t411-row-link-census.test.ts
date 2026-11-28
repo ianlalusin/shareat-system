@@ -43,6 +43,7 @@ const ROW_LINK: readonly string[] = [
   'app/inventory/deliveries/inbound/page.tsx', // T-398 S5: each shipment row opens its receipt page (LinkRow/RowLink)
   'app/inventory/production/page.tsx',
   'app/inventory/production/recipes/page.tsx', // T-413, swept at the 2026-10-16 combined release
+  'app/inventory/cookbook/page.tsx', // T-650 S3: each cookbook recipe row opens its page (LinkRow/RowLink)
   'app/inventory/usage/[id]/page.tsx',
   'app/inventory/usage/page.tsx',
   'app/items/page.tsx',
@@ -122,6 +123,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/inventory/page.tsx',
   'app/inventory/production/[id]/page.tsx',
   'app/inventory/production/recipes/[id]/page.tsx', // T-413: read-only ingredient lines, no row destination
+  'app/inventory/cookbook/[id]/page.tsx', // T-650 S3: read-only ingredient lines, no row destination
   'app/items/[id]/page.tsx',
   'app/menu/items/[id]/page.tsx',
   'app/owners/[id]/page.tsx',

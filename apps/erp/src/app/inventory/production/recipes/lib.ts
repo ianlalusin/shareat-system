@@ -9,6 +9,10 @@ import { withOrgPrincipal } from '../lib';
 export { withOrgPrincipal };
 
 export const RECIPES_PATH = '/inventory/production/recipes';
+/** T-650 S3: the cookbook (kitchen recipes: ingredients + method, no stock output). RECIPES_PATH is "Products we make". */
+export const COOKBOOK_PATH = '/inventory/cookbook';
+export type RecipePurpose = 'product' | 'kitchen';
+export const recipeBase = (purpose: RecipePurpose): string => (purpose === 'kitchen' ? COOKBOOK_PATH : RECIPES_PATH);
 export const MANAGE_RECIPES = 'manage_recipes';
 
 export interface RecipeItemOption {
@@ -58,18 +62,18 @@ export interface RecipeListRow {
   readonly ingredientCount: number;
 }
 
-export async function recipeList(orgId: string, status: 'active' | 'retired' | 'all'): Promise<RecipeListRow[]> {
+export async function recipeList(orgId: string, status: 'active' | 'retired' | 'all', purpose: RecipePurpose = 'product'): Promise<RecipeListRow[]> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const recipes = (await productionRepo.listRecipes(tx, orgId, true)).filter(
+    const recipes = (await productionRepo.listRecipes(tx, orgId, true, purpose)).filter(
       (r) => status === 'all' || (status === 'retired' ? r.status === 'inactive' : r.status === 'active'),
     );
     const items = new Map(
-      (await productionRepo.getItemsForProduction(tx, orgId, [...new Set(recipes.map((r) => r.outputItemId))])).map((i) => [i.id, i]),
+      (await productionRepo.getItemsForProduction(tx, orgId, [...new Set(recipes.flatMap((r) => (r.outputItemId ? [r.outputItemId] : [])))])).map((i) => [i.id, i]),
     );
     const out: RecipeListRow[] = [];
     for (const r of recipes) {
       const lines = await productionRepo.listRecipeLines(tx, r.id);
-      const item = items.get(r.outputItemId);
+      const item = r.outputItemId ? items.get(r.outputItemId) : undefined;
       out.push({
         id: r.id,
         name: r.name,
@@ -97,7 +101,11 @@ export interface RecipeDetail {
   readonly id: string;
   readonly name: string;
   readonly status: string;
-  readonly outputItemId: string;
+  /** Null for a cookbook recipe. */
+  readonly outputItemId: string | null;
+  readonly purpose: RecipePurpose;
+  /** T-650 S3: the steps of a cookbook recipe. */
+  readonly method: string | null;
   readonly outputName: string;
   readonly outputUnit: string;
   readonly outputQuantity: string;
@@ -115,14 +123,16 @@ export async function recipeDetail(orgId: string, id: string): Promise<RecipeDet
     if (!r) return null;
     const lines = await productionRepo.listRecipeLines(tx, r.id);
     const items = new Map(
-      (await productionRepo.getItemsForProduction(tx, orgId, [r.outputItemId, ...lines.map((l) => l.itemId)])).map((i) => [i.id, i]),
+      (await productionRepo.getItemsForProduction(tx, orgId, [...(r.outputItemId ? [r.outputItemId] : []), ...lines.map((l) => l.itemId)])).map((i) => [i.id, i]),
     );
-    const out = items.get(r.outputItemId);
+    const out = r.outputItemId ? items.get(r.outputItemId) : undefined;
     return {
       id: r.id,
       name: r.name,
       status: r.status,
       outputItemId: r.outputItemId,
+      purpose: r.purpose,
+      method: r.method,
       outputName: out?.name ?? 'its output',
       outputUnit: out?.baseUnit ?? '',
       outputQuantity: r.outputQuantity,

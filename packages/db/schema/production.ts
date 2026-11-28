@@ -55,6 +55,10 @@ import { stores } from './stores';
 export const PRODUCTION_RECIPE_STATUSES = ['active', 'inactive'] as const;
 export type ProductionRecipeStatus = (typeof PRODUCTION_RECIPE_STATUSES)[number];
 
+/** T-650 S3, migration 0291: a PRODUCT recipe makes a stock item; a KITCHEN recipe (the cookbook) is how to cook a dish we do not stock. */
+export const PRODUCTION_RECIPE_PURPOSES = ['product', 'kitchen'] as const;
+export type ProductionRecipePurpose = (typeof PRODUCTION_RECIPE_PURPOSES)[number];
+
 export const productionRecipes = pgTable(
   'production_recipes',
   {
@@ -63,9 +67,13 @@ export const productionRecipes = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
-    outputItemId: uuid('output_item_id')
-      .notNull()
-      .references(() => items.id, { onDelete: 'restrict' }),
+    /** Null only for a kitchen recipe (migration 0291: `purpose = 'kitchen' or output_item_id is not null`). */
+    outputItemId: uuid('output_item_id').references(() => items.id, { onDelete: 'restrict' }),
+    /** T-650 S3, migration 0291. */
+    purpose: text('purpose', { enum: PRODUCTION_RECIPE_PURPOSES }).notNull().default('product'),
+    /** T-650 S3, migration 0291: the steps of a recipe, plain text, at most 4000 characters. */
+    method: text('method'),
+    /** Product recipe: what one batch makes. Kitchen recipe: "makes N portions". */
     outputQuantity: numeric('output_quantity', { precision: 14, scale: 3 }).notNull(),
     /** T-650 S2, migration 0290: the labour for ONE batch of `outputQuantity`; null = none. A cook with a blank labour box takes this scaled to the quantity made. */
     standardLabourCost: numeric('standard_labour_cost', { precision: 14, scale: 2 }),
@@ -80,6 +88,9 @@ export const productionRecipes = pgTable(
     uniqueIndex('production_recipes_org_name_key').on(t.orgId, sql`lower(${t.name})`),
     check('production_recipes_output_quantity_positive_check', sql`${t.outputQuantity} > 0`),
     index('production_recipes_org_idx').on(t.orgId),
+    check('production_recipes_purpose_check', sql`${t.purpose} in ('product', 'kitchen')`),
+    check('production_recipes_output_by_purpose_check', sql`${t.purpose} = 'kitchen' or ${t.outputItemId} is not null`),
+    check('production_recipes_method_length_check', sql`${t.method} is null or char_length(${t.method}) <= 4000`),
     check('production_recipes_standard_labour_cost_check', sql`${t.standardLabourCost} is null or ${t.standardLabourCost} >= 0`),
     check('production_recipes_standard_labour_cost_finite_check', sql`${t.standardLabourCost} > '-Infinity'::numeric and ${t.standardLabourCost} < 'Infinity'::numeric`),
     check('production_recipes_output_quantity_finite_check', sql`${t.outputQuantity} > '-Infinity'::numeric and ${t.outputQuantity} < 'Infinity'::numeric`),

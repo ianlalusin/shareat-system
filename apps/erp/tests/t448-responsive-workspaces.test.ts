@@ -51,7 +51,8 @@ describe('T-448 responsive dashboards and record details', () => {
     // T-398 S5: 26 -> 27, new detail page app/inventory/deliveries/inbound/[shipmentId]/page.tsx
     // T-193 S5: 27 -> 28, new detail page app/payroll/statutory-payments/[id]/page.tsx
     // T-584: 28 -> 29, new detail page app/documents/[id]/page.tsx
-    expect(details.length).toBe(29);
+    // T-650 S3: 29 -> 30, new detail page app/inventory/cookbook/[id]/page.tsx
+    expect(details.length).toBe(30);
     for (const p of details) {
       const src = readFileSync(p, 'utf8');
       expect(src, p).toContain('view="detail"');

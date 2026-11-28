@@ -1,12 +1,12 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { convertUnit, quantity } from '@shareat/domain';
 import { requirePageAccess } from '../../../../../lib/page-access';
 import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { editRecipeAction, restoreRecipeAction, retireRecipeAction } from '../actions';
-import { RECIPES_PATH, canManageRecipes, fmtQty, recipeDetail, recipeItemOptions, type RecipeItemOption } from '../lib';
+import { COOKBOOK_PATH, RECIPES_PATH, canManageRecipes, fmtQty, recipeDetail, recipeItemOptions, type RecipeItemOption } from '../lib';
 import { RecipeFields, type FormLine } from '../recipe-form';
 import { listStores } from '../../lib';
 
@@ -28,6 +28,9 @@ export default async function RecipePage({
   if (refusal) return refusal;
   const recipe = await recipeDetail(actor.orgId, id);
   if (!recipe) notFound();
+  // T-650 S3: an old link to a cookbook recipe still works - it lands on the recipe in the cookbook.
+  if (recipe.purpose === 'kitchen') redirect(`${COOKBOOK_PATH}/${recipe.id}`);
+  const productItemId = recipe.outputItemId ?? '';
   const canManage = await canManageRecipes(actor.orgId, actor);
 
   // A saved line in another unit is shown converted to the item's base unit; one that cannot be converted is not opened in words.
@@ -48,7 +51,7 @@ export default async function RecipePage({
     // A saved item that has since been retired is still this recipe's item: keep it selectable so saving does not drop it silently.
     const known = new Set(items.map((i) => i.id));
     const extra = [
-      { id: recipe.outputItemId, code: '', name: `${recipe.outputName} (retired)`, baseUnit: recipe.outputUnit },
+      { id: productItemId, code: '', name: `${recipe.outputName} (retired)`, baseUnit: recipe.outputUnit },
       ...recipe.lines.map((l) => ({ id: l.itemId, code: '', name: `${l.itemName} (retired)`, baseUnit: l.baseUnit })),
     ].filter((i) => !known.has(i.id));
     items = [...items, ...extra.filter((e, i) => extra.findIndex((x) => x.id === e.id) === i)];
@@ -81,7 +84,7 @@ export default async function RecipePage({
             <RecipeFields
               items={items}
               name={recipe.name}
-              outputItemId={recipe.outputItemId}
+              outputItemId={productItemId}
               outputQuantity={fmtQty(recipe.outputQuantity)}
               outputUnit={recipe.outputUnit}
               lines={formLines}

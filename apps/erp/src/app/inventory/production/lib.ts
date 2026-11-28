@@ -53,7 +53,7 @@ export async function productionScreenData(orgId: string, storeId: string): Prom
       stockUsageRepo.listOperatingLocations(tx, storeId),
       itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
       itemsRepo.listUsableItems(tx, orgId, storeId),
-      productionRepo.listRecipes(tx, orgId),
+      productionRepo.listRecipes(tx, orgId, false, 'product'),
       productionRepo.listProductionRecords(tx, storeId),
       productionRepo.listSlicersAtStore(tx, orgId, storeId),
       productionRepo.recipeStoreMap(tx, orgId),

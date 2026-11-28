@@ -182,6 +182,9 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // T-635: the slicer pay view shows what people are owed, so it is read by whoever runs payroll. Rates are set under `set_pay_rate` inside the domain.
   '/inventory/production/slicer-pay': 'run_payroll',
   '/inventory/production/recipes': 'record_stock_movement',
+  // T-650 S3: the Cookbook (kitchen recipes) is read by the same people, written by the same people; /[id] inherits.
+  '/inventory/cookbook': 'record_stock_movement',
+  '/inventory/cookbook/new': 'manage_recipes',
   '/inventory/production/recipes/new': 'manage_recipes',
   // T-398 S6d: the franchisor looks at a franchisee's sales and stock (each press is logged by the database); the franchisee's owner reads who looked.
   '/franchise/sales': 'view_franchise_sales',

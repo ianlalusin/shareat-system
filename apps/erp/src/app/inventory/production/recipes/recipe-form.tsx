@@ -42,7 +42,6 @@ export function RecipeFields({
   /** T-650 S2: labour for one batch ('' = none). A plain box: the server rule INVENTORY_RECIPE_RULES (asserted in the recipe actions) decides. */
   standardLabourCost: string;
 }) {
-  const rows: FormLine[] = [...lines, ...Array.from({ length: blankRows }, () => ({ itemId: '', quantity: '', baseUnit: null }))];
   return (
     <>
       <FormGrid>
@@ -79,28 +78,36 @@ export function RecipeFields({
           </div>
         </fieldset>
       ) : null}
-      <div>
-        <span className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">Ingredients (what goes in)</span>
-        <div className="mt-2 space-y-2">
-          {rows.map((l, i) => (
-            <FormGrid key={i}>
-              <Field label={`Ingredient ${i + 1}`} className="text-sm">
-                <Select name="lineItemId" defaultValue={l.itemId} className="w-full">
-                  <option value="">— item —</option>
-                  {items.map((it) => (
-                    <option key={it.id} value={it.id}>
-                      {`${it.name} (${it.baseUnit})`}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label={l.baseUnit ? `Quantity, in ${l.baseUnit}` : 'Quantity'} className="text-sm">
-                <Input name="lineQuantity" defaultValue={l.quantity} inputMode="decimal" className="w-full" />
-              </Field>
-            </FormGrid>
-          ))}
-        </div>
-      </div>
+      <IngredientRows items={items} lines={lines} blankRows={blankRows} />
     </>
+  );
+}
+
+/** The ingredient rows (what goes in), shared by a product recipe and a cookbook recipe. */
+export function IngredientRows({ items, lines, blankRows }: { items: readonly RecipeItemOption[]; lines: readonly FormLine[]; blankRows: number }) {
+  const rows: FormLine[] = [...lines, ...Array.from({ length: blankRows }, () => ({ itemId: '', quantity: '', baseUnit: null }))];
+  return (
+  <div>
+    <span className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">Ingredients (what goes in)</span>
+    <div className="mt-2 space-y-2">
+      {rows.map((l, i) => (
+        <FormGrid key={i}>
+          <Field label={`Ingredient ${i + 1}`} className="text-sm">
+            <Select name="lineItemId" defaultValue={l.itemId} className="w-full">
+              <option value="">— item —</option>
+              {items.map((it) => (
+                <option key={it.id} value={it.id}>
+                  {`${it.name} (${it.baseUnit})`}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={l.baseUnit ? `Quantity, in ${l.baseUnit}` : 'Quantity'} className="text-sm">
+            <Input name="lineQuantity" defaultValue={l.quantity} inputMode="decimal" className="w-full" />
+          </Field>
+        </FormGrid>
+      ))}
+    </div>
+  </div>
   );
 }

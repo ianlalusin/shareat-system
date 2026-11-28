@@ -88,6 +88,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/inventory/counts', label: 'Counts' },
       // T-176, 2026-09-04 — a slicing run or prep batch posts as one stock transaction.
       { href: '/inventory/production', label: 'Production' },
+      // T-650 S3: how to cook the dishes we serve but do not stock. (The recipes for things we stock are under Production.)
+      { href: '/inventory/cookbook', label: 'Cookbook' },
       { href: '/inventory/low-stock', label: 'Low stock' },
       { href: '/commissary/orders', label: 'Branch orders' },
       // ⭐ DEF-129 — `commissary_item_map` had no writer anywhere until 2026-09-03, so every real

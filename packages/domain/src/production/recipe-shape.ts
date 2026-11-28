@@ -8,11 +8,17 @@
 export const MAX_RECIPE_QUANTITY_THOUSANDTHS = 10_000_000n;
 export const MAX_RECIPE_NAME_LENGTH = 80;
 export const MAX_RECIPE_LINES = 50;
+/** T-650 S3: the steps of a kitchen recipe. Matches production_recipes_method_length_check (migration 0291). */
+export const MAX_RECIPE_METHOD_LENGTH = 4000;
 
 export interface RecipeShapeInput {
   readonly name: string;
-  readonly outputItemId: string;
+  /** Absent for a kitchen recipe (T-650 S3). */
+  readonly outputItemId?: string | null | undefined;
   readonly outputQuantity: string;
+  /** T-650 S3: omitted = a product recipe. */
+  readonly purpose?: 'product' | 'kitchen' | undefined;
+  readonly method?: string | null | undefined;
   readonly lines: readonly { readonly itemId: string; readonly quantity: string }[];
 }
 
@@ -39,8 +45,13 @@ export function validateRecipeShape(input: RecipeShapeInput): RecipeShapeOutcome
   if (!name) return { ok: false, reason: 'A recipe needs a name.' };
   if (name.length > MAX_RECIPE_NAME_LENGTH) return { ok: false, reason: `A recipe name can be at most ${MAX_RECIPE_NAME_LENGTH} characters. This one is ${name.length}.` };
 
-  const out = recipeQuantityRefusal(input.outputQuantity, 'The output quantity');
+  const kitchen = input.purpose === 'kitchen';
+  const out = recipeQuantityRefusal(input.outputQuantity, kitchen ? 'The number of portions' : 'The output quantity');
   if (out) return { ok: false, reason: out };
+
+  if (!kitchen && !input.outputItemId) return { ok: false, reason: 'Pick the item this recipe makes.' };
+  const method = input.method?.trim() ?? '';
+  if (method.length > MAX_RECIPE_METHOD_LENGTH) return { ok: false, reason: `The method can be at most ${MAX_RECIPE_METHOD_LENGTH} characters. This one is ${method.length}.` };
 
   if (input.lines.length === 0) return { ok: false, reason: 'A recipe needs at least one ingredient.' };
   if (input.lines.length > MAX_RECIPE_LINES) return { ok: false, reason: `A recipe can have at most ${MAX_RECIPE_LINES} ingredients. This one has ${input.lines.length}.` };

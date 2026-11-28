@@ -155,7 +155,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
                 <Field label={<span className="text-neutral-600 dark:text-neutral-400">Recipe</span>} className="text-sm">
                   <Select name="recipeId" defaultValue={recipes[0]?.id} className="w-full">
                     {recipes.map((r) => {
-                      const out = itemName.get(r.outputItemId);
+                      const out = itemName.get(r.outputItemId ?? '');
                       return (
                         <option key={r.id} value={r.id}>
                           {r.name} — makes {r.outputQuantity} {out?.baseUnit ?? ''} of {out?.name ?? 'its output'}

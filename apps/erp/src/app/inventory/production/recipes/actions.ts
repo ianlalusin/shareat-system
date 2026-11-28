@@ -15,7 +15,7 @@ import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage } from '@/lib/constraint-messages';
 import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
 import { retypeMatches } from '@/lib/retype';
-import { RECIPES_PATH, isUuid, withOrgPrincipal } from './lib';
+import { RECIPES_PATH, isUuid, recipeBase, withOrgPrincipal } from './lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -51,18 +51,25 @@ async function attempt(orgId: string, run: (tx: Tx) => Promise<RecipeOutcome>): 
   }
 }
 
+/** T-650 S3: the cookbook's forms send purpose=kitchen; everything else is a product recipe. */
+const purposeOf = (fd: FormData): 'product' | 'kitchen' => (str(fd, 'purpose') === 'kitchen' ? 'kitchen' : 'product');
+
 /** Where a write on an existing recipe lands: its own page when the id is an id, else the list. */
-const detailPath = (recipeId: string): string => (isUuid(recipeId) ? `${RECIPES_PATH}/${recipeId}` : RECIPES_PATH);
+const detailPath = (recipeId: string, purpose: 'product' | 'kitchen' = 'product'): string => (isUuid(recipeId) ? `${recipeBase(purpose)}/${recipeId}` : recipeBase(purpose));
 
 export async function createRecipeAction(fd: FormData): Promise<void> {
   const actor = await requireActor(RECIPES_PATH);
   const r = await attempt(actor.orgId, async (tx) => {
     // T-440 S9 (iii): the field check runs only for a caller createRecipe's own authorize() would let in.
     if (await can(tx, actor, 'manage_recipes', {})) assertFieldRules(INVENTORY_RECIPE_RULES, fd);
-    return createRecipe(tx, actor, { orgId: actor.orgId, name: str(fd, 'name'), outputItemId: str(fd, 'outputItemId'), outputQuantity: str(fd, 'outputQuantity'), lines: lines(fd), ...madeAt(fd) });
+    const purpose = purposeOf(fd);
+    return createRecipe(tx, actor, {
+      orgId: actor.orgId, name: str(fd, 'name'), outputItemId: str(fd, 'outputItemId'), outputQuantity: str(fd, 'outputQuantity'), lines: lines(fd), purpose,
+      ...(purpose === 'kitchen' ? { method: str(fd, 'method') } : madeAt(fd)),
+    });
   });
-  if (!r.ok) return await redirectWithFlash(`${RECIPES_PATH}/new`, {}, { error: r.error });
-  return await redirectWithFlash(detailPath(r.recipeId), {}, { ok: 'Recipe added.' });
+  if (!r.ok) return await redirectWithFlash(`${recipeBase(purposeOf(fd))}/new`, {}, { error: r.error });
+  return await redirectWithFlash(detailPath(r.recipeId, purposeOf(fd)), {}, { ok: 'Recipe added.' });
 }
 
 export async function editRecipeAction(fd: FormData): Promise<void> {
@@ -70,9 +77,13 @@ export async function editRecipeAction(fd: FormData): Promise<void> {
   const recipeId = str(fd, 'recipeId');
   const r = await attempt(actor.orgId, async (tx) => {
     if (await can(tx, actor, 'manage_recipes', {})) assertFieldRules(INVENTORY_RECIPE_RULES, fd);
-    return editRecipe(tx, actor, { recipeId, name: str(fd, 'name'), outputItemId: str(fd, 'outputItemId'), outputQuantity: str(fd, 'outputQuantity'), lines: lines(fd), ...madeAt(fd) });
+    const purpose = purposeOf(fd);
+    return editRecipe(tx, actor, {
+      recipeId, name: str(fd, 'name'), outputItemId: str(fd, 'outputItemId'), outputQuantity: str(fd, 'outputQuantity'), lines: lines(fd),
+      ...(purpose === 'kitchen' ? { method: str(fd, 'method') } : madeAt(fd)),
+    });
   });
-  return await redirectWithFlash(detailPath(recipeId), {}, r.ok ? { ok: 'Recipe saved.' } : { error: r.error });
+  return await redirectWithFlash(detailPath(recipeId, purposeOf(fd)), {}, r.ok ? { ok: 'Recipe saved.' } : { error: r.error });
 }
 
 export async function retireRecipeAction(fd: FormData): Promise<void> {
@@ -83,15 +94,15 @@ export async function retireRecipeAction(fd: FormData): Promise<void> {
     const target = await loadDestructiveTarget(actor, 'production_recipe', recipeId, ['manage_recipes']);
     if (!retypeMatches(str(fd, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
   } catch (err) {
-    return await redirectWithFlash(detailPath(recipeId), {}, { error: errorMessage(err) });
+    return await redirectWithFlash(detailPath(recipeId, purposeOf(fd)), {}, { error: errorMessage(err) });
   }
   const r = await attempt(actor.orgId, (tx) => retireRecipe(tx, actor, { recipeId }));
-  return await redirectWithFlash(detailPath(recipeId), {}, r.ok ? { ok: 'Recipe retired.' } : { error: r.error });
+  return await redirectWithFlash(detailPath(recipeId, purposeOf(fd)), {}, r.ok ? { ok: 'Recipe retired.' } : { error: r.error });
 }
 
 export async function restoreRecipeAction(fd: FormData): Promise<void> {
   const actor = await requireActor(RECIPES_PATH);
   const recipeId = str(fd, 'recipeId');
   const r = await attempt(actor.orgId, (tx) => restoreRecipe(tx, actor, { recipeId }));
-  return await redirectWithFlash(detailPath(recipeId), {}, r.ok ? { ok: 'Recipe restored.' } : { error: r.error });
+  return await redirectWithFlash(detailPath(recipeId, purposeOf(fd)), {}, r.ok ? { ok: 'Recipe restored.' } : { error: r.error });
 }

@@ -192,6 +192,18 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/inventory/cookbook/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/cookbook/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/inventory/counts/[id]/page.tsx",
     "tables": 1,
     "sharedTables": 0,
