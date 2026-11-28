@@ -58,7 +58,7 @@ vi.mock('../../src/lib/session', () => ({
   })),
   requireActor: vi.fn(async () => h.current),
 }));
-vi.mock('@/components/shell/Page', () => ({
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: unknown }) => children,
 }));
 vi.mock('@/lib/flash', async (importOriginal) => {

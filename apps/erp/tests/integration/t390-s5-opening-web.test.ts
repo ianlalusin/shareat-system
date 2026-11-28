@@ -39,7 +39,7 @@ vi.mock('../../src/lib/session', () => ({
   requireActor: vi.fn(async () => h.actor),
   requireSession: vi.fn(async () => ({ actor: h.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01') })),
 }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('../../src/app/opening-balances/actions', () => spies);
 
 import { cutoverProgress, CUTOVER_STEPS } from '@shareat/domain';

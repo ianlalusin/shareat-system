@@ -2,8 +2,7 @@ import Link from 'next/link';
 import { requirePageAccess } from '../../../../lib/page-access';
 import { peso } from '../../../../lib/format';
 import { inboundList } from './lib';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, FlashBanner, LinkRow, RowLink } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
@@ -25,18 +24,14 @@ export default async function InboundShipmentsPage({
 
   return (
     <Page density="table" className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div className="min-w-0 flex-1 basis-[16rem]">
-          <h1 className="text-2xl font-semibold">Shipments to receive</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Shipments to receive" description={<>
             Goods another company in your group has sent you. Count what arrived, line by line, and receive it: your stock goes up and the
             amount you owe the sender is recorded in your own books.
-          </PageDescription>
-        </div>
+          </>} actions={
         <Link href="/inventory/deliveries" className={NAV_LINK}>
           ← Deliveries
         </Link>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

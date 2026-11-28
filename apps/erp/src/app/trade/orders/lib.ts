@@ -130,7 +130,7 @@ export async function orderFormData(orgId: string): Promise<OrderFormData> {
       if (listId) quotes[c.id] = await ratesOf(listId);
     }
 
-    // ⚠️ Only the RULED items are priced — `branchPriceFor` is three queries per item, and the
+    // ⚠️ Only the RULED items are priced — `branchPriceFor` is several queries per item (the rule, the production-cost read, the linked and own delivery reads: T-650 S1 added the first), and the
     // catalogue is hundreds of items of which a handful carry a rule.
     const branchPrices: Record<string, string> = {};
     for (const rule of rules) {

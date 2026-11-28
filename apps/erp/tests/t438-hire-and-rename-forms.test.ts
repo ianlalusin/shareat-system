@@ -26,7 +26,7 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/staff/emp-1',
   useSearchParams: () => new URLSearchParams(),
 }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 // Every real export becomes an inert function (the builder's rename action is unknown to this file, so no names are listed).
 vi.mock('../src/app/staff/actions', async (orig) => {
   const actual = await orig<Record<string, unknown>>();

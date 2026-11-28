@@ -26,7 +26,7 @@ vi.mock('../../src/lib/session', () => ({
   requireSession: vi.fn(async () => ({ actor: h.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01') })),
 }));
 vi.mock('../../src/lib/page-access', async (orig) => ({ ...(await orig<object>()), requirePageAccess: async () => ({ actor: h.actor!, refusal: null }) }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 
 import { closeDb } from '@shareat/db';
 import { captureRedirect, outcomeOf, resetJar } from '../helpers/flash-jar';

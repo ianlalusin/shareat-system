@@ -8,6 +8,7 @@ import type { SafeInsert } from './numeric-input';
 import { items } from '../../schema/items';
 import {
   productionRecipeLines,
+  productionRecipeStores,
   productionRecipes,
   productionRecordLines,
   productionRecords,
@@ -79,13 +80,15 @@ export interface RecipeRow {
   readonly name: string;
   readonly outputItemId: string;
   readonly outputQuantity: string;
+  /** T-650 S2: the labour for ONE batch of `outputQuantity`, or null when the recipe carries none. */
+  readonly standardLabourCost: string | null;
   readonly status: ProductionRecipeStatus;
 }
 
 /** T-371 C2 — `outputQuantity` is a `Decimal<'14,3'>` minted by `decimal()`. */
 export type InsertRecipeInput = Required<
   Pick<SafeInsert<typeof productionRecipes>, 'orgId' | 'name' | 'outputItemId' | 'createdBy'>
-> & { outputQuantity: Quantity };
+> & { outputQuantity: Quantity; standardLabourCost?: Money | null };
 
 export async function insertRecipe(tx: Tx, input: InsertRecipeInput): Promise<{ id: string }> {
   const [row] = await tx
@@ -95,6 +98,7 @@ export async function insertRecipe(tx: Tx, input: InsertRecipeInput): Promise<{ 
       name: input.name,
       outputItemId: input.outputItemId,
       outputQuantity: input.outputQuantity,
+      standardLabourCost: input.standardLabourCost ?? null,
       createdBy: input.createdBy,
     })
     .returning({ id: productionRecipes.id });
@@ -132,6 +136,7 @@ export async function getRecipe(tx: Tx, orgId: string, id: string): Promise<Reci
       name: productionRecipes.name,
       outputItemId: productionRecipes.outputItemId,
       outputQuantity: productionRecipes.outputQuantity,
+      standardLabourCost: productionRecipes.standardLabourCost,
       status: productionRecipes.status,
     })
     .from(productionRecipes)
@@ -149,6 +154,7 @@ export async function listRecipes(tx: Tx, orgId: string, includeInactive = false
       name: productionRecipes.name,
       outputItemId: productionRecipes.outputItemId,
       outputQuantity: productionRecipes.outputQuantity,
+      standardLabourCost: productionRecipes.standardLabourCost,
       status: productionRecipes.status,
     })
     .from(productionRecipes)
@@ -186,11 +192,11 @@ export async function updateRecipe(
   tx: Tx,
   orgId: string,
   id: string,
-  patch: { name: string; outputItemId: string; outputQuantity: Quantity },
+  patch: { name: string; outputItemId: string; outputQuantity: Quantity; standardLabourCost: Money | null },
 ): Promise<void> {
   await tx
     .update(productionRecipes)
-    .set({ name: patch.name, outputItemId: patch.outputItemId, outputQuantity: patch.outputQuantity, updatedAt: sql`now()` })
+    .set({ name: patch.name, outputItemId: patch.outputItemId, outputQuantity: patch.outputQuantity, standardLabourCost: patch.standardLabourCost, updatedAt: sql`now()` })
     .where(and(eq(productionRecipes.id, id), eq(productionRecipes.orgId, orgId)));
 }
 
@@ -205,6 +211,45 @@ export async function replaceRecipeLines(
   if (!own) return;
   await tx.delete(productionRecipeLines).where(eq(productionRecipeLines.recipeId, recipeId));
   await insertRecipeLines(tx, recipeId, lines);
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-650 S2 - the stores a product recipe may be made at. No rows = every store.
+// ---------------------------------------------------------------------------------------------
+/** The stores a recipe is limited to, by name (empty = no limit). */
+export async function listRecipeStores(tx: Tx, orgId: string, recipeId: string): Promise<{ storeId: string; storeName: string }[]> {
+  const rows = (await tx.execute(sql`
+    select s.id::text as store_id, s.name as store_name
+    from production_recipe_stores rs join stores s on s.id = rs.store_id
+    where rs.org_id = ${orgId} and rs.recipe_id = ${recipeId}
+    order by s.name, s.id
+  `)) as unknown as { store_id: string; store_name: string }[];
+  return rows.map((r) => ({ storeId: r.store_id, storeName: r.store_name }));
+}
+
+/** Every limited recipe's stores in one read: recipe id -> store ids. A recipe missing from the map has no limit. */
+export async function recipeStoreMap(tx: Tx, orgId: string): Promise<Map<string, string[]>> {
+  const rows = (await tx.execute(sql`
+    select recipe_id::text as recipe_id, store_id::text as store_id from production_recipe_stores where org_id = ${orgId} order by recipe_id, store_id
+  `)) as unknown as { recipe_id: string; store_id: string }[];
+  const out = new Map<string, string[]>();
+  for (const r of rows) out.set(r.recipe_id, [...(out.get(r.recipe_id) ?? []), r.store_id]);
+  return out;
+}
+
+/** Replaces a recipe's store list (delete + insert; the caller's transaction makes it one step). An empty list removes the limit. */
+export async function replaceRecipeStores(tx: Tx, orgId: string, recipeId: string, storeIds: readonly string[]): Promise<void> {
+  await tx.delete(productionRecipeStores).where(and(eq(productionRecipeStores.orgId, orgId), eq(productionRecipeStores.recipeId, recipeId)));
+  const unique = [...new Set(storeIds)];
+  if (unique.length === 0) return;
+  await tx.insert(productionRecipeStores).values(unique.map((storeId) => ({ orgId, recipeId, storeId })));
+}
+
+/** The store names of the org, for the "Only X make Y" sentence and the "Made at" picker's validation. Stores of another org are simply absent. */
+export async function storeNamesIn(tx: Tx, orgId: string, storeIds: readonly string[]): Promise<Map<string, string>> {
+  if (storeIds.length === 0) return new Map();
+  const rows = (await tx.execute(sql`select id::text as id, name from stores where org_id = ${orgId} and id in (${sql.join(storeIds.map((s) => sql`${s}`), sql`, `)})`)) as unknown as { id: string; name: string }[];
+  return new Map(rows.map((r) => [r.id, r.name]));
 }
 
 export async function setRecipeStatus(tx: Tx, orgId: string, id: string, status: ProductionRecipeStatus): Promise<void> {
@@ -456,11 +501,13 @@ export async function bumpProductionRevision(
   id: string,
   newRevision: number,
   journalEntryId: string | null,
+  /** T-650 S1: the labour the new legs were posted with. Stored so the record always says what its journal entry capitalised (an edit used to leave the old figure here). */
+  labourCost?: Money,
 ): Promise<void> {
   await tx
     .update(productionRecords)
     // T-635: an edit changes what was checked, so the confirmation goes (the domain refuses an edit of a PAID record before it gets here).
-    .set({ revision: newRevision, journalEntryId, confirmedByPersonId: null, confirmedAt: null })
+    .set({ revision: newRevision, journalEntryId, confirmedByPersonId: null, confirmedAt: null, ...(labourCost === undefined ? {} : { labourCost }) })
     .where(eq(productionRecords.id, id));
 }
 

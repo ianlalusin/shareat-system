@@ -6,9 +6,8 @@ import { customerCreditBalances, isPositiveQuantity, quantity, subtractQuantity 
 import { recordReturnAction, voidReturnAction } from './actions';
 import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { RETURN_RECORD_RULES, RETURN_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -125,16 +124,14 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
 
   return (
     <Page density="table" className="">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Customer returns</h1>
+      <PageHeader title="Customer returns" description={<>
+        The goods come back, and the customer holds a credit or takes cash. A return from one of our own stores
+        to the commissary is never a credit.
+      </>} actions={
         <Link href="/trade/orders" className="text-sm underline underline-offset-4">
           ← Trade orders
         </Link>
-      </div>
-      <PageDescription className="mt-1">
-        The goods come back, and the customer holds a credit or takes cash. A return from one of our own stores
-        to the commissary is never a credit.
-      </PageDescription>
+      } />
 
       <FlashBanner flash={sp} />
 

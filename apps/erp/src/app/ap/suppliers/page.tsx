@@ -9,8 +9,7 @@ import {
   peso,
   VAT_STATUS_LABEL,
 } from '../lib';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { withFlash } from '@/lib/flash';
 import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, DialogActions } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
@@ -57,14 +56,10 @@ export default async function SuppliersPage({
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 basis-[16rem]">
-          <h1 className="text-2xl font-semibold">Suppliers</h1>
-          <PageDescription>
+      <PageHeader title="Suppliers" description={<>
             Every supplier, across all stores. Each supplier appears once, so one change, one
             reconciliation and one payment cover every store it supplies.
-          </PageDescription>
-        </div>
+          </>} actions={
         <div className="flex items-center gap-3">
           <Link href="/ap" className={NAV_LINK}>← Payables</Link>
           {/* T-448: suppliers change rarely, so adding one is a header action, not a form on the invoices page. */}
@@ -102,7 +97,7 @@ export default async function SuppliersPage({
             </CheckedForm>
           </FormModal>
         </div>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

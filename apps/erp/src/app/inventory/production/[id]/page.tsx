@@ -4,8 +4,7 @@ import { requirePageAccess } from '../../../../lib/page-access';
 import { recordInScope } from '../../../../lib/store-scope';
 import { confirmSlicingAction, postProductionAction, unconfirmSlicingAction, updateSliceDraftAction, voidProductionAction } from '../actions';
 import { productionRecordDetail } from '../lib';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
@@ -34,10 +33,10 @@ export default async function ProductionRecordPage({
   const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess(`/inventory/production/${id}`);
   if (refusal) return refusal;
-  const detail = await productionRecordDetail(actor.orgId, id);
+  const detail = await productionRecordDetail(actor, id);
   if (!detail || !(await recordInScope(actor, `/inventory/production/${id}`, detail.record.storeId))) notFound();
 
-  const { record, locationName, lines, slicerName, confirmedByName, slicers } = detail;
+  const { record, locationName, lines, slicerName, confirmedByName, slicers, labourNote } = detail;
   const isSlice = record.kind === 'slice';
   const inputs = lines.filter((l) => l.direction === 'out');
   const outputs = lines.filter((l) => l.direction === 'in');
@@ -45,18 +44,14 @@ export default async function ProductionRecordPage({
 
   return (
     <Page view="detail" sectioned density="table">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{KIND_LABEL[record.kind] ?? record.kind}</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title={KIND_LABEL[record.kind] ?? record.kind} description={<>
             {formatBusinessDayLong(record.producedOn)} · {locationName} · revision {record.revision} ·{' '}
             <span className="font-medium">{statusLabel(record.status)}</span>
-          </PageDescription>
-        </div>
+          </>} actions={
         <Link href="/inventory/production" className={NAV_LINK}>
           ← Production
         </Link>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
       {warnings.length > 0 && (
@@ -69,6 +64,8 @@ export default async function ProductionRecordPage({
           </ul>
         </Banner>
       )}
+
+      {labourNote && <p className="text-sm">{labourNote}</p>}
 
       <section className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <div>

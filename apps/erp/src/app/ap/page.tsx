@@ -4,8 +4,7 @@ import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { requirePageAccess } from '@/lib/page-access';
 import { recordInvoiceAction } from './actions';
 import { apStoreIds, listSuppliersWithPosition, listInvoicesWithStanding, standingPills, listStores, peso, today } from './lib';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { withFlash } from '@/lib/flash';
 import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, DialogActions } from '@/components/ui';
 import { CheckedForm, RuleCheck } from '@/components/forms';
@@ -59,14 +58,10 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 basis-[16rem]">
-          <h1 className="text-2xl font-semibold">Accounts payable</h1>
-          <PageDescription>
+      <PageHeader title="Accounts payable" description={<>
             An expense, paid in cash or on credit, can only be recorded once its supplier invoice is
             verified here. Verifying <strong>is</strong> the approval.
-          </PageDescription>
-        </div>
+          </>} actions={
         <div className="flex items-center gap-3">
           <Link href="/ap/suppliers" className={NAV_LINK}>Suppliers →</Link>
           {/* T-448: invoices are logged daily, so the form opens from the header instead of sitting under the list. */}
@@ -162,7 +157,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
             </CheckedForm>
           </FormModal>
         </div>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

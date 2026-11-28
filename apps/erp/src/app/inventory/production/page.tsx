@@ -4,13 +4,12 @@ import { storePageScope } from '../../../lib/store-scope';
 import { saveProductionDraftAction } from './actions';
 import { productionScreenData } from './lib';
 import { cookbookShortcut } from './recipes/lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { ActionIcon } from '@/components/ui/action-icons';
 import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_PRODUCTION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { FILTER_CHIP, FILTER_CHIP_ON, NAV_LINK } from '@/components/action-link';
 
@@ -67,13 +66,9 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
 
   return (
     <Page density="table" className="space-y-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Production</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Production" description={<>
             A slicing run or prep batch takes the inputs out of stock and puts the outputs in. A floor worker records it; a manager posts it.
-          </PageDescription>
-        </div>
+          </>} actions={
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <Link href={`/inventory?store=${storeId}`} className={NAV_LINK}>
             ← Stock on hand
@@ -82,7 +77,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
             Slicer pay
           </Link>
         </div>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 
@@ -150,7 +145,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               <Field label={<span className="text-neutral-600 dark:text-neutral-400">Date</span>} className="text-sm" rule={INVENTORY_PRODUCTION_RULES.producedOn}>
                 <Input type="date" {...nativeAttrs(INVENTORY_PRODUCTION_RULES.producedOn)} defaultValue={toBusinessDate()} className="w-full" />
               </Field>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Labour cost (optional)</span>} className="text-sm">
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Labour cost (optional)</span>} className="text-sm" hint={kind === 'slice' ? 'Leave blank: slicing labour fills from the slicer rate (kg × rate per kg). A figure you type wins.' : kind === 'cook' ? "Leave blank: a cook takes its recipe's labour per batch, scaled to the quantity made. A figure you type wins." : undefined}>
                 <Input type="text" name="labourCost" inputMode="decimal" placeholder="0.00" className="w-full" />
               </Field>
             </FormGrid>

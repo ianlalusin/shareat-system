@@ -58,6 +58,11 @@ export const INVENTORY_PRODUCTION_RULES = defineFieldRules('inventory.createProd
   producedOn: { label: 'The production date', kind: 'date' },
 });
 
+/** T-650 S2: a product recipe's save form (new and edit). Labour per batch is optional (blank = none), never negative. The other boxes are the recipe's own shape checks. */
+export const INVENTORY_RECIPE_RULES = defineFieldRules('production.recipe', {
+  standardLabourCost: { label: 'Labour per batch', optional: true, kind: 'money', min: 0 },
+});
+
 /** Void a production record. */
 export const INVENTORY_PRODUCTION_VOID_RULES = defineFieldRules('inventory.voidProduction', {
   reason: { label: 'The reason', kind: 'text', requires: 'A void needs a reason.' },

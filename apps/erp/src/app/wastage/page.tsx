@@ -10,10 +10,9 @@ import { withOrgPrincipal } from '../expenses/lib';
 import { recordOrderWastageAction } from './actions';
 import { WASTAGE_RECORD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, Banner, Button, DialogActions, FlashBanner, FormGrid, Field, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Order wastage — Shareat System' };
@@ -92,13 +91,9 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Order wastage</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Order wastage" description={<>
             Orders that were refunded or remade. This records the money lost, not stock. Wasted stock is recorded under Inventory.
-          </PageDescription>
-        </div>
+          </>} actions={
         <FormModal trigger="+ Record wastage" title="Record a wastage" size="lg">
         <CheckedForm rules={WASTAGE_RECORD_RULES} action={recordOrderWastageAction} className="space-y-3 text-sm">
           <input type="hidden" name="storeId" value={storeId} />
@@ -190,7 +185,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
           </DialogActions>
         </CheckedForm>
         </FormModal>
-      </div>
+      } />
 
       <FilterRow>
         <label className="text-sm">

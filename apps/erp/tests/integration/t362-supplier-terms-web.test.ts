@@ -51,7 +51,7 @@ vi.mock('../../src/lib/session', () => ({
   requireSession: vi.fn(async () => SESSION_HOLDER.session),
 }));
 
-vi.mock('@/components/shell/Page', () => ({
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: unknown }) => children,
 }));
 // Only W10/W11 render the invoice detail page, which mounts <MoneyLines> — forwarded to the real

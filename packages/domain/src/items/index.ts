@@ -1625,12 +1625,12 @@ export async function branchPriceFor(
   tx: Tx,
   orgId: string,
   itemId: string,
-): Promise<(BranchPrice & { basisFrom: 'own' | 'linked' }) | undefined> {
+): Promise<(BranchPrice & { basisFrom: 'own' | 'linked' | 'produced'; basisProducedOn?: string; basisStoreName?: string }) | undefined> {
   const rule = await itemsRepo.getItemPricing(tx, orgId, itemId);
   if (!rule) return undefined;
   const basis = await itemsRepo.costBasisFor(tx, orgId, itemId);
   // A fixed price needs no basis at all - it is a number somebody chose.
   if (!basis && rule.pricingMode !== 'fixed') return undefined;
   const computed = computeBranchPrice(rule, basis?.basis ?? '0');
-  return { ...computed, basisFrom: basis?.basisFrom ?? 'own' };
+  return { ...computed, basisFrom: basis?.basisFrom ?? 'own', basisProducedOn: basis?.producedOn, basisStoreName: basis?.storeName };
 }

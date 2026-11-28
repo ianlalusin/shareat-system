@@ -1382,7 +1382,32 @@ async function lastTwoLandedMax(tx: Tx, orgId: string, itemId: string): Promise<
 }
 
 /**
- * The cost basis for a branch price: max of the LAST TWO landed receives - v1's rule, verbatim.
+ * T-650 S1. The unit cost an item was last MADE at: the unit cost on the output stock layer of its most recent posted slice or cook record, any store.
+ * A `convert` only re-counts, so it is never read; a voided record (status 'void', its lines reversed) and a reversed output line (an edit's old leg) are not read;
+ * a layer at zero cost (a production with no input value) is skipped, never used - the next most recent costed one is. Most recent = produced date, then created_at, then id.
+ */
+export async function lastProductionUnitCost(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+): Promise<{ unitCost: string; producedOn: string; storeName: string } | undefined> {
+  const [row] = (await tx.execute(sql`
+    select sl.unit_cost::text as unit_cost, pr.produced_on::text as produced_on, st.name as store_name
+    from production_record_lines prl
+    join production_records pr on pr.id = prl.record_id
+    join stock_layers sl on sl.movement_id = prl.movement_id and sl.org_id = pr.org_id
+    join stores st on st.id = pr.store_id
+    where pr.org_id = ${orgId} and prl.item_id = ${itemId} and prl.direction = 'in' and prl.reversed_at is null
+      and pr.status = 'posted' and pr.kind in ('slice', 'cook') and sl.unit_cost > 0
+    order by pr.produced_on desc, pr.created_at desc, pr.id desc
+    limit 1
+  `)) as unknown as Record<string, string>[];
+  return row ? { unitCost: String(row.unit_cost), producedOn: String(row.produced_on), storeName: String(row.store_name) } : undefined;
+}
+
+/**
+ * The cost basis for a branch price. T-650 S1 order: (1) what the item was last MADE at (a sliced or cooked item has no delivery price of its own), then
+ * (2) its linked cost-basis item's deliveries, then (3) its own deliveries. A delivered item is unchanged: max of the LAST TWO landed receives - v1's rule, verbatim.
  *
  * v1: "so a single low-cost lot can't drop the branch price below what an earlier expensive lot
  * still in inventory cost" (ERP-rebuild/src/lib/financial/commissary/pricing.ts).
@@ -1391,15 +1416,22 @@ async function lastTwoLandedMax(tx: Tx, orgId: string, itemId: string): Promise<
  * cosmetic: v1's stored lastReceivedCost could be poisoned by one bad delivery line and, because
  * the rule is max(prior, new), the poison was sticky and survived correcting the delivery.
  */
+export type CostBasis =
+  | { basis: string; basisFrom: 'own' | 'linked'; producedOn?: undefined; storeName?: undefined }
+  | { basis: string; basisFrom: 'produced'; producedOn: string; storeName: string };
+
 export async function costBasisFor(
   tx: Tx,
   orgId: string,
   itemId: string,
-): Promise<{ basis: string; basisFrom: 'own' | 'linked' } | undefined> {
+): Promise<CostBasis | undefined> {
   const [item] = (await tx.execute(sql`
     select cost_basis_item_id from items where id = ${itemId} and org_id = ${orgId}
   `)) as unknown as Record<string, string | null>[];
   if (!item) return undefined;
+
+  const made = await lastProductionUnitCost(tx, orgId, itemId);
+  if (made) return { basis: made.unitCost, basisFrom: 'produced', producedOn: made.producedOn, storeName: made.storeName };
 
   const linkedId = item.cost_basis_item_id;
   if (linkedId) {

@@ -2,13 +2,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { convertUnit, quantity } from '@shareat/domain';
 import { requirePageAccess } from '../../../../../lib/page-access';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { editRecipeAction, restoreRecipeAction, retireRecipeAction } from '../actions';
 import { RECIPES_PATH, canManageRecipes, fmtQty, recipeDetail, recipeItemOptions, type RecipeItemOption } from '../lib';
 import { RecipeFields, type FormLine } from '../recipe-form';
+import { listStores } from '../../lib';
 
 export const metadata = { title: 'Recipe - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -53,21 +53,18 @@ export default async function RecipePage({
     ].filter((i) => !known.has(i.id));
     items = [...items, ...extra.filter((e, i) => extra.findIndex((x) => x.id === e.id) === i)];
   }
+  const stores = canManage ? await listStores(actor.orgId) : [];
   const retired = recipe.status !== 'active';
 
   return (
     <Page view="detail" sectioned density="table" className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{recipe.name}</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title={recipe.name} description={<>
             {`Makes ${fmtQty(recipe.outputQuantity)} ${recipe.outputUnit} of ${recipe.outputName}`} <Badge status={recipe.status} />
-          </PageDescription>
-        </div>
+          </>} actions={
         <Link href={RECIPES_PATH} className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">
           ← Recipes
         </Link>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 
@@ -89,6 +86,9 @@ export default async function RecipePage({
               outputUnit={recipe.outputUnit}
               lines={formLines}
               blankRows={SPARE_ROWS}
+              stores={stores}
+              storeIds={recipe.storeIds}
+              standardLabourCost={recipe.standardLabourCost ?? ''}
             />
             <Button type="submit" variant="primary">
               Save recipe
