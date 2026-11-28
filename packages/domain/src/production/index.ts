@@ -52,7 +52,7 @@ import {
   type Quantity,
 } from '../stock/quantity';
 import { convertUnit, divideRoundHalfUp, unitConversionFactor } from './unit-conversion';
-import { slicerRefusal } from './slicer-pay';
+import { slicerRefusal, sliceLabourFor } from './slicer-pay';
 import {
   computeValueIdentity,
   PRODUCTION_QTY_EPS,
@@ -126,7 +126,7 @@ export interface CreateProductionDraftInput {
 // ⚠️ Named `ProductionDraftOutcome`, not `DraftOutcome` — `stock/usage-records.ts` already
 // exports a `DraftOutcome` and the domain barrel is `export *`; a same-named type here would be
 // a duplicate-export compile error, not a shadow.
-export type ProductionDraftOutcome = { readonly ok: true; readonly recordId: string } | { readonly ok: false; readonly reason: string };
+export type ProductionDraftOutcome = { readonly ok: true; readonly recordId: string; /** T-650 S1: why a blank slicing labour box stayed 0 (no rate in force, a unit that is not kg or g). */ readonly labourNote?: string } | { readonly ok: false; readonly reason: string };
 
 export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateProductionDraftInput): Promise<ProductionDraftOutcome> {
   await authorize(tx, actor, 'record_stock_movement', { storeId: input.storeId });
@@ -173,6 +173,21 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
     return { ok: false, reason: 'Only a slicing record has paid and unpaid lines.' };
   }
 
+  // T-650 S1: a slice record with the labour box left BLANK takes the slicer pay computeRecordPay works out for it; a typed figure wins; no rate -> stays 0 and says why.
+  let labour = parsedLabour;
+  let labourNote: string | undefined;
+  if (input.kind === 'slice' && parsedLabour === undefined) {
+    const names = await resolveItems(tx, input.orgId, outputs.map((l) => l.itemId));
+    const auto = await sliceLabourFor(
+      tx,
+      input.orgId,
+      input.producedOn,
+      outputs.map((l, i) => ({ itemId: l.itemId, itemName: names.get(l.itemId)?.name ?? 'This item', quantity: String(l.quantity), unit: l.unit, isPaid: input.outputs[i]?.isPaid })),
+    );
+    if (auto.ok) labour = auto.pay;
+    else labourNote = auto.reason;
+  }
+
   const { id: recordId } = await productionRepo.insertProductionRecord(tx, {
     orgId: input.orgId,
     storeId: input.storeId,
@@ -181,7 +196,7 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
     recipeId: input.recipeId ?? null,
     producedOn: input.producedOn,
     // T-371 R13: a blank labour cost is OMITTED, so the column's own DEFAULT applies.
-    labourCost: parsedLabour,
+    labourCost: labour,
     createdBy: actor.personId,
     performedByPersonId: input.kind === 'slice' ? (input.performedByPersonId ?? null) : null,
   });
@@ -191,7 +206,7 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
     ...outputs.map((l) => ({ direction: 'in' as const, itemId: l.itemId, quantity: l.quantity, unit: l.unit, isPaid: l.isPaid ?? true })),
   ]);
 
-  return { ok: true, recordId };
+  return { ok: true, recordId, ...(labourNote === undefined ? {} : { labourNote }) };
 }
 
 const COOK_INGREDIENTS_MISMATCH_PREFIX = 'The ingredients on this cook record do not match';
@@ -755,6 +770,8 @@ export async function postProduction(tx: Tx, actor: Actor, input: { recordId: st
     if (refusal) return { ok: false, reason: refusal };
   }
 
+  // T-650 S1: the labour figure was fixed when the draft was saved (blank -> slicer pay; typed -> as typed). Post never re-decides it, so a TYPED 0.00 stays 0.00.
+  const postLabour = money(record.labourCost);
   const result = await runProductionPosting(tx, {
     orgId: record.orgId,
     storeId: record.storeId,
@@ -763,7 +780,7 @@ export async function postProduction(tx: Tx, actor: Actor, input: { recordId: st
     recordId: record.id,
     producedOn: record.producedOn,
     // T-371 R4: a database value that is re-written is re-minted, never cast.
-    labourCost: money(record.labourCost),
+    labourCost: postLabour,
     inputs,
     outputs,
     postedBy: actor.personId,
@@ -821,7 +838,7 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
   // T-371 R5/R6: parsed AFTER authorize() and BEFORE any leg is reversed or written. A blank labour cost leaves it
   // unchanged (the column has a default); the stored value is re-minted, never cast (R4).
   const editLabour = parseDecimalInput(input.labourCost, '14,2', 'editPostedProduction.labourCost', 'Labour cost', { blank: 'omit' });
-  const labourCost = editLabour ?? money(record.labourCost);
+  let labourCost = editLabour ?? money(record.labourCost);
   let editInputs = parseDraftLines(input.inputs, 'editPostedProduction.inputs', 'Input line');
   const editOutputs = parseDraftLines(input.outputs, 'editPostedProduction.outputs', 'Output line');
 
@@ -924,6 +941,19 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
   const inputs = editInputs.map((l, i) => ({ lineRowId: newInputRows[i]!.id, itemId: l.itemId, quantity: l.quantity, unit: l.unit }));
   const outputs = editOutputs.map((l, i) => ({ lineRowId: newOutputRows[i]!.id, itemId: l.itemId, quantity: l.quantity, unit: l.unit }));
 
+  // T-650 S1: an edit with the labour box blank keeps the stored figure, EXCEPT when that figure was the automatic one (it equals the slicer pay of the OLD lines): then it follows the new lines. A typed figure, before or now, is never touched. (No flag is stored: equality with the recomputed old figure is the test.)
+  if (record.kind === 'slice' && editLabour === undefined) {
+    const names = await resolveItems(tx, record.orgId, [...oldLines, ...newOutputRows].map((l) => l.itemId));
+    const asLine = (l: { itemId: string; quantity: string; unit: string; isPaid: boolean }) => ({ itemId: l.itemId, itemName: names.get(l.itemId)?.name ?? 'This item', quantity: l.quantity, unit: l.unit, isPaid: l.isPaid });
+    const stored = money(record.labourCost);
+    const before = await sliceLabourFor(tx, record.orgId, record.producedOn, oldLines.filter((l) => l.direction === 'in').map(asLine));
+    const wasAuto = before.ok && compare(before.pay, stored) === 0;
+    if (wasAuto) {
+      const after = await sliceLabourFor(tx, record.orgId, record.producedOn, newOutputRows.map(asLine));
+      if (after.ok) labourCost = after.pay;
+    }
+  }
+
   const result = await runProductionPosting(tx, {
     orgId: record.orgId, storeId: record.storeId, locationId: record.locationId, kind: record.kind,
     recordId: record.id, producedOn: record.producedOn,
@@ -938,7 +968,7 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
     await productionRepo.setLineMovement(tx, newOutputRows[i]!.id, result.outputMovements[i]!.movementId);
   }
 
-  await productionRepo.bumpProductionRevision(tx, record.id, newRevision, result.journalEntryId);
+  await productionRepo.bumpProductionRevision(tx, record.id, newRevision, result.journalEntryId, labourCost);
   if (record.kind === 'slice' && input.performedByPersonId) await productionRepo.setPerformedBy(tx, record.id, input.performedByPersonId);
 
   return { ok: true, revision: newRevision, journalEntryId: result.journalEntryId };

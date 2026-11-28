@@ -27,7 +27,7 @@ import { parseMoneyInput } from '../shared/money-input';
 import { humanDate } from '../shared/refusal-leaf';
 import { refuse } from '../shared/refusal';
 import { fromThousandths, toThousandths, type Quantity } from '../stock/quantity';
-import { computeRecordPay, type SlicerPayLine } from './slicer-pay-math';
+import { computeRecordPay, slicerRateInForce, type SlicerPayLine } from './slicer-pay-math';
 
 export * from './slicer-pay-math';
 
@@ -295,4 +295,32 @@ export async function slicerPayOverview(tx: Tx, actor: Actor, input: { storeId: 
 export async function listSlicerPayRatesFor(tx: Tx, actor: Actor, input: { storeId: string }) {
   await authorize(tx, actor, 'run_payroll', { storeId: input.storeId });
   return productionRepo.listSlicerPayRates(tx, actor.orgId);
+}
+
+// -------------------------------------------------------------------------------------------------
+// T-650 S1: slicing labour fills itself. A slice record whose labour box is left BLANK takes the pay `computeRecordPay` works out for it (the same rate in force
+// on the produced date, the same kg/g rule, only the PAID output lines). A typed figure always wins; with no rate (or a unit that is not kg/g) labour stays 0 and
+// the reason is shown. Payroll is untouched: labour is still expensed once, by the payslip (see the top of this file).
+// -------------------------------------------------------------------------------------------------
+export interface SliceLabourLine {
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly quantity: string;
+  readonly unit: string;
+  /** Default true. */
+  readonly isPaid?: boolean;
+}
+
+export type SliceLabour =
+  | { readonly ok: true; readonly pay: Money; readonly kg: Quantity; /** The one per-kg rate every paid line used, or null when lines used different rates / there were none. */ readonly rate: string | null }
+  | { readonly ok: false; readonly reason: string };
+
+export async function sliceLabourFor(tx: Tx, orgId: string, producedOn: string, outputs: readonly SliceLabourLine[]): Promise<SliceLabour> {
+  const paid = outputs.filter((l) => l.isPaid !== false);
+  const rates = await productionRepo.listSlicerPayRates(tx, orgId);
+  const priced = computeRecordPay(producedOn, paid, rates);
+  if (!priced.ok) return priced;
+  const used = new Set(paid.map((l) => slicerRateInForce(rates, l.itemId, producedOn)));
+  const only = used.size === 1 ? ([...used][0] ?? null) : null;
+  return { ok: true, pay: priced.pay, kg: priced.kg, rate: only };
 }

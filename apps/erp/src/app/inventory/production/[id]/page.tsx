@@ -37,7 +37,7 @@ export default async function ProductionRecordPage({
   const detail = await productionRecordDetail(actor.orgId, id);
   if (!detail || !(await recordInScope(actor, `/inventory/production/${id}`, detail.record.storeId))) notFound();
 
-  const { record, locationName, lines, slicerName, confirmedByName, slicers } = detail;
+  const { record, locationName, lines, slicerName, confirmedByName, slicers, labourNote } = detail;
   const isSlice = record.kind === 'slice';
   const inputs = lines.filter((l) => l.direction === 'out');
   const outputs = lines.filter((l) => l.direction === 'in');
@@ -69,6 +69,8 @@ export default async function ProductionRecordPage({
           </ul>
         </Banner>
       )}
+
+      {labourNote && <p className="text-sm">{labourNote}</p>}
 
       <section className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <div>

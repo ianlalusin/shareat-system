@@ -4,6 +4,8 @@
  * Every rule lives in `packages/domain/src/production`; this file only reads.
  */
 import { itemsRepo, productionRepo, stockUsageRepo } from '@shareat/db';
+import { sliceLabourFor } from '@shareat/domain';
+import { peso } from '../../../lib/format';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
 export { listStores, withOrgPrincipal };
@@ -26,6 +28,16 @@ export interface ProductionScreenData {
   readonly records: Awaited<ReturnType<typeof productionRepo.listProductionRecords>>;
   /** T-635: the people who hold the Slicer position at this store today, for the "who sliced" picker. */
   readonly slicers: { personId: string; personName: string }[];
+}
+
+/** "Labour: ₱84.00 from the slicer rate, 12 kg × ₱7.00" - or why it is 0, or that it was typed. */
+export function sliceLabourSentence(stored: string, status: string, auto: Awaited<ReturnType<typeof sliceLabourFor>>): string {
+  const isZero = /^0+([.]0+)?$/.test(stored);
+  const how = (a: Extract<typeof auto, { ok: true }>) => `${a.kg} kg${a.rate === null ? ' at the slicer rates' : ` × ${peso(a.rate)}`}`;
+  if (auto.ok && stored === auto.pay) return `Labour: ${peso(stored)} from the slicer rate, ${how(auto)}`;
+  if (isZero && auto.ok) return status === 'draft' ? `Labour: ₱0.00. The slicer rate would give ${peso(auto.pay)} (${how(auto)}): leave the box blank when you record it to use that.` : 'Labour: ₱0.00';
+  if (isZero) return `Labour: ₱0.00. ${auto.ok ? '' : auto.reason}`;
+  return `Labour: ${peso(stored)} as typed`;
 }
 
 /** Everything the register + "New record" form needs, in one org-scoped transaction. */
@@ -79,6 +91,8 @@ export interface ProductionRecordDetail {
   readonly slicerName: string | null;
   readonly confirmedByName: string | null;
   readonly slicers: { personId: string; personName: string }[];
+  /** T-650 S1: one sentence on where a slice record's labour figure comes from (null for a cook / convert). */
+  readonly labourNote: string | null;
 }
 
 export async function productionRecordDetail(orgId: string, id: string): Promise<ProductionRecordDetail | null> {
@@ -111,8 +125,18 @@ export async function productionRecordDetail(orgId: string, id: string): Promise
       };
     });
 
+    const outputsForLabour = rows.filter((r) => r.direction === 'in' && r.reversedAt === null && r.revision === record.revision);
+    const labourNote =
+      record.kind === 'slice' && record.status !== 'void'
+        ? sliceLabourSentence(
+            record.labourCost,
+            record.status,
+            await sliceLabourFor(tx, orgId, record.producedOn, outputsForLabour.map((r) => ({ itemId: r.itemId, itemName: itemsById.get(r.itemId)?.name ?? 'This item', quantity: r.quantity, unit: r.unit, isPaid: r.isPaid }))),
+          )
+        : null;
     return {
       record,
+      labourNote,
       locationName,
       lines,
       slicerName: record.performedByPersonId ? (names.get(record.performedByPersonId) ?? null) : null,

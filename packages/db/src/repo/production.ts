@@ -456,11 +456,13 @@ export async function bumpProductionRevision(
   id: string,
   newRevision: number,
   journalEntryId: string | null,
+  /** T-650 S1: the labour the new legs were posted with. Stored so the record always says what its journal entry capitalised (an edit used to leave the old figure here). */
+  labourCost?: Money,
 ): Promise<void> {
   await tx
     .update(productionRecords)
     // T-635: an edit changes what was checked, so the confirmation goes (the domain refuses an edit of a PAID record before it gets here).
-    .set({ revision: newRevision, journalEntryId, confirmedByPersonId: null, confirmedAt: null })
+    .set({ revision: newRevision, journalEntryId, confirmedByPersonId: null, confirmedAt: null, ...(labourCost === undefined ? {} : { labourCost }) })
     .where(eq(productionRecords.id, id));
 }
 

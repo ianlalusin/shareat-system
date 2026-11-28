@@ -20,6 +20,19 @@ export interface PriceToStoresWords {
   alert: string | null;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** '2026-11-27' -> '27 Nov' (plain text, no time zone involved: it is a business day). */
+function shortDay(iso: string): string {
+  const [, m, d] = iso.split('-');
+  return `${Number(d)} ${MONTHS[Number(m) - 1] ?? ''}`;
+}
+
+/** T-650 S1: where the cost came from, in words - "last production (27 Nov, Lipa)", "slab delivery", "last delivery". */
+export function basisWords(v: Pick<PriceToStores, 'basisFrom' | 'basisProducedOn' | 'basisStoreName'>): string {
+  if (v.basisFrom === 'produced') return `last production (${v.basisProducedOn ? shortDay(v.basisProducedOn) : 'date unknown'}, ${v.basisStoreName ?? 'a store'})`;
+  return v.basisFrom === 'linked' ? 'slab delivery' : 'last delivery';
+}
+
 export function priceToStoresWords(v: PriceToStores): PriceToStoresWords {
   if (v.price === null) {
     return {
@@ -40,7 +53,7 @@ export function priceToStoresWords(v: PriceToStores): PriceToStoresWords {
   let how = headline;
   if (rule?.pricingMode === 'fixed') how = `${headline} fixed`;
   else if (rule && v.basis !== null) {
-    const base = `${v.basisFrom === 'linked' ? 'slab' : 'last'} delivery ${peso(v.basis)}`;
+    const base = `${basisWords(v)} ${peso(v.basis)}`;
     how =
       rule.pricingMode === 'fixed_markup'
         ? `${headline} = ${base} + ${peso(rule.fixedMarkupAmount ?? '0')}`

@@ -231,7 +231,10 @@ export interface PriceToStores {
   /** The item's rule (null: none set), the cost it works from, and where that cost came from. */
   rule: Awaited<ReturnType<typeof itemsRepo.getItemPricing>> | null;
   basis: string | null;
-  basisFrom: 'own' | 'linked' | null;
+  basisFrom: 'own' | 'linked' | 'produced' | null;
+  /** T-650: when basisFrom is 'produced', the day and store of the production the cost came from. */
+  basisProducedOn?: string | null;
+  basisStoreName?: string | null;
   /** The margin alert fires on the price shown (never for a manual-cost price: there is no rule margin to judge). */
   marginAlert: boolean;
 }
@@ -250,6 +253,8 @@ export async function priceToStores(
     rule,
     basis: bp ? bp.basis : null,
     basisFrom: bp ? bp.basisFrom : null,
+    basisProducedOn: bp?.basisProducedOn ?? null,
+    basisStoreName: bp?.basisStoreName ?? null,
     marginAlert: resolved?.from === 'branch_price' && bp?.marginAlert === true,
   };
 }
