@@ -17,29 +17,23 @@ import { audit, inTx } from './shared';
 
 const STALE = 'The list changed since you opened it. Reload and try again.';
 
-async function reorder(
-  trx: Tx,
-  actor: Actor,
-  list: menuRepo.OrderList,
-  ids: readonly string[],
-  action: string,
-  entityId: string,
-): Promise<{ changed: boolean }> {
+/** Checks the ids are exactly the list, writes 10, 20, 30... Returns the id order before, or null when nothing changed (nothing to audit). */
+async function reorder(trx: Tx, list: menuRepo.OrderList, ids: readonly string[], what: string): Promise<string[] | null> {
   const rows = await menuRepo.orderedRows(trx, list, true);
   const wanted = new Set(ids);
   if (!Array.isArray(ids) || wanted.size !== ids.length || ids.length !== rows.length || !rows.every((r) => wanted.has(r.id))) {
-    throw refuse(`${action}: the ids are not exactly the ${rows.length} active rows of this list.`, STALE);
+    throw refuse(`${what}: the ids are not exactly the ${rows.length} active rows of this list.`, STALE);
   }
   const written = await menuRepo.setSortOrders(trx, list, ids, MENU_ORDER_STEP);
-  if (written === 0) return { changed: false };
-  await audit(trx, actor, action, null, entityId, { order: rows.map((r) => r.id) }, { order: [...ids] });
-  return { changed: true };
+  return written === 0 ? null : rows.map((r) => r.id);
 }
 
 export async function reorderMenuCategories(actor: Actor, input: { ids: string[] }, tx?: Tx): Promise<{ changed: boolean }> {
   return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
-    return reorder(trx, actor, { kind: 'categories', orgId: actor.orgId }, input.ids, 'menu.categories_reordered', actor.orgId);
+    const before = await reorder(trx, { kind: 'categories', orgId: actor.orgId }, input.ids, 'reorderMenuCategories');
+    if (before) await audit(trx, actor, 'menu.categories_reordered', null, actor.orgId, { order: before }, { order: input.ids });
+    return { changed: before !== null };
   });
 }
 
@@ -47,7 +41,9 @@ export async function reorderMenuItems(actor: Actor, input: { categoryId: string
   return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     if (!(await menuRepo.getCategory(trx, actor.orgId, input.categoryId))) throw gone(`reorderMenuItems: category ${input.categoryId} does not exist.`, 'category');
-    return reorder(trx, actor, { kind: 'items', orgId: actor.orgId, categoryId: input.categoryId }, input.ids, 'menu.items_reordered', input.categoryId);
+    const before = await reorder(trx, { kind: 'items', orgId: actor.orgId, categoryId: input.categoryId }, input.ids, 'reorderMenuItems');
+    if (before) await audit(trx, actor, 'menu.items_reordered', null, input.categoryId, { order: before }, { order: input.ids });
+    return { changed: before !== null };
   });
 }
 
@@ -56,7 +52,9 @@ export async function reorderMenuVariants(actor: Actor, input: { menuItemId: str
   return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     if (!(await menuRepo.getItem(trx, actor.orgId, input.menuItemId))) throw gone(`reorderMenuVariants: item ${input.menuItemId} does not exist.`, 'menu item');
-    return reorder(trx, actor, { kind: 'variants', orgId: actor.orgId, menuItemId: input.menuItemId }, input.ids, 'menu.variants_reordered', input.menuItemId);
+    const before = await reorder(trx, { kind: 'variants', orgId: actor.orgId, menuItemId: input.menuItemId }, input.ids, 'reorderMenuVariants');
+    if (before) await audit(trx, actor, 'menu.variants_reordered', null, input.menuItemId, { order: before }, { order: input.ids });
+    return { changed: before !== null };
   });
 }
 
@@ -66,6 +64,8 @@ export async function reorderMenuOptionValues(actor: Actor, input: { optionGroup
     if (!(await menuRepo.getOptionGroup(trx, actor.orgId, input.optionGroupId))) {
       throw gone(`reorderMenuOptionValues: option group ${input.optionGroupId} does not exist.`, 'option group');
     }
-    return reorder(trx, actor, { kind: 'optionValues', orgId: actor.orgId, optionGroupId: input.optionGroupId }, input.ids, 'menu.option_values_reordered', input.optionGroupId);
+    const before = await reorder(trx, { kind: 'optionValues', orgId: actor.orgId, optionGroupId: input.optionGroupId }, input.ids, 'reorderMenuOptionValues');
+    if (before) await audit(trx, actor, 'menu.option_values_reordered', null, input.optionGroupId, { order: before }, { order: input.ids });
+    return { changed: before !== null };
   });
 }
