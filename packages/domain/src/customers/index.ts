@@ -17,11 +17,10 @@ import { auditLogRepo, customersRepo, itemsRepo, type Tx } from '@shareat/db';
 import type { CustomerGroup, CustomerTreatment, PricingMode } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { gone, refuse } from '../shared/refusal';
-import { parseMoneyInput } from '../shared/money-input';
+import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { CUSTOMER_ADD_RULES, CUSTOMER_RECONCILE_RULES, PRICE_LIST_ADD_RULES, PRICE_SET_RULES } from '../field-rules/customers';
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
-import { parseDecimalInput } from '../shared/money-input';
 
 export { treatmentOf } from '@shareat/db';
 export * from './quote';
