@@ -919,6 +919,21 @@ export async function rulesInForce(tx: Tx, orgId: string, variantIds: readonly s
   return out;
 }
 
+/**
+ * T-648: active variants of active package and refill items whose rule in force now is missing or is not `no_stock`.
+ * One definition, read by both the /menu count and `setNoStockForPackagesAndRefills`.
+ */
+export async function packageRefillVariantsNeedingNoStock(tx: Tx, orgId: string): Promise<{ variantId: string; itemName: string }[]> {
+  const rows = await tx
+    .select({ variantId: menuItemVariants.id, itemName: menuItems.name })
+    .from(menuItemVariants)
+    .innerJoin(menuItems, eq(menuItems.id, menuItemVariants.menuItemId))
+    .where(and(eq(menuItemVariants.orgId, orgId), eq(menuItemVariants.status, 'active'), eq(menuItems.status, 'active'), inArray(menuItems.itemType, ['package', 'refill'])))
+    .orderBy(asc(menuItems.name), asc(menuItemVariants.id));
+  const inForce = await rulesInForce(tx, orgId, rows.map((r) => r.variantId));
+  return rows.filter((r) => inForce.get(r.variantId)?.mode !== 'no_stock');
+}
+
 /** Locks the variant row (the seed's pre-check lock) and returns it. */
 export async function getVariantForUpdate(tx: Tx, orgId: string, id: string): Promise<MenuVariantRow | undefined> {
   const [row] = await tx
