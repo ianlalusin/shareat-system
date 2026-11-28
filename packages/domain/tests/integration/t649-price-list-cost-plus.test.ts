@@ -212,6 +212,19 @@ describe('the one resolver: which list, which rule, which number', () => {
     expect((await why(f, onWholesale.id, stray)).reason).toBe('not_on_list');
   });
 
+  it('rounds half-up at the centavo through the resolver (mutant: floor or banker rounding -> 10.60)', async () => {
+    const { f, wholesale, set } = await world();
+    const a = await wholesaleItem(f, 'Round33');
+    const b = await wholesaleItem(f, 'RoundHalf');
+    await landCost(f, a, '33.33');
+    await landCost(f, b, '10.50');
+    await set(wholesale.id, a, { mode: 'percent_markup', markupPercent: '7' }); // 33.33 x 1.07 = 35.6631
+    await set(wholesale.id, b, { mode: 'percent_markup', markupPercent: '1' }); // 10.50 x 1.01 = 10.605 exactly: half-up is 10.61
+    const c = await newCustomer(f, wholesale.id);
+    expect((await quote(f, c.id, a))!.rate).toBe('35.66');
+    expect((await quote(f, c.id, b))!.rate).toBe('10.61');
+  });
+
   it('a markup on an item with no delivery cost yet has no quote, and says why', async () => {
     const { f, wholesale, set } = await world();
     const fresh = await wholesaleItem(f, 'Fresh');
@@ -263,6 +276,17 @@ describe('setPrice: one price per item, the mode decides which figure is kept', 
     expect(counted!.count).toBe('0');
   });
 
+  it('a person who may not edit price lists is refused a markup rate and nothing is written', async () => {
+    const f = await fixture('staffrate');
+    const list = await newList(f);
+    const item = await wholesaleItem(f, 'Staffed');
+    await expect(
+      asOrg(f.orgId, (tx) => setPrice(tx, f.staff, { priceListId: list.id, itemId: item, mode: 'percent_markup', markupPercent: '7' })),
+    ).rejects.toThrow();
+    const [counted] = await sql<{ count: string }[]>`select count(*)::text as count from price_list_items where org_id = ${f.orgId}`;
+    expect(counted!.count).toBe('0');
+  });
+
   it('a stray figure from another mode is ignored, not stored', async () => {
     const f = await fixture('stray');
     const list = await newList(f);
@@ -308,6 +332,23 @@ describe('the default list', () => {
     await sql`update price_lists set retired_at = now() where id = ${a.id}`;
     expect(await sentence(asOrg(f.orgId, (tx) => setDefaultPriceList(tx, f.admin, { priceListId: a.id })))).toMatch(/is retired, so it cannot be the default list/);
     expect(await asOrg(f.orgId, (tx) => customersRepo.getDefaultPriceList(tx, f.orgId))).toBeUndefined();
+  });
+
+  it('a concurrent swap that hits the one-default index is told in plain words (mutant: catch removed -> raw database error)', async () => {
+    const f = await fixture('race');
+    const a = await newList(f, 'A');
+    const b = await newList(f, 'B');
+    // Another person's swap, not yet committed: it holds B as the default.
+    const other = await sql.reserve();
+    await other`begin`;
+    await other`update price_lists set is_default = true where id = ${b.id}`;
+    // Ours sees no default, clears nothing, then waits on the unique index for A.
+    const racing = sentence(asOrg(f.orgId, (tx) => setDefaultPriceList(tx, f.admin, { priceListId: a.id })));
+    await new Promise((r) => setTimeout(r, 600));
+    await other`commit`;
+    other.release();
+    expect(await racing).toBe('Another person changed the default list just now. Reload and try again.');
+    expect((await asOrg(f.orgId, (tx) => customersRepo.getDefaultPriceList(tx, f.orgId)))?.id).toBe(b.id);
   });
 
   it('a list that does not exist is refused, and so is a person who may not edit price lists', async () => {

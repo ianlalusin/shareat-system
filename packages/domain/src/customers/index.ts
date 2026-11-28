@@ -313,6 +313,15 @@ export async function setPrice(
   return run(tx);
 }
 
+/** A unique violation (23505) on `price_lists_one_default_per_org_key`, however deep the driver wrapped it. */
+function isDefaultListRace(err: unknown): boolean {
+  for (let e: unknown = err, i = 0; e && i < 4; i++, e = (e as { cause?: unknown }).cause) {
+    const x = e as { code?: string; constraint_name?: string };
+    if (x.code === '23505' && x.constraint_name === 'price_lists_one_default_per_org_key') return true;
+  }
+  return false;
+}
+
 /**
  * T-649. Make one price list the default (what a customer with no list of their own is priced from), or clear the default (`priceListId: null`).
  * The old default is cleared and the new one set in this one transaction; a retired list cannot be the default. Same capability as editing price lists.
@@ -329,7 +338,13 @@ export async function setDefaultPriceList(tx: Tx, actor: Actor, input: { priceLi
     }
     const before = await customersRepo.getDefaultPriceList(trx, actor.orgId);
     if ((before?.id ?? null) === input.priceListId) return; // nothing to change
-    await customersRepo.setDefaultPriceList(trx, actor.orgId, input.priceListId);
+    try {
+      await customersRepo.setDefaultPriceList(trx, actor.orgId, input.priceListId);
+    } catch (err) {
+      // A concurrent swap landed on the one-default-per-org unique index between our clear and our set: say it in words.
+      if (isDefaultListRace(err)) throw refuse('setDefaultPriceList: concurrent change of the default list', 'Another person changed the default list just now. Reload and try again.');
+      throw err;
+    }
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
       action: 'price_list.default_set',

@@ -129,7 +129,9 @@ export default async function CustomersPage({
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs">
-                    {c.priceListId
+                    {c.treatment === 'internal'
+                      ? 'Charged at branch price'
+                      : c.priceListId
                       ? (listById.get(c.priceListId)?.name ?? '—')
                       : defaultList
                         ? `Uses the default list: ${defaultList.name}`
@@ -234,7 +236,7 @@ export default async function CustomersPage({
                   ))}
                 </Select>
               </Field>
-              <Field label="Price list" hint={defaultList ? `Optional — without one, they use the default list (${defaultList.name}).` : 'Optional — without one, nobody sets a rate for them: it is typed on each order.'}>
+              <Field label="Price list" hint={`Optional. An outside customer with no list ${defaultList ? `uses the default list (${defaultList.name})` : 'has its rate typed on each order'}; one of our own branches is charged the branch price.`}>
                 <Select name="priceListId" defaultValue="" className="w-full">
                   <option value="">—</option>
                   {priceLists.map((l) => (

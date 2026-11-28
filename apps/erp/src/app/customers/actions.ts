@@ -6,7 +6,7 @@
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
 import { arRepo, itemsRepo } from '@shareat/db';
-import { parseMoneyInput } from '@shareat/domain/money-input';
+import { parseDecimalInput, parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { CHARGE_VOID_RULES, CHARGE_WRITE_OFF_RULES, COLLECTION_RECORD_RULES, COLLECTION_VOID_RULES, CUSTOMER_ADD_RULES } from '@shareat/domain/field-rules';
@@ -413,18 +413,21 @@ export async function previewListRateAction(input: {
     if (!(await can(tx, actor, 'manage_chart_of_accounts', {}))) return null;
     const cost = (await itemsRepo.costBasisFor(tx, actor.orgId, String(input.itemId ?? '')))?.basis ?? null;
     if (cost === null) return { cost: null, price: null };
-    const figure = (v: string | undefined) => (v && v.trim() !== '' ? v.trim().replace(/,/g, '') : null);
+    const typed = (mode === 'fixed_markup' ? input.markupAmount : input.markupPercent) ?? '';
+    if (typed.trim() === '') return { cost, price: null };
     try {
+      // The figure is parsed exactly as `setPrice` parses it (same shapes, same commas rule), so the preview never shows a price the save would refuse.
+      const figure = mode === 'fixed_markup' ? parseMoneyInput(typed, 'preview: the amount', 'The amount') : parseDecimalInput(typed, '8,4', 'preview: the percent', 'The percent');
+      if (figure.startsWith('-')) return { cost, price: null };
       const r = computeBranchPrice(
         {
           pricingMode: mode,
-          fixedMarkupAmount: mode === 'fixed_markup' ? figure(input.markupAmount) : null,
-          markupPercent: mode === 'percent_markup' ? figure(input.markupPercent) : null,
+          fixedMarkupAmount: mode === 'fixed_markup' ? figure : null,
+          markupPercent: mode === 'percent_markup' ? figure : null,
         },
         cost,
       );
-      const typed = figure(mode === 'fixed_markup' ? input.markupAmount : input.markupPercent);
-      return { cost, price: typed === null ? null : r.price };
+      return { cost, price: r.price };
     } catch {
       return { cost, price: null };
     }
