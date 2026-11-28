@@ -277,7 +277,7 @@ export async function offeredItemsWithRoute(tx: Tx, orgId: string, storeId: stri
           cross join lateral menu_offer_in_force(${storeId}, v.id, 'store', now()) f
           where v.menu_item_id = i.id and v.status = 'active' and not f.withdrawn
        )
-     order by lower(c.name), c.id, i.sort_order, lower(i.name), i.id
+     order by c.sort_order, lower(c.name), c.id, i.sort_order, lower(i.name), i.id
   `)) as unknown as { item_id: string; name: string; category_id: string; category_name: string; station_id: string | null }[];
   return rows.map((r) => ({
     itemId: r.item_id,
