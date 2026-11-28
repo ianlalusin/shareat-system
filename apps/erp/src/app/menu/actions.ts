@@ -6,7 +6,7 @@
  * Thin adapters: read the form, call the domain (packages/domain/src/menu), redirect with a banner. The gate lives INSIDE the
  * domain function (`manage_menu`, `add_menu_item`), not here. A blank text box means "not sent".
  */
-import { assertFieldRules, createMenuCategory, createMenuItem, editMenuCategory, retireMenuCategory } from '@shareat/domain';
+import { assertFieldRules, createMenuCategory, createMenuItem, editMenuCategory, retireMenuCategory, setNoStockForPackagesAndRefills } from '@shareat/domain';
 import { authorize, can } from '@shareat/auth';
 import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES } from '@shareat/domain/field-rules';
 import type { MenuItemType } from '@shareat/db/schema';
@@ -93,4 +93,19 @@ export async function createItemAction(fd: FormData): Promise<void> {
     return await redirectWithFlash(PATH, {}, { error: menuErrorMessage(err) });
   }
   return await redirectWithFlash(`/menu/items/${created.id}`, {}, { ok: 'Item added.' });
+}
+
+/** T-648: every active package and refill variant to "Uses no stock", from now. The gate (`set_menu_depletion`) lives in the domain. */
+export async function setNoStockForPackagesAndRefillsAction(): Promise<void> {
+  const actor = await requireActor(PATH);
+  let result;
+  try {
+    result = await withOrgPrincipal(actor.orgId, (tx) => setNoStockForPackagesAndRefills(actor, tx));
+  } catch (err) {
+    return await redirectWithFlash(PATH, {}, { error: menuErrorMessage(err) });
+  }
+  const { changed, skipped } = result;
+  const names = [...new Set(skipped.map((s) => s.itemName))].join(', ');
+  const note = skipped.length > 0 ? ` ${skipped.length} skipped because a change is already scheduled: ${names}.` : '';
+  return await redirectWithFlash(PATH, {}, { ok: `Set ${changed} variants to Uses no stock.${note}` });
 }
