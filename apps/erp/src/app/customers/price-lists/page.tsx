@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { requireSession } from '../../../lib/session';
-import { createPriceListAction } from '../actions';
+import { createPriceListAction, setDefaultPriceListAction } from '../actions';
 import { listLists } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, CardGrid, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input } from '@/components/ui';
+import { Badge, Button, CardGrid, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { PRICE_LIST_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { NAV_LINK } from '@/components/action-link';
@@ -37,8 +37,9 @@ export default async function PriceListsPage({
           <h1 className="mt-2 text-2xl font-semibold">Price lists</h1>
           <PageDescription>
             What the business charges, per item. A customer is given one list, and an order line takes
-            its rate. Each item has <strong>one rate per list</strong>: no volume discounts or dated
-            promotions.
+            its rate; a customer with no list uses the <strong>default list</strong>. Each item has{' '}
+            <strong>one price per list</strong>: a fixed rate, or the delivery cost plus an amount or a
+            percent. No volume discounts or dated promotions.
           </PageDescription>
         </div>
         {/* T-448: the add form opens from the header instead of sitting under the list. */}
@@ -67,17 +68,41 @@ export default async function PriceListsPage({
         <CardGrid min="sm">
           {lists.map((l) => (
             <div key={l.id} className="rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800">
-              <Link
-                href={`/customers/price-lists/${l.id}`}
-                className="underline underline-offset-2"
-              >
-                {l.name}
-              </Link>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Link
+                  href={`/customers/price-lists/${l.id}`}
+                  className="underline underline-offset-2"
+                >
+                  {l.name}
+                </Link>
+                {l.isDefault && <Badge tone="success" label="Default" />}
+              </div>
               {l.description && (
                 <div className="text-xs text-neutral-500 dark:text-neutral-500">
                   {l.description}
                 </div>
               )}
+              {/* T-649: one list is the default. A confirm first: it changes what every customer with no list of their own is charged. */}
+              <form action={setDefaultPriceListAction} className="mt-2">
+                {l.isDefault ? (
+                  <ConfirmDestructive
+                    tier="confirm"
+                    quiet
+                    label="Stop being default"
+                    consequence={`${l.name} stops being the default. A customer with no list of their own then has rates typed on each order.`}
+                  />
+                ) : (
+                  <>
+                    <input type="hidden" name="priceListId" value={l.id} />
+                    <ConfirmDestructive
+                      tier="confirm"
+                      quiet
+                      label="Make default"
+                      consequence={`Make ${l.name} the default list? A customer with no list of their own is then priced from it.${lists.some((x) => x.isDefault) ? ' The current default stops being the default.' : ''}`}
+                    />
+                  </>
+                )}
+              </form>
             </div>
           ))}
         </CardGrid>

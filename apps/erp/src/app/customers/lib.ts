@@ -17,7 +17,7 @@ import {
 import type { CustomerTreatment } from '@shareat/db/schema';
 import { add, compare, money } from '@shareat/core/money';
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
-import { spendableStoreCredit } from '@shareat/domain';
+import { costBasisReader, priceOfRow, spendableStoreCredit } from '@shareat/domain';
 import type { Tx } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 import type { StoreOption } from '../expenses/lib';
@@ -73,15 +73,26 @@ export async function listLists(orgId: string): Promise<PriceListRow[]> {
   return withOrgPrincipal(orgId, (tx) => customersRepo.listPriceLists(tx, orgId));
 }
 
+/** T-649: a list row with what it charges TODAY. `today` is null when a markup row has no delivery cost yet; `cost` is the delivery cost a markup adds to. */
+export interface PriceListItemView extends PriceListItemRow {
+  today: string | null;
+  cost: string | null;
+}
+
 export interface PriceListDetail extends PriceListRow {
-  items: PriceListItemRow[];
+  items: PriceListItemView[];
 }
 
 export async function getListDetail(orgId: string, id: string): Promise<PriceListDetail | null> {
   return withOrgPrincipal(orgId, async (tx) => {
     const row = await customersRepo.getPriceList(tx, orgId, id);
     if (!row) return null;
-    return { ...row, items: await customersRepo.listPriceListItems(tx, orgId, id) };
+    const costOf = costBasisReader(tx, orgId);
+    const items: PriceListItemView[] = [];
+    for (const r of await customersRepo.listPriceListItems(tx, orgId, id)) {
+      items.push({ ...r, today: (await priceOfRow(r, costOf))?.rate ?? null, cost: r.pricingMode === 'fixed' ? null : (await costOf(r.itemId)) ?? null });
+    }
+    return { ...row, items };
   });
 }
 

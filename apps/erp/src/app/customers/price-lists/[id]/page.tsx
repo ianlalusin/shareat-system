@@ -1,15 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../../lib/session';
-import { setPriceAction } from '../../actions';
-import { getListDetail, peso } from '../../lib';
+import { PriceRateForm } from './PriceRateForm';
+import { getListDetail, peso, type PriceListItemView } from '../../lib';
 import { listItems } from '../../../items/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select, FormModal, DialogActions } from '@/components/ui';
-import { CheckedForm, FieldCheck } from '@/components/forms';
-import { PRICE_SET_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { FlashBanner, FormModal } from '@/components/ui';
 import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Price list — Shareat System' };
@@ -59,7 +57,8 @@ export default async function PriceListPage({
               <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                 <th className="px-3 py-2 font-medium">Item</th>
                 <th className="px-3 py-2 font-medium">Unit</th>
-                <th className="px-3 py-2 text-right font-medium">Rate</th>
+                <th className="px-3 py-2 font-medium">Price</th>
+                <th className="px-3 py-2 text-right font-medium">Today</th>
               </tr>
             </thead>
             <tbody>
@@ -77,7 +76,14 @@ export default async function PriceListPage({
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs">{i.unit ?? '—'}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(i.rate)}</td>
+                  <td className="px-3 py-2 text-xs">{ruleOf(i)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">
+                    {i.today !== null ? (
+                      peso(i.today)
+                    ) : (
+                      <span className="font-sans text-xs text-neutral-500 dark:text-neutral-400">No delivery yet</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -98,69 +104,21 @@ export default async function PriceListPage({
           description={
             <>
               Setting a rate for an item that already has one <strong>replaces</strong> it. A list keeps
-              one price per item, not a history. Pick the item from the list rather than typing a
-              code.
+              one price per item, not a history. A price that follows the delivery cost is worked out
+              when an order is made, and the order keeps that number.
             </>
           }
         >
-        <CheckedForm rules={PRICE_SET_RULES} action={setPriceAction} className="space-y-3">
-          <input type="hidden" name="priceListId" value={list.id} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Item" hint="From the item master. Item not listed? Add it under Items first." rule={PRICE_SET_RULES.itemId}>
-              <Select {...nativeAttrs(PRICE_SET_RULES.itemId)} defaultValue="" className="w-full">
-                <option value="" disabled>
-                  {allItems.length === 0 ? 'No items yet' : 'Select…'}
-                </option>
-                {allItems.map((it) => (
-                  <option key={it.id} value={it.id}>
-                    {it.name} ({it.code}) — priced per {it.baseUnit}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Rate" hint="Zero is allowed — a sample is genuinely free." rule={PRICE_SET_RULES.rate}>
-              <input {...nativeAttrs(PRICE_SET_RULES.rate)} name="rate" inputMode="decimal" className="w-full min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink" />
-            </Field>
-            <Field label="Unit" hint="Optional.">
-              <Input name="unit" placeholder="kg" className="w-full" />
-            </Field>
-          </div>
-          <DialogActions>
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
-          </DialogActions>
-        </CheckedForm>
+          <PriceRateForm listId={list.id} items={allItems.map((it) => ({ id: it.id, name: it.name, code: it.code, baseUnit: it.baseUnit }))} />
         </FormModal>
       </div>
     </Page>
   );
 }
 
-function Field({
-  label,
-  hint,
-  rule,
-  children,
-}: {
-  label: React.ReactNode;
-  hint?: string;
-  rule?: FieldRule;
-  children: React.ReactNode;
-}) {
-  const body = (
-    <>
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </>
-  );
-  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
-  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
-  return (
-    <div>
-      <label className="flex flex-col gap-1">{body}</label>
-      <FieldCheck rule={rule} />
-    </div>
-  );
+/** The rule in the words the rate form uses: "₱100.00", "Cost + 7%", "Cost + ₱50.00". */
+function ruleOf(i: PriceListItemView): string {
+  if (i.pricingMode === 'fixed') return peso(i.rate ?? '0');
+  if (i.pricingMode === 'fixed_markup') return `Cost + ${peso(i.markupAmount ?? '0')}`;
+  return `Cost + ${Number(i.markupPercent ?? '0')}%`;
 }

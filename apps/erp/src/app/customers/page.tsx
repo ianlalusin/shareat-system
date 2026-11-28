@@ -53,6 +53,7 @@ export default async function CustomersPage({
   const storeById = new Map(stores.map((s) => [s.id, s]));
   const orgById = new Map(orgs.map((o) => [o.id, o]));
   const listById = new Map(priceLists.map((l) => [l.id, l]));
+  const defaultList = priceLists.find((l) => l.isDefault); // T-649: a customer with no list is priced from this one
   // T-645: the customer record carries no email, TIN or code, so: name, contact no., address, group.
   const q = readQ(sp.q);
   const all = customers;
@@ -128,7 +129,11 @@ export default async function CustomersPage({
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs">
-                    {c.priceListId ? (listById.get(c.priceListId)?.name ?? '—') : '—'}
+                    {c.priceListId
+                      ? (listById.get(c.priceListId)?.name ?? '—')
+                      : defaultList
+                        ? `Uses the default list: ${defaultList.name}`
+                        : 'No price list: rates are typed per order'}
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(c.balance)}</td>
                   <td className="px-3 py-2 text-xs">
@@ -229,7 +234,7 @@ export default async function CustomersPage({
                   ))}
                 </Select>
               </Field>
-              <Field label="Price list" hint="Optional — without one, nothing has a rate for them.">
+              <Field label="Price list" hint={defaultList ? `Optional — without one, they use the default list (${defaultList.name}).` : 'Optional — without one, nobody sets a rate for them: it is typed on each order.'}>
                 <Select name="priceListId" defaultValue="" className="w-full">
                   <option value="">—</option>
                   {priceLists.map((l) => (
