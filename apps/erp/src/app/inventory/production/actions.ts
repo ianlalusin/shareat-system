@@ -105,7 +105,7 @@ export async function saveProductionDraftAction(fd: FormData): Promise<void> {
   if (!result.ok) return await redirectWithFlash('/inventory/production', { store: storeId }, { error: result.reason });
 
   revalidatePath('/inventory/production');
-  return await redirectWithFlash(`/inventory/production/${result.recordId}`, {}, { ok: 'Draft saved. Nothing has posted — post is the step that moves stock and hits the books.' });
+  return await redirectWithFlash(`/inventory/production/${result.recordId}`, {}, { ok: `Draft saved. Nothing has posted — post is the step that moves stock and hits the books.${result.labourNote ? ` Labour is ₱0.00: ${result.labourNote}` : ''}` });
 }
 
 export async function postProductionAction(fd: FormData): Promise<void> {
