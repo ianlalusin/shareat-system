@@ -5,8 +5,8 @@
  *
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
-import { arRepo } from '@shareat/db';
-import { parseMoneyInput } from '@shareat/domain/money-input';
+import { arRepo, itemsRepo } from '@shareat/db';
+import { parseDecimalInput, parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { CHARGE_VOID_RULES, CHARGE_WRITE_OFF_RULES, COLLECTION_RECORD_RULES, COLLECTION_VOID_RULES, CUSTOMER_ADD_RULES } from '@shareat/domain/field-rules';
@@ -16,14 +16,16 @@ import {
   createPriceList,
   reconcileCustomer,
   recordCollection,
+  setDefaultPriceList,
   setPrice,
+  computeBranchPrice,
   claimUpload,
   voidCharge,
   voidCollection,
   writeOffCharge,
   suggestCollectionAllocation,
 } from '@shareat/domain';
-import type { CustomerGroup } from '@shareat/db/schema';
+import type { CustomerGroup, PricingMode } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
@@ -357,7 +359,12 @@ export async function setPriceAction(formData: FormData): Promise<void> {
         // ⭐ T-145: the form picks a real item now. The old free-text code is what allowed the
         // same product to exist under three spellings on three lists.
         itemId: str(formData, 'itemId'),
+        // T-649: the price is a fixed rate, the delivery cost + an amount, or the delivery cost + a percent. A form that sends no mode is a fixed price.
+        // The domain reads only the figure the chosen mode uses, so a stale box from another mode never reaches the row.
+        mode: (str(formData, 'pricingMode') || 'fixed') as PricingMode,
         rate: str(formData, 'rate'),
+        markupAmount: str(formData, 'markupAmount'),
+        markupPercent: str(formData, 'markupPercent'),
         unit: str(formData, 'unit') || null,
       }),
     );
@@ -367,5 +374,62 @@ export async function setPriceAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(`/customers/price-lists/${priceListId}`, {}, {
     // ⚠️ Says "replaced", because re-quoting an item does not add a second row.
     ok: 'Rate saved. Re-quoting an item replaces its rate — a list holds one price per item.',
+  });
+}
+
+/**
+ * T-649. Make a price list the default (a customer with no list of their own is priced from it), or stop one being the default (`priceListId` blank).
+ * `setDefaultPriceList` authorizes and owns every rule and the audit row; safe to repeat.
+ */
+export async function setDefaultPriceListAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const priceListId = str(formData, 'priceListId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => setDefaultPriceList(tx, actor, { priceListId: priceListId || null }));
+  } catch (err) {
+    return await redirectWithFlash('/customers/price-lists', {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash('/customers/price-lists', {}, {
+    ok: priceListId
+      ? 'Default list set. Customers with no list of their own are now priced from it.'
+      : 'No default list now. A customer with no list of their own has rates typed on each order.',
+  });
+}
+
+/**
+ * T-649. The live line under "Set a rate": the item's delivery cost today and what the markup typed so far would charge. Judged by `computeBranchPrice` itself,
+ * with the cost read here, never taken from the browser. Null: not allowed or not a markup way. `price` null: a figure not typed yet (or not a number).
+ */
+export async function previewListRateAction(input: {
+  itemId: string;
+  pricingMode: string;
+  markupAmount?: string;
+  markupPercent?: string;
+}): Promise<{ cost: string | null; price: string | null } | null> {
+  const actor = await requireActor();
+  const mode = input.pricingMode;
+  if (mode !== 'fixed_markup' && mode !== 'percent_markup') return null;
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    if (!(await can(tx, actor, 'manage_chart_of_accounts', {}))) return null;
+    const cost = (await itemsRepo.costBasisFor(tx, actor.orgId, String(input.itemId ?? '')))?.basis ?? null;
+    if (cost === null) return { cost: null, price: null };
+    const typed = (mode === 'fixed_markup' ? input.markupAmount : input.markupPercent) ?? '';
+    if (typed.trim() === '') return { cost, price: null };
+    try {
+      // The figure is parsed exactly as `setPrice` parses it (same shapes, same commas rule), so the preview never shows a price the save would refuse.
+      const figure = mode === 'fixed_markup' ? parseMoneyInput(typed, 'preview: the amount', 'The amount') : parseDecimalInput(typed, '8,4', 'preview: the percent', 'The percent');
+      if (figure.startsWith('-')) return { cost, price: null };
+      const r = computeBranchPrice(
+        {
+          pricingMode: mode,
+          fixedMarkupAmount: mode === 'fixed_markup' ? figure : null,
+          markupPercent: mode === 'percent_markup' ? figure : null,
+        },
+        cost,
+      );
+      return { cost, price: r.price };
+    } catch {
+      return { cost, price: null };
+    }
   });
 }

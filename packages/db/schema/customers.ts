@@ -28,8 +28,9 @@ import {
   uniqueIndex,
   uuid,
   foreignKey,
+  boolean,
 } from 'drizzle-orm/pg-core';
-import { items } from './items';
+import { items, PRICING_MODES } from './items';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
@@ -55,6 +56,8 @@ export const priceLists = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     retiredAt: timestamp('retired_at', { withTimezone: true }),
+    /** T-649 (migration 0289). The list a customer with no list of its own uses. At most one per org among lists not retired (partial unique index); a retired list can never hold it (CHECK). */
+    isDefault: boolean('is_default').notNull().default(false),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => persons.id, { onDelete: 'restrict' }),
@@ -64,6 +67,9 @@ export const priceLists = pgTable(
   (t) => [
     uniqueIndex('price_lists_org_name_key').on(t.orgId, t.name),
     check('price_lists_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    // T-649 (migration 0289): one default per org among non-retired lists, and a retired list is never the default.
+    uniqueIndex('price_lists_one_default_per_org_key').on(t.orgId).where(sql`${t.isDefault} and ${t.retiredAt} is null`),
+    check('price_lists_default_not_retired_check', sql`not ${t.isDefault} or ${t.retiredAt} is null`),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
     // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
     // cross-org person/store was accepted. They reference `persons_org_id_id_unique` /
@@ -102,7 +108,15 @@ export const priceListItems = pgTable(
       .notNull()
       .references(() => items.id, { onDelete: 'restrict' }),
 
-    rate: numeric('rate', { precision: 14, scale: 2 }).notNull(),
+    /**
+     * T-649 (migration 0289). How this item's price on this list is worked out: `fixed` (a peso `rate`), `fixed_markup` (the delivery cost + `markupAmount`) or
+     * `percent_markup` (the delivery cost + `markupPercent`). The same three modes as `item_pricing`; the arithmetic is `computeBranchPrice`. Exactly the
+     * figure its mode uses is set (`price_list_items_mode_shape_check`), so `rate` is NULL on a markup row.
+     */
+    pricingMode: text('pricing_mode', { enum: PRICING_MODES }).notNull().default('fixed'),
+    rate: numeric('rate', { precision: 14, scale: 2 }),
+    markupAmount: numeric('markup_amount', { precision: 14, scale: 2 }),
+    markupPercent: numeric('markup_percent', { precision: 8, scale: 4 }),
     unit: text('unit'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
@@ -114,6 +128,16 @@ export const priceListItems = pgTable(
     index('price_list_items_org_idx').on(t.orgId),
     check('price_list_items_rate_not_negative_check', sql`${t.rate} >= 0`),
     check('price_list_items_rate_finite_check', sql`${t.rate} > '-Infinity'::numeric and ${t.rate} < 'Infinity'::numeric`),
+    // T-649 (migration 0289).
+    check('price_list_items_pricing_mode_check', sql`${t.pricingMode} in ('fixed', 'fixed_markup', 'percent_markup')`),
+    check('price_list_items_markup_amount_finite_check', sql`${t.markupAmount} > '-Infinity'::numeric and ${t.markupAmount} < 'Infinity'::numeric`),
+    check('price_list_items_markup_percent_finite_check', sql`${t.markupPercent} > '-Infinity'::numeric and ${t.markupPercent} < 'Infinity'::numeric`),
+    check(
+      'price_list_items_mode_shape_check',
+      sql`(${t.pricingMode} = 'fixed' and ${t.rate} is not null and ${t.markupAmount} is null and ${t.markupPercent} is null)
+        or (${t.pricingMode} = 'fixed_markup' and ${t.markupAmount} is not null and ${t.markupAmount} >= 0 and ${t.rate} is null and ${t.markupPercent} is null)
+        or (${t.pricingMode} = 'percent_markup' and ${t.markupPercent} is not null and ${t.markupPercent} >= 0 and ${t.rate} is null and ${t.markupAmount} is null)`,
+    ),
     // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.itemId],

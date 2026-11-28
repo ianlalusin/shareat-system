@@ -110,6 +110,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('item.expense_category_set', 'stock', 'normal', 'org', 'items', 'T-502'),
   def('item.merged', 'stock', 'normal', 'org', 'items', 'T-502'),
   def('item_pricing.set', 'stock', 'normal', 'org', 'item_pricing', 'T-638'),
+  def('price_list.default_set', 'settings', 'normal', 'org', 'price_lists', 'T-649'),
   def('item.imported', 'stock', 'normal', 'org', 'items', 'T-502'),
   def('expense_subcategory.created', 'settings', 'normal', 'org', 'expense_subcategories', 'T-502'),
   def('expense_subcategory.renamed', 'settings', 'normal', 'org', 'expense_subcategories', 'T-502'),

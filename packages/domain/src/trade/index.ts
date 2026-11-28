@@ -31,6 +31,7 @@ import { assertFiguresReconcile } from '../shared/reconcile';
 import { parseQuantityInput } from '../shared/quantity-input';
 import { CHARGE_HAS_CREDIT_SENTENCE, recordCharge, recordChargeWithCollection, voidCharge, type PayNowInput } from '../ar';
 import { branchPriceFor } from '../items';
+import { quoteForCustomer, quoteWithReason } from '../customers/quote';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { add, compare, money, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
@@ -271,9 +272,9 @@ export async function createTradeOrder(
         const bp = await branchPriceFor(trx, actor.orgId, draft.itemId);
         derived = bp?.price ?? null;
       }
-      const quoted = treatment === 'internal'
-        ? undefined
-        : await tradeRepo.quotedRate(trx, actor.orgId, input.customerId, draft.itemId);
+      // T-649: an outside buyer's rate comes from ONE resolver: its own price list, else the org's default list; a markup row works off the delivery cost today.
+      // Read even when the line states its own rate: the list's unit still applies (a stated rate wins, the quote is a default).
+      const quoted = treatment === 'internal' ? undefined : ((await quoteForCustomer(trx, actor.orgId, input.customerId, draft.itemId)) ?? undefined);
       const rawRate = draft.rate ?? derived ?? quoted?.rate;
       if (rawRate === undefined || rawRate === null) {
         throw new Error(
@@ -281,8 +282,11 @@ export async function createTradeOrder(
             ? `createTradeOrder: line ${n} names ${item.name}, and nothing can price it — it ` +
               'has no branch price rule, or no purchase history to base one on. Set a pricing ' +
               'rule, or state a rate on the line.'
-            : `createTradeOrder: line ${n} names ${item.name}, and ${customer.name}'s price ` +
-              'list does not quote it. Add a rate to the price list, or state one on the line.',
+            : (await quoteWithReason(trx, actor.orgId, input.customerId, draft.itemId)).reason === 'no_delivery_cost'
+              ? `createTradeOrder: line ${n} names ${item.name}, and ${customer.name}'s price list prices it as the ` +
+                'delivery cost plus a markup, but it has no delivery cost yet. Receive a delivery first, or state a rate on the line.'
+              : `createTradeOrder: line ${n} names ${item.name}, and ${customer.name}'s price ` +
+                'list does not quote it. Add a rate to the price list, or state one on the line.',
         );
       }
       // T-328 — `rate` and `quantity` each parsed and blamed by their OWN name before they are
