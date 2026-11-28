@@ -16,4 +16,17 @@ describe('T-650 S1 words', () => {
     expect(sliceLabourSentence('10.00', 'posted', ok)).toBe('Labour: ₱10.00 as typed');
     expect(sliceLabourSentence('0.00', 'posted', { ok: false, reason: 'There is no slicer rate in force for Slice A.' })).toBe('Labour: ₱0.00. There is no slicer rate in force for Slice A.');
   });
+
+  it('audit fix: without run_payroll the sentence gives the total and the source, never the per-kg slicer rate', () => {
+    const hidden = { ok: true as const, pay: '84.00' as never, kg: '12.000' as never, rate: null, ratesHidden: true };
+    const s = sliceLabourSentence('84.00', 'draft', hidden);
+    expect(s).toBe('Labour: ₱84.00 (from the slicer rate)');
+    expect(s).not.toMatch(/7.00|×/);
+    expect(sliceLabourSentence('0.00', 'draft', hidden)).not.toMatch(/7.00|×/);
+  });
+
+  it('audit fix: no slicer named -> "No slicer named: labour not added."', () => {
+    expect(sliceLabourSentence('0.00', 'draft', null)).toBe('No slicer named: labour not added.');
+    expect(sliceLabourSentence('12.00', 'posted', null)).toBe('Labour: ₱12.00 as typed');
+  });
 });

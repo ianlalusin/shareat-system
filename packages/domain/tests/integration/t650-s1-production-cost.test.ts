@@ -10,10 +10,15 @@ import { sql as dsql } from 'drizzle-orm';
  * Cost basis order: (1) the item's latest posted slice/cook layer cost -> (2) the linked slab's landed max-of-last-two -> (3) its own landed.
  * Branch price and the T-649 customer-price resolver both read it.
  *
- * MUTANTS (each goes red): tier (1) placed after tier (2) in `costBasisFor` (the "sliced item beats the linked slab" tests); the status filter dropped from
- * `lastProductionUnitCost` (the voided test); `kind in ('slice','cook')` widened to convert (the convert test); `unit_cost > 0` dropped (the zero-cost test);
- * the blank-labour auto fill removed from `createProductionDraft` (the labour tests); `postProduction` re-deciding a zero labour (the typed-0.00 tests);
- * the edit recompute removed (the edit test).
+ * MUTANTS (each goes red): tier (1) placed after tier (2) in `costBasisFor` (the "sliced item beats the linked slab" tests); tier (1) moved below the item's OWN
+ * deliveries (the "own deliveries AND a production" test); `order by produced_on asc` (the "newer wins" test); `created_at asc` (the same-day tie-break);
+ * `kind in ('slice','cook')` widened to convert (the convert test); `unit_cost > 0` dropped (the zero-cost test); `prl.reversed_at is null` dropped from
+ * `lastProductionUnitCost` (the edit-follows-the-new-layer test); the blank-labour auto fill removed from `createProductionDraft` (the labour tests); the
+ * "no slicer named" guard removed (the no-slicer test); `postProduction` re-deciding a zero labour (the typed-0.00 tests); the edit recompute removed (the edit
+ * test); the run_payroll check dropped from `sliceLabourView` (the pay-rate privacy test).
+ * NOT a mutant of the voided test: dropping `pr.status = 'posted'` from `lastProductionUnitCost` does NOT turn it red, because `voidProduction` reverses the
+ * output line (`reversed_at` is stamped), and `prl.reversed_at is null` alone already excludes a voided record. The status filter is belt-and-braces; the voided
+ * test goes red only if BOTH `pr.status = 'posted'` and `prl.reversed_at is null` are dropped.
  */
 config({ path: '.env.local' });
 
@@ -41,6 +46,7 @@ import {
   setItemPricing,
   setPrice,
   setSlicerPayRate,
+  sliceLabourView,
   voidProduction,
 } from '@shareat/domain';
 import { receiveDelivery } from '../../src/deliveries/receive';
@@ -124,10 +130,10 @@ async function landCost(f: F, itemId: string, price: string): Promise<void> {
     values (${inv!.id}, 1, ${itemId}, '1', 'kg', '1', ${price}, ${price})`;
 }
 
-async function slice(f: F, over: { on?: string; slabKg?: string; out?: { itemId: string; quantity: string; unit?: string }[]; labourCost?: string; post?: boolean }) {
+async function slice(f: F, over: { on?: string; slabKg?: string; out?: { itemId: string; quantity: string; unit?: string }[]; labourCost?: string; post?: boolean; noSlicer?: boolean }) {
   const draft = await asOrg(f.orgId, (tx) =>
     createProductionDraft(tx, f.admin, {
-      orgId: f.orgId, storeId: f.storeId, locationId: f.locationId, kind: 'slice', performedByPersonId: f.samId, producedOn: over.on ?? '2026-01-12',
+      orgId: f.orgId, storeId: f.storeId, locationId: f.locationId, kind: 'slice', performedByPersonId: over.noSlicer ? undefined : f.samId, producedOn: over.on ?? '2026-01-12',
       labourCost: over.labourCost,
       inputs: [{ itemId: f.slab, quantity: over.slabKg ?? '10', unit: 'kg' }],
       outputs: (over.out ?? [{ itemId: f.sliceA, quantity: '8' }]).map((o) => ({ ...o, unit: o.unit ?? 'kg' })),
@@ -308,5 +314,81 @@ describe('T-650 S1.6 - slicing labour fills itself from the slicer rate', () => 
     expect((await edit(typed.recordId)).ok).toBe(true);
     expect(await labourOf(auto.recordId)).toBe('35.00');
     expect(await labourOf(typed.recordId)).toBe('12.34');
+  });
+});
+
+describe('T-650 S1 audit fixes - ordering, tiers, edits, privacy, no-slicer', () => {
+  async function ready(hint: string) {
+    const f = await fixture(hint);
+    await stockUp(f, f.slab, 'meat_slab', '100', '300.00');
+    return f;
+  }
+
+  it('A1. two costed productions at different dates: the NEWER production date wins, even when it was entered first', async () => {
+    const f = await ready('a1');
+    await slice(f, { on: '2026-01-12', slabKg: '10', out: [{ itemId: f.sliceA, quantity: '10' }], labourCost: '200.00' }); // 300 + 20 = 320, entered first
+    await slice(f, { on: '2026-01-05', slabKg: '10', out: [{ itemId: f.sliceA, quantity: '10' }], labourCost: '100.00' }); // 300 + 10 = 310, older date, entered later
+    expect(await basis(f, f.sliceA)).toMatchObject({ basis: '320', basisFrom: 'produced', producedOn: '2026-01-12' });
+  });
+
+  it('A2. the same day: the later created_at wins; with created_at equal, the higher id wins', async () => {
+    const f = await ready('a2');
+    const first = await slice(f, { on: '2026-01-12', slabKg: '10', out: [{ itemId: f.sliceA, quantity: '10' }], labourCost: '100.00' }); // 310
+    const second = await slice(f, { on: '2026-01-12', slabKg: '10', out: [{ itemId: f.sliceA, quantity: '10' }], labourCost: '200.00' }); // 320, created later
+    expect(await basis(f, f.sliceA)).toMatchObject({ basis: '320' });
+    // Equal created_at: the id decides. Whichever id is higher is the winner.
+    await sql`update production_records set created_at = '2026-01-12T08:00:00Z' where id in (${first.recordId}, ${second.recordId})`;
+    const [top] = await sql<{ id: string }[]>`select id from production_records where id in (${first.recordId}, ${second.recordId}) order by id desc limit 1`;
+    expect(await basis(f, f.sliceA)).toMatchObject({ basis: top!.id === first.recordId ? '310' : '320' });
+  });
+
+  it('A3. an item with its OWN deliveries (and a linked slab) AND a production: the production wins (tier 1 over tiers 2 and 3)', async () => {
+    const f = await ready('a3');
+    await landCost(f, f.slab, '300.00'); // linked tier
+    await landCost(f, f.sliceA, '500.00'); // own tier
+    expect(await basis(f, f.sliceA)).toMatchObject({ basis: '300', basisFrom: 'linked' });
+    await slice(f, { slabKg: '10', out: [{ itemId: f.sliceA, quantity: '8' }], labourCost: '200.00' });
+    expect(await basis(f, f.sliceA)).toMatchObject({ basis: '325', basisFrom: 'produced' });
+  });
+
+  it('A3b. an item with no link, own deliveries only: tier 3 until it is produced', async () => {
+    const f = await ready('a3b');
+    await landCost(f, f.sauce, '90.00');
+    expect(await basis(f, f.sauce)).toMatchObject({ basis: '90', basisFrom: 'own' });
+  });
+
+  it('A4. after editPostedProduction the basis follows the NEW output layer, not the reversed one', async () => {
+    const f = await ready('a4');
+    const d = await slice(f, { slabKg: '10', out: [{ itemId: f.sliceA, quantity: '8' }], labourCost: '200.00' }); // 325
+    expect(await basis(f, f.sliceA)).toMatchObject({ basis: '325' });
+    const e = await asOrg(f.orgId, (tx) =>
+      editPostedProduction(tx, f.admin, { recordId: d.recordId, inputs: [{ itemId: f.slab, quantity: '10', unit: 'kg' }], outputs: [{ itemId: f.sliceA, quantity: '4', unit: 'kg' }], labourCost: '200.00' }),
+    );
+    expect(e.ok, e.ok ? '' : e.reason).toBe(true);
+    expect(await basis(f, f.sliceA)).toMatchObject({ basis: '350', basisFrom: 'produced' }); // 300 + 200 / 4
+  });
+
+  it('A5. pay-rate privacy: run_payroll sees kg x rate; a manager gets the total with the rate hidden', async () => {
+    const f = await ready('a5');
+    const [m] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Mgr') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${m!.id}, ${f.orgId}, 'manager')`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${m!.id}, ${f.storeId})`;
+    const lines = [{ itemId: f.sliceA, itemName: 'Slice A', quantity: '12', unit: 'kg' }];
+    const admin = await asOrg(f.orgId, (tx) => sliceLabourView(tx, f.admin, f.storeId, '2026-01-12', lines));
+    const mgr = await asOrg(f.orgId, (tx) => sliceLabourView(tx, actor(f.orgId, m!.id), f.storeId, '2026-01-12', lines));
+    expect(admin).toMatchObject({ ok: true, pay: '60.00', rate: '5.00' });
+    expect(admin.ok && admin.ratesHidden).toBeFalsy();
+    expect(mgr).toMatchObject({ ok: true, pay: '60.00', rate: null, ratesHidden: true });
+  });
+
+  it('A6. no slicer named: a BLANK labour box stays 0.00 with the sentence; a typed figure still wins; naming the slicer fills it', async () => {
+    const f = await ready('a6');
+    const none = await slice(f, { slabKg: '10', out: [{ itemId: f.sliceA, quantity: '9' }], post: false, noSlicer: true });
+    expect(none.labourNote).toBe('No slicer named: labour not added.');
+    expect(await labourOf(none.recordId)).toBe('0.00');
+    const typed = await slice(f, { slabKg: '10', out: [{ itemId: f.sliceA, quantity: '9' }], labourCost: '12.00', post: false, noSlicer: true });
+    expect(await labourOf(typed.recordId)).toBe('12.00');
+    const named = await slice(f, { slabKg: '10', out: [{ itemId: f.sliceA, quantity: '9' }], post: false });
+    expect(await labourOf(named.recordId)).toBe('45.00');
   });
 });

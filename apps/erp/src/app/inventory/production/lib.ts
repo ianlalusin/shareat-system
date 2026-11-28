@@ -4,7 +4,8 @@
  * Every rule lives in `packages/domain/src/production`; this file only reads.
  */
 import { itemsRepo, productionRepo, stockUsageRepo } from '@shareat/db';
-import { sliceLabourFor } from '@shareat/domain';
+import { sliceLabourView } from '@shareat/domain';
+import type { Actor } from '@shareat/auth';
 import { peso } from '../../../lib/format';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
@@ -31,11 +32,15 @@ export interface ProductionScreenData {
 }
 
 /** "Labour: ₱84.00 from the slicer rate, 12 kg × ₱7.00" - or why it is 0, or that it was typed. */
-export function sliceLabourSentence(stored: string, status: string, auto: Awaited<ReturnType<typeof sliceLabourFor>>): string {
+export function sliceLabourSentence(stored: string, status: string, auto: Awaited<ReturnType<typeof sliceLabourView>> | null): string {
   const isZero = /^0+([.]0+)?$/.test(stored);
-  const how = (a: Extract<typeof auto, { ok: true }>) => `${a.kg} kg${a.rate === null ? ' at the slicer rates' : ` × ${peso(a.rate)}`}`;
-  if (auto.ok && stored === auto.pay) return `Labour: ${peso(stored)} from the slicer rate, ${how(auto)}`;
-  if (isZero && auto.ok) return status === 'draft' ? `Labour: ₱0.00. The slicer rate would give ${peso(auto.pay)} (${how(auto)}): leave the box blank when you record it to use that.` : 'Labour: ₱0.00';
+  // Audit fix: the per-kg pay rate is payroll data. Without run_payroll the sentence names the source and the total, never the rate.
+  const how = (a: Extract<NonNullable<typeof auto>, { ok: true }>) => (a.ratesHidden ? '' : ` (${a.kg} kg${a.rate === null ? ' at the slicer rates' : ` × ${peso(a.rate)}`})`);
+  const fromRate = (a: Extract<NonNullable<typeof auto>, { ok: true }>) => (a.ratesHidden ? ' (from the slicer rate)' : ` from the slicer rate, ${a.kg} kg${a.rate === null ? ' at the slicer rates' : ` × ${peso(a.rate)}`}`);
+  // No slicer is named on the record: payroll would never pay it, so no labour is added (the same condition payroll pays on).
+  if (auto === null) return isZero ? 'No slicer named: labour not added.' : `Labour: ${peso(stored)} as typed`;
+  if (auto.ok && stored === auto.pay) return `Labour: ${peso(stored)}${fromRate(auto)}`;
+  if (isZero && auto.ok) return status === 'draft' ? `Labour: ₱0.00. The slicer rate would give ${peso(auto.pay)}${how(auto)}: leave the box blank when you record it to use that.` : 'Labour: ₱0.00';
   if (isZero) return `Labour: ₱0.00. ${auto.ok ? '' : auto.reason}`;
   return `Labour: ${peso(stored)} as typed`;
 }
@@ -95,7 +100,8 @@ export interface ProductionRecordDetail {
   readonly labourNote: string | null;
 }
 
-export async function productionRecordDetail(orgId: string, id: string): Promise<ProductionRecordDetail | null> {
+export async function productionRecordDetail(actor: Actor, id: string): Promise<ProductionRecordDetail | null> {
+  const orgId = actor.orgId;
   return withOrgPrincipal(orgId, async (tx) => {
     const record = await productionRepo.getProductionRecord(tx, id);
     if (!record || record.orgId !== orgId) return null;
@@ -131,7 +137,9 @@ export async function productionRecordDetail(orgId: string, id: string): Promise
         ? sliceLabourSentence(
             record.labourCost,
             record.status,
-            await sliceLabourFor(tx, orgId, record.producedOn, outputsForLabour.map((r) => ({ itemId: r.itemId, itemName: itemsById.get(r.itemId)?.name ?? 'This item', quantity: r.quantity, unit: r.unit, isPaid: r.isPaid }))),
+            record.performedByPersonId === null
+              ? null
+              : await sliceLabourView(tx, actor, record.storeId, record.producedOn, outputsForLabour.map((r) => ({ itemId: r.itemId, itemName: itemsById.get(r.itemId)?.name ?? 'This item', quantity: r.quantity, unit: r.unit, isPaid: r.isPaid }))),
           )
         : null;
     return {

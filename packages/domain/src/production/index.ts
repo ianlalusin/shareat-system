@@ -176,7 +176,10 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
   // T-650 S1: a slice record with the labour box left BLANK takes the slicer pay computeRecordPay works out for it; a typed figure wins; no rate -> stays 0 and says why.
   let labour = parsedLabour;
   let labourNote: string | undefined;
-  if (input.kind === 'slice' && parsedLabour === undefined) {
+  // Audit fix: only when a slicer is NAMED on the record - the condition payroll pays on (performed_by_person_id) - so 6100 never keeps a credit payroll will not match.
+  if (input.kind === 'slice' && parsedLabour === undefined && !input.performedByPersonId) {
+    labourNote = 'No slicer named: labour not added.';
+  } else if (input.kind === 'slice' && parsedLabour === undefined) {
     const names = await resolveItems(tx, input.orgId, outputs.map((l) => l.itemId));
     const auto = await sliceLabourFor(
       tx,
@@ -942,7 +945,7 @@ export async function editPostedProduction(tx: Tx, actor: Actor, input: EditProd
   const outputs = editOutputs.map((l, i) => ({ lineRowId: newOutputRows[i]!.id, itemId: l.itemId, quantity: l.quantity, unit: l.unit }));
 
   // T-650 S1: an edit with the labour box blank keeps the stored figure, EXCEPT when that figure was the automatic one (it equals the slicer pay of the OLD lines): then it follows the new lines. A typed figure, before or now, is never touched. (No flag is stored: equality with the recomputed old figure is the test.)
-  if (record.kind === 'slice' && editLabour === undefined) {
+  if (record.kind === 'slice' && editLabour === undefined && record.performedByPersonId && (input.performedByPersonId ?? record.performedByPersonId)) {
     const names = await resolveItems(tx, record.orgId, [...oldLines, ...newOutputRows].map((l) => l.itemId));
     const asLine = (l: { itemId: string; quantity: string; unit: string; isPaid: boolean }) => ({ itemId: l.itemId, itemName: names.get(l.itemId)?.name ?? 'This item', quantity: l.quantity, unit: l.unit, isPaid: l.isPaid });
     const stored = money(record.labourCost);

@@ -20,7 +20,7 @@
  * A record with no rate in force, a unit that is not kg or g, or a slicer with no job that day is SKIPPED with a sentence (the preview shows it as a
  * warning) and stays unpaid and unfrozen, so it is paid by a later run once it is fixed.
  */
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, can, type Actor } from '@shareat/auth';
 import { auditLogRepo, productionRepo, type Tx } from '@shareat/db';
 import { ZERO, add, compare, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
@@ -312,7 +312,15 @@ export interface SliceLabourLine {
 }
 
 export type SliceLabour =
-  | { readonly ok: true; readonly pay: Money; readonly kg: Quantity; /** The one per-kg rate every paid line used, or null when lines used different rates / there were none. */ readonly rate: string | null }
+  | {
+      readonly ok: true;
+      readonly pay: Money;
+      readonly kg: Quantity;
+      /** The one per-kg rate every paid line used, or null when lines used different rates / there were none (or the viewer may not see rates: `ratesHidden`). */
+      readonly rate: string | null;
+      /** True when the viewer does not hold run_payroll: the pay total is shown, the slicer's per-kg rate is not. */
+      readonly ratesHidden?: boolean;
+    }
   | { readonly ok: false; readonly reason: string };
 
 export async function sliceLabourFor(tx: Tx, orgId: string, producedOn: string, outputs: readonly SliceLabourLine[]): Promise<SliceLabour> {
@@ -323,4 +331,15 @@ export async function sliceLabourFor(tx: Tx, orgId: string, producedOn: string, 
   const used = new Set(paid.map((l) => slicerRateInForce(rates, l.itemId, producedOn)));
   const only = used.size === 1 ? ([...used][0] ?? null) : null;
   return { ok: true, pay: priced.pay, kg: priced.kg, rate: only };
+}
+
+/**
+ * T-650 S1 audit fix: the SAME figure for a screen. The slicer's per-kg pay rate is payroll data, so only a holder of run_payroll at the store sees it;
+ * everyone else gets the pay total and `ratesHidden`. (The labour figure itself is on the record and visible to anyone who reads it.)
+ */
+export async function sliceLabourView(tx: Tx, actor: Actor, storeId: string, producedOn: string, outputs: readonly SliceLabourLine[]): Promise<SliceLabour> {
+  const r = await sliceLabourFor(tx, actor.orgId, producedOn, outputs);
+  if (!r.ok) return r;
+  if (await can(tx, actor, 'run_payroll', { storeId })) return r;
+  return { ...r, rate: null, ratesHidden: true };
 }

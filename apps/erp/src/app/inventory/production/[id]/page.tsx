@@ -34,7 +34,7 @@ export default async function ProductionRecordPage({
   const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess(`/inventory/production/${id}`);
   if (refusal) return refusal;
-  const detail = await productionRecordDetail(actor.orgId, id);
+  const detail = await productionRecordDetail(actor, id);
   if (!detail || !(await recordInScope(actor, `/inventory/production/${id}`, detail.record.storeId))) notFound();
 
   const { record, locationName, lines, slicerName, confirmedByName, slicers, labourNote } = detail;
