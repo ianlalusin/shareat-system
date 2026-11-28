@@ -197,3 +197,6 @@ Only 8 pages scored "needs fixing", so the list stops at 8. Items 1-6 share one 
 | /documents/templates/[id] | apps/erp/src/app/documents/templates/[id]/page.tsx | - | not reviewed | - | - | new page, not reviewed |
 | /pos/lobby | apps/erp/src/app/pos/lobby/page.tsx | - | not reviewed | - | - | new page, not reviewed |
 | /menu/arrange | apps/erp/src/app/menu/arrange/page.tsx | - | not reviewed | - | - | new page, not reviewed |
+| /inventory/cookbook/new | apps/erp/src/app/inventory/cookbook/new/page.tsx | - | not reviewed | - | - | new page, not reviewed |
+| /inventory/cookbook | apps/erp/src/app/inventory/cookbook/page.tsx | - | not reviewed | - | - | new page, not reviewed |
+| /inventory/cookbook/[id] | apps/erp/src/app/inventory/cookbook/[id]/page.tsx | - | not reviewed | - | - | new page, not reviewed |

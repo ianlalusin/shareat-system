@@ -31,7 +31,13 @@ export interface RecipeLineInput {
 export interface CreateRecipeInput {
   readonly orgId: string;
   readonly name: string;
-  readonly outputItemId: string;
+  /** Required for a product recipe; a kitchen recipe makes no stock item (it is ignored). */
+  readonly outputItemId?: string;
+  /** T-650 S3: 'product' (default) or 'kitchen' (the cookbook: ingredients + method, no stock output). */
+  readonly purpose?: 'product' | 'kitchen';
+  /** T-650 S3: the steps, plain text. */
+  readonly method?: string;
+  /** Product: what one batch makes. Kitchen: how many portions it makes. */
   readonly outputQuantity: string;
   readonly lines: readonly RecipeLineInput[];
   /** T-650 S2: the stores that may make it. Empty / omitted = every store. */
@@ -43,7 +49,10 @@ export interface CreateRecipeInput {
 export interface EditRecipeInput {
   readonly recipeId: string;
   readonly name: string;
-  readonly outputItemId: string;
+  /** Required for a product recipe, ignored for a kitchen one. A recipe's purpose never changes. */
+  readonly outputItemId?: string;
+  /** T-650 S3: omit to leave the method as it is; blank clears it. */
+  readonly method?: string;
   readonly outputQuantity: string;
   readonly lines: readonly RecipeLineInput[];
   /** T-650 S2: omit to leave the store list as it is; [] removes the limit (every store). */
@@ -65,6 +74,8 @@ async function snapshot(tx: Tx, orgId: string, recipeId: string) {
   return {
     name: r.name,
     outputItemId: r.outputItemId,
+    purpose: r.purpose,
+    method: r.method,
     outputQuantity: r.outputQuantity,
     standardLabourCost: r.standardLabourCost,
     storeIds: (await productionRepo.listRecipeStores(tx, orgId, recipeId)).map((s) => s.storeId),
@@ -81,6 +92,10 @@ type Quantity14_3 = Quantity;
 interface Checked {
   readonly name: string;
   readonly outputQuantity: Quantity14_3;
+  /** Null for a kitchen recipe. */
+  readonly outputItemId: string | null;
+  /** undefined = the caller said nothing (edit leaves it); null = cleared. */
+  readonly method: string | null | undefined;
   /** undefined = the caller said nothing; null = cleared / none. */
   readonly standardLabourCost: Money | null | undefined;
   readonly storeIds: readonly string[] | undefined;
@@ -91,19 +106,27 @@ interface Checked {
 async function checkRecipe(
   tx: Tx,
   orgId: string,
-  input: { name: string; outputItemId: string; outputQuantity: string; lines: readonly RecipeLineInput[]; storeIds?: readonly string[]; standardLabourCost?: string },
+  input: { name: string; outputItemId?: string | undefined; outputQuantity: string; lines: readonly RecipeLineInput[]; storeIds?: readonly string[] | undefined; standardLabourCost?: string | undefined; method?: string | undefined },
   ownId: string | null,
+  purpose: 'product' | 'kitchen',
 ): Promise<{ ok: true; value: Checked } | { ok: false; reason: string }> {
-  const shape = validateRecipeShape(input);
+  const kitchen = purpose === 'kitchen';
+  const outputItemId = kitchen ? null : (input.outputItemId?.trim() || null);
+  const shape = validateRecipeShape({ ...input, outputItemId, purpose });
   if (!shape.ok) return shape;
   const name = input.name.trim();
+  // T-650 S3: a cookbook recipe is read by every store and never produced, so it has neither a "Made at" list nor a labour per batch.
+  if (kitchen && (input.storeIds ?? []).some((s) => s.trim() !== '')) return refusal('A cookbook recipe is read by every store, so it has no "Made at" list.');
+  if (kitchen && (input.standardLabourCost ?? '').trim() !== '') return refusal('A cookbook recipe is not produced, so it has no labour per batch.');
 
   const items = new Map(
-    (await productionRepo.getItemsForProduction(tx, orgId, [input.outputItemId, ...input.lines.map((l) => l.itemId)])).map((r) => [r.id, r]),
+    (await productionRepo.getItemsForProduction(tx, orgId, [...(outputItemId ? [outputItemId] : []), ...input.lines.map((l) => l.itemId)])).map((r) => [r.id, r]),
   );
-  const out = items.get(input.outputItemId);
-  if (!out) return refusal('The item this recipe makes does not exist. Pick it from the list.');
-  if (out.status !== 'active') return refusal(notActiveItemSentence(out.status, 'put on a new recipe', 'The output'));
+  if (outputItemId) {
+    const out = items.get(outputItemId);
+    if (!out) return refusal('The item this recipe makes does not exist. Pick it from the list.');
+    if (out.status !== 'active') return refusal(notActiveItemSentence(out.status, 'put on a new recipe', 'The output'));
+  }
 
   const lines: Checked['lines'] = [];
   for (const [i, line] of input.lines.entries()) {
@@ -151,6 +174,8 @@ async function checkRecipe(
       outputQuantity: parseDecimalInput(input.outputQuantity.trim(), '14,3', 'recipe.outputQuantity', 'The output quantity', { blank: 'refuse' }),
       standardLabourCost,
       storeIds,
+      outputItemId,
+      method: input.method === undefined ? undefined : input.method.trim() === '' ? null : input.method.trim(),
       lines,
     },
   };
@@ -160,12 +185,15 @@ const andMore = (n: number): string => (n > 0 ? ` (and ${n} more)` : '');
 
 export async function createRecipe(tx: Tx, actor: Actor, input: CreateRecipeInput): Promise<RecipeOutcome> {
   await authorize(tx, actor, 'manage_recipes', {}); // T-403: admin-only
-  const checked = await checkRecipe(tx, input.orgId, input, null);
+  const purpose = input.purpose ?? 'product';
+  const checked = await checkRecipe(tx, input.orgId, input, null, purpose);
   if (!checked.ok) return checked;
   const { id: recipeId } = await productionRepo.insertRecipe(tx, {
     orgId: input.orgId,
     name: checked.value.name,
-    outputItemId: input.outputItemId,
+    outputItemId: checked.value.outputItemId,
+    purpose,
+    method: checked.value.method ?? null,
     outputQuantity: checked.value.outputQuantity,
     standardLabourCost: checked.value.standardLabourCost ?? null,
     createdBy: actor.personId,
@@ -180,7 +208,7 @@ export async function editRecipe(tx: Tx, actor: Actor, input: EditRecipeInput): 
   await authorize(tx, actor, 'manage_recipes', {});
   const existing = await productionRepo.getRecipe(tx, actor.orgId, input.recipeId);
   if (!existing) return refusal(NOT_FOUND);
-  const checked = await checkRecipe(tx, actor.orgId, input, existing.id);
+  const checked = await checkRecipe(tx, actor.orgId, input, existing.id, existing.purpose);
   if (!checked.ok) return checked;
 
   // E1: an unfinished cook was worked out from the current ratios.
@@ -203,7 +231,8 @@ export async function editRecipe(tx: Tx, actor: Actor, input: EditRecipeInput): 
   const before = await snapshot(tx, actor.orgId, existing.id);
   await productionRepo.updateRecipe(tx, actor.orgId, existing.id, {
     name: checked.value.name,
-    outputItemId: input.outputItemId,
+    outputItemId: checked.value.outputItemId,
+    ...(checked.value.method === undefined ? {} : { method: checked.value.method }),
     outputQuantity: checked.value.outputQuantity,
     standardLabourCost: checked.value.standardLabourCost === undefined ? (existing.standardLabourCost === null ? null : money(existing.standardLabourCost)) : checked.value.standardLabourCost,
   });
@@ -239,9 +268,9 @@ export async function restoreRecipe(tx: Tx, actor: Actor, input: { recipeId: str
   if (!existing) return refusal(NOT_FOUND);
   if (existing.status === 'active') return refusal(`The recipe '${existing.name}' is already active.`);
   const lines = await productionRepo.listRecipeLines(tx, existing.id);
-  const items = await productionRepo.getItemsForProduction(tx, actor.orgId, [existing.outputItemId, ...lines.map((l) => l.itemId)]);
+  const items = await productionRepo.getItemsForProduction(tx, actor.orgId, [...(existing.outputItemId ? [existing.outputItemId] : []), ...lines.map((l) => l.itemId)]);
   const retired = (id: string) => items.find((i) => i.id === id && i.status !== 'active');
-  const out = retired(existing.outputItemId);
+  const out = existing.outputItemId ? retired(existing.outputItemId) : undefined;
   if (out) return refusal(notActiveItemSentence(out.status, 'put back on a recipe', `The output (${out.name})`));
   for (const l of lines) {
     const bad = retired(l.itemId);

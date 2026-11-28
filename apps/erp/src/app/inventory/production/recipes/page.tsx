@@ -3,7 +3,7 @@ import { requirePageAccess } from '../../../../lib/page-access';
 import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, FlashBanner, LinkRow, RowLink } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
-import { RECIPES_PATH, canManageRecipes, fmtQty, recipeList } from './lib';
+import { COOKBOOK_PATH, RECIPES_PATH, canManageRecipes, fmtQty, recipeList } from './lib';
 
 export const metadata = { title: 'Recipes - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -29,8 +29,8 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
 
   return (
     <Page density="table" className="space-y-6">
-      <PageHeader title="Recipes" description={<>
-            The batch recipes the business cooks from. A cook works out its ingredients from the recipe. Only an admin changes a recipe.
+      <PageHeader title="Products we make" description={<>
+            The recipes for things we stock and sell, like the home-made sauce. A cook works out its ingredients from the recipe, and each recipe can be limited to the stores that make it. How to cook a dish we do not stock is in the Cookbook. Only an admin changes a recipe.
           </>} actions={
         <div className="flex flex-wrap items-center gap-4 text-sm">
           {canManage && (
@@ -38,6 +38,9 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
               New recipe
             </Link>
           )}
+          <Link href={COOKBOOK_PATH} className="inline-flex min-h-11 items-center underline underline-offset-4">
+            Cookbook
+          </Link>
           <Link href="/inventory/production" className="inline-flex min-h-11 items-center underline underline-offset-4">
             ← Production
           </Link>
