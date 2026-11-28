@@ -34,7 +34,7 @@ if (!isTestDatabaseUrl(url)) {
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 60_000 });
 vi.mock('next/navigation', async () => (await import('../helpers/flash-jar-core')).nextNavigationMock());
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 const h = vi.hoisted(() => ({ actor: null as null | { personId: string; orgId: string } }));
 vi.mock('../../src/lib/session', () => ({
   requireActor: vi.fn(async () => h.actor),

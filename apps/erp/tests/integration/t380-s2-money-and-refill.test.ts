@@ -49,7 +49,7 @@ vi.mock('../../src/lib/session', () => ({
 vi.mock('../../src/lib/page-access', () => ({
   requirePageAccess: async () => ({ actor: ACTOR_HOLDER.actor!, refusal: null }),
 }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('@/components/shell/DetailLayout', () => ({
   DetailLayout: ({ summary, children }: { summary: unknown; children: unknown }) => [summary, children],
 }));

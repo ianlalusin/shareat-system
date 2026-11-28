@@ -21,7 +21,7 @@ import { cast, expectSentenceError, fd, rawItem, rawOption, rawRule, run, sql, u
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('next/navigation', async () => (await import('../helpers/flash-jar-core')).nextNavigationMock());
 vi.mock('../../src/lib/session', async () => (await import('./t401-s4-common')).sessionMock());
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 
 afterAll(async () => {
   const { closeDb } = await import('@shareat/db');

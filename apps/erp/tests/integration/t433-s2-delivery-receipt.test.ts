@@ -23,7 +23,7 @@ if (!isTestDatabaseUrl(url)) {
 }
 
 vi.mock('../../src/lib/session', () => ({ requireSession: vi.fn(), requireActor: vi.fn() }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 
 import { closeDb } from '@shareat/db';
 import { recordCharge, recordCollection, voidTradeOrder, WHOLESALE_REVENUE_CODE } from '@shareat/domain';
