@@ -5,6 +5,7 @@
  */
 import { add, money } from '@shareat/core/money';
 import type { ProjectedStoreMenu, StoreMenuV2 } from '@shareat/domain';
+import { compareMenuOrder, compareVariantOrder } from '@shareat/domain/menu/order';
 import { hasStoreSlots, resolveSlot, type DaypartHours, type SlotAnswer } from '@/lib/pos-device/daypart-client';
 
 /** The snapshot holds the menu as `{ menu, contentHash, nextChangeAt }`; a bare `StoreMenuV2` is accepted too. */
@@ -51,7 +52,8 @@ export interface PickerCategory {
   items: PickerItem[];
 }
 
-const bySort = <T extends { sortOrder: number }>(a: T, b: T) => a.sortOrder - b.sortOrder;
+/** T-651: one order rule everywhere (sort order, then name, then id); sizes put the default first. */
+const bySort = compareMenuOrder;
 
 /**
  * `takeOut`: a take-out order holds no package (T-524 refuses one), so packages never show. In a dine-in context a package shows whatever its
@@ -121,7 +123,7 @@ export function goneLines<L extends { itemId: string; variantId?: string }>(cart
 }
 
 /** The variants the cashier can pick between: a sold-out size is not offered. */
-export const orderableVariants = (item: PickerItem): ProjectedVariant[] => [...item.variants].filter((v) => storeAnswer(v, item.when).orderable).sort(bySort);
+export const orderableVariants = (item: PickerItem): ProjectedVariant[] => [...item.variants].filter((v) => storeAnswer(v, item.when).orderable).sort(compareVariantOrder);
 
 /**
  * The display price of a line already on an order (T-559): its slot at `when`. A dayparted variant with no price for that minute has NO price (null: the bill

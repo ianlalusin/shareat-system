@@ -7,6 +7,7 @@
 import { createHash } from 'node:crypto';
 import { internalFault } from '../shared/refusal-leaf';
 import { resolveOfferPrice, type ResolvableOffer } from './resolve-price';
+import { compareMenuOrder, compareVariantOrder } from './order';
 
 type Status = 'active' | 'retired';
 type Channel = 'store' | 'online';
@@ -187,7 +188,7 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
   // R4: station rows are read live, active only. R5: a store-offered item with no route to one of them is not on the POS.
   const stationRows = snapshot.stations.filter((s) => s.storeId === storeId && s.status === 'active');
   const stations: ProjectedStation[] = [...stationRows]
-    .sort((a, b) => cmpNum(a.sortOrder, b.sortOrder) || cmp(a.name, b.name) || cmp(a.id, b.id))
+    .sort(compareMenuOrder)
     .map((s) => ({ id: s.id, name: s.name, slaMinutes: s.slaMinutes, printOnOutage: s.printOnOutage }));
   const activeStationIds = new Set(stationRows.map((s) => s.id));
   const stationOf = new Map<string, string>();
@@ -237,7 +238,7 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
           },
         }))
         .filter((v) => v.channels.store.orderable || v.channels.online.orderable)
-        .sort((a, b) => cmpNum(a.sortOrder, b.sortOrder) || cmp(a.name, b.name) || cmp(a.id, b.id));
+        .sort(compareMenuOrder);
       out.push({ id: g.id, name: g.name, selectionMode: g.selectionMode, minSelections: g.minSelections, maxSelections: g.maxSelections, values });
     }
     return out;
@@ -261,7 +262,7 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
             ...(slots ? { slots } : {}),
           };
         })
-        .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || cmpNum(a.sortOrder, b.sortOrder) || cmp(a.label ?? '', b.label ?? '') || cmp(a.id, b.id));
+        .sort(compareVariantOrder);
       return {
         id: i.id,
         categoryId: i.categoryId,
@@ -276,7 +277,7 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
         stationId: stationOf.get(i.id) ?? null,
       };
     })
-    .sort((a, b) => cmpNum(a.sortOrder, b.sortOrder) || cmp(a.name, b.name) || cmp(a.id, b.id));
+    .sort(compareMenuOrder);
 
   // A category appears iff it holds an appearing item or parents (at any depth) an appearing category.
   const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
@@ -295,7 +296,7 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
   const flat: ProjectedCategory[] = snapshot.categories
     .filter((c) => c.status === 'active' && catAppears.has(c.id))
     .map((c) => ({ id: c.id, name: c.name, parentId: c.parentId, sortOrder: c.sortOrder }))
-    .sort((a, b) => cmpNum(a.sortOrder, b.sortOrder) || cmp(a.name, b.name) || cmp(a.id, b.id));
+    .sort(compareMenuOrder);
   // Tree order: parents before children, siblings by (sortOrder, name, id); a category whose parent is absent is a root.
   const flatIds = new Set(flat.map((c) => c.id));
   const kids = new Map<string | null, ProjectedCategory[]>();

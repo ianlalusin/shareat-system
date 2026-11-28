@@ -6,6 +6,7 @@
  * An item that is sold out or not open yet shows greyed and cannot be tapped (row 307). Prices here are display only: the server sets the real price.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { compareMenuOrder } from '@shareat/domain/menu/order';
 import { peso } from '@/lib/format';
 import { asStoreMenu, closedPackages, closedPackagesText, displayUnitPrice, goneLines, groupHint, isOptionChoiceValid, needsChoiceSheet, orderableVariants, pickerCatalog, type MenuLike, type PickerItem, type Variant } from './menu-filter';
 import { POS_NOTICE_DISMISS_MS } from '../_shell/constants';
@@ -88,7 +89,7 @@ function ChoiceSheet({ item, onAdd, onCancel }: { item: PickerItem; onAdd: (line
           <div className="flex flex-wrap gap-2">
             {g.values
               .filter((v) => v.channels.store.orderable)
-              .sort((a, b) => a.sortOrder - b.sortOrder)
+              .sort(compareMenuOrder)
               .map((v) => {
                 const on = (picked[g.id] ?? []).includes(v.id);
                 const more = !on && (picked[g.id] ?? []).length >= g.maxSelections && g.selectionMode === 'multi';

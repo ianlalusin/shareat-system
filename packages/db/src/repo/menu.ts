@@ -218,7 +218,7 @@ export async function variantsOfItem(tx: Tx, orgId: string, menuItemId: string):
     .select()
     .from(menuItemVariants)
     .where(and(eq(menuItemVariants.menuItemId, menuItemId), eq(menuItemVariants.orgId, orgId)))
-    .orderBy(asc(menuItemVariants.sortOrder), asc(menuItemVariants.createdAt));
+    .orderBy(desc(menuItemVariants.isDefault), asc(menuItemVariants.sortOrder), asc(sql`lower(coalesce(${menuItemVariants.label}, ''))`), asc(menuItemVariants.id));
 }
 
 export async function insertVariant(
@@ -975,4 +975,102 @@ export async function insertRuleAtTxNow(tx: Tx, input: Omit<InsertRuleInput, 'ef
 export async function clockNow(tx: Tx): Promise<Date> {
   const rows = (await tx.execute(sql`select date_trunc('milliseconds', clock_timestamp()) as t`)) as unknown as { t: string | Date }[];
   return new Date(rows[0]!.t);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-651: order. One list = the categories of an org, the items of a category, the variants of an item or the values of an option group.
+// ---------------------------------------------------------------------------------------------------------------------
+export type OrderList =
+  | { kind: 'categories'; orgId: string }
+  | { kind: 'items'; orgId: string; categoryId: string }
+  | { kind: 'variants'; orgId: string; menuItemId: string }
+  | { kind: 'optionValues'; orgId: string; optionGroupId: string };
+
+/** The table and filter of a list. `lower(name)` ties go to the id, the same rule as `compareMenuOrder`. */
+function orderTarget(list: OrderList) {
+  switch (list.kind) {
+    case 'categories':
+      return { t: menuCategories, scope: eq(menuCategories.orgId, list.orgId), name: sql`lower(${menuCategories.name})`, label: sql<string>`${menuCategories.name}`, isDefault: sql<boolean>`false`, first: undefined };
+    case 'items':
+      return {
+        t: menuItems,
+        scope: and(eq(menuItems.orgId, list.orgId), eq(menuItems.categoryId, list.categoryId)),
+        name: sql`lower(${menuItems.name})`,
+        label: sql<string>`${menuItems.name}`,
+        isDefault: sql<boolean>`false`,
+        first: undefined,
+      };
+    case 'variants':
+      return {
+        t: menuItemVariants,
+        scope: and(eq(menuItemVariants.orgId, list.orgId), eq(menuItemVariants.menuItemId, list.menuItemId)),
+        name: sql`lower(coalesce(${menuItemVariants.label}, ''))`,
+        label: sql<string>`coalesce(${menuItemVariants.label}, '')`,
+        isDefault: sql<boolean>`${menuItemVariants.isDefault}`,
+        first: desc(menuItemVariants.isDefault), // the default size is always first
+      };
+    case 'optionValues':
+      return {
+        t: menuOptionValues,
+        scope: and(eq(menuOptionValues.orgId, list.orgId), eq(menuOptionValues.optionGroupId, list.optionGroupId)),
+        name: sql`lower(${menuOptionValues.name})`,
+        label: sql<string>`${menuOptionValues.name}`,
+        isDefault: sql<boolean>`false`,
+        first: undefined,
+      };
+  }
+}
+
+export interface OrderRow {
+  id: string;
+  sortOrder: number;
+  /** The name shown for the row (a variant's label; '' for the unlabelled default). */
+  label: string;
+  isDefault: boolean;
+}
+
+/** The ACTIVE rows of a list in the arranged order. `lock` (the writer) takes `for update`, so two people saving one list take turns. */
+export async function orderedRows(tx: Tx, list: OrderList, lock = false): Promise<OrderRow[]> {
+  const { t, scope, name, label, isDefault, first } = orderTarget(list);
+  const q = tx
+    .select({ id: t.id, sortOrder: t.sortOrder, label, isDefault })
+    .from(t)
+    .where(and(scope, eq(t.status, 'active')))
+    .orderBy(...(first ? [first] : []), asc(t.sortOrder), asc(name), asc(t.id));
+  return lock ? q.for('update') : q;
+}
+
+/** Sets `sort_order` to `step`, `2 * step`, ... in the given order, for the rows that differ. Returns how many rows changed. */
+export async function setSortOrders(tx: Tx, list: OrderList, ids: readonly string[], step: number): Promise<number> {
+  const { t } = orderTarget(list);
+  const current = new Map((await tx.select({ id: t.id, sortOrder: t.sortOrder }).from(t).where(inArray(t.id, [...ids]))).map((r) => [r.id, r.sortOrder]));
+  let changed = 0;
+  for (const [i, id] of ids.entries()) {
+    const want = (i + 1) * step;
+    if (current.get(id) === want) continue;
+    // One literal `.update(<table>)` per kind (not a union-typed `t`), so the T-371 write guard can name every target.
+    switch (list.kind) {
+      case 'categories':
+        await tx.update(menuCategories).set({ sortOrder: want, updatedAt: sql`now()` }).where(eq(menuCategories.id, id));
+        break;
+      case 'items':
+        await tx.update(menuItems).set({ sortOrder: want, updatedAt: sql`now()` }).where(eq(menuItems.id, id));
+        break;
+      case 'variants':
+        await tx.update(menuItemVariants).set({ sortOrder: want, updatedAt: sql`now()` }).where(eq(menuItemVariants.id, id));
+        break;
+      case 'optionValues':
+        await tx.update(menuOptionValues).set({ sortOrder: want, updatedAt: sql`now()` }).where(eq(menuOptionValues.id, id));
+        break;
+    }
+    changed++;
+  }
+  return changed;
+}
+
+/** Where a new row lands: past the end of its list (largest sort order of ANY status, plus `step`), never at the top. */
+export async function nextSortOrder(tx: Tx, list: OrderList, step: number): Promise<number> {
+  const { t, scope } = orderTarget(list);
+  const [row] = await tx.select({ m: sql<number>`coalesce(max(${t.sortOrder}), 0)::int` }).from(t).where(scope);
+  return (row?.m ?? 0) + step;
 }

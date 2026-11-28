@@ -6,7 +6,7 @@ import { defineTypedForm } from '@/lib/keep-typing';
 
 export const MENU_ITEM = defineTypedForm({
   form: 'menu.item',
-  fields: ['name', 'description', 'categoryId', 'sortOrder', 'status'],
+  fields: ['name', 'description', 'categoryId', 'status'],
 });
 
 export const MENU_OPTION_GROUP = defineTypedForm({

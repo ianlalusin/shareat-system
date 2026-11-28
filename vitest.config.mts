@@ -69,6 +69,8 @@ const alias = {
   '@shareat/domain/documents/doc': `${root}packages/domain/src/documents/doc.ts`,
   // T-528 — the pure pricing leaf the POS tablet runs on the device; exact match before the bare name.
   '@shareat/domain/pos/price': `${root}packages/domain/src/pos/price.ts`,
+  // T-651 - the menu order rule, a db-free leaf the POS tablet bundle imports; exact entry before the bare name.
+  '@shareat/domain/menu/order': `${root}packages/domain/src/menu/order.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,
   // ⚠️ The subpath goes BEFORE the bare name: these are exact-match aliases applied in order, and
   // T-237's `@shareat/auth/errors` leaf (the error classes without `@shareat/db` behind them) is

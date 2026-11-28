@@ -321,14 +321,14 @@ describe('notOffered reasons land on the right channel; amounts come from resolv
   });
 });
 
-describe('sort orders (UTF-16 code unit; input order never matters)', () => {
+describe('sort orders (T-651: name compared lower-case, then id; input order never matters)', () => {
   const cat = (id: string, name: string, sortOrder: number) => ({ id, name, parentId: null, sortOrder, status: 'active' });
-  it('categories and items by (sortOrder, name, id); uppercase sorts before lowercase', () => {
+  it('categories and items by (sortOrder, lower-case name, id); case does not decide', () => {
     const snap = base({ categories: [cat('c3', 'b', 1), cat('c2', 'a', 1), cat('c1', 'Z', 1), cat('c0', 'zz', 0)] });
     snap.items = snap.items.map((i: any, n: number) => ({ ...i, categoryId: ['c0', 'c1', 'c2', 'c3'][n], sortOrder: 5, name: ['a', 'a', 'B', 'a'][n] }));
     const p = proj(snap);
-    expect(p.menu.categories.map((c: any) => c.id)).toEqual(['c0', 'c1', 'c2', 'c3']);
-    expect(p.menu.items.map((i: any) => i.id)).toEqual(['r1', 'i1', 'ip', 'r2']);
+    expect(p.menu.categories.map((c: any) => c.id)).toEqual(['c0', 'c2', 'c3', 'c1']);
+    expect(p.menu.items.map((i: any) => i.id)).toEqual(['i1', 'ip', 'r2', 'r1']);
   });
   it('categories come in tree order: parent before its children, siblings by (sortOrder, name, id)', () => {
     const snap = base({

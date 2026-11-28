@@ -10,6 +10,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { daypartsRepo, kitchenRepo, menuRepo, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { inTx, parseMenuAmount } from './shared';
+import { compareMenuOrder, compareVariantOrder } from './order';
 import { cancelScheduledOffer, cancelScheduledOptionOffer, setMenuOffer, setOptionOffer, withdrawMenuOffer } from './pricing';
 
 export interface SwitchPrice {
@@ -204,7 +205,7 @@ export async function loadStoreSells(tx: Tx, orgId: string, storeId: string, oth
 
   const activeStations = new Set(stations.map((s) => s.id)); // listStations: active only
   const routed = new Set(routes.filter((r) => activeStations.has(r.stationId)).map((r) => r.menuItemId));
-  const categories = catalog.categories.filter((c) => c.status === 'active').sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  const categories = catalog.categories.filter((c) => c.status === 'active').sort(compareMenuOrder);
   const activeCategory = new Set(categories.map((c) => c.id));
 
   const slotOf = (daypartId: string | null, r?: { amount: string | null; bundleHeads: number | null; extraHeadAmount: string | null }): SellsSlot => ({
@@ -226,8 +227,8 @@ export async function loadStoreSells(tx: Tx, orgId: string, storeId: string, oth
   };
 
   const items: SellsItem[] = [];
-  for (const item of catalog.items.filter((i) => i.status === 'active').sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))) {
-    const vrows = catalog.variants.filter((v) => v.menuItemId === item.id && v.status === 'active').sort((a, b) => a.sortOrder - b.sortOrder);
+  for (const item of catalog.items.filter((i) => i.status === 'active').sort(compareMenuOrder)) {
+    const vrows = catalog.variants.filter((v) => v.menuItemId === item.id && v.status === 'active').sort(compareVariantOrder);
     if (vrows.length === 0) continue;
     const variants: SellsVariant[] = vrows.map((v) => {
       const mine = offers.filter((r) => r.variantId === v.id && !r.withdrawn);
@@ -275,7 +276,7 @@ export async function loadStoreSells(tx: Tx, orgId: string, storeId: string, oth
         name: g.name,
         values: catalog.optionValues
           .filter((ov) => ov.optionGroupId === g.id && ov.status === 'active')
-          .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+          .sort(compareMenuOrder)
           .map((ov) => {
             const live = optionOffers.find((o) => o.optionValueId === ov.id && o.channel === 'store');
             return { optionValueId: ov.id, name: ov.name, on: live !== undefined, priceDelta: live?.priceDelta ?? null };

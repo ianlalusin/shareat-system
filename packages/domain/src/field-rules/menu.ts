@@ -5,10 +5,9 @@
  */
 import { defineFieldRules } from './check';
 
-/** Add a category (/menu) and edit one (EditableRecord): the same two boxes. */
+/** Add a category (/menu) and edit one (EditableRecord): the same box. T-651: the order is set on /menu/arrange, not typed here. */
 export const MENU_CATEGORY_RULES = defineFieldRules('menu.category', {
   name: { label: 'The category name', kind: 'text', requires: 'A category needs a name.' },
-  sortOrder: { label: 'The sort order', optional: true, kind: 'number', integer: true },
 });
 
 /** Add an item (/menu, super-admin). */
@@ -20,7 +19,6 @@ export const MENU_ITEM_ADD_RULES = defineFieldRules('menu.createItem', {
 /** Edit an item's details (/menu/items/[id]). */
 export const MENU_ITEM_EDIT_RULES = defineFieldRules('menu.item', {
   name: { label: 'The item name', kind: 'text', requires: 'An item needs a name.' },
-  sortOrder: { label: 'The sort order', optional: true, kind: 'number', integer: true },
 });
 
 /** What a sale uses up. The quantity is only needed in "a stock item" mode; the domain decides, and parses six decimals. */

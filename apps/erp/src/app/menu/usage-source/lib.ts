@@ -2,7 +2,7 @@
  * Reads for /menu/usage-source (T-401 S5). Plain reads inside the caller's `withOrgPrincipal`; every write goes through the
  * seam in packages/domain/src/pos/depletion-source.ts, which authorizes, validates and audits.
  */
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { menuRepo, posMappingRepo, schema, stockLocationsRepo, type Tx } from '@shareat/db';
 import { compareDepletionSources, type SourceComparison } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
@@ -59,8 +59,10 @@ export async function loadUsageSourcePage(tx: Tx, actor: Actor, storeId: string,
     .select({ id: v.id, label: v.label, itemName: i.name })
     .from(v)
     .innerJoin(i, eq(i.id, v.menuItemId))
+    .innerJoin(schema.menuCategories, eq(schema.menuCategories.id, i.categoryId))
     .where(and(eq(v.orgId, actor.orgId), eq(v.status, 'active'), eq(i.status, 'active')))
-    .orderBy(asc(i.name), asc(v.label), asc(v.id));
+    // T-651: the arranged order (category, item, then the default size first), not alphabetical.
+    .orderBy(asc(schema.menuCategories.sortOrder), asc(sql`lower(${schema.menuCategories.name})`), asc(i.sortOrder), asc(sql`lower(${i.name})`), asc(i.id), desc(v.isDefault), asc(v.sortOrder), asc(sql`lower(coalesce(${v.label}, ''))`), asc(v.id));
   const variants = variantRows.map((r) => ({ id: r.id, label: r.label ? `${r.itemName} (${r.label})` : r.itemName }));
   const variantLabel = new Map(variants.map((x) => [x.id, x.label]));
 
