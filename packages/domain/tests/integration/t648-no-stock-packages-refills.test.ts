@@ -72,6 +72,23 @@ describe('T-648 setNoStockForPackagesAndRefills', () => {
     expect(await auditCount(w.c.orgId)).toBe(before.audit);
   });
 
+  it('a manager is refused even when every package and refill variant already uses no stock (the batch gate runs first)', async () => {
+    const c = await cast('t648-gate');
+    const pkg = await rawItem(c, 'package');
+    await rawRule(c, pkg.variantId);
+    const refill = await rawItem(c, 'refill');
+    await rawRule(c, refill.variantId);
+    expect(await asOrg(c.orgId, (tx) => menuRepo.packageRefillVariantsNeedingNoStock(tx, c.orgId))).toEqual([]);
+    const audits = await auditCount(c.orgId);
+    const r = await attempt(() => asOrg(c.orgId, (tx) => setNoStockForPackagesAndRefills(c.manager, tx)));
+    expect(r.failed).toBe(true);
+    expect(r.error).toBeInstanceOf(AuthorizationError);
+    expect((r.error as AuthorizationError).capability).toBe('set_menu_depletion');
+    expect((await rulesOf(pkg.variantId)).map((x) => x.mode)).toEqual(['no_stock']);
+    expect((await rulesOf(refill.variantId)).map((x) => x.mode)).toEqual(['no_stock']);
+    expect(await auditCount(c.orgId)).toBe(audits);
+  });
+
   it('a variant with a scheduled future rule is skipped and reported; the others still change', async () => {
     const w = await world();
     await directRule(w.c, w.pkg.variantId, `now() + interval '7 days'`);

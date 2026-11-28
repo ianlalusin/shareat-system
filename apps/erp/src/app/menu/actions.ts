@@ -106,6 +106,7 @@ export async function setNoStockForPackagesAndRefillsAction(): Promise<void> {
   }
   const { changed, skipped } = result;
   const names = [...new Set(skipped.map((s) => s.itemName))].join(', ');
-  const note = skipped.length > 0 ? ` ${skipped.length} skipped because a change is already scheduled: ${names}.` : '';
-  return await redirectWithFlash(PATH, {}, { ok: `Set ${changed} variants to Uses no stock.${note}` });
+  const word = (n: number) => (n === 1 ? 'variant' : 'variants');
+  const note = skipped.length > 0 ? ` ${skipped.length} ${word(skipped.length)} skipped because a change is already scheduled: ${names}.` : '';
+  return await redirectWithFlash(PATH, {}, { ok: `Set ${changed} ${word(changed)} to Uses no stock.${note}` });
 }
