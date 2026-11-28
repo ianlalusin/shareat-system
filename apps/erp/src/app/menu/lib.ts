@@ -8,7 +8,7 @@
  *    domain (`@shareat/domain`, packages/domain/src/menu), which authorizes, validates and audits.
  */
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { accessRepo, daypartsRepo, menuRepo, refuse, schema, type Tx } from '@shareat/db';
 import { loadLiveStoreOffers, type LiveOfferFault, type NotOfferedNow } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
@@ -157,13 +157,13 @@ export interface CategoryRow {
   status: 'active' | 'retired';
 }
 
-/** Every category, in the order they were arranged (sort order, then the order they were made). */
+/** Every category, in the order they were arranged (T-651: sort order, then name, then id). */
 export async function listCategories(tx: Tx, orgId: string): Promise<CategoryRow[]> {
   return tx
     .select({ id: schema.menuCategories.id, name: schema.menuCategories.name, sortOrder: schema.menuCategories.sortOrder, status: schema.menuCategories.status })
     .from(schema.menuCategories)
     .where(eq(schema.menuCategories.orgId, orgId))
-    .orderBy(asc(schema.menuCategories.sortOrder), asc(schema.menuCategories.createdAt), asc(schema.menuCategories.id));
+    .orderBy(asc(schema.menuCategories.sortOrder), asc(sql`lower(${schema.menuCategories.name})`), asc(schema.menuCategories.id));
 }
 
 export interface OverviewItem {
@@ -294,6 +294,8 @@ export interface ItemPageData {
     quantityPerSale: string | null;
     inForce: boolean;
   }[];
+  /** T-651: where this item stands among the active items of its category (1-based), for "Position 3 of 12". */
+  position: { at: number; of: number };
   stores: StoreChoice[];
   offers: OfferHistoryRow[];
 }
@@ -424,7 +426,13 @@ export async function loadItemPage(tx: Tx, actor: Actor, itemId: string): Promis
       }
     }
   }
-  return { now, item, category: categories.find((c) => c.id === item.categoryId), categories, variants, optionGroups, allGroups, refillChoices, refillsByVariant, rules, stores, offers };
+  const siblings = await tx
+    .select({ id: schema.menuItems.id })
+    .from(schema.menuItems)
+    .where(and(eq(schema.menuItems.orgId, orgId), eq(schema.menuItems.categoryId, item.categoryId), eq(schema.menuItems.status, 'active')))
+    .orderBy(asc(schema.menuItems.sortOrder), asc(sql`lower(${schema.menuItems.name})`), asc(schema.menuItems.id));
+  const position = { at: siblings.findIndex((s) => s.id === item.id) + 1, of: siblings.length };
+  return { now, item, category: categories.find((c) => c.id === item.categoryId), categories, variants, optionGroups, allGroups, refillChoices, refillsByVariant, rules, position, stores, offers };
 }
 
 export interface ScheduledOffer {
@@ -492,7 +500,7 @@ export async function loadPricesPage(tx: Tx, orgId: string, storeId: string): Pr
     .select({ id: schema.menuItemVariants.id, menuItemId: schema.menuItemVariants.menuItemId, label: schema.menuItemVariants.label })
     .from(schema.menuItemVariants)
     .where(and(eq(schema.menuItemVariants.orgId, orgId), eq(schema.menuItemVariants.status, 'active')))
-    .orderBy(asc(schema.menuItemVariants.sortOrder), asc(schema.menuItemVariants.createdAt));
+    .orderBy(desc(schema.menuItemVariants.isDefault), asc(schema.menuItemVariants.sortOrder), asc(sql`lower(coalesce(${schema.menuItemVariants.label}, ''))`), asc(schema.menuItemVariants.id));
   const items = itemRows.map((i) => ({ ...i, variants: variantRows.filter((v) => v.menuItemId === i.id).map((v) => ({ id: v.id, label: v.label })) }));
   // T-510: the offer live RIGHT NOW per variant and channel (a variant may hold one live offer per daypart); the grid also shows every slot (below).
   const { offers: inForce, notOfferedNow, faults } = await loadLiveStoreOffers(tx, orgId, storeId, now);

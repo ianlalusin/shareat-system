@@ -47,6 +47,9 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
   const canManage = held.has('manage_menu');
   const canAddItem = held.has('add_menu_item');
 
+  // T-651: "Position 3 of 12": where the category stands among the active ones (the arranged order; `listCategories` already sorts).
+  const activePosition = new Map(categories.filter((c) => c.status === 'active').map((c, i) => [c.id, i + 1]));
+  const activeCategoryCount = activePosition.size;
   const activeCount = new Map<string, number>();
   for (const i of items) if (i.status === 'active') activeCount.set(i.categoryId, (activeCount.get(i.categoryId) ?? 0) + 1);
 
@@ -81,9 +84,6 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
                 <FormGrid layout="fields">
                   <Field label="Name" width="name" rule={MENU_CATEGORY_RULES.name}>
                     <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} />
-                  </Field>
-                  <Field label="Sort order (optional)" width="short" rule={MENU_CATEGORY_RULES.sortOrder}>
-                    <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} />
                   </Field>
                 </FormGrid>
                 <DialogActions>
@@ -136,6 +136,11 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
           <Link href="/menu/prices" className={NAV_LINK}>
             Prices
           </Link>
+          {canManage && (
+            <Link href="/menu/arrange" className={NAV_LINK}>
+              Arrange order
+            </Link>
+          )}
           {storeId && (
             <Link href={`/menu/stores/${storeId}`} className={NAV_LINK}>
               What a store sells
@@ -242,19 +247,22 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
             </div>
             {canManage && c.status === 'active' && (
               <>
+                <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted">
+                  {`Position ${activePosition.get(c.id)} of ${activeCategoryCount} ·`}
+                  <Link href={`/menu/arrange?category=${c.id}`} className={NAV_LINK}>
+                    Arrange order
+                  </Link>
+                </p>
                 <div className="flex items-center gap-1 text-xs text-muted">
                   Retiring a category
                   <HelpTip label="Retiring a category">
                     Retiring a category hides it, and every item in it, from every store menu. It is refused while the category still holds active items.
                   </HelpTip>
                 </div>
-                <EditableRecord action={editCategoryAction} rules={MENU_CATEGORY_RULES} label={c.name} summary={[{ label: 'Name', value: c.name }, { label: 'Sort order', value: String(c.sortOrder) }]} hidden={{ id: c.id }} typed={typedFor(sp, MENU_CATEGORY, c.id, actor.personId)}>
+                <EditableRecord action={editCategoryAction} rules={MENU_CATEGORY_RULES} label={c.name} summary={[{ label: 'Name', value: c.name }]} hidden={{ id: c.id }} typed={typedFor(sp, MENU_CATEGORY, c.id, actor.personId)}>
                   <FormGrid layout="fields">
                     <Field label="Name" width="name" rule={MENU_CATEGORY_RULES.name}>
                       <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} defaultValue={c.name} />
-                    </Field>
-                    <Field label="Sort order" width="short" rule={MENU_CATEGORY_RULES.sortOrder}>
-                      <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} defaultValue={String(c.sortOrder)} />
                     </Field>
                   </FormGrid>
                 </EditableRecord>

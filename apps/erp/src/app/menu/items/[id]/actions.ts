@@ -48,7 +48,6 @@ export async function editItemAction(fd: FormData): Promise<void> {
     const description = opt(fd, 'description');
     const categoryId = opt(fd, 'categoryId');
     const status = opt(fd, 'status');
-    const sortOrder = wholeNumber(fd, 'sortOrder', 'The sort order');
     await withOrgPrincipal(actor.orgId, async (tx) => {
       // T-440 S9 (iii): `editMenuItem` also serves retire (no name), so the field check stays here, and runs only for a caller its
       // first authorize() ('manage_menu') would let in; anyone else is refused by that gate before any field sentence.
@@ -61,7 +60,6 @@ export async function editItemAction(fd: FormData): Promise<void> {
           ...(name !== undefined ? { name } : {}),
           ...(description !== undefined ? { description } : {}),
           ...(categoryId !== undefined ? { categoryId } : {}),
-          ...(sortOrder !== undefined ? { sortOrder } : {}),
           ...(status !== undefined ? { status: status as MenuStatus } : {}),
         },
         tx,

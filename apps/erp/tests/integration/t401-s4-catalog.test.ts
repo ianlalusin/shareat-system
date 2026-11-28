@@ -30,8 +30,8 @@ const ITEM_PAGE = () => import('../../src/app/menu/items/[id]/page');
 
 const n = async (q: PromiseLike<readonly Record<string, unknown>[]>): Promise<number> => Number((await q)[0]!['n']);
 
-async function category(c: Cast, name: string): Promise<string> {
-  return (await sql<{ id: string }[]>`insert into menu_categories (org_id, name, status, created_by) values (${c.orgId}, ${name}, 'active', ${c.admin.personId}) returning id`)[0]!.id;
+async function category(c: Cast, name: string, sortOrder = 0): Promise<string> {
+  return (await sql<{ id: string }[]>`insert into menu_categories (org_id, name, sort_order, status, created_by) values (${c.orgId}, ${name}, ${sortOrder}, 'active', ${c.admin.personId}) returning id`)[0]!.id;
 }
 async function itemIn(c: Cast, categoryId: string, name: string, type: 'a_la_carte' | 'package' | 'refill' = 'a_la_carte', status = 'active'): Promise<{ itemId: string; variantId: string }> {
   const [item] = await sql<{ id: string }[]>`
@@ -45,8 +45,9 @@ async function itemIn(c: Cast, categoryId: string, name: string, type: 'a_la_car
 /** Meat (Pork Belly a la carte WITH a rule and an offer at A, Unli Pork package, Rice Refill) and Drinks (Iced Tea, no rule). */
 async function menuWorld(hint: string) {
   const c = await cast(`s4cat-${hint}`);
-  const meat = await category(c, 'Meat');
-  const drinks = await category(c, 'Drinks');
+  // T-651: arranged (Meat first); tied numbers would fall to the name, which puts Drinks first.
+  const meat = await category(c, 'Meat', 10);
+  const drinks = await category(c, 'Drinks', 20);
   const pork = await itemIn(c, meat, 'Pork Belly');
   const unli = await itemIn(c, meat, 'Unli Pork', 'package');
   const rice = await itemIn(c, meat, 'Rice Refill', 'refill');
@@ -137,14 +138,14 @@ describe('inline category edits', () => {
     expect(await n(sql`select count(*)::int as n from menu_categories where org_id = ${c.orgId} and lower(name) = 'soups'`)).toBe(1);
   });
 
-  it('editCategoryAction renames and re-sorts ("Category saved."); renaming onto another category is refused', async () => {
+  it('editCategoryAction renames ("Category saved."); renaming onto another category is refused; a sort order in the form is ignored (T-651: order is set on /menu/arrange)', async () => {
     const c = await cast('s4cat-edit');
     const id = await category(c, 'Dessert');
     await category(c, 'Drinks');
     const ok = await run(MENU_ACTIONS, 'editCategoryAction', c.admin, fd({ id, name: 'Desserts', sortOrder: '5' }));
     expect(ok.flash.ok).toBe('Category saved.');
     const [row] = await sql<{ name: string; sort_order: number }[]>`select name, sort_order from menu_categories where id = ${id}`;
-    expect(row).toMatchObject({ name: 'Desserts', sort_order: 5 });
+    expect(row).toMatchObject({ name: 'Desserts', sort_order: 0 });
     const clash = await run(MENU_ACTIONS, 'editCategoryAction', c.admin, fd({ id, name: 'drinks' }));
     expectSentenceError(clash.flash.error, 'rename onto another');
     expect((await sql<{ name: string }[]>`select name from menu_categories where id = ${id}`)[0]!.name).toBe('Desserts');

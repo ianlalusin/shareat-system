@@ -6,5 +6,5 @@ import { defineTypedForm } from '@/lib/keep-typing';
 
 export const MENU_CATEGORY = defineTypedForm({
   form: 'menu.category',
-  fields: ['name', 'sortOrder'],
+  fields: ['name'],
 });
