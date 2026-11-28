@@ -29,7 +29,7 @@ const held = { current: new Set<string>() };
 vi.mock('@shareat/auth', async (orig) => ({ ...(await orig<typeof import('@shareat/auth')>()), heldCapabilities: async () => held.current }));
 vi.mock('../src/lib/session', () => ({ requireSession: async () => ({ actor: { orgId: 'org-1', personId: 'p-1' } }) }));
 vi.mock('../src/app/expenses/lib', () => ({ withOrgPrincipal: async (_o: string, fn: (tx: unknown) => unknown) => fn({}), listStores: async () => [] }));
-vi.mock('../src/app/inventory/production/lib', () => ({ withOrgPrincipal: async (_o: string, fn: (tx: unknown) => unknown) => fn({}) }));
+vi.mock('../src/app/inventory/production/lib', () => ({ withOrgPrincipal: async (_o: string, fn: (tx: unknown) => unknown) => fn({}), listStores: async () => [] }));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
 vi.mock('../src/app/inventory/production/recipes/actions', () => ({
   createRecipeAction: async () => {},

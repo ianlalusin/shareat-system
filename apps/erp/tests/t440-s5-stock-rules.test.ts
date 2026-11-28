@@ -81,6 +81,10 @@ const ROWS: Record<string, Row> = {
   'inventory.setThreshold.threshold': optNum0('Low-stock threshold'),
   'inventory.createProductionDraft.producedOn': date('The production date'),
   'inventory.voidProduction.reason': req('A void needs a reason.'),
+  'production.recipe.standardLabourCost': {
+    ok: '10.5', stored: '10.50',
+    bad: [MONEY_BAD('Labour per batch'), ['-5', 'Labour per batch must be an amount of 0 or more.']],
+  },
   'inventory.refundSupplierCredit.amount': {
     ok: '10.5', stored: '10.50',
     bad: [MONEY_BAD('The refund amount'), ['0', 'The refund amount must be an amount of 0.01 or more.'], ['-5', 'The refund amount must be an amount of 0.01 or more.']],

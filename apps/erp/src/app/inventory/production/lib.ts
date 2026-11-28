@@ -4,8 +4,9 @@
  * Every rule lives in `packages/domain/src/production`; this file only reads.
  */
 import { itemsRepo, productionRepo, stockUsageRepo } from '@shareat/db';
-import { sliceLabourView } from '@shareat/domain';
+import { cookLabourFor, sliceLabourView } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
+import { quantity } from '@shareat/domain';
 import { peso } from '../../../lib/format';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
@@ -48,14 +49,17 @@ export function sliceLabourSentence(stored: string, status: string, auto: Awaite
 /** Everything the register + "New record" form needs, in one org-scoped transaction. */
 export async function productionScreenData(orgId: string, storeId: string): Promise<ProductionScreenData> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const [locations, itemRows, usableRows, recipes, records, slicers] = await Promise.all([
+    const [locations, itemRows, usableRows, allRecipes, records, slicers, limited] = await Promise.all([
       stockUsageRepo.listOperatingLocations(tx, storeId),
       itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
       itemsRepo.listUsableItems(tx, orgId, storeId),
       productionRepo.listRecipes(tx, orgId),
       productionRepo.listProductionRecords(tx, storeId),
       productionRepo.listSlicersAtStore(tx, orgId, storeId),
+      productionRepo.recipeStoreMap(tx, orgId),
     ]);
+    // T-650 S2: a recipe limited to some stores is not offered at the others (a recipe with no list is offered everywhere).
+    const recipes = allRecipes.filter((r) => !limited.has(r.id) || limited.get(r.id)!.includes(storeId));
     return {
       locations,
       items: itemRows.map((i) => ({ id: i.id, code: i.code, name: i.name, kind: i.kind, baseUnit: i.baseUnit })),
@@ -132,8 +136,19 @@ export async function productionRecordDetail(actor: Actor, id: string): Promise<
     });
 
     const outputsForLabour = rows.filter((r) => r.direction === 'in' && r.reversedAt === null && r.revision === record.revision);
+    // T-650 S2: a cook's labour, when it came from the recipe's standard per batch.
+    let cookNote: string | null = null;
+    if (record.kind === 'cook' && record.status !== 'void' && record.recipeId) {
+      const recipe = await productionRepo.getRecipe(tx, orgId, record.recipeId);
+      const made = outputsForLabour[0];
+      if (recipe?.standardLabourCost && made) {
+        const std = cookLabourFor(recipe.standardLabourCost, recipe.outputQuantity, quantity(made.quantity));
+        if (std && record.labourCost === std.pay) cookNote = `Labour: ${peso(std.pay)} from the recipe (${std.batches} ${std.batches === '1' ? 'batch' : 'batches'} × ${peso(recipe.standardLabourCost)})`;
+      }
+    }
     const labourNote =
-      record.kind === 'slice' && record.status !== 'void'
+      cookNote ??
+      (record.kind === 'slice' && record.status !== 'void'
         ? sliceLabourSentence(
             record.labourCost,
             record.status,
@@ -141,7 +156,7 @@ export async function productionRecordDetail(actor: Actor, id: string): Promise<
               ? null
               : await sliceLabourView(tx, actor, record.storeId, record.producedOn, outputsForLabour.map((r) => ({ itemId: r.itemId, itemName: itemsById.get(r.itemId)?.name ?? 'This item', quantity: r.quantity, unit: r.unit, isPaid: r.isPaid }))),
           )
-        : null;
+        : null);
     return {
       record,
       labourNote,

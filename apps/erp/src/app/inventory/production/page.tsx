@@ -150,7 +150,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               <Field label={<span className="text-neutral-600 dark:text-neutral-400">Date</span>} className="text-sm" rule={INVENTORY_PRODUCTION_RULES.producedOn}>
                 <Input type="date" {...nativeAttrs(INVENTORY_PRODUCTION_RULES.producedOn)} defaultValue={toBusinessDate()} className="w-full" />
               </Field>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Labour cost (optional)</span>} className="text-sm" hint={kind === 'slice' ? 'Leave blank: slicing labour fills from the slicer rate (kg × rate per kg). A figure you type wins.' : undefined}>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Labour cost (optional)</span>} className="text-sm" hint={kind === 'slice' ? 'Leave blank: slicing labour fills from the slicer rate (kg × rate per kg). A figure you type wins.' : kind === 'cook' ? "Leave blank: a cook takes its recipe's labour per batch, scaled to the quantity made. A figure you type wins." : undefined}>
                 <Input type="text" name="labourCost" inputMode="decimal" placeholder="0.00" className="w-full" />
               </Field>
             </FormGrid>

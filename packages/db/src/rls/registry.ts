@@ -1074,6 +1074,10 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'A recipe belongs to an org, org-wide master data, same class as items itself.',
   },
+  production_recipe_stores: {
+    scope: 'org_column',
+    reason: 'T-650 S2: carries its own org_id (same-org composite FKs to the recipe and the store); the stores a product recipe may be made at.',
+  },
   production_recipe_lines: {
     scope: 'derived',
     reason: 'No org_id of its own — reached only through its recipe, like supplier_return_lines.',

@@ -1327,6 +1327,10 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'keep',
     reason: 'The detail of a recipe, hanging off it by CASCADE. Same class as its parent.',
   },
+  production_recipe_stores: {
+    class: 'keep',
+    reason: 'T-650 S2: which stores may make a product recipe - part of the standing instruction, hanging off the recipe by CASCADE. Same class as its parent.',
+  },
   production_records: {
     class: 'purge',
     reason:
