@@ -354,6 +354,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu_option_group_edit', 'menu_price', 'normal', 'org', 'menu_option_groups', 'T-401'),
   def('menu_option_group_link', 'menu_price', 'normal', 'org', 'menu_option_group_links', 'T-401'),
   def('menu_option_group_unlink', 'menu_price', 'normal', 'org', 'menu_option_group_links', 'T-401'),
+  // T-653: one flavour list; a package or refill's allowed flavours, and the "Use these flavours" merge.
+  def('menu.flavours_allowed_set', 'menu_price', 'normal', 'org', 'menu_option_group_links', 'T-653'),
+  def('menu.flavours_merged', 'menu_price', 'normal', 'org', 'menu_option_groups', 'T-653'),
   def('menu_option_value_create', 'menu_price', 'normal', 'org', 'menu_option_values', 'T-401'),
   def('menu_option_value_edit', 'menu_price', 'normal', 'org', 'menu_option_values', 'T-401'),
   def('menu_package_refills_set', 'menu_price', 'normal', 'org', 'menu_package_refills', 'T-401'),

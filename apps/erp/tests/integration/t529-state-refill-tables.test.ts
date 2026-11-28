@@ -43,7 +43,7 @@ const viaRoute = async (f: Fx, who: { orgId: string; personId: string }, storeId
   return { status: res.status, body: (await res.json()) as { refillTables?: unknown[] | null; kitchenQueue?: unknown[] | null } };
 };
 const row = (t: { sessionId: string; standNumber: number }, f: Fx) => ({
-  sessionId: t.sessionId, standNumber: t.standNumber, packageVariantId: f.menu.unli.variantId, packageVariantIds: [f.menu.unli.variantId], seatFlavours: [], headsCashier: 2, headsServer: null,
+  sessionId: t.sessionId, standNumber: t.standNumber, packageVariantId: f.menu.unli.variantId, packageVariantIds: [f.menu.unli.variantId], seatFlavours: [], seatFlavourIds: [], headsCashier: 2, headsServer: null,
 });
 
 describe('refillTables in the state poll', () => {

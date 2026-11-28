@@ -193,7 +193,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 120 -> 119, T-637: /documents/templates moved onto <Page title description actions> (its call site left app/), and the new editor screen passes its prose to the same header, so the net change is -1; measured by walking app/.
     // 119 -> 84, T-652: the top-row sweep moved 35 header descriptions onto <PageHeader title description actions> (sticky header), whose own <PageDescription> lives in Page.tsx; measured by walking app/.
     // 84 -> 85, T-651 (merged): /menu/arrange carries its <PageDescription>; measured by walking app/.
-    expect(count).toBe(85);
+    // 85 -> 86, T-653: /menu/flavours carries its <PageDescription>; measured by walking app/.
+    expect(count).toBe(86);
   });
 });
 

@@ -36,7 +36,7 @@ describe('listRefillableTables', () => {
     const out = await read(f, server);
     expect(out.tables.map((t) => t.sessionId).sort()).toEqual([a.sessionId, b.sessionId].sort());
     expect(out.tables.map((t) => t.standNumber)).toEqual([...out.tables.map((t) => t.standNumber)].sort((x, y) => x - y));
-    expect(out.tables.find((t) => t.sessionId === a.sessionId)).toEqual({ sessionId: a.sessionId, standNumber: a.standNumber, packageVariantId: f.menu.unli.variantId, packageVariantIds: [f.menu.unli.variantId], seatFlavours: [], headsCashier: 3, headsServer: null });
+    expect(out.tables.find((t) => t.sessionId === a.sessionId)).toEqual({ sessionId: a.sessionId, standNumber: a.standNumber, packageVariantId: f.menu.unli.variantId, packageVariantIds: [f.menu.unli.variantId], seatFlavours: [], seatFlavourIds: [], headsCashier: 3, headsServer: null });
   });
 
   it('a table holding TWO package variants lists both (the first is packageVariantId), still one row for the table', async () => {

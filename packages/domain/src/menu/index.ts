@@ -6,6 +6,7 @@ export * from './catalog';
 export * from './daypart';
 export { createDaypart, retireDaypart, updateDaypart, type DaypartInput } from './dayparts';
 export * from './options';
+export * from './flavours';
 export * from './reorder';
 export * from './pricing';
 export * from './requests';

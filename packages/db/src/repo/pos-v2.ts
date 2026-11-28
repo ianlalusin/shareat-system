@@ -754,6 +754,8 @@ export async function listRefillableTables(tx: Tx, orgId: string, storeId: strin
       headsCashier: tableSessions.headsCashier,
       headsServer: tableSessions.headsServer,
       packageVariantId: tableSessionLines.menuItemVariantId,
+      /** T-653: the ids of the same options, in the same order: with ONE flavour list, a package's pick and a refill's pill are the same value row. */
+      seatFlavourIds: sql<string[]>`coalesce((select array_agg(${menuOptionValues.id}::text order by ${menuOptionValues.sortOrder}, ${menuOptionValues.name}) from ${menuOptionValues} where ${menuOptionValues.orgId} = ${tableSessionLines.orgId} and ${menuOptionValues.id} = any(${tableSessionLines.optionValueIds})), '{}'::text[])`,
       seatFlavours: sql<string[]>`coalesce((select array_agg(${menuOptionValues.name} order by ${menuOptionValues.sortOrder}, ${menuOptionValues.name}) from ${menuOptionValues} where ${menuOptionValues.orgId} = ${tableSessionLines.orgId} and ${menuOptionValues.id} = any(${tableSessionLines.optionValueIds})), '{}'::text[])`,
     })
     .from(tableSessions)

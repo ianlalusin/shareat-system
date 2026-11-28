@@ -10,7 +10,7 @@
 import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { accessRepo, daypartsRepo, menuRepo, refuse, schema, type Tx } from '@shareat/db';
-import { loadLiveStoreOffers, type LiveOfferFault, type NotOfferedNow } from '@shareat/domain';
+import { allowedFlavoursOf, loadLiveStoreOffers, type LiveOfferFault, type NotOfferedNow } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
 import { businessDayRange, parseBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
@@ -273,6 +273,14 @@ export interface OfferHistoryRow {
   state: 'in_force' | 'scheduled' | 'replaced';
 }
 
+/** What one package variant or refill item allows of the flavour list. `optionValueIds` empty with `linked` = every flavour; not linked = no flavours at all. */
+export interface AllowedFlavours {
+  linked: boolean;
+  optionValueIds: string[];
+  min: number | null;
+  max: number | null;
+}
+
 export interface ItemPageData {
   now: Date;
   item: typeof schema.menuItems.$inferSelect;
@@ -284,6 +292,10 @@ export interface ItemPageData {
   /** For a package: the refill items every package variant may serve, and which are ticked per variant. */
   refillChoices: { id: string; name: string }[];
   refillsByVariant: Map<string, Set<string>>;
+  /** T-653: the org's one flavour list (active flavours, in the arranged order; null = not started), and what each package variant / this refill item allows. */
+  flavourList: { id: string; name: string }[] | null;
+  flavoursByVariant: Map<string, AllowedFlavours>;
+  flavoursForItem: AllowedFlavours | null;
   rules: {
     id: string;
     variantId: string;
@@ -374,6 +386,15 @@ export async function loadItemPage(tx: Tx, actor: Actor, itemId: string): Promis
     }
   }
 
+  // T-653: the one flavour list, and the flavours each package variant (or this refill item) allows.
+  const flavourGroup = await menuRepo.getFlavoursGroup(tx, orgId);
+  const flavourList = flavourGroup
+    ? (await menuRepo.valuesOfGroup(tx, orgId, flavourGroup.id)).filter((v) => v.status === 'active').map((v) => ({ id: v.id, name: v.name }))
+    : null;
+  const flavoursByVariant = new Map<string, AllowedFlavours>();
+  if (flavourGroup && item.itemType === 'package') for (const vid of variantIds) flavoursByVariant.set(vid, await allowedFlavoursOf(tx, orgId, { variantId: vid }));
+  const flavoursForItem = flavourGroup && item.itemType === 'refill' ? await allowedFlavoursOf(tx, orgId, { menuItemId: item.id }) : null;
+
   const ruleRows =
     variantIds.length === 0
       ? []
@@ -432,7 +453,7 @@ export async function loadItemPage(tx: Tx, actor: Actor, itemId: string): Promis
     .where(and(eq(schema.menuItems.orgId, orgId), eq(schema.menuItems.categoryId, item.categoryId), eq(schema.menuItems.status, 'active')))
     .orderBy(asc(schema.menuItems.sortOrder), asc(sql`lower(${schema.menuItems.name})`), asc(schema.menuItems.id));
   const position = { at: siblings.findIndex((s) => s.id === item.id) + 1, of: siblings.length };
-  return { now, item, category: categories.find((c) => c.id === item.categoryId), categories, variants, optionGroups, allGroups, refillChoices, refillsByVariant, rules, position, stores, offers };
+  return { now, item, category: categories.find((c) => c.id === item.categoryId), categories, variants, optionGroups, allGroups, refillChoices, refillsByVariant, flavourList, flavoursByVariant, flavoursForItem, rules, position, stores, offers };
 }
 
 export interface ScheduledOffer {

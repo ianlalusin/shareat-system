@@ -24,6 +24,7 @@ import {
   integer,
   numeric,
   pgTable,
+  primaryKey,
   smallint,
   text,
   time,
@@ -45,6 +46,9 @@ export const MENU_ITEM_TYPES = ['a_la_carte', 'package', 'refill'] as const;
 export type MenuItemType = (typeof MENU_ITEM_TYPES)[number];
 
 export const MENU_SELECTION_MODES = ['single', 'multi'] as const;
+/** T-653: a 'flavours' group is THE org's one flavour list; every other group is a 'choice' group. */
+export const MENU_OPTION_GROUP_ROLES = ['choice', 'flavours'] as const;
+export type MenuOptionGroupRole = (typeof MENU_OPTION_GROUP_ROLES)[number];
 export type MenuSelectionMode = (typeof MENU_SELECTION_MODES)[number];
 
 export const MENU_CHANNELS = ['store', 'online'] as const;
@@ -217,6 +221,8 @@ export const menuOptionGroups = pgTable(
       .references(() => organizations.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     selectionMode: text('selection_mode', { enum: MENU_SELECTION_MODES }).notNull(),
+    /** T-653, migration 0292: 'choice' (every group until now) or 'flavours' (THE org's one flavour list; at most one active per org). */
+    role: text('role', { enum: MENU_OPTION_GROUP_ROLES }).notNull().default('choice'),
     minSelections: integer('min_selections').notNull().default(0),
     maxSelections: integer('max_selections').notNull().default(1),
     status: text('status', { enum: MENU_STATUSES }).notNull().default('active'),
@@ -229,6 +235,8 @@ export const menuOptionGroups = pgTable(
   (t) => [
     unique('menu_option_groups_org_id_id_unique').on(t.orgId, t.id),
     check('menu_option_groups_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    // NOTE: partial UNIQUE index menu_option_groups_one_flavours_per_org_key (org_id) WHERE role = 'flavours' AND status = 'active', hand-added in migration 0292.
+    check('menu_option_groups_role_check', sql`${t.role} in ('choice','flavours')`),
     check('menu_option_groups_selection_mode_check', sql`${t.selectionMode} in ('single','multi')`),
     check('menu_option_groups_status_check', sql`${t.status} in ('active','retired')`),
     check('menu_option_groups_min_check', sql`${t.minSelections} >= 0`),
@@ -263,6 +271,8 @@ export const menuOptionValues = pgTable(
   },
   (t) => [
     unique('menu_option_values_org_id_id_unique').on(t.orgId, t.id),
+    // T-653, migration 0292: lets menu_option_link_values pin a value to ITS group with a composite FK.
+    unique('menu_option_values_id_group_unique').on(t.id, t.optionGroupId),
     // NOTE: UNIQUE (option_group_id, lower(name)) - menu_option_values_group_name_key, hand-added in migration 0196.
     check('menu_option_values_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
     check('menu_option_values_status_check', sql`${t.status} in ('active','retired')`),
@@ -293,6 +303,9 @@ export const menuOptionGroupLinks = pgTable(
     menuItemId: uuid('menu_item_id').references(() => menuItems.id, { onDelete: 'restrict' }),
     variantId: uuid('variant_id').references(() => menuItemVariants.id, { onDelete: 'restrict' }),
     sortOrder: integer('sort_order').notNull().default(0),
+    /** T-653, migration 0292: per-link overrides of the group's min/max (null = the group's own). A package picks 1 to 3, a refill exactly 1. */
+    minSelections: integer('min_selections'),
+    maxSelections: integer('max_selections'),
     status: text('status', { enum: MENU_STATUSES }).notNull().default('active'),
     createdBy: uuid('created_by')
       .notNull()
@@ -300,6 +313,11 @@ export const menuOptionGroupLinks = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    unique('menu_option_group_links_org_id_id_unique').on(t.orgId, t.id),
+    unique('menu_option_group_links_id_group_unique').on(t.id, t.optionGroupId),
+    check('menu_option_group_links_min_check', sql`${t.minSelections} is null or ${t.minSelections} >= 0`),
+    check('menu_option_group_links_max_check', sql`${t.maxSelections} is null or ${t.maxSelections} >= 1`),
+    check('menu_option_group_links_max_min_check', sql`${t.minSelections} is null or ${t.maxSelections} is null or ${t.maxSelections} >= ${t.minSelections}`),
     // NOTE: partial UNIQUEs (option_group_id, menu_item_id) WHERE menu_item_id IS NOT NULL and
     // (option_group_id, variant_id) WHERE variant_id IS NOT NULL, hand-added in migration 0196.
     index('menu_option_group_links_item_idx').on(t.menuItemId),
@@ -326,6 +344,34 @@ export const menuOptionGroupLinks = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'menu_option_group_links_created_by_same_org_fk',
     }).onDelete('restrict'),
+  ],
+);
+
+/**
+ * T-653, migration 0292 - the flavours (option values) a link allows. No rows = every active value of the link's group; rows = only those.
+ * Both composite FKs carry option_group_id, so a value of ANOTHER group is refused by the database.
+ * NOTE: UNIQUE (org_id, id) and UNIQUE (id, option_group_id) on menu_option_group_links and UNIQUE (id, option_group_id) on menu_option_values are declared above;
+ * the composite FKs, RLS (ENABLE + FORCE + org_isolation) and the grants are hand-added in migration 0292.
+ */
+export const menuOptionLinkValues = pgTable(
+  'menu_option_link_values',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    linkId: uuid('link_id').notNull(),
+    optionGroupId: uuid('option_group_id').notNull(),
+    optionValueId: uuid('option_value_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.linkId, t.optionValueId], name: 'menu_option_link_values_pkey' }),
+    foreignKey({ columns: [t.orgId, t.linkId], foreignColumns: [menuOptionGroupLinks.orgId, menuOptionGroupLinks.id], name: 'menu_option_link_values_link_same_org_fk' }).onDelete('cascade'),
+    foreignKey({ columns: [t.orgId, t.optionValueId], foreignColumns: [menuOptionValues.orgId, menuOptionValues.id], name: 'menu_option_link_values_value_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.linkId, t.optionGroupId], foreignColumns: [menuOptionGroupLinks.id, menuOptionGroupLinks.optionGroupId], name: 'menu_option_link_values_link_group_fk' }).onDelete('cascade'),
+    foreignKey({ columns: [t.optionValueId, t.optionGroupId], foreignColumns: [menuOptionValues.id, menuOptionValues.optionGroupId], name: 'menu_option_link_values_value_group_fk' }).onDelete('restrict'),
+    index('menu_option_link_values_value_idx').on(t.optionValueId),
+    index('menu_option_link_values_org_idx').on(t.orgId),
   ],
 );
 

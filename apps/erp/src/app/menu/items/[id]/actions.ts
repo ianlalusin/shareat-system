@@ -20,6 +20,8 @@ import {
   editOptionValue,
   linkOptionGroup,
   setDepletionRule,
+  REFILL_FLAVOUR_LIMITS,
+  setAllowedFlavours,
   setPackageRefills,
   unlinkOptionGroup,
 } from '@shareat/domain';
@@ -257,6 +259,27 @@ export async function unlinkOptionGroupAction(fd: FormData): Promise<void> {
 }
 
 /** REPLACES the package's refills with the ticked ones. None ticked means no refills, never "all". */
+/** T-653: the flavours one package variant or one refill item allows, and (for a package) how many guests pick. A refill is always exactly one (the server is told 1 and 1; the screen does not show it). */
+export async function setAllowedFlavoursAction(fd: FormData): Promise<void> {
+  const { path, valid } = where(fd);
+  const actor = await requireActor(path);
+  if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
+  try {
+    const optionValueIds = fd.getAll('optionValueIds').filter((v): v is string => typeof v === 'string' && v !== '');
+    const variantId = opt(fd, 'packageVariantId');
+    const isRefill = str(fd, 'kind') === 'refill';
+    const min = isRefill ? REFILL_FLAVOUR_LIMITS.min : wholeNumber(fd, 'min', 'The fewest flavours');
+    const max = isRefill ? REFILL_FLAVOUR_LIMITS.max : wholeNumber(fd, 'max', 'The most flavours');
+    const limits = { ...(min === undefined ? {} : { min }), ...(max === undefined ? {} : { max }) };
+    const target = variantId ? { variantId } : { menuItemId: requireId(fd, 'menuItemId', 'Choose a refill item.') };
+    const clean = { ...target, optionValueIds, ...limits };
+    await withOrgPrincipal(actor.orgId, (tx) => setAllowedFlavours(actor, clean, tx));
+  } catch (err) {
+    return await redirectWithFlash(path, {}, { error: menuErrorMessage(err) });
+  }
+  return await redirectWithFlash(path, {}, { ok: 'Flavours saved.' });
+}
+
 export async function setPackageRefillsAction(fd: FormData): Promise<void> {
   const { path, valid } = where(fd);
   const actor = await requireActor(path);

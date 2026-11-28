@@ -137,6 +137,11 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
               Arrange order
             </Link>
           )}
+          {canManage && (
+            <Link href="/menu/flavours" className={NAV_LINK}>
+              Flavours
+            </Link>
+          )}
           {storeId && (
             <Link href={`/menu/stores/${storeId}`} className={NAV_LINK}>
               What a store sells
