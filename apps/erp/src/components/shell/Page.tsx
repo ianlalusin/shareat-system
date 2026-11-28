@@ -125,11 +125,10 @@ export interface PageHeaderProps {
  * ⚠️ A sticky element sticks only inside its parent's box, so the sticky header's wrapper is `display: contents`: its row is then a child of the page's
  * own box and sticks for the whole page. (A normal wrapper would end right after the description and the row would unstick at once.)
  *
- * ⚠️ **`flex-wrap`, so a phone stacks them rather than squeezing.** This is DEF-199's lesson one layer up: a label beside a button in a row that cannot
- * wrap is what made twelve routes scroll sideways at 390 px. The title truncates to ONE line in the sticky row so a long title never grows it.
+ * ⚠️ **md+ wraps; a phone swipes.** (DEF-199: a row that cannot wrap made twelve routes scroll sideways at 390 px; here the scrolling is confined to the actions strip.) Below md the sticky row stays ONE line: the title clamps to two lines at most and the buttons scroll sideways (`flex-nowrap overflow-x-auto`); md+ they wrap.
  */
 export const STICKY_HEADER_ROW =
-  'sticky top-14 z-20 -mx-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-[var(--workspace-border)] bg-[var(--workspace)] px-4 py-2 md:top-0 md:-mx-6 md:px-6';
+  'sticky top-14 z-20 -mx-4 flex flex-nowrap items-center justify-between gap-x-4 gap-y-2 border-b border-[var(--workspace-border)] bg-[var(--workspace)] px-4 py-2 md:top-0 md:-mx-6 md:flex-wrap md:px-6';
 
 export function PageHeader({ title, description, crumb, actions }: PageHeaderProps) {
   if (!actions) {
@@ -152,13 +151,15 @@ export function PageHeader({ title, description, crumb, actions }: PageHeaderPro
     );
   }
   return (
-    <div className="contents">
+    <div className="contents" data-page-header>
       {crumb && <p className="text-xs text-neutral-500 dark:text-neutral-400">{crumb}</p>}
       <div className={STICKY_HEADER_ROW} data-sticky-header>
-        <h1 className="min-w-0 flex-1 basis-[12rem] truncate text-2xl font-semibold">{title}</h1>
-        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+        {/* Below md: up to two lines (line-clamp-2), the full title on hover; md+: the whole title, wrapping. */}
+        <h1 title={typeof title === 'string' ? title : undefined} className="line-clamp-2 min-w-0 max-w-[55%] flex-1 basis-[7rem] text-2xl font-semibold md:line-clamp-none md:max-w-none md:basis-[12rem]">{title}</h1>
+        {/* Below md the buttons stay on the ONE line and swipe sideways; md+ they wrap. */}
+        <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible" data-sticky-actions>{actions}</div>
       </div>
-      {description && <PageDescription className="mt-2">{description}</PageDescription>}
+      {description && <PageDescription className="mt-1">{description}</PageDescription>}
     </div>
   );
 }

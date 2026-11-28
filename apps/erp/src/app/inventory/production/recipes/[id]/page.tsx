@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 import { convertUnit, quantity } from '@shareat/domain';
 import { requirePageAccess } from '../../../../../lib/page-access';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { editRecipeAction, restoreRecipeAction, retireRecipeAction } from '../actions';

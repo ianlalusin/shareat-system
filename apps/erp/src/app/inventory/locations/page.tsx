@@ -15,7 +15,6 @@ import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_LOCATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Badge, Button, Checkbox, ConfirmDestructive, DialogActions, EmptyState, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select, statusLabel } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { LOCATION_EDIT } from './typed-forms';

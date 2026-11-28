@@ -6,7 +6,6 @@ import { listStoreIds } from '@/lib/store-scope';
 import { createLoanAction } from './actions';
 import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Badge, Button, FlashBanner, Input, LinkRow, NumTd, RowLink, Select, FormModal, FormGrid, FormSection, Table, Td, Th, type FieldProps, DialogActions } from '@/components/ui';
 

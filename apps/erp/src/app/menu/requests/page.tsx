@@ -5,7 +5,6 @@ import { requirePageAccess } from '@/lib/page-access';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { MENU_REQUEST_REJECT_RULES, MENU_REQUEST_RULES, nativeAttrs } from '@shareat/domain/field-rules';

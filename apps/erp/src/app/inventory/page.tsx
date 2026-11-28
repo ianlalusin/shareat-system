@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { stockSummary } from './lib';
 import { recordInScope, storePageScope } from '../../lib/store-scope';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
 import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
@@ -48,7 +47,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           </>} actions={
         <>
           {/* The four doors stock actually passes through, plus the two exceptions and the alert. */}
-        <nav aria-label="Inventory sections" className="flex max-w-full flex-wrap gap-2 pb-1 text-sm md:flex-nowrap md:overflow-x-auto">
+        <nav aria-label="Inventory sections" className="flex min-w-0 max-w-full flex-nowrap gap-2 pb-1 text-sm md:overflow-x-auto">
           {[
             { href: `/inventory/locations?store=${storeId}`, label: 'Rooms' },
             { href: `/inventory/deliveries?store=${storeId}`, label: 'Deliveries' },

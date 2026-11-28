@@ -11,7 +11,6 @@ import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
 import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { LOW_STOCK_THRESHOLD } from './typed-forms';

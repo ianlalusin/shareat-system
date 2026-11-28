@@ -10,7 +10,6 @@ import { requirePageAccess } from '@/lib/page-access';
 import { withFlash } from '@/lib/flash';
 import { Page, PageHeader } from '@/components/shell/Page';
 import { ChevronIcon } from '@/components/shell/icons';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
 import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';

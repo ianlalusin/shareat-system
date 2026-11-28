@@ -5,7 +5,6 @@ import { requirePageAccess } from '@/lib/page-access';
 import { recordInvoiceAction } from './actions';
 import { apStoreIds, listSuppliersWithPosition, listInvoicesWithStanding, standingPills, listStores, peso, today } from './lib';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, DialogActions } from '@/components/ui';
 import { CheckedForm, RuleCheck } from '@/components/forms';

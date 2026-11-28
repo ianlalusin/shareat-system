@@ -7,7 +7,6 @@ import { withFlash, type FlashFields } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { Page, PageHeader } from '@/components/shell/Page';
 import { ChevronIcon } from '@/components/shell/icons';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import {
   MENU_DEPLETION_RULES,
@@ -105,9 +104,9 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
 
 
       {/* T-652: ONE grid; DOM order is the phone order (details, prices, variants, refills, option groups). From lg the narrow cards sit LEFT and the
-          wide ones RIGHT, with Prices by store first in the wide column (Ian, 28 Nov 2026: "move the prices per store card to the right so it is wider"). */}
-      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-3">
-        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          wide ones RIGHT, with Prices by store first in the wide column. Rows are `auto 1fr auto auto`: Prices spans rows 1-2, so its height lands on the flexible row 2 and Refills sits right under Item details (no gap); an empty cell is `empty:hidden`, so it adds no phone gap (Ian, 28 Nov 2026: "move the prices per store card to the right so it is wider"). */}
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-3 lg:grid-rows-[auto_1fr_auto_auto]">
+        <div className="min-w-0 empty:hidden lg:col-start-1 lg:row-start-1">
       {canManage && (
         <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
           <h2 className="text-lg font-semibold">Item details</h2>
@@ -154,7 +153,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
         </section>
       )}
         </div>
-        <div className="min-w-0 lg:col-span-2 lg:col-start-2 lg:row-start-1">
+        <div className="min-w-0 lg:col-span-2 lg:col-start-2 lg:row-span-2 lg:row-start-1">
       <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
         <h2 className="text-lg font-semibold">Prices by store</h2>
         {data.offers.length === 0 ? (
@@ -192,7 +191,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
         </p>
       </section>
         </div>
-        <div className="min-w-0 lg:col-span-2 lg:col-start-2 lg:row-start-2">
+        <div className="min-w-0 lg:col-span-2 lg:col-start-2 lg:row-start-3">
       <section className="space-y-4 rounded-[14px] border border-surface-border p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Variants and stock use</h2>
@@ -303,7 +302,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
         })}
       </section>
         </div>
-        <div className="min-w-0 lg:col-start-1 lg:row-span-2 lg:row-start-2">
+        <div className="min-w-0 empty:hidden lg:col-start-1 lg:row-start-2">
       {item.itemType === 'package' && (
         <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
           <h2 className="text-lg font-semibold">Refills this package allows</h2>
@@ -334,7 +333,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
         </section>
       )}
         </div>
-        <div className="min-w-0 lg:col-span-2 lg:col-start-2 lg:row-start-3">
+        <div className="min-w-0 lg:col-span-2 lg:col-start-2 lg:row-start-4">
       <OptionGroups data={data} canManage={canManage} sp={sp} actorId={actor.personId} />
         </div>
       </div>

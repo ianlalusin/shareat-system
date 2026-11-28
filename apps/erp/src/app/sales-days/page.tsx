@@ -7,7 +7,6 @@ import { receiptCheckLine } from './receipt-check';
 import { reportScope } from '../reports/lib';
 import { withOrgPrincipal } from '../expenses/lib';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Button, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Sales days — Shareat System' };

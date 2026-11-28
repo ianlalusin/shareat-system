@@ -9,7 +9,6 @@ import { listStoreIds } from '@/lib/store-scope';
 import { createLiabilityAction } from './actions';
 import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { NAV_LINK } from '@/components/action-link';
 import { Banner, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, DialogActions } from '@/components/ui';

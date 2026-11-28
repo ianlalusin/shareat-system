@@ -5,7 +5,6 @@ import { recordInScope } from '../../../../lib/store-scope';
 import { confirmSlicingAction, postProductionAction, unconfirmSlicingAction, updateSliceDraftAction, voidProductionAction } from '../actions';
 import { productionRecordDetail } from '../lib';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong, toBusinessDate } from '@shareat/core/datetime';
 import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, Input, Select, statusLabel } from '@/components/ui';

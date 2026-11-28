@@ -8,7 +8,6 @@ import { createDeliveryAction } from './actions';
 import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, EmptyState, FlashBanner, FormModal, LinkRow, NumTd, RowLink, Select, Table, Td, Th } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { NAV_LINK } from '@/components/action-link';
 

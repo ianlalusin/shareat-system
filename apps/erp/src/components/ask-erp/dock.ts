@@ -53,6 +53,20 @@ export function parseDock(raw: string | null): Dock {
   }
 }
 
+/** T-652 F8: the visible band's insets for a viewport (px): clear of the phone TopBar (56px) below md, and of the bottom 16px. */
+export function dockInsets(viewportWidth: number): { topInset: number; bottomInset: number } {
+  return { topInset: viewportWidth < 768 ? 64 : 8, bottomInset: 16 };
+}
+
+/** Pull a stored/remembered dock back inside the visible band (a smaller window, a rotated phone). Never throws; the side is kept. */
+export function clampDock(d: Dock, v: { viewportHeight: number; topInset: number; bottomInset: number; tabHeight: number }): Dock {
+  if (!(v.viewportHeight > 0)) return d;
+  const minTop = v.topInset;
+  const maxTop = Math.max(minTop, v.viewportHeight - v.bottomInset - v.tabHeight);
+  const top = Math.min(maxTop, Math.max(minTop, (d.topPct / 100) * v.viewportHeight));
+  return { side: d.side, topPct: (top / v.viewportHeight) * 100 };
+}
+
 export function readDock(): Dock {
   try {
     return parseDock(window.localStorage.getItem(DOCK_STORAGE_KEY));

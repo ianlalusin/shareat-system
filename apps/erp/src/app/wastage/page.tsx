@@ -13,7 +13,6 @@ import { CheckedForm } from '@/components/forms';
 import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, Banner, Button, DialogActions, FlashBanner, FormGrid, Field, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Order wastage — Shareat System' };

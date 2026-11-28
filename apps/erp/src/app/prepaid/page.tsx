@@ -18,7 +18,6 @@ import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { CheckedForm } from '@/components/forms';
 import { PREPAID_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, statusTone, DialogActions } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 

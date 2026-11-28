@@ -13,7 +13,6 @@ import {
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { CASH_REQUEST_CREATE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, FlashBanner, FormModal, Input, LinkRow, RowLink, Select, statusTone, DialogActions } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 

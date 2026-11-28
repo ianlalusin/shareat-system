@@ -10,7 +10,6 @@ import { CheckedForm } from '@/components/forms';
 import { IssueAdminPinConfirm } from './IssueAdminPinConfirm';
 import { STAFF_PIN_RULES, STAFF_POSITION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
 import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { withFlash } from '@/lib/flash';

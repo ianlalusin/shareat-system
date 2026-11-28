@@ -3,7 +3,6 @@ import { requirePageAccess } from '../../../../lib/page-access';
 import { peso } from '../../../../lib/format';
 import { inboundList } from './lib';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, FlashBanner, LinkRow, RowLink } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong } from '@shareat/core/datetime';

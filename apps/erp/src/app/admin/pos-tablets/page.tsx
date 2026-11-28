@@ -12,7 +12,6 @@ import { CHARGE_OPTION_EDIT } from './typed-forms';
 import { typedFor } from '@/lib/keep-typing';
 import { DiscountsSection } from './DiscountsSection';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { CheckedForm } from '@/components/forms';
 import { POS_TABLET_REGISTER_RULES, nativeAttrs } from '@shareat/domain/field-rules';

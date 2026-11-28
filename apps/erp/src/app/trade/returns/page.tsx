@@ -8,7 +8,6 @@ import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { RETURN_RECORD_RULES, RETURN_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';

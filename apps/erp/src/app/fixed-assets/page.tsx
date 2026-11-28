@@ -12,7 +12,6 @@ import {
   readPolicyForDisplay,
 } from './lib';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, LinkRow, RowLink, Select, Input } from '@/components/ui';
 

@@ -10,7 +10,6 @@ import {
   VAT_STATUS_LABEL,
 } from '../lib';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, DialogActions } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';

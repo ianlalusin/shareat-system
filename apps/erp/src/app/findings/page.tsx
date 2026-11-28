@@ -24,7 +24,6 @@ import { heldCapabilities } from '@shareat/auth';
 // T-345 Amendment R3.4 — the Manila month, not UTC.
 import { currentPeriod } from '../fixed-assets/lib';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { CheckedForm } from '@/components/forms';
 import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';

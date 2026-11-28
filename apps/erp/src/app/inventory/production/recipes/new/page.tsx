@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { requirePageAccess } from '../../../../../lib/page-access';
 import { Page, PageHeader } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner, Button, FlashBanner } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { createRecipeAction } from '../actions';

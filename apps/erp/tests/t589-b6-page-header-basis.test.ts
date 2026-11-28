@@ -29,7 +29,7 @@ describe('T-589 B6 - page header basis', () => {
     );
     // T-652: with actions the row is the STICKY title + buttons row (the description sits under it); it still wraps, and the title still has a basis.
     const row = /<div class="([^"]*)" data-sticky-header/.exec(html)?.[1] ?? '';
-    const title = /<h1 class="([^"]*)"/.exec(html)?.[1] ?? '';
+    const title = /<h1 [^>]*class="([^"]*)"/.exec(html)?.[1] ?? '';
     expect(row).toContain('flex-wrap');
     expect(title).toContain('min-w-0');
     expect(title).toContain('flex-1');

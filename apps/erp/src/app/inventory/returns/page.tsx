@@ -8,7 +8,6 @@ import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { formatBusinessDayLong } from '@shareat/core/datetime';
 import { Badge, Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';

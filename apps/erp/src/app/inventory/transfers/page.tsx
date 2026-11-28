@@ -11,7 +11,6 @@ import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, ConfirmDestructive, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';

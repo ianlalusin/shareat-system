@@ -10,7 +10,6 @@ import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, For
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_PRODUCTION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { FILTER_CHIP, FILTER_CHIP_ON, NAV_LINK } from '@/components/action-link';
 

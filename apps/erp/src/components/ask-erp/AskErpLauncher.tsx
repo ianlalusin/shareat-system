@@ -12,13 +12,13 @@
  * form action, because the reply is shown in the panel and a form action's return value is not); the same server action is the form's `action` for a browser without scripts.
  */
 import Link from 'next/link';
-import { useEffect, useRef, useState, useTransition, type FormEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useTransition, type FormEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { ASK_ERP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, Field, Textarea } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { NAV_LINK } from '@/components/action-link';
 import { askErpAction, askErpFormAction, type AskReply } from '../../app/ask-erp/actions';
-import { DEFAULT_DOCK, isDrag, readDock, snapDock, writeDock, type Dock } from './dock';
+import { DEFAULT_DOCK, clampDock, dockInsets, isDrag, readDock, snapDock, writeDock, type Dock } from './dock';
 
 /** The turns sent back with a question (the server keeps the last ten too; a test pins both to the domain's number). */
 const KEEP_TURNS = 10;
@@ -49,8 +49,21 @@ export function AskErpLauncher() {
   const [live, setLive] = useState<{ x: number; y: number } | null>(null);
   const press = useRef<{ x: number; y: number; grab: number; moved: boolean } | null>(null);
   const dragged = useRef(false);
-  useEffect(() => {
-    setDock(readDock());
+  // F8: the stored position is read (and clamped to THIS window) before the first paint, and again on resize / rotation; until then the tab is hidden, so it never jumps.
+  const [placed, setPlaced] = useState(false);
+  const tab = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const fit = (d: Dock) =>
+      clampDock(d, { viewportHeight: window.innerHeight, ...dockInsets(window.innerWidth), tabHeight: tab.current?.getBoundingClientRect().height || 44 });
+    setDock(fit(readDock()));
+    setPlaced(true);
+    const onResize = () => setDock((d) => fit(d));
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -115,14 +128,12 @@ export function AskErpLauncher() {
       const p = press.current;
       press.current = null;
       if (!p || !p.moved) return; // a short press: the click that follows opens the panel
-      const phone = window.innerWidth < 768;
       const next = snapDock({
         x: e.clientX,
         y: e.clientY,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
-        topInset: phone ? 64 : 8, // clear of the phone TopBar (56px)
-        bottomInset: 16,
+        ...dockInsets(window.innerWidth), // clear of the phone TopBar (56px) and the bottom 16px
         tabHeight: e.currentTarget.getBoundingClientRect().height,
         grabOffsetY: p.grab,
       });
@@ -143,7 +154,8 @@ export function AskErpLauncher() {
         aria-label="Ask ERP"
         data-ask-erp-tab
         data-dock-side={dock.side}
-        style={style}
+        ref={tab}
+        style={placed ? style : { ...style, visibility: 'hidden' }}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
