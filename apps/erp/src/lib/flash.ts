@@ -113,6 +113,9 @@ const NAV_SHAPES = {
   // T-544: the channel and day a waiting-day link preselects on the record page; an old `?channel=` link on the overview is sent on with them.
   channel: UUID,
   pos: UUID,
+  // T-651: the category and item the Arrange menu screen was showing, so a Save returns to the same lists.
+  category: UUID,
+  menuItem: UUID,
   start: ISO_DATE,
   end: ISO_DATE,
   date: ISO_DATE,

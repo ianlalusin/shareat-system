@@ -10,6 +10,7 @@ import { menuRepo, type Tx } from '@shareat/db';
 import { MENU_SELECTION_MODES, type MenuSelectionMode, type MenuStatus } from '@shareat/db/schema';
 import { gone, refuse } from '../shared/refusal';
 import { audit, changedFields, inTx, requireName } from './shared';
+import { MENU_ORDER_STEP } from './order';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { MENU_OPTION_VALUE_RULES } from '../field-rules/menu';
 
@@ -107,7 +108,7 @@ export async function addOptionValue(
       orgId: actor.orgId,
       optionGroupId: group.id,
       name,
-      sortOrder: input.sortOrder ?? 0,
+      sortOrder: input.sortOrder ?? (await menuRepo.nextSortOrder(trx, { kind: 'optionValues', orgId: actor.orgId, optionGroupId: group.id }, MENU_ORDER_STEP)),
       createdBy: actor.personId,
     });
     await audit(trx, actor, 'menu_option_value_create', null, row.id, null, row);

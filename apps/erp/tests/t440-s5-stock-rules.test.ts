@@ -168,11 +168,9 @@ const ROWS: Record<string, Row> = {
   },
   // ---- menu
   'menu.category.name': req('A category needs a name.'),
-  'menu.category.sortOrder': optInt('The sort order'),
   'menu.createItem.categoryId': req('Choose a category for the item.'),
   'menu.createItem.name': req('An item needs a name.'),
   'menu.item.name': req('An item needs a name.'),
-  'menu.item.sortOrder': optInt('The sort order'),
   'menu.setDepletionRule.quantityPerSale': optNum0('The quantity per sale'),
   'menu.addVariant.label': req('A variant needs a name.'),
   'menu.optionValue.name': req('An option needs a name.'),

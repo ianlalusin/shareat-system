@@ -13,6 +13,7 @@ import { menuRepo, type Tx } from '@shareat/db';
 import { MENU_ITEM_TYPES, type MenuItemType, type MenuStatus } from '@shareat/db/schema';
 import { gone, refuse } from '../shared/refusal';
 import { audit, changedFields, inTx, requireName } from './shared';
+import { MENU_ORDER_STEP } from './order';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { MENU_CATEGORY_RULES, MENU_VARIANT_RULES } from '../field-rules/menu';
 
@@ -30,7 +31,7 @@ export interface CreateMenuCategoryInput {
 export async function createMenuCategory(actor: Actor, input: CreateMenuCategoryInput, tx?: Tx): Promise<{ id: string }> {
   return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
-    assertFieldRules(MENU_CATEGORY_RULES, { name: input.name, sortOrder: input.sortOrder === undefined ? undefined : String(input.sortOrder) });
+    assertFieldRules(MENU_CATEGORY_RULES, { name: input.name });
     const name = requireName(input.name, 'createMenuCategory', 'A category');
     if (await menuRepo.findCategoryByName(trx, actor.orgId, name)) {
       throw refuse(`createMenuCategory: a category named "${name}" exists.`, `There is already a category called "${name}".`);
@@ -40,7 +41,7 @@ export async function createMenuCategory(actor: Actor, input: CreateMenuCategory
       orgId: actor.orgId,
       name,
       parentId: input.parentId ?? null,
-      sortOrder: input.sortOrder ?? 0,
+      sortOrder: input.sortOrder ?? (await menuRepo.nextSortOrder(trx, { kind: 'categories', orgId: actor.orgId }, MENU_ORDER_STEP)), // T-651: the end of the list
       createdBy: actor.personId,
     });
     await audit(trx, actor, 'menu_category_create', null, row.id, null, row);
@@ -145,7 +146,7 @@ export async function createMenuItem(actor: Actor, input: CreateMenuItemInput, t
       soldALaCarte,
       soldInPackageSession,
       dinerOrderable: input.dinerOrderable ?? true,
-      sortOrder: input.sortOrder ?? 0,
+      sortOrder: input.sortOrder ?? (await menuRepo.nextSortOrder(trx, { kind: 'items', orgId: actor.orgId, categoryId: input.categoryId }, MENU_ORDER_STEP)),
       createdBy: actor.personId,
     });
     const variant = await menuRepo.insertVariant(trx, {
@@ -254,7 +255,7 @@ export async function addMenuVariant(
       menuItemId: item.id,
       label,
       isDefault: false,
-      sortOrder: input.sortOrder ?? 0,
+      sortOrder: input.sortOrder ?? (await menuRepo.nextSortOrder(trx, { kind: 'variants', orgId: actor.orgId, menuItemId: item.id }, MENU_ORDER_STEP)),
       createdBy: actor.personId,
     });
     await audit(trx, actor, 'menu_variant_create', null, row.id, null, row);

@@ -148,10 +148,6 @@ describe('T-440 S5: a bad value is refused with the rule sentence and nothing is
     await refused('menu_categories', () => run('menu/actions', 'createCategoryAction', { name: '   ' }), sentence(MENU_CATEGORY_RULES.name, ''));
   });
 
-  it('menu createCategoryAction: a fractional sort order is refused; no category (mutant: integer dropped from the sort-order rule)', async () => {
-    await refused('menu_categories', () => run('menu/actions', 'createCategoryAction', { name: 'Drinks', sortOrder: '1.5' }), sentence(MENU_CATEGORY_RULES.sortOrder, '1.5'));
-  });
-
   it('menu createItemAction: no category chosen is refused; no menu item (mutant: assert removed from createItemAction)', async () => {
     await refused('menu_items', () => run('menu/actions', 'createItemAction', { categoryId: '', name: 'Halo-halo', itemType: 'a_la_carte' }), sentence(MENU_ITEM_ADD_RULES.categoryId, ''));
   });

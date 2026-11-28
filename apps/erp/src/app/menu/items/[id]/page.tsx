@@ -226,12 +226,17 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
       {canManage && (
         <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
           <h2 className="text-lg font-semibold">Item details</h2>
+          <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted">
+            {item.status === 'active' ? `Position ${data.position.at} of ${data.position.of} in ${data.category?.name ?? 'its category'} ·` : 'A retired item has no place in the order ·'}
+            <Link href={`/menu/arrange?category=${item.categoryId}&menuItem=${item.id}`} className={NAV_LINK}>
+              Arrange order
+            </Link>
+          </p>
           <EditableRecord action={editItemAction} rules={MENU_ITEM_EDIT_RULES} label={item.name}
             summary={[
               { label: 'Name', value: item.name },
               { label: 'Description', value: item.description },
               { label: 'Category', value: data.categories.find((c) => c.id === item.categoryId)?.name },
-              { label: 'Sort order', value: String(item.sortOrder) },
               { label: 'Status', value: item.status === 'active' ? 'Active' : 'Retired' },
             ]}
             hidden={{ menuItemId: item.id }} typed={typedFor(sp, MENU_ITEM, item.id, actor.personId)}>
@@ -252,9 +257,6 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                       </option>
                     ))}
                 </Select>
-              </Field>
-              <Field label="Sort order" className="text-sm" rule={MENU_ITEM_EDIT_RULES.sortOrder}>
-                <Input {...nativeAttrs(MENU_ITEM_EDIT_RULES.sortOrder)} defaultValue={String(item.sortOrder)} className="w-full" />
               </Field>
               <Field label="Status" className="text-sm">
                 <Select name="status" defaultValue={item.status} className="w-full">

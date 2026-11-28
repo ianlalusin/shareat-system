@@ -187,7 +187,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 120 -> 119, T-599: a redrawn long page moved its prose onto the page header; measured by walking app/.
     // 119 -> 120, T-628: /pos-reservations carries its <PageDescription>; measured by walking app/.
     // 120 -> 119, T-637: /documents/templates moved onto <Page title description actions> (its call site left app/), and the new editor screen passes its prose to the same header, so the net change is -1; measured by walking app/.
-    expect(count).toBe(119);
+    // 119 -> 120, T-651: /menu/arrange carries its <PageDescription>; measured by walking app/.
+    expect(count).toBe(120);
   });
 });
 

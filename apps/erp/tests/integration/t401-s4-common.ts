@@ -23,13 +23,13 @@
  *
  * FILES, ACTIONS AND FORM FIELDS (all under apps/erp/src/app/menu/)
  *  menu/actions.ts            redirect `/menu`
- *    createCategoryAction     name, parentId?, sortOrder?                     gate manage_menu          ok 'Category added.'
- *    editCategoryAction       id, name?, sortOrder?                           gate manage_menu          ok 'Category saved.'
+ *    createCategoryAction     name, parentId?                                 gate manage_menu          ok 'Category added.'
+ *    editCategoryAction       id, name?                                       gate manage_menu          ok 'Category saved.'
  *    retireCategoryAction     id                                              gate manage_menu          ok 'Category retired.'
  *    createItemAction         categoryId, name, itemType, description?        gate add_menu_item        ok 'Item added.'
  *                             (this one redirects to `/menu/items/<new id>`)
  *  menu/items/[id]/actions.ts redirect `/menu/items/<menuItemId>`; EVERY form carries hidden `menuItemId` (the page's item)
- *    editItemAction           menuItemId, name?, description?, categoryId?, sortOrder?, status?   manage_menu   ok 'Item saved.'
+ *    editItemAction           menuItemId, name?, description?, categoryId?, status?   manage_menu   ok 'Item saved.'
  *    addVariantAction         menuItemId, label                               gate add_menu_item        ok 'Variant added.'
  *    setDepletionRuleAction   menuItemId, variantId, mode (direct|recipe|no_stock), stockItemId?, recipeId?, quantityPerSale?, effectiveFrom?
  *                                                                              gate set_menu_depletion   ok 'Depletion rule saved.'

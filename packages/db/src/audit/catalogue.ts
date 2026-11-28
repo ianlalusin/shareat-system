@@ -357,6 +357,11 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu_option_value_create', 'menu_price', 'normal', 'org', 'menu_option_values', 'T-401'),
   def('menu_option_value_edit', 'menu_price', 'normal', 'org', 'menu_option_values', 'T-401'),
   def('menu_package_refills_set', 'menu_price', 'normal', 'org', 'menu_package_refills', 'T-401'),
+  // T-651: one row per saved list on the Arrange menu screen (before and after are the id order).
+  def('menu.categories_reordered', 'menu_price', 'normal', 'org', 'menu_categories', 'T-651'),
+  def('menu.items_reordered', 'menu_price', 'normal', 'org', 'menu_items', 'T-651'),
+  def('menu.variants_reordered', 'menu_price', 'normal', 'org', 'menu_item_variants', 'T-651'),
+  def('menu.option_values_reordered', 'menu_price', 'normal', 'org', 'menu_option_values', 'T-651'),
   // S5 (Q3): the v1 usage seam. A link, an unlink, and a store's switch of usage source. Dotted: new, never in 0197's copy list.
   def('menu.pos_v1_link', 'stock', 'normal', 'store', 'menu_pos_v1_links', 'T-401'),
   def('menu.pos_v1_unlink', 'stock', 'normal', 'store', 'menu_pos_v1_links', 'T-401'),
