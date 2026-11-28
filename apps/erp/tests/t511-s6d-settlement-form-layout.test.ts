@@ -148,7 +148,7 @@ describe('D - SplitWorkspace stickyDetails', () => {
     }
     const block = css.slice(start, end);
     expect(block).toContain('.split-workspace-grid');
-    expect(block).toMatch(/\.split-workspace-sticky[^{]*\{[^}]*position:\s*sticky[^}]*top:\s*1rem/);
+    expect(block).toMatch(/\.split-workspace-sticky[^{]*\{[^}]*position:\s*sticky[^}]*top:\s*5rem/);
     const outside = css.slice(0, start) + css.slice(end);
     expect(outside, 'no sticky rule outside the block').not.toContain('split-workspace-sticky');
   });

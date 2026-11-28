@@ -5,9 +5,8 @@ import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess } from '@/lib/page-access';
 import { withFlash, type FlashFields } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { ChevronIcon } from '@/components/shell/icons';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import {
   MENU_DEPLETION_RULES,
@@ -86,13 +85,9 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
 
   return (
     <Page view="detail" sectioned density="table" className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{item.name}</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title={item.name} description={<>
             {`${TYPE_LABEL[item.itemType] ?? item.itemType} in ${data.category?.name ?? 'no category'}. ${item.description ?? ''}`}
-          </PageDescription>
-        </div>
+          </>} actions={
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <Badge status={item.status} />
           <Link href="/menu" className={NAV_LINK}>
@@ -102,14 +97,101 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
             Prices
           </Link>
         </div>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
       {sp.ok && <Banner tone="success">{sp.ok}</Banner>}
 
 
-      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
-        <div className="min-w-0 space-y-6 lg:col-span-2">
+      {/* T-652: ONE grid; DOM order is the phone order (details, prices, variants, refills, option groups). From lg the narrow cards sit LEFT and the
+          wide ones RIGHT, with Prices by store first in the wide column. Rows are `auto 1fr auto auto`: Prices spans rows 1-2, so its height lands on the flexible row 2 and Refills sits right under Item details (no gap); an empty cell is `empty:hidden`, so it adds no phone gap (Ian, 28 Nov 2026: "move the prices per store card to the right so it is wider"). */}
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-3 lg:grid-rows-[auto_1fr_auto_auto]">
+        <div className="min-w-0 empty:hidden lg:col-start-1 lg:row-start-1">
+      {canManage && (
+        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
+          <h2 className="text-lg font-semibold">Item details</h2>
+          <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted">
+            {item.status === 'active' ? `Position ${data.position.at} of ${data.position.of} in ${data.category?.name ?? 'its category'} ·` : 'A retired item has no place in the order ·'}
+            <Link href={`/menu/arrange?category=${item.categoryId}&menuItem=${item.id}`} className={NAV_LINK}>
+              Arrange order
+            </Link>
+          </p>
+          <EditableRecord action={editItemAction} rules={MENU_ITEM_EDIT_RULES} label={item.name}
+            summary={[
+              { label: 'Name', value: item.name },
+              { label: 'Description', value: item.description },
+              { label: 'Category', value: data.categories.find((c) => c.id === item.categoryId)?.name },
+              { label: 'Status', value: item.status === 'active' ? 'Active' : 'Retired' },
+            ]}
+            hidden={{ menuItemId: item.id }} typed={typedFor(sp, MENU_ITEM, item.id, actor.personId)}>
+            <FormGrid>
+              <Field label="Name" className="text-sm" rule={MENU_ITEM_EDIT_RULES.name}>
+                <Input {...nativeAttrs(MENU_ITEM_EDIT_RULES.name)} defaultValue={item.name} className="w-full" />
+              </Field>
+              <Field label="Description" className="text-sm">
+                <Input name="description" defaultValue={item.description ?? ''} className="w-full" />
+              </Field>
+              <Field label="Category" className="text-sm">
+                <Select name="categoryId" defaultValue={item.categoryId} className="w-full">
+                  {data.categories
+                    .filter((c) => c.status === 'active' || c.id === item.categoryId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </Select>
+              </Field>
+              <Field label="Status" className="text-sm">
+                <Select name="status" defaultValue={item.status} className="w-full">
+                  <option value="active">Active</option>
+                  <option value="retired">Retired</option>
+                </Select>
+              </Field>
+            </FormGrid>
+          </EditableRecord>
+        </section>
+      )}
+        </div>
+        <div className="min-w-0 lg:col-span-2 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+      <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
+        <h2 className="text-lg font-semibold">Prices by store</h2>
+        {data.offers.length === 0 ? (
+          <p className="text-sm text-muted">No price has been set for this item at your stores yet.</p>
+        ) : (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Store</Th>
+                <Th>Variant</Th>
+                <Th>Channel</Th>
+                <Th>From</Th>
+                <Th>Price</Th>
+                <Th>State</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.offers.map((r) => (
+                <tr key={`${r.storeId}|${r.variantId}|${r.channel}|${r.effectiveFrom.toISOString()}`}>
+                  <Td>{storeName(r.storeId)}</Td>
+                  <Td>{variantName(r.variantId)}</Td>
+                  <Td>{CHANNEL_LABEL[r.channel] ?? r.channel}</Td>
+                  <Td>{formatBusinessDateTime(r.effectiveFrom, { dateStyle: 'long', timeStyle: 'short' })}</Td>
+                  <Td>{priceText(r)}</Td>
+                  <Td>{r.state === 'in_force' ? <Badge tone="success" label={STATE_LABEL[r.state]} /> : r.state === 'scheduled' ? <Badge tone="info" label={STATE_LABEL[r.state]} /> : <Badge tone="closed" label={STATE_LABEL[r.state]} />}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+        <p className="text-sm">
+          <Link href="/menu/prices" className={NAV_LINK}>
+            Set or change prices
+          </Link>
+        </p>
+      </section>
+        </div>
+        <div className="min-w-0 lg:col-span-2 lg:col-start-2 lg:row-start-3">
       <section className="space-y-4 rounded-[14px] border border-surface-border p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Variants and stock use</h2>
@@ -219,93 +301,8 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
           );
         })}
       </section>
-
-      <OptionGroups data={data} canManage={canManage} sp={sp} actorId={actor.personId} />
         </div>
-        <div className="min-w-0 space-y-6">
-      {canManage && (
-        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
-          <h2 className="text-lg font-semibold">Item details</h2>
-          <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted">
-            {item.status === 'active' ? `Position ${data.position.at} of ${data.position.of} in ${data.category?.name ?? 'its category'} ·` : 'A retired item has no place in the order ·'}
-            <Link href={`/menu/arrange?category=${item.categoryId}&menuItem=${item.id}`} className={NAV_LINK}>
-              Arrange order
-            </Link>
-          </p>
-          <EditableRecord action={editItemAction} rules={MENU_ITEM_EDIT_RULES} label={item.name}
-            summary={[
-              { label: 'Name', value: item.name },
-              { label: 'Description', value: item.description },
-              { label: 'Category', value: data.categories.find((c) => c.id === item.categoryId)?.name },
-              { label: 'Status', value: item.status === 'active' ? 'Active' : 'Retired' },
-            ]}
-            hidden={{ menuItemId: item.id }} typed={typedFor(sp, MENU_ITEM, item.id, actor.personId)}>
-            <FormGrid>
-              <Field label="Name" className="text-sm" rule={MENU_ITEM_EDIT_RULES.name}>
-                <Input {...nativeAttrs(MENU_ITEM_EDIT_RULES.name)} defaultValue={item.name} className="w-full" />
-              </Field>
-              <Field label="Description" className="text-sm">
-                <Input name="description" defaultValue={item.description ?? ''} className="w-full" />
-              </Field>
-              <Field label="Category" className="text-sm">
-                <Select name="categoryId" defaultValue={item.categoryId} className="w-full">
-                  {data.categories
-                    .filter((c) => c.status === 'active' || c.id === item.categoryId)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </Select>
-              </Field>
-              <Field label="Status" className="text-sm">
-                <Select name="status" defaultValue={item.status} className="w-full">
-                  <option value="active">Active</option>
-                  <option value="retired">Retired</option>
-                </Select>
-              </Field>
-            </FormGrid>
-          </EditableRecord>
-        </section>
-      )}
-
-      <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
-        <h2 className="text-lg font-semibold">Prices by store</h2>
-        {data.offers.length === 0 ? (
-          <p className="text-sm text-muted">No price has been set for this item at your stores yet.</p>
-        ) : (
-          <Table>
-            <thead>
-              <tr>
-                <Th>Store</Th>
-                <Th>Variant</Th>
-                <Th>Channel</Th>
-                <Th>From</Th>
-                <Th>Price</Th>
-                <Th>State</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.offers.map((r) => (
-                <tr key={`${r.storeId}|${r.variantId}|${r.channel}|${r.effectiveFrom.toISOString()}`}>
-                  <Td>{storeName(r.storeId)}</Td>
-                  <Td>{variantName(r.variantId)}</Td>
-                  <Td>{CHANNEL_LABEL[r.channel] ?? r.channel}</Td>
-                  <Td>{formatBusinessDateTime(r.effectiveFrom, { dateStyle: 'long', timeStyle: 'short' })}</Td>
-                  <Td>{priceText(r)}</Td>
-                  <Td>{r.state === 'in_force' ? <Badge tone="success" label={STATE_LABEL[r.state]} /> : r.state === 'scheduled' ? <Badge tone="info" label={STATE_LABEL[r.state]} /> : <Badge tone="closed" label={STATE_LABEL[r.state]} />}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-        <p className="text-sm">
-          <Link href="/menu/prices" className={NAV_LINK}>
-            Set or change prices
-          </Link>
-        </p>
-      </section>
-
+        <div className="min-w-0 empty:hidden lg:col-start-1 lg:row-start-2">
       {item.itemType === 'package' && (
         <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
           <h2 className="text-lg font-semibold">Refills this package allows</h2>
@@ -335,6 +332,9 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
           })}
         </section>
       )}
+        </div>
+        <div className="min-w-0 lg:col-span-2 lg:col-start-2 lg:row-start-4">
+      <OptionGroups data={data} canManage={canManage} sp={sp} actorId={actor.personId} />
         </div>
       </div>
     </Page>

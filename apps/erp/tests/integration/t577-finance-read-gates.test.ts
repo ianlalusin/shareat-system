@@ -25,7 +25,7 @@ import { postEntry } from '../../../../packages/domain/src/ledger/post-entry';
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('next/navigation', async () => (await import('../helpers/flash-jar-core')).nextNavigationMock());
 vi.mock('../../src/lib/session', async () => (await import('./t435-fixture')).sessionMock());
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 
 afterAll(async () => {
   const { closeDb } = await import('@shareat/db');

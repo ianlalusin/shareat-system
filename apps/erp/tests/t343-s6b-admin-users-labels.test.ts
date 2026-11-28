@@ -65,7 +65,8 @@ vi.mock('@/lib/constraint-messages', () => ({
 }));
 
 // Same gap, for the `Page` shell every route under `admin/users` renders through.
-vi.mock('@/components/shell/Page', () => ({
+vi.mock('@/components/shell/Page', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: unknown }) => children,
 }));
 

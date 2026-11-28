@@ -3,8 +3,7 @@ import { heldCapabilities } from '@shareat/auth';
 import { requirePageAccess } from '@/lib/page-access';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
 import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
@@ -68,15 +67,12 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
 
   return (
     <Page density="table" className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Menu</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Menu" description={<>
             What the stores sell: categories, items and their variants, what each sale uses up from stock, and the options guests can pick.
             Prices are set per store.
-          </PageDescription>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
+          </>} actions={
+        <>
+          <div className="flex flex-wrap items-center gap-3">
           {/* T-448: the add forms open from header buttons. */}
           {canManage && (
             <FormModal trigger="+ Category" title="Add category" size="sm">
@@ -160,7 +156,8 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
             </Link>
           )}
         </div>
-      </div>
+        </>
+      } />
 
       <FlashBanner flash={sp} />
       {sp.ok && <Banner tone="success">{sp.ok}</Banner>}

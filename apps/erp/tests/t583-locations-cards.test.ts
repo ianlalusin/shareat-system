@@ -29,7 +29,7 @@ vi.mock('../src/lib/store-scope', () => ({
   listStoreIds: async () => undefined,
 }));
 vi.mock('../src/lib/session', () => ({ requireSession: async () => ({ actor: { orgId: 'org-1', personId: 'p-1' } }) }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('../src/app/inventory/locations/actions', () => {
   const noop = async () => {};
   return {

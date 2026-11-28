@@ -14,7 +14,7 @@ vi.mock('next/navigation', () => ({
   redirect: (to: string) => { throw new Error(`redirect:${to}`); },
   notFound: () => { throw new Error('notFound'); },
 }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('../src/lib/flash', () => ({ withFlash: vi.fn(async (p: Promise<unknown>) => p), redirectWithFlash: vi.fn() }));
 vi.mock('../src/lib/page-access', () => ({ requirePageAccess: vi.fn(async () => ({ actor: { orgId: 'org-1', personId: 'admin-1' }, refusal: null })) }));
 vi.mock('../src/app/staff/lib', async () => ({ staffStoresFor: vi.fn(async () => [STORE]) }));

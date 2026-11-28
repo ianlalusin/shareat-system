@@ -32,7 +32,8 @@ vi.mock('next/navigation', () => ({
     throw new Error('notFound() called unexpectedly');
   },
 }));
-vi.mock('@/components/shell/Page', () => ({
+vi.mock('@/components/shell/Page', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: unknown }) => children,
 }));
 vi.mock('@/components/FilterRow', () => ({

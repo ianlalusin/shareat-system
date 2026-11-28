@@ -40,7 +40,7 @@ vi.mock('../../src/lib/session', () => ({
   requireSession: vi.fn(async () => ({ actor: ACTOR_HOLDER.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01') })),
 }));
 vi.mock('../../src/lib/page-access', () => ({ requirePageAccess: async () => ({ actor: ACTOR_HOLDER.actor, refusal: null }) }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 // the actions file imports the bare `@/lib/constraint-messages` specifier the root vitest config does not resolve
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
 

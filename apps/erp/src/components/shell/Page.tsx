@@ -115,29 +115,51 @@ export interface PageHeaderProps {
 }
 
 /**
- * Title and description on the left, actions on the right.
+ * Title and actions in one row; the description under it.
  *
- * ⚠️ **`flex-wrap`, so a phone stacks them rather than squeezing.** This is DEF-199's lesson one
- * layer up: a label beside a button in a row that cannot wrap is what made twelve routes scroll
- * sideways at 390 px. A header is the same shape and would fail the same way.
+ * ⭐ T-652 (Ian, 28 Nov 2026: "on every page that has buttons on header or top stick these buttons on top"): **when `actions` is set, the title and the
+ * buttons stay on screen while the page scrolls.** The row is `sticky` (`top-14` on a phone, under the 56 px TopBar; `md:top-0` where the TopBar is gone),
+ * `z-20` (under the TopBar's z-30 and under every dialog and toast, which are z-50), on the workspace's own background with a hairline under it so
+ * content does not show through. The crumb and the description scroll away. A header WITHOUT actions has nothing to keep on screen and is unchanged.
+ *
+ * ⚠️ A sticky element sticks only inside its parent's box, so the sticky header's wrapper is `display: contents`: its row is then a child of the page's
+ * own box and sticks for the whole page. (A normal wrapper would end right after the description and the row would unstick at once.)
+ *
+ * ⚠️ **md+ wraps; a phone swipes.** (DEF-199: a row that cannot wrap made twelve routes scroll sideways at 390 px; here the scrolling is confined to the actions strip.) Below md the sticky row stays ONE line: the title clamps to two lines at most and the buttons scroll sideways (`flex-nowrap overflow-x-auto`); md+ they wrap.
  */
+export const STICKY_HEADER_ROW =
+  'sticky top-14 z-20 -mx-4 flex flex-nowrap items-center justify-between gap-x-4 gap-y-2 border-b border-[var(--workspace-border)] bg-[var(--workspace)] px-4 py-2 md:top-0 md:-mx-6 md:flex-wrap md:px-6';
+
 export function PageHeader({ title, description, crumb, actions }: PageHeaderProps) {
-  const row = (
-    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-      {/* basis-[16rem]: without a basis the row never wraps and a phone squeezes the title (T-589 B6). */}
-      <div className="min-w-0 flex-1 basis-[16rem]">
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        {description && <PageDescription className="mt-1">{description}</PageDescription>}
+  if (!actions) {
+    const row = (
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        {/* basis-[16rem]: without a basis the row never wraps and a phone squeezes the title (T-589 B6). */}
+        <div className="min-w-0 flex-1 basis-[16rem]">
+          <h1 className="text-2xl font-semibold">{title}</h1>
+          {description && <PageDescription className="mt-1">{description}</PageDescription>}
+        </div>
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-    </div>
-  );
-  // No crumb: the row alone, so every existing header's markup is unchanged.
-  if (!crumb) return row;
+    );
+    // No crumb: the row alone, so every existing header's markup is unchanged.
+    if (!crumb) return row;
+    return (
+      <div>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">{crumb}</p>
+        {row}
+      </div>
+    );
+  }
   return (
-    <div>
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">{crumb}</p>
-      {row}
+    <div className="contents" data-page-header>
+      {crumb && <p className="text-xs text-neutral-500 dark:text-neutral-400">{crumb}</p>}
+      <div className={STICKY_HEADER_ROW} data-sticky-header>
+        {/* Below md: up to two lines (line-clamp-2), the full title on hover; md+: the whole title, wrapping. */}
+        <h1 title={typeof title === 'string' ? title : undefined} className="line-clamp-2 min-w-0 max-w-[55%] flex-1 basis-[7rem] text-2xl font-semibold md:line-clamp-none md:max-w-none md:basis-[12rem]">{title}</h1>
+        {/* Below md the buttons stay on the ONE line and swipe sideways; md+ they wrap. */}
+        <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible" data-sticky-actions>{actions}</div>
+      </div>
+      {description && <PageDescription className="mt-1">{description}</PageDescription>}
     </div>
   );
 }

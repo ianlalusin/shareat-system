@@ -48,7 +48,7 @@ vi.mock('next/navigation', () => ({
     throw new Error('notFound() called — the route must return its own uniform 404, not the framework page');
   },
 }));
-vi.mock('@/components/shell/Page', () => ({
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: unknown }) => children,
 }));
 vi.mock('@/lib/money-lines/load', async () => await import('../../src/lib/money-lines/load'));

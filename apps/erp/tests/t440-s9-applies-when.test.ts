@@ -132,7 +132,7 @@ vi.mock('../src/lib/session', () => ({
 }));
 // T-577: /ap is route-gated now; this test is about the form's rules, so the gate (which reads the database) is stubbed open.
 vi.mock('../src/lib/page-access', () => ({ requirePageAccess: async () => ({ actor: { orgId: 'org-1', personId: 'p-1' }, refusal: null }) }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('../src/app/ap/actions', () => ({
   createSupplierAction: vi.fn(), recordInvoiceAction: vi.fn(), editSupplierAction: vi.fn(),
   recordPaymentAction: vi.fn(), autoAllocatePaymentAction: vi.fn(),

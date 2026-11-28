@@ -645,8 +645,8 @@ html { scrollbar-gutter: stable; }
   /* T-511 S6d: the details section (the second child) follows the scroll; stacked below the form it must not. */
   .split-workspace-sticky > :nth-child(2) {
     position: sticky;
-    top: 1rem;
-    max-height: calc(100dvh - 2rem); /* a tall preview scrolls inside, so Post stays reachable */
+    top: 5rem; /* T-652: under the sticky page header */
+    max-height: calc(100dvh - 6rem); /* a tall preview scrolls inside, so Post stays reachable */
     overflow-y: auto;
     padding: 0.25rem; /* room inside the scroll box so a focus ring at its edge is not clipped */
     margin: -0.25rem;
@@ -901,6 +901,10 @@ html { scrollbar-gutter: stable; }
   .erp-page[data-view="detail"] .erp-detail-layout :where(section) { padding-block: 0.75rem; }
   .erp-page[data-view="detail"] > :where(section) + :where(section) { margin-top: 1rem; }
 }
+/* T-652 F2: below md the sticky header row stays ONE line and its buttons swipe sideways, so a page's own wrapper inside `actions` must not wrap or shrink either. */
+@media (max-width: 767px) {
+  [data-sticky-actions] > :is(div, nav, form, span) { flex-wrap: nowrap; flex-shrink: 0; }
+}
 @media (min-width: 1440px) {
   .erp-page[data-view="detail"][data-sectioned] {
     display: grid;
@@ -909,6 +913,9 @@ html { scrollbar-gutter: stable; }
     gap: 1rem;
   }
   .erp-page[data-view="detail"][data-sectioned] > * { grid-column: 1 / -1; margin-block: 0; min-width: 0; }
+  /* T-652 F1: PageHeader is `display: contents` (so its sticky row sticks page-long); its crumb, row and description would otherwise become separate
+     half-width grid items. Each spans the full width. */
+  .erp-page[data-view="detail"][data-sectioned] > [data-page-header] > * { grid-column: 1 / -1; min-width: 0; }
   /* ⭐ T-571 — a card may share the row only with ANOTHER CARD beside it. A table-less section with no
      table-less neighbour on either side (the first rule: one with a table-less next sibling; the second:
      one with a table-less previous sibling) spans both columns instead of leaving the second column empty.

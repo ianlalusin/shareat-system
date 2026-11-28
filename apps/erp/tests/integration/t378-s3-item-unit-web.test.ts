@@ -50,7 +50,7 @@ vi.mock('../../src/lib/session', () => ({
   })),
 }));
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('@/components/shell/PageDescription', () => ({ PageDescription: () => null }));
 
 import { BASE_UNITS } from '@shareat/db';

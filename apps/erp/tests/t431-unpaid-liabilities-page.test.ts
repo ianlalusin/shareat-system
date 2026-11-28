@@ -81,7 +81,7 @@ vi.mock('../src/lib/page-access', () => ({
 }));
 // T-603: the store scope reads the database; these tests render with the session and page-access stubbed, so the scope is stubbed open too.
 vi.mock('../src/lib/store-scope', () => ({ recordInScope: async () => true, listStoreIds: async () => undefined }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('../src/app/liabilities/lib', async (orig) => {
   const actual = await orig<typeof import('../src/app/liabilities/lib')>();
   return {

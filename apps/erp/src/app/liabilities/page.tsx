@@ -8,8 +8,7 @@ import { requirePageAccess } from '../../lib/page-access';
 import { listStoreIds } from '@/lib/store-scope';
 import { createLiabilityAction } from './actions';
 import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { withFlash } from '@/lib/flash';
 import { NAV_LINK } from '@/components/action-link';
 import { Banner, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, DialogActions } from '@/components/ui';
@@ -42,17 +41,19 @@ export default async function LiabilitiesPage({
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 basis-[16rem]">
-          <h1 className="text-2xl font-semibold">Liabilities</h1>
-          <PageDescription>
+      <PageHeader
+        title="Liabilities"
+        description={
+          <>
             What the business owes that is not tracked anywhere else. Supplier invoices, loans, wages
             and statutory contributions each have their own page.
-          </PageDescription>
-          <Link href="/liabilities/unpaid" className={NAV_LINK}>
-            Everything unpaid
-          </Link>
-        </div>
+          </>
+        }
+        actions={
+          <>
+            <Link href="/liabilities/unpaid" className={NAV_LINK}>
+              Everything unpaid
+            </Link>
         {/* T-448: the add form is a modal opened from the header. */}
         <FormModal
           trigger="+ Record obligation"
@@ -114,7 +115,9 @@ export default async function LiabilitiesPage({
             </DialogActions>
           </CheckedForm>
         </FormModal>
-      </div>
+          </>
+        }
+      />
 
       <FlashBanner flash={sp} />
 

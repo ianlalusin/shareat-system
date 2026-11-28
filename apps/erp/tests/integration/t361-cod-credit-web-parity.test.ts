@@ -41,7 +41,7 @@ vi.mock('../../src/lib/session', () => ({
   requireActor: vi.fn(async () => ACTOR_HOLDER.actor!),
   requireSession: vi.fn(async () => SESSION_HOLDER.session),
 }));
-vi.mock('@/components/shell/Page', () => ({
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: unknown }) => children,
 }));
 vi.mock('@/lib/money-lines/load', async () => {

@@ -29,7 +29,7 @@ vi.mock('../src/lib/page-access', async () => {
 });
 vi.mock('../src/app/expenses/lib', () => ({ withOrgPrincipal: async (_org: string, fn: (tx: unknown) => unknown) => fn({}) }));
 vi.mock('@shareat/auth', async (orig) => ({ ...(await orig<typeof import('@shareat/auth')>()), heldCapabilities: async () => state.held }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => createElement('div', null, children as never) }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => createElement('div', null, children as never) }));
 vi.mock('@/components/shell/PageDescription', () => ({ PageDescription: ({ children }: { children: unknown }) => createElement('p', null, children as never) }));
 
 import SettingsPage from '../src/app/settings/page';
