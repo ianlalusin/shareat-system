@@ -39,6 +39,7 @@ import {
   setCostBasisItem,
   recordInvoice,
   verifyInvoice,
+  setDefaultPriceList,
   setPrice,
   setStoreSellability,
   voidTradeOrder,
@@ -285,6 +286,72 @@ describe('the rate is captured, not live-joined', () => {
       }),
     );
     expect(order.totalAmount).toBe('160.00');
+  });
+});
+
+// =========================================================================================
+// T-649 - a price list can follow the delivery cost, and one list can be the default
+// =========================================================================================
+
+describe('T-649: the order line captures what the list rule works out to', () => {
+  /** A delivery cost the cost-plus rules read: one supplier bill for the item at `price` a kg. */
+  async function landCost(f: Fixture, itemId: string, price: string, on = '2026-01-05'): Promise<void> {
+    const [sup] = await sql<{ id: string }[]>`insert into suppliers (org_id, name, created_by) values (${f.orgId}, ${uid('sup')}, ${f.superAdmin.personId}) returning id`;
+    const [inv] = await sql<{ id: string }[]>`
+      insert into supplier_invoices (org_id, store_id, supplier_id, invoice_date, total_amount, created_by)
+      values (${f.orgId}, ${f.storeId}, ${sup!.id}, ${on}, ${price}, ${f.superAdmin.personId}) returning id`;
+    await sql`
+      insert into supplier_invoice_lines (supplier_invoice_id, line_no, item_id, quantity, purchase_unit, conversion_factor, unit_price, line_total)
+      values (${inv!.id}, 1, ${itemId}, '1', 'kg', '1', ${price}, ${price})`;
+  }
+
+  it('⭐ cost + 7% on a delivery cost of 120 is captured as 128.40, and a later cost change leaves the order alone', async () => {
+    const f = await fixture('t649cap');
+    const list = await asOrg(f.orgId, (tx) => createPriceList(tx, f.admin, { name: `List ${uid('l')}` }));
+    const itemId = await wholesaleItem(f, 'Cost plus');
+    await landCost(f, itemId, '120.00');
+    await asOrg(f.orgId, (tx) => setPrice(tx, f.admin, { priceListId: list.id, itemId, mode: 'percent_markup', markupPercent: '7' }));
+    const customerId = await buyer(f, { priceListId: list.id });
+    const order = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, { storeId: f.storeId, customerId, orderDate: '2026-01-10', lines: [{ itemId, quantity: '10' }] }),
+    );
+    expect(order.totalAmount).toBe('1284.00');
+    await landCost(f, itemId, '200.00', '2026-01-08'); // the cost moves; the order must not
+    const lines = await asOrg(f.orgId, (tx) => tradeRepo.linesFor(tx, f.orgId, order.orderId));
+    expect(Number(lines[0]!.rate)).toBe(128.4);
+    const reread = await asOrg(f.orgId, (tx) => tradeRepo.getOrderById(tx, f.orgId, order.orderId));
+    expect(reread!.totalAmount).toBe('1284.00');
+  });
+
+  it('⭐ a buyer with no list of its own is priced from the default list (mutant: no fallback -> "does not quote it")', async () => {
+    const f = await fixture('t649default');
+    const list = await asOrg(f.orgId, (tx) => createPriceList(tx, f.admin, { name: `List ${uid('l')}` }));
+    const itemId = await wholesaleItem(f, 'Default priced');
+    await asOrg(f.orgId, (tx) => setPrice(tx, f.admin, { priceListId: list.id, itemId, mode: 'fixed_markup', markupAmount: '50' }));
+    await landCost(f, itemId, '120.00');
+    const customerId = await buyer(f); // no list of its own
+    const attempt = () =>
+      asOrg(f.orgId, (tx) => createTradeOrder(tx, f.manager, { storeId: f.storeId, customerId, orderDate: '2026-01-10', lines: [{ itemId, quantity: '2' }] }));
+    await expect(attempt()).rejects.toThrow(/does not quote it/); // no default list yet: the person must type a rate
+    await asOrg(f.orgId, (tx) => setDefaultPriceList(tx, f.admin, { priceListId: list.id }));
+    expect((await attempt()).totalAmount).toBe('340.00'); // (120 + 50) x 2
+  });
+
+  it('a markup with no delivery cost yet is refused and says so (not "does not quote it")', async () => {
+    const f = await fixture('t649nocost');
+    const list = await asOrg(f.orgId, (tx) => createPriceList(tx, f.admin, { name: `List ${uid('l')}` }));
+    const itemId = await wholesaleItem(f, 'No delivery');
+    await asOrg(f.orgId, (tx) => setPrice(tx, f.admin, { priceListId: list.id, itemId, mode: 'percent_markup', markupPercent: '7' }));
+    const customerId = await buyer(f, { priceListId: list.id });
+    const lines = [{ itemId, quantity: '1' }];
+    await expect(
+      asOrg(f.orgId, (tx) => createTradeOrder(tx, f.manager, { storeId: f.storeId, customerId, orderDate: '2026-01-10', lines })),
+    ).rejects.toThrow(/has no delivery cost yet/);
+    // a stated rate still wins
+    const order = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, { storeId: f.storeId, customerId, orderDate: '2026-01-10', lines: [{ itemId, quantity: '1', rate: '99.00' }] }),
+    );
+    expect(order.totalAmount).toBe('99.00');
   });
 });
 

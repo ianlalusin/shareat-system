@@ -29,6 +29,7 @@ import type { Actor } from '@shareat/auth';
 import {
   createCustomer,
   createPriceList,
+  quoteForCustomer,
   reconcileCustomer,
   setPrice,
   treatmentOf,
@@ -336,7 +337,7 @@ async function item(f: Fixture, label: string, name: string, baseUnit = 'kg'): P
     );
     const probeId = await item(f, 'PORK-BELLY', 'Pork-Belly');
     expect(
-      await asOrg(f.orgId, (tx) => customersRepo.rateFor(tx, f.orgId, created.id, probeId)),
+      (await asOrg(f.orgId, (tx) => quoteForCustomer(tx, f.orgId, created.id, probeId)))?.rate ?? null,
     ).toBe('380.00');
   });
 
@@ -349,7 +350,7 @@ async function item(f: Fixture, label: string, name: string, baseUnit = 'kg'): P
     // Inventing a number where nobody has priced an item is how something ships free.
     const probeId = await item(f, 'BEEF-RIB', 'Beef-Rib');
     expect(
-      await asOrg(f.orgId, (tx) => customersRepo.rateFor(tx, f.orgId, created.id, probeId)),
+      (await asOrg(f.orgId, (tx) => quoteForCustomer(tx, f.orgId, created.id, probeId)))?.rate ?? null,
     ).toBeNull();
   });
 
@@ -360,7 +361,7 @@ async function item(f: Fixture, label: string, name: string, baseUnit = 'kg'): P
     );
     const probeId = await item(f, 'PORK-BELLY', 'Pork-Belly');
     expect(
-      await asOrg(f.orgId, (tx) => customersRepo.rateFor(tx, f.orgId, created.id, probeId)),
+      (await asOrg(f.orgId, (tx) => quoteForCustomer(tx, f.orgId, created.id, probeId)))?.rate ?? null,
     ).toBeNull();
   });
 

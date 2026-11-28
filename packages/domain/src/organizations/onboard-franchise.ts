@@ -318,7 +318,7 @@ async function completeBothSides(
   const quoted = await customersRepo.quotedItemIds(tx, priceListId);
   for (const line of lines) {
     if (quoted.has(line.itemId)) continue;
-    await customersRepo.upsertPriceListItem(tx, { orgId: c.franchisor.id, priceListId, itemId: line.itemId, rate: money(line.rate), unit: null });
+    await customersRepo.upsertPriceListItem(tx, { orgId: c.franchisor.id, priceListId, itemId: line.itemId, pricingMode: 'fixed', rate: money(line.rate), markupAmount: null, markupPercent: null, unit: null });
     wrote = true;
   }
   if (!sameCustomer) {

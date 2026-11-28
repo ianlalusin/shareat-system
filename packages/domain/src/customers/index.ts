@@ -14,15 +14,17 @@
  * revenue. Neither → external, real revenue. ⛔ `customer_group` never decides any of it.
  */
 import { auditLogRepo, customersRepo, itemsRepo, type Tx } from '@shareat/db';
-import type { CustomerGroup, CustomerTreatment } from '@shareat/db/schema';
+import type { CustomerGroup, CustomerTreatment, PricingMode } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { gone, refuse } from '../shared/refusal';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { CUSTOMER_ADD_RULES, CUSTOMER_RECONCILE_RULES, PRICE_LIST_ADD_RULES, PRICE_SET_RULES } from '../field-rules/customers';
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
+import { parseDecimalInput } from '../shared/money-input';
 
 export { treatmentOf } from '@shareat/db';
+export * from './quote';
 
 export interface CreateCustomerInput {
   name: string;
@@ -235,14 +237,31 @@ export async function setPrice(
     priceListId: string;
     /** ⭐ T-145: a real item, not an opaque code. The name comes from the item. */
     itemId: string;
-    rate: string;
+    /** T-649: how the price is worked out. Omitted = `fixed` (every caller before T-649). Only the figure this mode uses is read; the others are ignored. */
+    mode?: PricingMode;
+    /** `fixed`: the peso rate. */
+    rate?: string | null;
+    /** `fixed_markup`: pesos added to the delivery cost. */
+    markupAmount?: string | null;
+    /** `percent_markup`: percent added to the delivery cost. */
+    markupPercent?: string | null;
     unit?: string | null;
   },
 ): Promise<void> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
     // T-440 / S9: the screen's own rule judges the box(es) AFTER the gate (T-364 order). Moved here from the action.
-    assertFieldRules(PRICE_SET_RULES, { itemId: input.itemId, rate: input.rate });
+    const mode = input.mode ?? 'fixed';
+    if (mode !== 'fixed' && mode !== 'fixed_markup' && mode !== 'percent_markup') {
+      throw refuse(`setPrice: ${String(mode)} is not a pricing mode.`, 'Choose how the price is worked out.');
+    }
+    assertFieldRules(PRICE_SET_RULES, {
+      itemId: input.itemId,
+      pricingMode: mode,
+      rate: input.rate ?? '',
+      markupAmount: input.markupAmount ?? '',
+      markupPercent: input.markupPercent ?? '',
+    });
     const list = await customersRepo.getPriceList(trx, actor.orgId, input.priceListId);
     if (!list) throw gone(`setPrice: price list ${input.priceListId} does not exist.`, 'price list');
 
@@ -269,17 +288,57 @@ export async function setPrice(
     }
     // ⚠️ Zero is allowed — a genuinely free line exists (a sample, a promotional unit) and refusing
     // it would push people to enter 0.01. Negative is not: that is a discount, not a price.
-    const rate = parseMoneyInput(input.rate, 'setPrice: the rate', 'The rate');
-    if (compare(rate, ZERO) < 0) {
+    // Only the chosen mode's figure is parsed and stored; the shape CHECK (0289) holds the other two at NULL.
+    const rate = mode === 'fixed' ? parseMoneyInput(input.rate ?? '', 'setPrice: the rate', 'The rate') : null;
+    if (rate !== null && compare(rate, ZERO) < 0) {
       throw refuse('setPrice: a rate cannot be negative. A negative price is a discount.', 'A rate cannot be negative. A negative price is a discount.');
+    }
+    const markupAmount = mode === 'fixed_markup' ? parseMoneyInput(input.markupAmount ?? '', 'setPrice: the markup amount', 'The amount over the delivery cost') : null;
+    const markupPercent = mode === 'percent_markup' ? parseDecimalInput(input.markupPercent ?? '', '8,4', 'setPrice: the markup percent', 'The percent over the delivery cost') : null;
+    // A markup is "never below the cost": negative is refused here as well as by the field rule and the CHECK.
+    if ((markupAmount !== null && compare(markupAmount, ZERO) < 0) || markupPercent?.startsWith('-')) {
+      throw refuse('setPrice: a markup cannot be negative.', 'A markup cannot be negative.');
     }
 
     await customersRepo.upsertPriceListItem(trx, {
       orgId: actor.orgId,
       priceListId: list.id,
       itemId: item.id,
+      pricingMode: mode,
       rate,
+      markupAmount,
+      markupPercent,
       unit: input.unit?.trim() || null,
+    });
+  };
+  return run(tx);
+}
+
+/**
+ * T-649. Make one price list the default (what a customer with no list of their own is priced from), or clear the default (`priceListId: null`).
+ * The old default is cleared and the new one set in this one transaction; a retired list cannot be the default. Same capability as editing price lists.
+ */
+export async function setDefaultPriceList(tx: Tx, actor: Actor, input: { priceListId: string | null }): Promise<void> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_chart_of_accounts', {});
+    if (input.priceListId !== null) {
+      const list = await customersRepo.getPriceList(trx, actor.orgId, input.priceListId);
+      if (!list) throw gone(`setDefaultPriceList: price list ${input.priceListId} does not exist.`, 'price list');
+      if (list.retiredAt) {
+        throw refuse(`setDefaultPriceList: ${list.name} is retired.`, `${list.name} is retired, so it cannot be the default list.`);
+      }
+    }
+    const before = await customersRepo.getDefaultPriceList(trx, actor.orgId);
+    if ((before?.id ?? null) === input.priceListId) return; // nothing to change
+    await customersRepo.setDefaultPriceList(trx, actor.orgId, input.priceListId);
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'price_list.default_set',
+      storeId: null,
+      entityId: input.priceListId ?? before!.id,
+      before: { defaultListId: before?.id ?? null },
+      after: { defaultListId: input.priceListId },
+      source: 'web',
     });
   };
   return run(tx);
