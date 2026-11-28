@@ -31,8 +31,10 @@ const norm = (s: string) => s.trim().toLowerCase();
  * T-643 (v1's sort): the pills whose name matches a seating flavour come first (case and spaces ignored, the package group and the refill group are different value rows),
  * the rest keep their order. Nothing is removed and nothing is chosen for the cashier.
  */
-export function flavoursLedBy<F extends { name: string }>(flavours: readonly F[], seatFlavours: readonly string[]): { flavour: F; seat: boolean }[] {
+export function flavoursLedBy<F extends { id?: string; name: string }>(flavours: readonly F[], seatFlavours: readonly string[], seatFlavourIds: readonly string[] = []): { flavour: F; seat: boolean }[] {
   const seat = new Set(seatFlavours.map(norm));
-  const tagged = flavours.map((flavour) => ({ flavour, seat: seat.has(norm(flavour.name)) }));
+  // T-653: with the one flavour list a package's pick and a refill's pill are the SAME value row, so the id decides; the name stays as the fallback for old per-item groups.
+  const seatIds = new Set(seatFlavourIds);
+  const tagged = flavours.map((flavour) => ({ flavour, seat: (flavour.id !== undefined && seatIds.has(flavour.id)) || seat.has(norm(flavour.name)) }));
   return [...tagged.filter((t) => t.seat), ...tagged.filter((t) => !t.seat)];
 }

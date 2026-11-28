@@ -216,7 +216,7 @@ export function Refills() {
                       </span>
                       {m.flavours.length > 0 ? (
                         <div className="flex w-full flex-wrap gap-2" role="group" aria-label={`Flavour for ${m.name}${m.flavourRequired ? ' (required)' : ''}`}>
-                          {flavoursLedBy(m.flavours, table.seatFlavours).map(({ flavour: f, seat }) => {
+                          {flavoursLedBy(m.flavours, table.seatFlavours, table.seatFlavourIds).map(({ flavour: f, seat }) => {
                             const on = flavourOf(m) === f.id;
                             return (
                               <button

@@ -1765,6 +1765,13 @@
       "when": 1811043107084,
       "tag": "0289_t649_price_list_cost_plus",
       "breakpoints": true
+    },
+    {
+      "idx": 292,
+      "version": "7",
+      "when": 1811302307084,
+      "tag": "0292_t653_one_flavour_list",
+      "breakpoints": true
     }
   ]
 }

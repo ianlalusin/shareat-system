@@ -1540,6 +1540,10 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'keep',
     reason: 'Which option groups an item or variant offers: standing configuration, kept with the menu.',
   },
+  menu_option_link_values: {
+    class: 'keep',
+    reason: 'T-653: which flavours a package or a refill allows: standing configuration, kept with the menu (same class as its link).',
+  },
   menu_package_refills: {
     class: 'keep',
     reason: 'Which refills a package entitles: standing configuration, kept with the menu.',

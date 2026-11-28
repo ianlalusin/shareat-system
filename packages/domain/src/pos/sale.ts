@@ -484,14 +484,15 @@ export async function listRefillableTables(tx: Tx, actor: Actor, input: { storeI
   const at = { storeId: input.storeId };
   if (!(await can(tx, actor, 'request_pos_refill', at)) && !(await can(tx, actor, 'confirm_pos_heads', at))) await authorize(tx, actor, 'request_pos_refill', at);
   // One row per table. A table may hold more than one package variant: `packageVariantIds` has every one (first line first), `packageVariantId` is the first.
-  const byTable = new Map<string, { sessionId: string; standNumber: number; packageVariantId: string; packageVariantIds: string[]; seatFlavours: string[]; headsCashier: number; headsServer: number | null }>();
+  const byTable = new Map<string, { sessionId: string; standNumber: number; packageVariantId: string; packageVariantIds: string[]; seatFlavours: string[]; seatFlavourIds: string[]; headsCashier: number; headsServer: number | null }>();
   for (const r of await posV2Repo.listRefillableTables(tx, actor.orgId, input.storeId)) {
     if (r.packageVariantId === null) continue;
     const have = byTable.get(r.sessionId);
-    if (!have) byTable.set(r.sessionId, { sessionId: r.sessionId, standNumber: r.standNumber, packageVariantId: r.packageVariantId, packageVariantIds: [r.packageVariantId], seatFlavours: addFlavours([], r.seatFlavours), headsCashier: r.headsCashier, headsServer: r.headsServer });
+    if (!have) byTable.set(r.sessionId, { sessionId: r.sessionId, standNumber: r.standNumber, packageVariantId: r.packageVariantId, packageVariantIds: [r.packageVariantId], seatFlavours: addFlavours([], r.seatFlavours), seatFlavourIds: [...new Set(r.seatFlavourIds)], headsCashier: r.headsCashier, headsServer: r.headsServer });
     else {
       if (!have.packageVariantIds.includes(r.packageVariantId)) have.packageVariantIds.push(r.packageVariantId);
       addFlavours(have.seatFlavours, r.seatFlavours);
+      for (const id of r.seatFlavourIds) if (!have.seatFlavourIds.includes(id)) have.seatFlavourIds.push(id);
     }
   }
   return { tables: [...byTable.values()] };

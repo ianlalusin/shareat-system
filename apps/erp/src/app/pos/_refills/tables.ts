@@ -11,6 +11,8 @@ export interface RefillTableSource {
   packageVariantIds?: string[];
   /** T-643: the flavour names chosen at seating (the package line's options). */
   seatFlavours?: string[];
+  /** T-653: the same options' ids (one flavour list: they match a refill pill by id). */
+  seatFlavourIds?: string[];
 }
 export interface RefillTable {
   sessionId: string;
@@ -21,6 +23,8 @@ export interface RefillTable {
   packageVariantIds?: string[];
   /** T-643: the table's seating flavours; they lead the flavour pills (v1 sorts, never limits). */
   seatFlavours: string[];
+  /** T-653: the ids of the same options. A pill matches by id first (both come from the one list), then by name (old per-item groups). */
+  seatFlavourIds: string[];
 }
 
 export function refillTables(rows: readonly RefillTableSource[], packageVariantBySession?: Readonly<Record<string, string | null | undefined>>): RefillTable[] {
@@ -29,7 +33,7 @@ export function refillTables(rows: readonly RefillTableSource[], packageVariantB
     const packageVariantId = packageVariantBySession ? packageVariantBySession[r.sessionId] : r.packageVariantId;
     if (r.mode === 'take_out' || r.standNumber === null || !packageVariantId) continue;
     const all = !packageVariantBySession && r.packageVariantIds && r.packageVariantIds.length > 0 ? { packageVariantIds: r.packageVariantIds } : {};
-    out.push({ sessionId: r.sessionId, standNumber: r.standNumber, label: `Stand ${r.standNumber}`, packageVariantId, seatFlavours: r.seatFlavours ?? [], ...all });
+    out.push({ sessionId: r.sessionId, standNumber: r.standNumber, label: `Stand ${r.standNumber}`, packageVariantId, seatFlavours: r.seatFlavours ?? [], seatFlavourIds: r.seatFlavourIds ?? [], ...all });
   }
   return out.sort((a, b) => a.standNumber - b.standNumber);
 }

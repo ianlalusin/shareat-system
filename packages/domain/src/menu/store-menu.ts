@@ -268,14 +268,31 @@ export async function loadStoreSells(tx: Tx, orgId: string, storeId: string, oth
       };
     });
     const variantIds = new Set(vrows.map((v) => v.id));
-    const groupIds = new Set(catalog.optionGroupLinks.filter((l) => l.menuItemId === item.id || (l.variantId !== null && variantIds.has(l.variantId))).map((l) => l.optionGroupId));
+    const itemLinks = catalog.optionGroupLinks.filter((l) => l.menuItemId === item.id || (l.variantId !== null && variantIds.has(l.variantId)));
+    const groupIds = new Set(itemLinks.map((l) => l.optionGroupId));
+    // T-653: a link limited to some flavours shows only those; a group reached by several links shows the union (an unlimited link shows them all).
+    const limitedBy = new Map<string, Set<string>>();
+    for (const r of catalog.optionLinkValues) {
+      const set = limitedBy.get(r.linkId) ?? new Set<string>();
+      set.add(r.optionValueId);
+      limitedBy.set(r.linkId, set);
+    }
+    const allowedIn = (groupId: string): Set<string> | null => {
+      const union = new Set<string>();
+      for (const l of itemLinks.filter((x) => x.optionGroupId === groupId)) {
+        const only = limitedBy.get(l.id);
+        if (!only) return null;
+        for (const id of only) union.add(id);
+      }
+      return union;
+    };
     const flavourGroups = catalog.optionGroups
       .filter((g) => g.status === 'active' && groupIds.has(g.id))
       .map((g) => ({
         groupId: g.id,
         name: g.name,
         values: catalog.optionValues
-          .filter((ov) => ov.optionGroupId === g.id && ov.status === 'active')
+          .filter((ov) => ov.optionGroupId === g.id && ov.status === 'active' && (allowedIn(g.id)?.has(ov.id) ?? true))
           .sort(compareMenuOrder)
           .map((ov) => {
             const live = optionOffers.find((o) => o.optionValueId === ov.id && o.channel === 'store');

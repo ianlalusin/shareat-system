@@ -63,6 +63,11 @@ const EXEMPT: Record<string, string> = {
 // `<button>` labels written in app/ - they are the `label=` prop of <ConfirmDestructive>, whose own submit button is the one
 // control (apps/erp/tests/t412-destructive-census.test.ts is the guard for those). Their entries left this list with them.
 const COMMANDS: Record<string, string> = {
+  'Add flavour': 'T-653: adds one flavour to the one flavour list (a new row; audited menu_option_value_create)',
+  'Rename': 'T-653: renames one flavour of the one flavour list (audited menu_option_value_edit)',
+  'Bring back': 'T-653: brings a retired flavour back onto the flavour list (a status move; audited menu_option_value_edit)',
+  'Start your flavour list': 'T-653: creates the org\'s one flavour list (audited menu_option_group_create); idempotent',
+  'Use these flavours': 'T-653: merges the per-item Flavours groups into the one list in one transaction, after the page showed the preview (audited menu.flavours_merged)',
   'Remove key': 'T-640 (BOSS approved 26 Nov 2026): deletes a stored AI provider key and, with it, that provider\'s models (a credential removed; audited ai_key.removed; super admin only, inside a "Remove this key" reveal)',
   'Test': 'T-640 (BOSS approved 26 Nov 2026): sends one tiny prompt with one tool to an AI provider with the stored key (spends a fraction of a centavo, counted against the monthly cap; logged in ai_calls)',
   'Switch on': 'T-640 (BOSS approved 26 Nov 2026): switches a tested AI model on (it then answers questions and spends money; audited ai_model.activated) or one store\'s AI features back on; super admin only',

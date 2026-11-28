@@ -22,7 +22,9 @@ export interface MenuSnapshot {
   readonly variants: readonly { id: string; menuItemId: string; label: string | null; isDefault: boolean; sortOrder: number; status: Status }[];
   readonly optionGroups: readonly { id: string; name: string; selectionMode: 'single' | 'multi'; minSelections: number; maxSelections: number; status: Status }[];
   readonly optionValues: readonly { id: string; optionGroupId: string; name: string; sortOrder: number; status: Status }[];
-  readonly optionGroupLinks: readonly { id: string; optionGroupId: string; menuItemId: string | null; variantId: string | null; sortOrder: number; status: Status }[];
+  readonly optionGroupLinks: readonly { id: string; optionGroupId: string; menuItemId: string | null; variantId: string | null; sortOrder: number; status: Status; /** T-653: this link's own min / max (null or absent = the group's). */ minSelections?: number | null; maxSelections?: number | null }[];
+  /** T-653: the flavours a link is limited to. A link with NO rows allows every active value of its group. Absent = no link is limited. */
+  readonly optionLinkValues?: readonly { linkId: string; optionValueId: string }[];
   readonly packageRefills: readonly { packageVariantId: string; refillItemId: string; status: Status }[];
   readonly stores: readonly StoreOffersAt[];
   /** T-508 R4/R11: live station rows of every store in `stores` (names and SLA are read here, never copied onto an item). */
@@ -165,6 +167,13 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
   const itemById = new Map(snapshot.items.map((i) => [i.id, i]));
   const groupById = new Map(snapshot.optionGroups.map((g) => [g.id, g]));
   const activeLinks = snapshot.optionGroupLinks.filter((l) => l.status === 'active');
+  // T-653: a link with rows allows only those values; a link with none allows them all (today's behaviour).
+  const allowedByLink = new Map<string, Set<string>>();
+  for (const r of snapshot.optionLinkValues ?? []) {
+    const set = allowedByLink.get(r.linkId) ?? new Set<string>();
+    set.add(r.optionValueId);
+    allowedByLink.set(r.linkId, set);
+  }
 
   // Which variants appear: active, item active, orderable on at least one channel.
   const appearing = new Map<string, { variant: MenuSnapshot['variants'][number]; channels: { store: ChannelOffer; online: ChannelOffer } }>();
@@ -226,8 +235,9 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
       const g = groupById.get(l.optionGroupId);
       if (!g || g.status !== 'active' || seen.has(g.id)) continue;
       seen.add(g.id);
+      const only = allowedByLink.get(l.id);
       const values = snapshot.optionValues
-        .filter((ov) => ov.optionGroupId === g.id && ov.status === 'active')
+        .filter((ov) => ov.optionGroupId === g.id && ov.status === 'active' && (only === undefined || only.has(ov.id)))
         .map((ov) => ({
           id: ov.id,
           name: ov.name,
@@ -239,7 +249,8 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
         }))
         .filter((v) => v.channels.store.orderable || v.channels.online.orderable)
         .sort(compareMenuOrder);
-      out.push({ id: g.id, name: g.name, selectionMode: g.selectionMode, minSelections: g.minSelections, maxSelections: g.maxSelections, values });
+      // T-653: the link's own min / max win over the group's (a package picks 1 to 3, a refill exactly 1).
+      out.push({ id: g.id, name: g.name, selectionMode: g.selectionMode, minSelections: l.minSelections ?? g.minSelections, maxSelections: l.maxSelections ?? g.maxSelections, values });
     }
     return out;
   };

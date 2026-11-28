@@ -8,7 +8,7 @@ import { typedFor } from '@/lib/keep-typing';
 import { Page } from '@/components/shell/Page';
 import { ChevronIcon } from '@/components/shell/icons';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { CheckedForm, EditableRecord } from '@/components/forms';
+import { CheckAllButtons, CheckedForm, EditableRecord } from '@/components/forms';
 import {
   MENU_DEPLETION_RULES,
   MENU_ITEM_EDIT_RULES,
@@ -26,12 +26,14 @@ import {
   editOptionGroupAction,
   editOptionValueAction,
   linkOptionGroupAction,
+  setAllowedFlavoursAction,
   setDepletionRuleAction,
   setPackageRefillsAction,
   unlinkOptionGroupAction,
 } from './actions';
 import { MENU_ITEM, MENU_OPTION_GROUP, MENU_OPTION_VALUE } from './typed-forms';
-import { listActiveRecipes, listActiveStockItems, loadItemPage, withOrgPrincipal, type ItemPageData, type OfferHistoryRow, type OptionGroupView } from '../../lib';
+import { PACKAGE_FLAVOUR_LIMITS } from '@shareat/domain';
+import { listActiveRecipes, listActiveStockItems, loadItemPage, withOrgPrincipal, type AllowedFlavours, type ItemPageData, type OfferHistoryRow, type OptionGroupView } from '../../lib';
 import { NAV_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Menu item - Shareat System' };
@@ -325,6 +327,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                     {data.refillChoices.map((r) => (
                       <Checkbox key={r.id} name="refillItemIds" value={r.id} defaultChecked={ticked.has(r.id)} label={r.name} />
                     ))}
+                    <CheckAllButtons name="refillItemIds" subject={`refills for ${v.label ?? 'Default'}`} />
                     <Button type="submit" variant="secondary">
                       Save
                     </Button>
@@ -335,9 +338,115 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
           })}
         </section>
       )}
+
+      {item.itemType === 'package' && (
+        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
+          <h2 className="text-lg font-semibold">Flavours this package allows</h2>
+          {data.variants.map((v) => (
+            <FlavourCard key={v.id} data={data} canManage={canManage} itemId={item.id} variantId={v.id} heading={v.label ?? 'Default'} allowed={data.flavoursByVariant.get(v.id) ?? null} />
+          ))}
+        </section>
+      )}
+
+      {item.itemType === 'refill' && (
+        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
+          <h2 className="text-lg font-semibold">Flavours this refill allows</h2>
+          <FlavourCard data={data} canManage={canManage} itemId={item.id} variantId={null} heading={item.name} allowed={data.flavoursForItem} />
+        </section>
+      )}
         </div>
       </div>
     </Page>
+  );
+}
+
+/**
+ * T-653: the flavours one package variant (or one refill item) allows, ticked from THE flavour list. Select all / Clear tick the boxes on the page; Save sends the ticks.
+ * A package picks 1 to 3 by default (the boxes below); a refill always picks exactly one (not shown, not editable). A link that is saved with every box ticked allows
+ * every flavour that is on the list when it is saved; an untouched, never-saved one is shown with all ticked and allows them all.
+ */
+function FlavourCard({
+  data,
+  canManage,
+  itemId,
+  variantId,
+  heading,
+  allowed,
+}: {
+  data: ItemPageData;
+  canManage: boolean;
+  itemId: string;
+  variantId: string | null;
+  heading: string;
+  allowed: AllowedFlavours | null;
+}) {
+  const list = data.flavourList;
+  const isRefill = variantId === null;
+  const ticked = new Set(allowed?.linked ? (allowed.optionValueIds.length > 0 ? allowed.optionValueIds : (list ?? []).map((f) => f.id)) : []);
+  const names = (list ?? []).filter((f) => ticked.has(f.id)).map((f) => f.name);
+  // The stored limits are the selects' starting values (a package's own, else guests pick 1 to 3).
+  const minAttrs = { defaultValue: String(allowed?.min ?? PACKAGE_FLAVOUR_LIMITS.min) };
+  const maxAttrs = { defaultValue: String(allowed?.max ?? PACKAGE_FLAVOUR_LIMITS.max) };
+  return (
+    <div className="space-y-2">
+      {!isRefill && <h3 className="font-medium">{heading}</h3>}
+      {!canManage ? (
+        <p className="text-sm">{names.length > 0 ? names.join(', ') : 'No flavours.'}</p>
+      ) : list === null ? (
+        <p className="text-sm text-muted">
+          You have not started your flavour list yet.{' '}
+          <Link href="/menu/flavours" className={NAV_LINK}>
+            Start your flavour list
+          </Link>
+        </p>
+      ) : list.length === 0 ? (
+        <p className="text-sm text-muted">
+          The flavour list is empty.{' '}
+          <Link href="/menu/flavours" className={NAV_LINK}>
+            Add flavours
+          </Link>
+        </p>
+      ) : (
+        <form action={setAllowedFlavoursAction} className="space-y-3">
+          <input type="hidden" name="menuItemId" value={itemId} />
+          {variantId !== null ? <input type="hidden" name="packageVariantId" value={variantId} /> : <input type="hidden" name="kind" value="refill" />}
+          <div className="flex flex-wrap items-center gap-4">
+            {list.map((f) => (
+              <Checkbox key={f.id} name="optionValueIds" value={f.id} defaultChecked={ticked.has(f.id)} label={f.name} />
+            ))}
+            <CheckAllButtons name="optionValueIds" subject={`flavours for ${heading}`} />
+          </div>
+          {variantId !== null && (
+            <FormGrid>
+              <Field label="Guests pick at least" className="text-sm">
+                <Select name="min" {...minAttrs} className="w-full">
+                  {[0, 1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Guests pick at most" className="text-sm">
+                <Select name="max" {...maxAttrs} className="w-full">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </FormGrid>
+          )}
+          <p className="text-sm text-muted">
+            {isRefill ? 'A refill always carries exactly one flavour. Untick every flavour to give this refill none.' : 'Untick every flavour to give this package none.'}
+          </p>
+          <Button type="submit" variant="secondary">
+            Save
+          </Button>
+        </form>
+      )}
+    </div>
   );
 }
 

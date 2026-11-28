@@ -1232,6 +1232,10 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',
   },
+  menu_option_link_values: {
+    scope: 'org_column',
+    reason: 'T-653: carries its own org_id (same-org composite FKs to the link and the value); the flavours a package or refill allows.',
+  },
   menu_package_refills: {
     scope: 'org_column',
     reason: 'T-401 R10: an org’s own menu master data; Padre Garcia has its own menu in its own org, never a shared one.',

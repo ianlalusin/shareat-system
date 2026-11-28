@@ -19,6 +19,7 @@ import {
   menuItemVariants,
   menuOffers,
   menuOptionGroupLinks,
+  menuOptionLinkValues,
   menuOptionGroups,
   menuOptionOffers,
   menuOptionValues,
@@ -32,6 +33,7 @@ import type {
   MenuDepletionMode,
   MenuItemType,
   MenuPricingMode,
+  MenuOptionGroupRole,
   MenuRequestStatus,
   MenuSelectionMode,
   MenuStatus,
@@ -258,6 +260,8 @@ export async function insertOptionGroup(
     selectionMode: MenuSelectionMode;
     minSelections: number;
     maxSelections: number;
+    /** T-653: 'flavours' for THE org's one flavour list; omitted = a 'choice' group. */
+    role?: MenuOptionGroupRole;
     createdBy: string;
   },
 ): Promise<MenuOptionGroupRow> {
@@ -322,6 +326,84 @@ export async function insertLink(
 
 export async function deleteLink(tx: Tx, id: string): Promise<void> {
   await tx.delete(menuOptionGroupLinks).where(eq(menuOptionGroupLinks.id, id));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-653 - one flavour list; a link allows a subset of it and may override the group's min/max
+// ---------------------------------------------------------------------------------------------------------------------
+/** THE org's flavour list: its one active group with role 'flavours'. */
+export async function getFlavoursGroup(tx: Tx, orgId: string): Promise<MenuOptionGroupRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(menuOptionGroups)
+    .where(and(eq(menuOptionGroups.orgId, orgId), eq(menuOptionGroups.role, 'flavours'), eq(menuOptionGroups.status, 'active')));
+  return row;
+}
+
+/** Every active-or-retired link of one group onto an item or a variant (the flavour screens' own read). */
+export async function linkOfTarget(
+  tx: Tx,
+  orgId: string,
+  groupId: string,
+  target: { menuItemId?: string | undefined; variantId?: string | undefined },
+): Promise<MenuOptionGroupLinkRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(menuOptionGroupLinks)
+    .where(
+      and(
+        eq(menuOptionGroupLinks.orgId, orgId),
+        eq(menuOptionGroupLinks.optionGroupId, groupId),
+        target.menuItemId ? eq(menuOptionGroupLinks.menuItemId, target.menuItemId) : eq(menuOptionGroupLinks.variantId, target.variantId ?? ''),
+      ),
+    );
+  return row;
+}
+
+/** The value ids a link is limited to (empty = every active value of its group). */
+export async function linkValueIds(tx: Tx, orgId: string, linkId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ id: menuOptionLinkValues.optionValueId })
+    .from(menuOptionLinkValues)
+    .where(and(eq(menuOptionLinkValues.orgId, orgId), eq(menuOptionLinkValues.linkId, linkId)));
+  return rows.map((r) => r.id).sort();
+}
+
+/** Replaces a link's allowed set (delete + insert; the caller's transaction makes it one step). The group id rides on each row: the database refuses a value of another group. */
+export async function replaceLinkValues(tx: Tx, orgId: string, link: { id: string; optionGroupId: string }, valueIds: readonly string[]): Promise<void> {
+  await tx.delete(menuOptionLinkValues).where(and(eq(menuOptionLinkValues.orgId, orgId), eq(menuOptionLinkValues.linkId, link.id)));
+  const unique = [...new Set(valueIds)];
+  if (unique.length === 0) return;
+  await tx.insert(menuOptionLinkValues).values(unique.map((optionValueId) => ({ orgId, linkId: link.id, optionGroupId: link.optionGroupId, optionValueId })));
+}
+
+/** The only two columns of a link that can change. null = use the group's own. */
+export async function updateLinkLimits(tx: Tx, id: string, limits: { minSelections: number | null; maxSelections: number | null }): Promise<MenuOptionGroupLinkRow> {
+  const [row] = await tx.update(menuOptionGroupLinks).set(limits).where(eq(menuOptionGroupLinks.id, id)).returning();
+  return row!;
+}
+
+/** Every link of the org to one group (both statuses), for the merge preview. */
+export async function linksOfGroup(tx: Tx, orgId: string, groupId: string): Promise<MenuOptionGroupLinkRow[]> {
+  return tx
+    .select()
+    .from(menuOptionGroupLinks)
+    .where(and(eq(menuOptionGroupLinks.orgId, orgId), eq(menuOptionGroupLinks.optionGroupId, groupId)))
+    .orderBy(menuOptionGroupLinks.id);
+}
+
+/** Active-or-retired values of a group, in screen order. */
+export async function valuesOfGroup(tx: Tx, orgId: string, groupId: string): Promise<MenuOptionValueRow[]> {
+  return tx
+    .select()
+    .from(menuOptionValues)
+    .where(and(eq(menuOptionValues.orgId, orgId), eq(menuOptionValues.optionGroupId, groupId)))
+    .orderBy(menuOptionValues.sortOrder, menuOptionValues.id);
+}
+
+/** Option groups of the org, with a name match (trimmed, case ignored) and a role filter. */
+export async function optionGroupsOfOrg(tx: Tx, orgId: string): Promise<MenuOptionGroupRow[]> {
+  return tx.select().from(menuOptionGroups).where(eq(menuOptionGroups.orgId, orgId)).orderBy(menuOptionGroups.name, menuOptionGroups.id);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -685,16 +767,17 @@ export async function upcomingOfferDates(tx: Tx, storeId: string, at: Date): Pro
 
 /** The whole catalog of an org (all statuses; the projection decides what appears). Plain reads for the projection's snapshot. */
 export async function catalogOfOrg(tx: Tx, orgId: string) {
-  const [categories, items, variants, optionGroups, optionValues, optionGroupLinks, packageRefills] = await Promise.all([
+  const [categories, items, variants, optionGroups, optionValues, optionGroupLinks, optionLinkValues, packageRefills] = await Promise.all([
     tx.select().from(menuCategories).where(eq(menuCategories.orgId, orgId)),
     tx.select().from(menuItems).where(eq(menuItems.orgId, orgId)),
     tx.select().from(menuItemVariants).where(eq(menuItemVariants.orgId, orgId)),
     tx.select().from(menuOptionGroups).where(eq(menuOptionGroups.orgId, orgId)),
     tx.select().from(menuOptionValues).where(eq(menuOptionValues.orgId, orgId)),
     tx.select().from(menuOptionGroupLinks).where(eq(menuOptionGroupLinks.orgId, orgId)),
+    tx.select({ linkId: menuOptionLinkValues.linkId, optionValueId: menuOptionLinkValues.optionValueId }).from(menuOptionLinkValues).where(eq(menuOptionLinkValues.orgId, orgId)),
     tx.select().from(menuPackageRefills).where(eq(menuPackageRefills.orgId, orgId)),
   ]);
-  return { categories, items, variants, optionGroups, optionValues, optionGroupLinks, packageRefills };
+  return { categories, items, variants, optionGroups, optionValues, optionGroupLinks, optionLinkValues, packageRefills };
 }
 
 /**

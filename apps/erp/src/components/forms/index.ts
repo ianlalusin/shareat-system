@@ -1,6 +1,9 @@
 // T-384: client form components. Kept apart from `@/components/ui`, which stays server-safe.
 // T-440: live field checks (CheckedForm, FieldCheck, the check context and its pure logic).
 export { CheckedForm } from './CheckedForm';
+// T-653: Select all / Clear for a set of ticks.
+export { CheckAllButtons } from './CheckAllButtons';
+export type { CheckAllButtonsProps } from './CheckAllButtons';
 export type { CheckedFormProps } from './CheckedForm';
 export { FieldCheck, FieldCheckView } from './FieldCheck';
 export { CheckContext } from './context';
