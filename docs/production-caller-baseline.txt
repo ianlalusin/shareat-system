@@ -84,7 +84,6 @@ previewDrawingClose
 proxy
 pullHolds
 purgeComplete
-rateFor
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier

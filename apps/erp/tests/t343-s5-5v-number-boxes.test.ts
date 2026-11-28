@@ -110,8 +110,10 @@ describe('R-legs — source-text: each of the 22 S5.5v boxes has no type="number
   it('liabilities/[id]/page.tsx — amount[2] pay (decimal)', () => {
     assertConverted('apps/erp/src/app/liabilities/[id]/page.tsx', '"amount"', 'decimal', 2);
   });
-  it('customers/price-lists/[id]/page.tsx — rate (decimal)', () => {
-    assertConverted('apps/erp/src/app/customers/price-lists/[id]/page.tsx', '"rate"', 'decimal');
+  it('customers/price-lists/[id]/PriceRateForm.tsx — rate, markupAmount, markupPercent (decimal; T-649 moved the rate box here)', () => {
+    for (const f of ['"rate"', '"markupAmount"', '"markupPercent"']) {
+      assertConverted('apps/erp/src/app/customers/price-lists/[id]/PriceRateForm.tsx', f, 'decimal');
+    }
   });
   it('payroll/page.tsx — amount (decimal)', () => {
     assertConverted('apps/erp/src/app/payroll/page.tsx', '"amount"', 'decimal');

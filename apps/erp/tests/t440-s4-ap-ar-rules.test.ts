@@ -31,6 +31,8 @@ type Row = {
   bad: Array<[value: string, sentence: string]>;
   /** The sentence for a blank (required rules only). */
   blank?: string;
+  /** Sibling values a conditional rule needs to apply (T-649: `pricingMode` for the price list's figures). */
+  given?: Record<string, string>;
 };
 
 const BLANK = '   ';
@@ -101,7 +103,10 @@ const ROWS: Record<string, Row> = {
   'customers.reconcileCustomer.asOf': dateReq('Say which date they were verified at zero.'),
   'customers.createPriceList.name': req('A price list needs a name.'),
   'customers.setPrice.itemId': req('Choose an item.'),
-  'customers.setPrice.rate': { ...money0('The rate'), bad: [MONEY_BAD('The rate'), ['-1', 'A rate cannot be negative. A negative price is a discount.']] },
+  'customers.setPrice.pricingMode': req('Choose how the price is worked out.'),
+  'customers.setPrice.rate': { ...money0('The rate'), bad: [MONEY_BAD('The rate'), ['-1', 'A rate cannot be negative. A negative price is a discount.']], given: { pricingMode: 'fixed' } },
+  'customers.setPrice.markupAmount': { ok: '3.5', bad: [['abc', 'The amount over the delivery cost must be a number of 0 or more.'], ['-1', 'The amount over the delivery cost must be a number of 0 or more.']], blank: 'The amount over the delivery cost is required.', given: { pricingMode: 'fixed_markup' } },
+  'customers.setPrice.markupPercent': { ok: '7', bad: [['abc', 'The percent over the delivery cost must be a number of 0 or more.'], ['-1', 'The percent over the delivery cost must be a number of 0 or more.']], blank: 'The percent over the delivery cost is required.', given: { pricingMode: 'percent_markup' } },
   'customers.recordCollection.amount': moneyPos('The amount collected must be an amount greater than zero.'),
   'customers.recordCollection.platformFee': optMoney0('The platform fee'),
   'customers.recordCollection.collectionDate': date('The collection date'),
@@ -205,10 +210,10 @@ const ALL_SETS = Object.values(FILES).flatMap(setsOf);
 const keyOf = (set: FieldRuleSetLike, r: FieldRule) => `${set.form}.${r.name}`;
 const ALL_RULES = ALL_SETS.flatMap((set) => rulesOf(set).map((r) => ({ set, rule: r, key: keyOf(set, r) })));
 
-function goodInput(set: FieldRuleSetLike): Record<string, string> {
+function goodInput(set: FieldRuleSetLike, given: Record<string, string> = {}): Record<string, string> {
   const out: Record<string, string> = {};
   for (const r of rulesOf(set)) out[r.name] = ROWS[keyOf(set, r)]?.ok ?? '';
-  return out;
+  return { ...out, ...given };
 }
 /** A short value ("0", "-1") can sit inside a sentence by accident; only a value of 3+ characters can be an echo. */
 const echoes = (text: string, typed: string) => typed.trim().length >= 3 && text.includes(typed);
@@ -251,7 +256,7 @@ describe('T-440 S4 payables and receivables: client rule === server refusal, exa
         const want = row.stored === undefined ? row.ok : row.stored;
         expect(checkField(r, row.ok)).toEqual({ ok: true, value: want });
         expect(checkField(r, `  ${row.ok} `)).toEqual({ ok: true, value: want });
-        expect(assertFieldRules(set, goodInput(set))[r.name]).toBe(want);
+        expect(assertFieldRules(set, goodInput(set, row.given))[r.name]).toBe(want);
       });
 
       for (const [value, sentence] of row.bad) {
@@ -262,7 +267,7 @@ describe('T-440 S4 payables and receivables: client rule === server refusal, exa
           expect(c.requirement).toBe(sentence);
           let thrown: unknown;
           try {
-            assertFieldRules(set, { ...goodInput(set), [r.name]: value });
+            assertFieldRules(set, { ...goodInput(set, row.given), [r.name]: value });
           } catch (e) {
             thrown = e;
           }
@@ -280,7 +285,7 @@ describe('T-440 S4 payables and receivables: client rule === server refusal, exa
         it('a blank passes and is stored as null (mutant: optional ignored)', () => {
           expect(checkField(r, '')).toEqual({ ok: true, value: null });
           expect(checkField(r, BLANK)).toEqual({ ok: true, value: null });
-          expect(assertFieldRules(set, { ...goodInput(set), [r.name]: '' })[r.name]).toBeNull();
+          expect(assertFieldRules(set, { ...goodInput(set, row.given), [r.name]: '' })[r.name]).toBeNull();
         });
       } else {
         it('a blank (and spaces) is refused with the blank sentence, same on the server (mutant: optional ignored the other way)', () => {
@@ -294,7 +299,7 @@ describe('T-440 S4 payables and receivables: client rule === server refusal, exa
             expect(c.progress).toBe('Required');
             let thrown: unknown;
             try {
-              assertFieldRules(set, { ...goodInput(set), [r.name]: blank });
+              assertFieldRules(set, { ...goodInput(set, row.given), [r.name]: blank });
             } catch (e) {
               thrown = e;
             }

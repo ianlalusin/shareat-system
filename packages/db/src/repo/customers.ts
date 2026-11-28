@@ -6,7 +6,7 @@
  * so there is never a column for T-131 (AR) to have to remove.
  */
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
-import type { Money } from '@shareat/core/money';
+import type { Decimal, Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
 import { recordGone } from './record-gone';
@@ -18,6 +18,7 @@ import {
   type CustomerStatus,
   type CustomerTreatment,
 } from '../../schema/customers';
+import type { PricingMode } from '../../schema/items';
 
 export const AR_CONTROL_CODE = '1210';
 export const PARTY_TYPE = 'customer';
@@ -244,6 +245,8 @@ export interface PriceListRow {
   name: string;
   description: string | null;
   retiredAt: Date | null;
+  /** T-649. The list a customer with no list of its own uses. */
+  isDefault: boolean;
   createdBy: string;
   createdAt: Date;
 }
@@ -254,7 +257,11 @@ export interface PriceListItemRow {
   priceListId: string;
   /** ⭐ T-145: the FK that replaced an opaque `item_code`. */
   itemId: string;
-  rate: string;
+  /** T-649. How the price is worked out; `rate` is set only for `fixed`, the markups only for their own mode. */
+  pricingMode: PricingMode;
+  rate: string | null;
+  markupAmount: string | null;
+  markupPercent: string | null;
   unit: string | null;
   /** Joined from `items` — the name and code belong to the item, never copied onto the rate. */
   itemName?: string;
@@ -303,7 +310,11 @@ export type UpsertPriceListItemInput = Pick<
   SafeInsert<typeof priceListItems>,
   'orgId' | 'priceListId' | 'itemId'
 > & {
-  rate: Money;
+  /** T-649. Exactly the figure the mode uses is set; the others are null (the shape CHECK refuses anything else). */
+  pricingMode: PricingMode;
+  rate: Money | null;
+  markupAmount: Money | null;
+  markupPercent: Decimal<'8,4'> | null;
   /** The unit this LIST quotes in, when it differs from the item's base unit. */
   unit: string | null;
 };
@@ -324,7 +335,10 @@ export async function upsertPriceListItem(tx: Tx, input: UpsertPriceListItemInpu
     .onConflictDoUpdate({
       target: [priceListItems.priceListId, priceListItems.itemId],
       set: {
+        pricingMode: input.pricingMode,
         rate: input.rate,
+        markupAmount: input.markupAmount,
+        markupPercent: input.markupPercent,
         // The rate always replaces — that is the point of a re-quote. The unit only replaces
         // when a new one is supplied.
         unit: sql`coalesce(${input.unit}, ${priceListItems.unit})`,
@@ -333,57 +347,93 @@ export async function upsertPriceListItem(tx: Tx, input: UpsertPriceListItemInpu
     });
 }
 
+const PRICE_LIST_ITEM_SELECT = sql`pli.id, pli.org_id, pli.price_list_id, pli.item_id, pli.pricing_mode, pli.rate::text as rate,
+           pli.markup_amount::text as markup_amount, pli.markup_percent::text as markup_percent, pli.unit,
+           i.name as item_name, i.code as item_code, i.base_unit`;
+
+// ⚠️ A raw `execute` returns the driver's own snake_case keys — unlike `.select()`, which maps
+// to the schema's camelCase. Mapping explicitly rather than casting: a cast here compiles and
+// then hands every caller `undefined` under a correct-looking type.
+function toPriceListItemRow(r: Record<string, string | null>): PriceListItemRow {
+  return {
+    id: String(r.id),
+    orgId: String(r.org_id),
+    priceListId: String(r.price_list_id),
+    itemId: String(r.item_id),
+    pricingMode: r.pricing_mode as PricingMode,
+    rate: r.rate == null ? null : Number(r.rate).toFixed(2),
+    markupAmount: r.markup_amount == null ? null : Number(r.markup_amount).toFixed(2),
+    // numeric(8,4) text keeps its own scale ('7.0000'); the figure is exact as stored.
+    markupPercent: r.markup_percent ?? null,
+    unit: r.unit ?? null,
+    itemName: String(r.item_name),
+    itemCode: String(r.item_code),
+    baseUnit: String(r.base_unit),
+  };
+}
+
 export async function listPriceListItems(
   tx: Tx,
   orgId: string,
   priceListId: string,
 ): Promise<PriceListItemRow[]> {
-  // ⚠️ A raw `execute` returns the driver's own snake_case keys — unlike `.select()`, which maps
-  // to the schema's camelCase. Mapping explicitly rather than casting: a cast here compiles and
-  // then hands every caller `undefined` under a correct-looking type.
   const rows = (await tx.execute(sql`
-    select pli.id, pli.org_id, pli.price_list_id, pli.item_id, pli.rate::text as rate, pli.unit,
-           i.name as item_name, i.code as item_code, i.base_unit
+    select ${PRICE_LIST_ITEM_SELECT}
     from price_list_items pli
     join items i on i.id = pli.item_id
     where pli.org_id = ${orgId} and pli.price_list_id = ${priceListId}
     order by i.name asc
   `)) as unknown as Record<string, string | null>[];
-  return rows.map((r) => ({
-    id: String(r.id),
-    orgId: String(r.org_id),
-    priceListId: String(r.price_list_id),
-    itemId: String(r.item_id),
-    rate: Number(r.rate).toFixed(2),
-    unit: r.unit ?? null,
-    itemName: String(r.item_name),
-    itemCode: String(r.item_code),
-    baseUnit: String(r.base_unit),
-  }));
+  return rows.map(toPriceListItemRow);
+}
+
+/** T-649. One item's row on one list, or undefined when the list does not carry it. */
+export async function getPriceListItem(
+  tx: Tx,
+  orgId: string,
+  priceListId: string,
+  itemId: string,
+): Promise<PriceListItemRow | undefined> {
+  const [row] = (await tx.execute(sql`
+    select ${PRICE_LIST_ITEM_SELECT}
+    from price_list_items pli
+    join items i on i.id = pli.item_id
+    where pli.org_id = ${orgId} and pli.price_list_id = ${priceListId} and pli.item_id = ${itemId}
+    limit 1
+  `)) as unknown as Record<string, string | null>[];
+  return row ? toPriceListItemRow(row) : undefined;
+}
+
+/** T-649. The org's default price list (not retired), or undefined when none is set. */
+export async function getDefaultPriceList(tx: Tx, orgId: string): Promise<PriceListRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(priceLists)
+    .where(and(eq(priceLists.orgId, orgId), eq(priceLists.isDefault, true), isNull(priceLists.retiredAt)))
+    .limit(1);
+  return row as PriceListRow | undefined;
 }
 
 /**
- * ⭐ **What one item costs a given customer.** Returns `null` when the customer has no price list,
- * or the list has no rate for that item.
- *
- * ⛔ **Null, not zero, and not a fallback to some other list.** A missing rate means nobody has
- * priced this item for this customer — and inventing a number there is how something ships free.
+ * T-649. Make `id` the org's default list, or clear the default when `id` is null. Clears first, then sets, in the caller's transaction:
+ * the partial unique index (one default per org) would refuse the other order.
  */
-export async function rateFor(
-  tx: Tx,
-  orgId: string,
-  customerId: string,
-  /** ⭐ T-145: an item id, not a text code. Same lookup, one identity. */
-  itemId: string,
-): Promise<string | null> {
+export async function setDefaultPriceList(tx: Tx, orgId: string, id: string | null): Promise<void> {
+  await tx
+    .update(priceLists)
+    .set({ isDefault: false, updatedAt: sql`now()` })
+    .where(and(eq(priceLists.orgId, orgId), eq(priceLists.isDefault, true)));
+  if (id !== null) {
+    await tx.update(priceLists).set({ isDefault: true, updatedAt: sql`now()` }).where(and(eq(priceLists.orgId, orgId), eq(priceLists.id, id)));
+  }
+}
+
+/** T-649. The customer's own price list id: `null` = the customer has none, `undefined` = no such customer. */
+export async function customerPriceListId(tx: Tx, orgId: string, customerId: string): Promise<string | null | undefined> {
   const [row] = (await tx.execute(sql`
-    select pli.rate::text as rate
-    from customers c
-    join price_list_items pli on pli.price_list_id = c.price_list_id
-    where c.org_id = ${orgId} and c.id = ${customerId} and pli.item_id = ${itemId}
-    limit 1
-  `)) as unknown as Record<string, string>[];
-  return row?.rate ? Number(row.rate).toFixed(2) : null;
+    select price_list_id from customers where org_id = ${orgId} and id = ${customerId}
+  `)) as unknown as { price_list_id: string | null }[];
+  return row === undefined ? undefined : (row.price_list_id ?? null);
 }
 
 /**

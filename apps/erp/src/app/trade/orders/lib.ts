@@ -21,7 +21,7 @@ import {
 } from '@shareat/db';
 import type { CustomerTreatment, TradeOrderStatus } from '@shareat/db/schema';
 import { AuthorizationError, can, type Actor } from '@shareat/auth';
-import { branchPriceFor, previewCreditExposure } from '@shareat/domain';
+import { branchPriceFor, costBasisReader, previewCreditExposure, priceOfRow } from '@shareat/domain';
 import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
@@ -82,18 +82,29 @@ export interface OrderFormData {
 /** Everything the "New order" form needs, in one org-scoped transaction. */
 export async function orderFormData(orgId: string): Promise<OrderFormData> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const [customerRows, itemRows, lists, rules] = await Promise.all([
+    const [customerRows, itemRows, defaultList, rules] = await Promise.all([
       customersRepo.listCustomers(tx, orgId),
       itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
-      customersRepo.listPriceLists(tx, orgId),
+      customersRepo.getDefaultPriceList(tx, orgId),
       itemsRepo.listItemPricing(tx, orgId),
     ]);
 
+    // T-649: a price per item for each list an OUTSIDE customer can be priced from (its own, else the default list), through the same row pricing the order
+    // line uses (`priceOfRow`). Computed once per list, not per customer. A markup row works off the item's delivery cost; an item with none yet has no entry.
+    // shortcut: one cost read (two queries) per distinct markup item across the lists in use; upgrade to a batched cost read if lists grow past a few hundred markup rows.
+    const costOf = costBasisReader(tx, orgId);
     const ratesByList = new Map<string, Record<string, string>>();
-    for (const list of lists) {
-      const rates = await customersRepo.listPriceListItems(tx, orgId, list.id);
-      ratesByList.set(list.id, Object.fromEntries(rates.map((r) => [r.itemId, r.rate])));
-    }
+    const ratesOf = async (listId: string) => {
+      const known = ratesByList.get(listId);
+      if (known) return known;
+      const rates: Record<string, string> = {};
+      for (const row of await customersRepo.listPriceListItems(tx, orgId, listId)) {
+        const priced = await priceOfRow(row, costOf);
+        if (priced) rates[row.itemId] = priced.rate;
+      }
+      ratesByList.set(listId, rates);
+      return rates;
+    };
 
     const customers: CustomerOption[] = customerRows
       .filter((c) => c.status === 'active')
@@ -114,7 +125,9 @@ export async function orderFormData(orgId: string): Promise<OrderFormData> {
 
     const quotes: Record<string, Record<string, string>> = {};
     for (const c of customers) {
-      if (c.priceListId) quotes[c.id] = ratesByList.get(c.priceListId) ?? {};
+      // An internal customer is charged the branch price below, never a list.
+      const listId = c.treatment === 'internal' ? null : (c.priceListId ?? defaultList?.id ?? null);
+      if (listId) quotes[c.id] = await ratesOf(listId);
     }
 
     // ⚠️ Only the RULED items are priced — `branchPriceFor` is three queries per item, and the

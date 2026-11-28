@@ -23,10 +23,26 @@ export const PRICE_LIST_ADD_RULES = defineFieldRules('customers.createPriceList'
   name: { label: 'The price list name', kind: 'text', requires: 'A price list needs a name.' },
 });
 
-/** "Set a rate" on a price list (setPriceAction). Zero is allowed: a sample is genuinely free. */
+/**
+ * "Set a rate" on a price list (setPriceAction). T-649: the price is a fixed rate, the delivery cost + an amount, or the delivery cost + a percent; only the figure the chosen
+ * way uses is judged (a figure of another way is ignored, as on the item pricing screen). Zero is allowed: a sample is genuinely free. A form that sends no
+ * `pricingMode` is a fixed price.
+ */
 export const PRICE_SET_RULES = defineFieldRules('customers.setPrice', {
   itemId: { label: 'The item', kind: 'text', requires: 'Choose an item.' },
-  rate: { label: 'The rate', kind: 'money', min: 0, rangeSays: 'A rate cannot be negative. A negative price is a discount.' },
+  pricingMode: { label: 'The price', kind: 'text', requires: 'Choose how the price is worked out.' },
+  rate: {
+    label: 'The rate', kind: 'money', min: 0, rangeSays: 'A rate cannot be negative. A negative price is a discount.',
+    when: { field: 'pricingMode', equals: ['fixed'], says: 'Only used for a fixed price' },
+  },
+  markupAmount: {
+    label: 'The amount over the delivery cost', kind: 'number', min: 0,
+    when: { field: 'pricingMode', equals: ['fixed_markup'], says: 'Only used for delivery cost + an amount' },
+  },
+  markupPercent: {
+    label: 'The percent over the delivery cost', kind: 'number', min: 0,
+    when: { field: 'pricingMode', equals: ['percent_markup'], says: 'Only used for delivery cost + a percent' },
+  },
 });
 
 /** "Record payment" on a customer page (recordCollectionAction). The per-charge allocation boxes are a repeated-line family (S8). */

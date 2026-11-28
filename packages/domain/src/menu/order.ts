@@ -1,7 +1,8 @@
 /**
  * T-651 - the ONE order rule for the menu: sort order first, then name (lower case), then id. Pure leaf (no database), so the POS tablet
  * bundle imports it too (`@shareat/domain/menu/order`). A variant list puts the default size first, then the same rule on its label.
- * Plain `<` on lower-cased text, never `localeCompare`: the same answer on every device and every locale.
+ * Text is compared with `localeCompare(_, 'en')` on lower-cased text: a FIXED locale, so every device gives the same answer, and no relational
+ * operator ever touches a string (the T-371 NaN-blind guard).
  */
 export interface MenuOrdered {
   sortOrder: number;
@@ -9,7 +10,7 @@ export interface MenuOrdered {
   id: string;
 }
 
-const lt = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+const lt = (a: string, b: string): number => a.localeCompare(b, 'en');
 
 export function compareMenuOrder(a: MenuOrdered, b: MenuOrdered): number {
   return a.sortOrder - b.sortOrder || lt(a.name.toLowerCase(), b.name.toLowerCase()) || lt(a.id, b.id);

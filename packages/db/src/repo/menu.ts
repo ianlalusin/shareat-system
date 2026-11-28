@@ -1048,7 +1048,21 @@ export async function setSortOrders(tx: Tx, list: OrderList, ids: readonly strin
   for (const [i, id] of ids.entries()) {
     const want = (i + 1) * step;
     if (current.get(id) === want) continue;
-    await tx.update(t).set({ sortOrder: want, updatedAt: sql`now()` }).where(eq(t.id, id));
+    // One literal `.update(<table>)` per kind (not a union-typed `t`), so the T-371 write guard can name every target.
+    switch (list.kind) {
+      case 'categories':
+        await tx.update(menuCategories).set({ sortOrder: want, updatedAt: sql`now()` }).where(eq(menuCategories.id, id));
+        break;
+      case 'items':
+        await tx.update(menuItems).set({ sortOrder: want, updatedAt: sql`now()` }).where(eq(menuItems.id, id));
+        break;
+      case 'variants':
+        await tx.update(menuItemVariants).set({ sortOrder: want, updatedAt: sql`now()` }).where(eq(menuItemVariants.id, id));
+        break;
+      case 'optionValues':
+        await tx.update(menuOptionValues).set({ sortOrder: want, updatedAt: sql`now()` }).where(eq(menuOptionValues.id, id));
+        break;
+    }
     changed++;
   }
   return changed;
