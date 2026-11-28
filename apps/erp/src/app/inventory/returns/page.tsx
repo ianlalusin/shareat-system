@@ -6,7 +6,7 @@ import { isPositiveQuantity, quantity, subtractQuantity, supplierCreditBalances 
 import { recordReturnAction, refundCreditAction, voidReturnAction } from './actions';
 import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -135,15 +135,13 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
 
   return (
     <Page density="table" className="">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Supplier returns</h1>
+      <PageHeader title="Supplier returns" description={<>
+        The goods go back to the supplier and we hold a credit with them. The books pick the right account for you.
+      </>} actions={
         <Link href="/inventory" className={NAV_LINK}>
           ← Stock on hand
         </Link>
-      </div>
-      <PageDescription className="mt-1">
-        The goods go back to the supplier and we hold a credit with them. The books pick the right account for you.
-      </PageDescription>
+      } />
 
       <FlashBanner flash={sp} />
 

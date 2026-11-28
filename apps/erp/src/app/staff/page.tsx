@@ -3,7 +3,7 @@ import { requirePageAccess, StoreNotAvailable } from '../../lib/page-access';
 import { issueAdminPinAction, upsertStorePositionAction } from './actions';
 import { positionHolders } from './role-title';
 import { positionsForStore, rosterForStore, staffStoresFor, withOrgPrincipal } from './lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { Button, Field, FlashBanner, FormGrid, Input } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
@@ -119,17 +119,13 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
 
   return (
     <Page density="table" className="space-y-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div className="min-w-0 flex-1 basis-[16rem]">
-          <h1 className="text-2xl font-semibold">Staff and positions</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Staff and positions" description={<>
             Who is on the roster at this store, which position they hold, and where they are in the day.
-          </PageDescription>
-        </div>
+          </>} actions={
         <Link href={`/staff/hire?store=${storeId}`} className="inline-flex min-h-11 items-center rounded-full border border-transparent bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover">
           Hire
         </Link>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

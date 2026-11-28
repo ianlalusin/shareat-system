@@ -4,7 +4,7 @@ import { menuRepo } from '@shareat/db';
 import { requirePageAccess } from '@/lib/page-access';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
@@ -77,14 +77,10 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
 
   return (
     <Page density="table" className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Item requests</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Item requests" description={<>
             Ask for an item that is not on the menu yet. We check the name against what is already there first, so the same dish is not
             added twice. The head office adds the item or tells you why not.
-          </PageDescription>
-        </div>
+          </>} actions={
         <div className="flex items-center gap-3">
           <Link href="/menu" className={NAV_LINK}>
             Back to the menu
@@ -140,7 +136,7 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
             </FormModal>
           )}
         </div>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
       {sp.ok && <Banner tone="success">{sp.ok}</Banner>}

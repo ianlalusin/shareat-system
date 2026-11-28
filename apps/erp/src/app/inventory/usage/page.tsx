@@ -6,7 +6,7 @@ import { saveUsageDraftAction } from './actions';
 import { usageQueueData, usageScreenData } from './lib';
 import { NewUsageForm } from './NewUsageForm';
 import { ACTION_LINK, NAV_LINK } from '@/components/action-link';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -60,18 +60,14 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
 
   return (
     <Page density="table" className="space-y-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Usage &amp; wastage</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Usage &amp; wastage" description={<>
             A floor worker records what was consumed or spoiled; a manager posts it. Posting is the
             only step that moves stock and hits the books.
-          </PageDescription>
-        </div>
+          </>} actions={
         <Link href={`/inventory?store=${storeId}`} className={NAV_LINK}>
           ← Stock on hand
         </Link>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

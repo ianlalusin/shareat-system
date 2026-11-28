@@ -145,7 +145,8 @@ describe('T-348 S2 — the two neutral-500 prose sites move too (SW3)', () => {
   it('SW3: the element PAIRED with admin/stores\' and admin/users\' <h1> is a <PageDescription>, not just present somewhere in the file', () => {
     // T-540 (7 Nov 2026, BOSS approved): admin/users moved onto <Page title description>, so it has no hand-written <h1>
     // pair any more; the prose still renders through PageHeader's PageDescription. admin/stores (a rule-2 skip) stays.
-    for (const rel of ['admin/stores/page.tsx']) {
+    // T-652 (28 Nov 2026): admin/stores moved onto <PageHeader title description actions> too (its buttons stick), so it has no hand-written <h1> pair either.
+    for (const rel of [] as string[]) {
       const tag = tagPairedWithH1(resolve(appRoot, rel));
       expect(tag, `${rel}: expected an <h1>-then-<PageDescription> pair`).toBe('PageDescription');
     }
@@ -187,7 +188,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 120 -> 119, T-599: a redrawn long page moved its prose onto the page header; measured by walking app/.
     // 119 -> 120, T-628: /pos-reservations carries its <PageDescription>; measured by walking app/.
     // 120 -> 119, T-637: /documents/templates moved onto <Page title description actions> (its call site left app/), and the new editor screen passes its prose to the same header, so the net change is -1; measured by walking app/.
-    expect(count).toBe(119);
+    // 119 -> 84, T-652: the top-row sweep moved 35 header descriptions onto <PageHeader title description actions> (sticky header), whose own <PageDescription> lives in Page.tsx; measured by walking app/.
+    expect(count).toBe(84);
   });
 });
 

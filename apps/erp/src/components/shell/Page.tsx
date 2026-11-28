@@ -115,29 +115,50 @@ export interface PageHeaderProps {
 }
 
 /**
- * Title and description on the left, actions on the right.
+ * Title and actions in one row; the description under it.
  *
- * ⚠️ **`flex-wrap`, so a phone stacks them rather than squeezing.** This is DEF-199's lesson one
- * layer up: a label beside a button in a row that cannot wrap is what made twelve routes scroll
- * sideways at 390 px. A header is the same shape and would fail the same way.
+ * ⭐ T-652 (Ian, 28 Nov 2026: "on every page that has buttons on header or top stick these buttons on top"): **when `actions` is set, the title and the
+ * buttons stay on screen while the page scrolls.** The row is `sticky` (`top-14` on a phone, under the 56 px TopBar; `md:top-0` where the TopBar is gone),
+ * `z-20` (under the TopBar's z-30 and under every dialog and toast, which are z-50), on the workspace's own background with a hairline under it so
+ * content does not show through. The crumb and the description scroll away. A header WITHOUT actions has nothing to keep on screen and is unchanged.
+ *
+ * ⚠️ A sticky element sticks only inside its parent's box, so the sticky header's wrapper is `display: contents`: its row is then a child of the page's
+ * own box and sticks for the whole page. (A normal wrapper would end right after the description and the row would unstick at once.)
+ *
+ * ⚠️ **`flex-wrap`, so a phone stacks them rather than squeezing.** This is DEF-199's lesson one layer up: a label beside a button in a row that cannot
+ * wrap is what made twelve routes scroll sideways at 390 px. The title truncates to ONE line in the sticky row so a long title never grows it.
  */
+export const STICKY_HEADER_ROW =
+  'sticky top-14 z-20 -mx-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-[var(--workspace-border)] bg-[var(--workspace)] px-4 py-2 md:top-0 md:-mx-6 md:px-6';
+
 export function PageHeader({ title, description, crumb, actions }: PageHeaderProps) {
-  const row = (
-    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-      {/* basis-[16rem]: without a basis the row never wraps and a phone squeezes the title (T-589 B6). */}
-      <div className="min-w-0 flex-1 basis-[16rem]">
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        {description && <PageDescription className="mt-1">{description}</PageDescription>}
+  if (!actions) {
+    const row = (
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        {/* basis-[16rem]: without a basis the row never wraps and a phone squeezes the title (T-589 B6). */}
+        <div className="min-w-0 flex-1 basis-[16rem]">
+          <h1 className="text-2xl font-semibold">{title}</h1>
+          {description && <PageDescription className="mt-1">{description}</PageDescription>}
+        </div>
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-    </div>
-  );
-  // No crumb: the row alone, so every existing header's markup is unchanged.
-  if (!crumb) return row;
+    );
+    // No crumb: the row alone, so every existing header's markup is unchanged.
+    if (!crumb) return row;
+    return (
+      <div>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">{crumb}</p>
+        {row}
+      </div>
+    );
+  }
   return (
-    <div>
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">{crumb}</p>
-      {row}
+    <div className="contents">
+      {crumb && <p className="text-xs text-neutral-500 dark:text-neutral-400">{crumb}</p>}
+      <div className={STICKY_HEADER_ROW} data-sticky-header>
+        <h1 className="min-w-0 flex-1 basis-[12rem] truncate text-2xl font-semibold">{title}</h1>
+        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+      </div>
+      {description && <PageDescription className="mt-2">{description}</PageDescription>}
     </div>
   );
 }

@@ -33,6 +33,7 @@ import { PhoneTableCards } from './PhoneTableCards';
 import { ScreenState } from './ScreenState';
 // T-641: the Ask ERP button and side panel, for a person who holds `use_ask_erp`.
 import { AskErpLauncher } from '../ask-erp/AskErpLauncher';
+import { ASK_ERP_CLEARANCE } from '../ask-erp/dock';
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const session = await currentSession();
@@ -67,6 +68,8 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       signedInAs: (await personsRepo.getPersonById(tx, session.actor.orgId, session.actor.personId))?.displayName ?? null,
     })),
   ]);
+  // T-652: the Ask ERP tab floats over the page, so while it renders the workspace keeps bottom room and the last control on every page can scroll clear of it.
+  const askErp = (held as ReadonlySet<string>).has('use_ask_erp');
   const allowedHrefs = GROUPS.flatMap((g) => g.links.map((l) => l.href)).filter(
     (href) => navHrefAllowed(href, held as ReadonlySet<string>) && commissaryNavAllowed(href, usage),
   );
@@ -80,12 +83,12 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar allowedHrefs={allowedHrefs} signedInAs={signedInAs} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar signedInAs={signedInAs} />
-          <main id="erp-main" tabIndex={-1} className="erp-workspace min-w-0 flex-1"><PhoneTableCards><Suspense fallback={null}><ScreenState scope={`${session.actor.orgId}:${session.actor.personId}`} /></Suspense><Breadcrumbs held={[...held]} />{children}</PhoneTableCards></main>
+          <main id="erp-main" tabIndex={-1} className={`erp-workspace min-w-0 flex-1${askErp ? ` ${ASK_ERP_CLEARANCE}` : ""}`}><PhoneTableCards><Suspense fallback={null}><ScreenState scope={`${session.actor.orgId}:${session.actor.personId}`} /></Suspense><Breadcrumbs held={[...held]} />{children}</PhoneTableCards></main>
         </div>
       </div>
     </SidebarProvider>
     {/* Presentation only (like the sidebar links): the action behind it authorizes again. Not rendered for /pos, /clock or sign-in, which return bare children above. */}
-    {(held as ReadonlySet<string>).has('use_ask_erp') ? <AskErpLauncher /> : null}
+    {askErp ? <AskErpLauncher /> : null}
     </>
   );
 }

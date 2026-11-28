@@ -12,7 +12,7 @@ import {
 } from './lib';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { CASH_REQUEST_CREATE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, FlashBanner, FormModal, Input, LinkRow, RowLink, Select, statusTone, DialogActions } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -53,15 +53,11 @@ export default async function CashRequestsPage({
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 basis-[16rem]">
-          <h1 className="text-2xl font-semibold">Cash requests</h1>
-          <PageDescription>
+      <PageHeader title="Cash requests" description={<>
             Money handed to a person for an errand, then spent and accounted for.{' '}
             <strong>A request closes when the cash handed out is fully accounted for</strong>, not when
             someone marks it done.
-          </PageDescription>
-        </div>
+          </>} actions={
         <FormModal trigger="+ Ask for cash" title="Ask for cash" size="md"
           description="This records the ask only. No money moves until it is approved and handed over.">
           <CheckedForm rules={CASH_REQUEST_CREATE_RULES} action={createRequestAction} className="space-y-4">
@@ -122,7 +118,7 @@ export default async function CashRequestsPage({
             </DialogActions>
           </CheckedForm>
         </FormModal>
-      </div>
+      } />
 
       <FlashBanner flash={sp} fieldLabels={{ store: 'Store', 'requested-for': 'Who holds the money' }} />
 

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requirePageAccess } from '../../../../../lib/page-access';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner, Button, FlashBanner } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -22,17 +22,13 @@ export default async function NewRecipePage({ searchParams }: { searchParams: Pr
 
   return (
     <Page density="table" className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">New recipe</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="New recipe" description={<>
             Every quantity is in the item&apos;s own unit (kg for a kg item). The most one quantity can be is 10,000.
-          </PageDescription>
-        </div>
+          </>} actions={
         <Link href={RECIPES_PATH} className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">
           ← Recipes
         </Link>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

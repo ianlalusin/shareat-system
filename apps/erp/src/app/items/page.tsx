@@ -34,7 +34,7 @@ import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat
 import Link from 'next/link';
 import { NAV_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { Banner, Button, Checkbox, DialogActions, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, FormModal, statusLabel } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
@@ -81,13 +81,9 @@ export default async function ItemsPage({
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Items</h1>
-          <PageDescription>
+      <PageHeader title="Items" description={<>
             The shared item catalogue for every store. Request a new item here; an admin approves it. Open an item for its settings, suppliers and price history.
-          </PageDescription>
-        </div>
+          </>} actions={
         <div className="flex flex-wrap items-center gap-4">
         {/* T-502 S4: the admin's CSV import; shown only to those who hold approve_item_request (the page and the domain refuse everyone else). */}
         {canImport && <Link href="/items/import" className={NAV_LINK}>Import items from a file</Link>}
@@ -219,7 +215,7 @@ export default async function ItemsPage({
             </CheckedForm>
         </FormModal>
         </div>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

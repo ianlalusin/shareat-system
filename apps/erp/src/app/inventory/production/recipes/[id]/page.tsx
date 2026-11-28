@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { convertUnit, quantity } from '@shareat/domain';
 import { requirePageAccess } from '../../../../../lib/page-access';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -57,17 +57,13 @@ export default async function RecipePage({
 
   return (
     <Page view="detail" sectioned density="table" className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{recipe.name}</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title={recipe.name} description={<>
             {`Makes ${fmtQty(recipe.outputQuantity)} ${recipe.outputUnit} of ${recipe.outputName}`} <Badge status={recipe.status} />
-          </PageDescription>
-        </div>
+          </>} actions={
         <Link href={RECIPES_PATH} className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">
           ← Recipes
         </Link>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

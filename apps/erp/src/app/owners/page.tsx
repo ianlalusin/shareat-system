@@ -12,7 +12,7 @@ import {
   listStores,
   peso,
 } from './lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Banner, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, DialogActions } from '@/components/ui';
@@ -50,14 +50,11 @@ export default async function OwnersPage({
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 basis-[16rem]">
-          <h1 className="text-2xl font-semibold">Owners</h1>
-          <PageDescription>
+      <PageHeader title="Owners" description={<>
             What each owner has put in, taken out, and still owes.
-          </PageDescription>
-        </div>
-        {/* T-448: the add form is a modal opened from the header. */}
+          </>} actions={
+        <>
+          {/* T-448: the add form is a modal opened from the header. */}
         <FormModal
           trigger="+ Record owner"
           title="Record an owner"
@@ -140,7 +137,8 @@ export default async function OwnersPage({
             </DialogActions>
           </CheckedForm>
         </FormModal>
-      </div>
+        </>
+      } />
 
       <FlashBanner flash={sp} />
 

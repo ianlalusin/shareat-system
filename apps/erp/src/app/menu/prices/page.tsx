@@ -8,7 +8,7 @@ import type { OfferInForce } from '@shareat/db';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requirePageAccess } from '@/lib/page-access';
 import { withFlash } from '@/lib/flash';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { ChevronIcon } from '@/components/shell/icons';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
@@ -124,18 +124,14 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
 
   return (
     <Page density="table" className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Menu prices</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Menu prices" description={<>
             What each variant sells for at one store, on the counter and online. A new price starts right now unless you pick a date and
             time (Manila time). An online price can follow the store price by a rule, so it moves when the store price moves.
-          </PageDescription>
-        </div>
+          </>} actions={
         <Link href="/menu" className={NAV_LINK}>
           Back to the menu
         </Link>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
       {sp.ok && <Banner tone="success">{sp.ok}</Banner>}

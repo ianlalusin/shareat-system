@@ -5,7 +5,7 @@ import { formatBusinessDateTime, type BusinessDate } from '@shareat/core/datetim
 import { humanDate } from '@shareat/domain/refusal-leaf';
 import { requirePageAccess } from '@/lib/page-access';
 import { withFlash } from '@/lib/flash';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { KeepParams, NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
@@ -56,18 +56,14 @@ export default async function UsageSourcePage({ searchParams }: { searchParams: 
 
   return (
     <Page density="table" className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Where stock usage comes from</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Where stock usage comes from" description={<>
             A store&apos;s daily stock usage comes from either its POS item maps or the menu&apos;s stock rules. Link each POS item to its menu item,
             compare the two, then switch. You can switch back at any time.
-          </PageDescription>
-        </div>
+          </>} actions={
         <Link href="/menu" className={NAV_LINK}>
           Back to the menu
         </Link>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
       {sp.ok && <Banner tone="success">{sp.ok}</Banner>}

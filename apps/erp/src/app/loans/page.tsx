@@ -5,7 +5,7 @@ import { requirePageAccess } from '../../lib/page-access';
 import { listStoreIds } from '@/lib/store-scope';
 import { createLoanAction } from './actions';
 import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Badge, Button, FlashBanner, Input, LinkRow, NumTd, RowLink, Select, FormModal, FormGrid, FormSection, Table, Td, Th, type FieldProps, DialogActions } from '@/components/ui';
@@ -37,13 +37,9 @@ export default async function LoansPage({
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 basis-[16rem]">
-          <h1 className="text-2xl font-semibold">Loans</h1>
-          <PageDescription>
+      <PageHeader title="Loans" description={<>
             What the business has borrowed, what it has repaid, and what is left.
-          </PageDescription>
-        </div>
+          </>} actions={
         <FormModal trigger="+ Record loan" title="Record a loan" size="lg"
           description="This records the agreement. No money moves until the loan is drawn.">
             <CheckedForm rules={LOAN_ADD_RULES} action={createLoanAction} className="space-y-4">
@@ -162,7 +158,7 @@ export default async function LoansPage({
               </DialogActions>
             </CheckedForm>
         </FormModal>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

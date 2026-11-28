@@ -4,7 +4,7 @@ import { storePageScope } from '../../../lib/store-scope';
 import { saveProductionDraftAction } from './actions';
 import { productionScreenData } from './lib';
 import { cookbookShortcut } from './recipes/lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { ActionIcon } from '@/components/ui/action-icons';
 import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
@@ -67,13 +67,9 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
 
   return (
     <Page density="table" className="space-y-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Production</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Production" description={<>
             A slicing run or prep batch takes the inputs out of stock and puts the outputs in. A floor worker records it; a manager posts it.
-          </PageDescription>
-        </div>
+          </>} actions={
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <Link href={`/inventory?store=${storeId}`} className={NAV_LINK}>
             ← Stock on hand
@@ -82,7 +78,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
             Slicer pay
           </Link>
         </div>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

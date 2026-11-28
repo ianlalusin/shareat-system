@@ -23,7 +23,7 @@ import { classifyHoles, missedMonths, type ClassifiedHolePiece, type MissedMonth
 import { heldCapabilities } from '@shareat/auth';
 // T-345 Amendment R3.4 — the Manila month, not UTC.
 import { currentPeriod } from '../fixed-assets/lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { CheckedForm } from '@/components/forms';
@@ -82,20 +82,21 @@ export default async function FindingsPage({
 
   return (
     <Page density="table">
-      <div>
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="text-2xl font-semibold">Findings</h1>
-          {/* ⚠️ Linked, not orphaned. DEF-139 and DEF-181 were both screens reachable only by
-              typing the URL — a link is part of shipping. */}
+      <PageHeader
+        title="Findings"
+        description={
+          <>
+            The checks the system runs on the books, answered each time you open this page.{' '}
+            <strong>A finding goes away only when it is fixed</strong> or accepted for now.
+          </>
+        }
+        actions={
+          // ⚠️ Linked, not orphaned. DEF-139 and DEF-181 were both screens reachable only by typing the URL — a link is part of shipping.
           <Link href="/findings/scorecard" className={NAV_LINK}>
             Responsiveness scorecard →
           </Link>
-        </div>
-        <PageDescription>
-          The checks the system runs on the books, answered each time you open this page.{' '}
-          <strong>A finding goes away only when it is fixed</strong> or accepted for now.
-        </PageDescription>
-      </div>
+        }
+      />
 
       <FlashBanner flash={sp} />
 

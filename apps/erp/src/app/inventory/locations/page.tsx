@@ -10,7 +10,7 @@ import {
   updateLocationAction,
 } from './actions';
 import { locationsPageData } from './lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_LOCATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Badge, Button, Checkbox, ConfirmDestructive, DialogActions, EmptyState, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select, statusLabel } from '@/components/ui';
@@ -65,17 +65,13 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
 
   return (
     <Page density="table" className="space-y-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Stock locations</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Stock locations" description={<>
             The rooms where this store keeps stock, such as Stockroom, Kitchen and Receiving.
-          </PageDescription>
-        </div>
+          </>} actions={
         <Link href="/inventory" className={NAV_LINK}>
           ← Stock on hand
         </Link>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

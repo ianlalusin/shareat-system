@@ -645,8 +645,8 @@ html { scrollbar-gutter: stable; }
   /* T-511 S6d: the details section (the second child) follows the scroll; stacked below the form it must not. */
   .split-workspace-sticky > :nth-child(2) {
     position: sticky;
-    top: 1rem;
-    max-height: calc(100dvh - 2rem); /* a tall preview scrolls inside, so Post stays reachable */
+    top: 5rem; /* T-652: under the sticky page header */
+    max-height: calc(100dvh - 6rem); /* a tall preview scrolls inside, so Post stays reachable */
     overflow-y: auto;
     padding: 0.25rem; /* room inside the scroll box so a focus ring at its edge is not clipped */
     margin: -0.25rem;

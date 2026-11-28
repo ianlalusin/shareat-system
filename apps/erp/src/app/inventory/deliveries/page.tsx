@@ -5,7 +5,7 @@ import { peso } from '../../../lib/format';
 import { deliveryFormData, deliveryRegister } from './lib';
 import { NewDeliveryForm } from './NewDeliveryForm';
 import { createDeliveryAction } from './actions';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, EmptyState, FlashBanner, FormModal, LinkRow, NumTd, RowLink, Select, Table, Td, Th } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -46,13 +46,9 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
 
   return (
     <Page density="table" className="space-y-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Deliveries</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Deliveries" description={<>
             Record what is coming, then receive what actually arrived. Receiving is how stock enters the store.
-          </PageDescription>
-        </div>
+          </>} actions={
         <div className="flex flex-wrap items-baseline gap-4">
           <Link href="/inventory/deliveries/inbound" className={NAV_LINK}>
             Shipments to receive
@@ -61,7 +57,7 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
             ← Stock on hand
           </Link>
         </div>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

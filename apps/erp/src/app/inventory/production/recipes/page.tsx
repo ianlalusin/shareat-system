@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requirePageAccess } from '../../../../lib/page-access';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, FlashBanner, LinkRow, RowLink } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -30,13 +30,9 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
 
   return (
     <Page density="table" className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Recipes</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Recipes" description={<>
             The batch recipes the business cooks from. A cook works out its ingredients from the recipe. Only an admin changes a recipe.
-          </PageDescription>
-        </div>
+          </>} actions={
         <div className="flex flex-wrap items-center gap-4 text-sm">
           {canManage && (
             <Link href="/inventory/production/recipes/new" className="inline-flex min-h-11 items-center rounded-[12px] bg-brand px-4 py-2.5 font-semibold text-white">
@@ -47,7 +43,7 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
             ← Production
           </Link>
         </div>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

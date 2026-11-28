@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { countsRegister } from './lib';
 import { openCountSessionAction } from './actions';
 import { storePageScope } from '../../../lib/store-scope';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, Button, Card, DialogActions, EmptyState, FlashBanner, FormGrid, FormModal, Field, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, statusTone } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_COUNT_OPEN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -56,12 +56,11 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Physical counts</h1>
+      <PageHeader title="Physical counts" actions={
         <Link href="/inventory" className={NAV_LINK}>
           ← Stock on hand
         </Link>
-      </div>
+      } />
       <PageDescription>
         Freeze a room, count it, and any difference from what the books expected is posted to{' '}
         <strong>stock count differences</strong>.

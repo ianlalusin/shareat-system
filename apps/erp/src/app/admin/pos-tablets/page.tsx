@@ -11,7 +11,7 @@ import { ChargeOptionsSection } from './ChargeOptionsSection';
 import { CHARGE_OPTION_EDIT } from './typed-forms';
 import { typedFor } from '@/lib/keep-typing';
 import { DiscountsSection } from './DiscountsSection';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { CheckedForm } from '@/components/forms';
@@ -115,14 +115,10 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 basis-[16rem]">
-          <h1 className="text-2xl font-semibold">POS tablets</h1>
-          <PageDescription>
+      <PageHeader title="POS tablets" description={<>
             Register a store&apos;s POS tablet so it can ask a manager for a refund approval. Admin or super admin only. This is not the clock-in
             terminal (Setup, Clock terminals).
-          </PageDescription>
-        </div>
+          </>} actions={
         <FormModal trigger="+ Register tablet" title="Register a tablet" size="md">
           {terminals.length === 0 ? (
             <p data-no-terminal className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -162,7 +158,7 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
             </CheckedForm>
           )}
         </FormModal>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
 

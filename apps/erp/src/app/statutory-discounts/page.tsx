@@ -9,7 +9,7 @@ import { requirePageAccess } from '../../lib/page-access';
 import { recordStatutoryDiscountAction, voidStatutoryDiscountAction } from './actions';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { STATUTORY_DISCOUNT_RECORD_RULES, STATUTORY_DISCOUNT_VOID_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, FormModal, Input, Select , FormSection, type FieldProps, DialogActions } from '@/components/ui';
@@ -73,15 +73,16 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
 
   return (
     <Page density="table">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1 basis-[16rem] space-y-2">
-          <h1 className="text-2xl font-semibold">Senior citizen / PWD register</h1>
-          <PageDescription>
+      <PageHeader
+        title="Senior citizen / PWD register"
+        description={
+          <>
             The per-transaction record required by <strong>RR 5-2017 §5.9</strong> (PWD) and{' '}
             <strong>RR 7-2010</strong> (senior citizen): name, ID number, gross, discount, date and
             invoice number, for every discounted sale.
-          </PageDescription>
-        </div>
+          </>
+        }
+        actions={
         <FormModal trigger="+ Add record" title="Add a record" size="lg">
         <CheckedForm rules={STATUTORY_DISCOUNT_RECORD_RULES} action={recordStatutoryDiscountAction} className="space-y-3">
           <input type="hidden" name="from" value={carry.from} />
@@ -179,7 +180,8 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
           </DialogActions>
         </CheckedForm>
         </FormModal>
-      </header>
+        }
+      />
 
       {/* ⛔ Bible row 75, on the face of the screen rather than buried in a doc. The disclaimer in
           POSTING-PATTERNS.md is doing real work and must not be quietly dropped; this is the same

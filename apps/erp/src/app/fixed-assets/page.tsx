@@ -11,7 +11,7 @@ import {
   listStores,
   readPolicyForDisplay,
 } from './lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, LinkRow, RowLink, Select, Input } from '@/components/ui';
@@ -67,20 +67,16 @@ export default async function FixedAssetsPage({
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Fixed assets</h1>
-          <PageDescription>
+      <PageHeader title="Fixed assets" description={<>
             Everything the business owns that lasts: what it cost and what it is worth now.
-          </PageDescription>
-        </div>
+          </>} actions={
         <a
           href={`/fixed-assets/new?${carry.toString()}`}
           className="inline-flex min-h-11 shrink-0 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
         >
           Add asset
         </a>
-      </div>
+      } />
 
       <FlashBanner flash={sp} />
       {/* ⚠️ A run that failed must not LOOK like a run that worked. The first version of this

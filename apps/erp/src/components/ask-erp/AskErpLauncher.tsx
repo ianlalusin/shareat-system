@@ -12,12 +12,13 @@
  * form action, because the reply is shown in the panel and a form action's return value is not); the same server action is the form's `action` for a browser without scripts.
  */
 import Link from 'next/link';
-import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useTransition, type FormEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { ASK_ERP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, Field, Textarea } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { NAV_LINK } from '@/components/action-link';
 import { askErpAction, askErpFormAction, type AskReply } from '../../app/ask-erp/actions';
+import { DEFAULT_DOCK, isDrag, readDock, snapDock, writeDock, type Dock } from './dock';
 
 /** The turns sent back with a question (the server keeps the last ten too; a test pins both to the domain's number). */
 const KEEP_TURNS = 10;
@@ -43,6 +44,14 @@ export function AskErpLauncher() {
   const [warning, setWarning] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const log = useRef<HTMLDivElement>(null);
+  // T-652: the closed launcher is a slim tab docked to a side edge that can be dragged. `dock` is where it rests; `live` is where it is while a pointer drags it.
+  const [dock, setDock] = useState<Dock>(DEFAULT_DOCK);
+  const [live, setLive] = useState<{ x: number; y: number } | null>(null);
+  const press = useRef<{ x: number; y: number; grab: number; moved: boolean } | null>(null);
+  const dragged = useRef(false);
+  useEffect(() => {
+    setDock(readDock());
+  }, []);
 
   useEffect(() => {
     if (open) document.getElementById(QUESTION_ID)?.focus();
@@ -88,12 +97,74 @@ export function AskErpLauncher() {
   }
 
   if (!open) {
+    const onDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
+      const box = e.currentTarget.getBoundingClientRect();
+      press.current = { x: e.clientX, y: e.clientY, grab: e.clientY - box.top, moved: false };
+      dragged.current = false;
+      e.currentTarget.setPointerCapture(e.pointerId);
+    };
+    const onMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+      const p = press.current;
+      if (!p) return;
+      if (!p.moved && !isDrag(e.clientX - p.x, e.clientY - p.y)) return;
+      p.moved = true;
+      dragged.current = true;
+      setLive({ x: e.clientX, y: e.clientY - p.grab });
+    };
+    const onUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
+      const p = press.current;
+      press.current = null;
+      if (!p || !p.moved) return; // a short press: the click that follows opens the panel
+      const phone = window.innerWidth < 768;
+      const next = snapDock({
+        x: e.clientX,
+        y: e.clientY,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        topInset: phone ? 64 : 8, // clear of the phone TopBar (56px)
+        bottomInset: 16,
+        tabHeight: e.currentTarget.getBoundingClientRect().height,
+        grabOffsetY: p.grab,
+      });
+      setLive(null);
+      setDock(next);
+      writeDock(next);
+    };
+    // While dragging the tab follows the pointer (top/left in px); at rest it sits on its edge at topPct of the viewport height.
+    // (inline style, not classes, so the touch-target census can still resolve the className statically)
+    const style: CSSProperties = live
+      ? { top: live.y, left: live.x - 22, borderRadius: 12 }
+      : dock.side === 'left'
+        ? { top: `${dock.topPct}%`, left: 0, borderRadius: '0 12px 12px 0', borderLeftWidth: 0 }
+        : { top: `${dock.topPct}%`, right: 0, borderRadius: '12px 0 0 12px', borderRightWidth: 0 };
     return (
-      <div className="fixed bottom-4 right-4 z-40 print:hidden">
-        <Button variant="primary" icon={null} onClick={() => setOpen(true)}>
-          Ask ERP
-        </Button>
-      </div>
+      <button
+        type="button"
+        aria-label="Ask ERP"
+        data-ask-erp-tab
+        data-dock-side={dock.side}
+        style={style}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={() => {
+          press.current = null;
+          setLive(null);
+        }}
+        onClick={() => {
+          if (dragged.current) {
+            dragged.current = false; // the release of a drag is not a press
+            return;
+          }
+          setOpen(true);
+        }}
+        className="fixed z-40 inline-flex min-h-11 min-w-11 touch-none select-none items-center justify-center gap-1 border border-transparent bg-brand px-2 text-xs font-semibold text-white shadow-lg hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink print:hidden"
+      >
+        <span aria-hidden="true" className="text-base leading-none">
+          ?
+        </span>
+        <span className="hidden sm:inline">Ask ERP</span>
+      </button>
     );
   }
 
