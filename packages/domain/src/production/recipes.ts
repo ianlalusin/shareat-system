@@ -14,6 +14,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { auditLogRepo, productionRepo, type Tx } from '@shareat/db';
 import type { BusinessDate } from '@shareat/core/datetime';
+import { money, type Money } from '@shareat/core/money';
 import { notActiveItemSentence } from '../items/not-active';
 import { parseDecimalInput } from '../shared/money-input';
 import { humanDate } from '../shared/refusal-leaf';
@@ -33,6 +34,10 @@ export interface CreateRecipeInput {
   readonly outputItemId: string;
   readonly outputQuantity: string;
   readonly lines: readonly RecipeLineInput[];
+  /** T-650 S2: the stores that may make it. Empty / omitted = every store. */
+  readonly storeIds?: readonly string[];
+  /** T-650 S2: labour for ONE batch (blank / omitted = none). */
+  readonly standardLabourCost?: string;
 }
 
 export interface EditRecipeInput {
@@ -41,6 +46,10 @@ export interface EditRecipeInput {
   readonly outputItemId: string;
   readonly outputQuantity: string;
   readonly lines: readonly RecipeLineInput[];
+  /** T-650 S2: omit to leave the store list as it is; [] removes the limit (every store). */
+  readonly storeIds?: readonly string[];
+  /** T-650 S2: omit to leave it as it is; blank clears it. */
+  readonly standardLabourCost?: string;
 }
 
 export type RecipeOutcome = { readonly ok: true; readonly recipeId: string } | { readonly ok: false; readonly reason: string };
@@ -57,6 +66,8 @@ async function snapshot(tx: Tx, orgId: string, recipeId: string) {
     name: r.name,
     outputItemId: r.outputItemId,
     outputQuantity: r.outputQuantity,
+    standardLabourCost: r.standardLabourCost,
+    storeIds: (await productionRepo.listRecipeStores(tx, orgId, recipeId)).map((s) => s.storeId),
     lines: lines.map((l) => ({ itemId: l.itemId, quantity: l.quantity, unit: l.unit })),
   };
 }
@@ -70,6 +81,9 @@ type Quantity14_3 = Quantity;
 interface Checked {
   readonly name: string;
   readonly outputQuantity: Quantity14_3;
+  /** undefined = the caller said nothing; null = cleared / none. */
+  readonly standardLabourCost: Money | null | undefined;
+  readonly storeIds: readonly string[] | undefined;
   readonly lines: { itemId: string; quantity: Quantity14_3; unit: string }[];
 }
 
@@ -77,7 +91,7 @@ interface Checked {
 async function checkRecipe(
   tx: Tx,
   orgId: string,
-  input: { name: string; outputItemId: string; outputQuantity: string; lines: readonly RecipeLineInput[] },
+  input: { name: string; outputItemId: string; outputQuantity: string; lines: readonly RecipeLineInput[]; storeIds?: readonly string[]; standardLabourCost?: string },
   ownId: string | null,
 ): Promise<{ ok: true; value: Checked } | { ok: false; reason: string }> {
   const shape = validateRecipeShape(input);
@@ -107,6 +121,21 @@ async function checkRecipe(
     });
   }
 
+  // T-650 S2: standard labour per batch (>= 0, two decimals) and the stores. A store of another organisation is "not found" here (and refused by the FK underneath).
+  let standardLabourCost: Money | null | undefined;
+  if (input.standardLabourCost !== undefined) {
+    const raw = input.standardLabourCost.trim();
+    if (raw === '') standardLabourCost = null;
+    else if (raw.startsWith('-')) return refusal('Labour per batch cannot be negative.');
+    else standardLabourCost = parseDecimalInput(raw, '14,2', 'recipe.standardLabourCost', 'Labour per batch', { blank: 'refuse' });
+  }
+  const storeIds = input.storeIds === undefined ? undefined : [...new Set(input.storeIds.map((s) => s.trim()).filter((s) => s !== ''))];
+  if (storeIds && storeIds.length > 0) {
+    const known = await productionRepo.storeNamesIn(tx, orgId, storeIds);
+    const missing = storeIds.find((s) => !known.has(s));
+    if (missing) return refusal('One of the stores picked for "Made at" does not exist. Pick the stores from the list.');
+  }
+
   const held = await productionRepo.findRecipeByName(tx, orgId, name);
   if (held && held.id !== ownId) {
     return refusal(
@@ -120,6 +149,8 @@ async function checkRecipe(
     value: {
       name,
       outputQuantity: parseDecimalInput(input.outputQuantity.trim(), '14,3', 'recipe.outputQuantity', 'The output quantity', { blank: 'refuse' }),
+      standardLabourCost,
+      storeIds,
       lines,
     },
   };
@@ -136,9 +167,11 @@ export async function createRecipe(tx: Tx, actor: Actor, input: CreateRecipeInpu
     name: checked.value.name,
     outputItemId: input.outputItemId,
     outputQuantity: checked.value.outputQuantity,
+    standardLabourCost: checked.value.standardLabourCost ?? null,
     createdBy: actor.personId,
   });
   await productionRepo.insertRecipeLines(tx, recipeId, checked.value.lines);
+  if (checked.value.storeIds && checked.value.storeIds.length > 0) await productionRepo.replaceRecipeStores(tx, input.orgId, recipeId, checked.value.storeIds);
   await audit(tx, actor, 'production.recipe_create', recipeId, null, await snapshot(tx, input.orgId, recipeId));
   return { ok: true, recipeId };
 }
@@ -172,7 +205,9 @@ export async function editRecipe(tx: Tx, actor: Actor, input: EditRecipeInput): 
     name: checked.value.name,
     outputItemId: input.outputItemId,
     outputQuantity: checked.value.outputQuantity,
+    standardLabourCost: checked.value.standardLabourCost === undefined ? (existing.standardLabourCost === null ? null : money(existing.standardLabourCost)) : checked.value.standardLabourCost,
   });
+  if (checked.value.storeIds !== undefined) await productionRepo.replaceRecipeStores(tx, actor.orgId, existing.id, checked.value.storeIds);
   await productionRepo.replaceRecipeLines(tx, actor.orgId, existing.id, checked.value.lines);
   await audit(tx, actor, 'production.recipe_edit', existing.id, before, await snapshot(tx, actor.orgId, existing.id));
   return { ok: true, recipeId: existing.id };

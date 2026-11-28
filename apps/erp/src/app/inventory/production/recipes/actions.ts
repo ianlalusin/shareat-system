@@ -6,7 +6,9 @@
  * redirect with a banner. The actor comes from the session. The form sends NO unit: the domain writes each item's base
  * unit, and any `lineUnit` / `unit` a hostile client sends is never read.
  */
-import { createRecipe, editRecipe, restoreRecipe, retireRecipe, type RecipeOutcome } from '@shareat/domain';
+import { assertFieldRules, createRecipe, editRecipe, restoreRecipe, retireRecipe, type RecipeOutcome } from '@shareat/domain';
+import { can } from '@shareat/auth';
+import { INVENTORY_RECIPE_RULES } from '@shareat/domain/field-rules';
 import type { Tx } from '@shareat/db';
 import { requireActor } from '../../../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
@@ -35,6 +37,11 @@ function lines(fd: FormData): { itemId: string; quantity: string }[] {
   return rows;
 }
 
+/** T-650 S2: the "Made at" boxes that were ticked (none ticked = every store) and the labour-per-batch box (blank = none). */
+function madeAt(fd: FormData): { storeIds: string[]; standardLabourCost: string } {
+  return { storeIds: fd.getAll('storeId').filter((v): v is string => typeof v === 'string' && v.trim() !== '').map((v) => v.trim()), standardLabourCost: str(fd, 'standardLabourCost') };
+}
+
 async function attempt(orgId: string, run: (tx: Tx) => Promise<RecipeOutcome>): Promise<{ ok: true; recipeId: string } | { ok: false; error: string }> {
   try {
     const r = await withOrgPrincipal(orgId, run);
@@ -49,9 +56,11 @@ const detailPath = (recipeId: string): string => (isUuid(recipeId) ? `${RECIPES_
 
 export async function createRecipeAction(fd: FormData): Promise<void> {
   const actor = await requireActor(RECIPES_PATH);
-  const r = await attempt(actor.orgId, (tx) =>
-    createRecipe(tx, actor, { orgId: actor.orgId, name: str(fd, 'name'), outputItemId: str(fd, 'outputItemId'), outputQuantity: str(fd, 'outputQuantity'), lines: lines(fd) }),
-  );
+  const r = await attempt(actor.orgId, async (tx) => {
+    // T-440 S9 (iii): the field check runs only for a caller createRecipe's own authorize() would let in.
+    if (await can(tx, actor, 'manage_recipes', {})) assertFieldRules(INVENTORY_RECIPE_RULES, fd);
+    return createRecipe(tx, actor, { orgId: actor.orgId, name: str(fd, 'name'), outputItemId: str(fd, 'outputItemId'), outputQuantity: str(fd, 'outputQuantity'), lines: lines(fd), ...madeAt(fd) });
+  });
   if (!r.ok) return await redirectWithFlash(`${RECIPES_PATH}/new`, {}, { error: r.error });
   return await redirectWithFlash(detailPath(r.recipeId), {}, { ok: 'Recipe added.' });
 }
@@ -59,9 +68,10 @@ export async function createRecipeAction(fd: FormData): Promise<void> {
 export async function editRecipeAction(fd: FormData): Promise<void> {
   const actor = await requireActor(RECIPES_PATH);
   const recipeId = str(fd, 'recipeId');
-  const r = await attempt(actor.orgId, (tx) =>
-    editRecipe(tx, actor, { recipeId, name: str(fd, 'name'), outputItemId: str(fd, 'outputItemId'), outputQuantity: str(fd, 'outputQuantity'), lines: lines(fd) }),
-  );
+  const r = await attempt(actor.orgId, async (tx) => {
+    if (await can(tx, actor, 'manage_recipes', {})) assertFieldRules(INVENTORY_RECIPE_RULES, fd);
+    return editRecipe(tx, actor, { recipeId, name: str(fd, 'name'), outputItemId: str(fd, 'outputItemId'), outputQuantity: str(fd, 'outputQuantity'), lines: lines(fd), ...madeAt(fd) });
+  });
   return await redirectWithFlash(detailPath(recipeId), {}, r.ok ? { ok: 'Recipe saved.' } : { error: r.error });
 }
 

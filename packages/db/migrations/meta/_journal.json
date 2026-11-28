@@ -1765,6 +1765,13 @@
       "when": 1811043107084,
       "tag": "0289_t649_price_list_cost_plus",
       "breakpoints": true
+    },
+    {
+      "idx": 290,
+      "version": "7",
+      "when": 1811129507084,
+      "tag": "0290_t650_recipe_stores_standard_labour",
+      "breakpoints": true
     }
   ]
 }

@@ -101,6 +101,10 @@ export interface RecipeDetail {
   readonly outputName: string;
   readonly outputUnit: string;
   readonly outputQuantity: string;
+  /** T-650 S2: labour for one batch, or null. */
+  readonly standardLabourCost: string | null;
+  /** T-650 S2: the stores it is limited to (empty = every store). */
+  readonly storeIds: string[];
   readonly lines: RecipeDetailLine[];
 }
 
@@ -122,6 +126,8 @@ export async function recipeDetail(orgId: string, id: string): Promise<RecipeDet
       outputName: out?.name ?? 'its output',
       outputUnit: out?.baseUnit ?? '',
       outputQuantity: r.outputQuantity,
+      standardLabourCost: r.standardLabourCost,
+      storeIds: (await productionRepo.listRecipeStores(tx, orgId, r.id)).map((s) => s.storeId),
       lines: lines.map((l) => ({
         itemId: l.itemId,
         itemName: items.get(l.itemId)?.name ?? 'an item',

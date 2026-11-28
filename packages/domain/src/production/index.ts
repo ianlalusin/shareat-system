@@ -53,6 +53,7 @@ import {
 } from '../stock/quantity';
 import { convertUnit, divideRoundHalfUp, unitConversionFactor } from './unit-conversion';
 import { slicerRefusal, sliceLabourFor } from './slicer-pay';
+import { cookLabourFor } from './recipe-labour';
 import {
   computeValueIdentity,
   PRODUCTION_QTY_EPS,
@@ -93,6 +94,7 @@ const slicerPaidSentence = (doing: string) =>
   `This slicing record was already paid to the slicer in a pay run, so it cannot be ${doing}. Void that pay run first, then ${doing === 'voided' ? 'void' : 'change'} it.`;
 
 export * from './slicer-pay';
+export * from './recipe-labour';
 
 // Recipes (create / edit / retire / restore) live in `recipes.ts` (T-413), re-exported here.
 export * from './recipes';
@@ -141,6 +143,7 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
   // T-371 R5/R6: every figure is parsed AFTER authorize() and BEFORE the first write, so a refused line can never leave an
   // orphan record behind. `labour_cost` is NOT NULL DEFAULT 0: a blank takes the column default.
   const parsedLabour = parseDecimalInput(input.labourCost, '14,2', 'createProductionDraft.labourCost', 'Labour cost', { blank: 'omit' });
+  let labour = parsedLabour;
   let inputs = parseDraftLines(input.inputs, 'createProductionDraft.inputs', 'Input line');
   const outputs = parseDraftLines(input.outputs, 'createProductionDraft.outputs', 'Output line');
 
@@ -159,9 +162,16 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
     const recipe = await productionRepo.getRecipe(tx, input.orgId, input.recipeId);
     if (!recipe) return { ok: false, reason: 'That recipe does not exist. Pick a recipe from the list.' };
     if (recipe.status !== 'active') return { ok: false, reason: `The recipe '${recipe.name}' is not active. Pick an active recipe.` };
+    const notHere = await recipeStoreRefusal(tx, input.orgId, recipe, input.storeId);
+    if (notHere) return { ok: false, reason: notHere };
     const derived = await deriveCookInputs(tx, input.orgId, recipe, outputs);
     if (!derived.ok) return derived;
     inputs = [...derived.inputs];
+    // T-650 S2: a BLANK labour box takes the recipe's standard labour per batch x the batches cooked; a typed figure wins; no standard -> 0 as before.
+    if (parsedLabour === undefined && recipe.standardLabourCost !== null) {
+      const std = cookLabourFor(recipe.standardLabourCost, recipe.outputQuantity, derived.target);
+      if (std) labour = std.pay;
+    }
   }
 
   // T-635: who sliced, and which output lines are paid. Refused before the first write.
@@ -174,7 +184,7 @@ export async function createProductionDraft(tx: Tx, actor: Actor, input: CreateP
   }
 
   // T-650 S1: a slice record with the labour box left BLANK takes the slicer pay computeRecordPay works out for it; a typed figure wins; no rate -> stays 0 and says why.
-  let labour = parsedLabour;
+  // (declared before the cook branch so a cook's standard labour can fill it)
   let labourNote: string | undefined;
   // Audit fix: only when a slicer is NAMED on the record - the condition payroll pays on (performed_by_person_id) - so 6100 never keeps a credit payroll will not match.
   if (input.kind === 'slice' && parsedLabour === undefined && !input.performedByPersonId) {
@@ -241,7 +251,7 @@ async function deriveCookInputs(
   orgId: string,
   recipe: { readonly id: string; readonly name: string; readonly outputItemId: string; readonly outputQuantity: string },
   outputs: readonly { itemId: string; quantity: Quantity; unit: string }[],
-): Promise<{ ok: true; inputs: { itemId: string; quantity: Quantity; unit: string }[] } | { ok: false; reason: string }> {
+): Promise<{ ok: true; inputs: { itemId: string; quantity: Quantity; unit: string }[]; target: Quantity } | { ok: false; reason: string }> {
   if (outputs.length !== 1) {
     return { ok: false, reason: `A cook has exactly one output: what the recipe '${recipe.name}' makes.` };
   }
@@ -270,7 +280,16 @@ async function deriveCookInputs(
       return { ok: false, reason: `At this quantity, ${items.get(l.itemId)?.name ?? l.itemId} comes to less than 0.001 ${l.unit}. Make a larger batch.` };
     }
   }
-  return { ok: true, inputs: scaled.lines.map((l) => ({ itemId: l.itemId, quantity: quantity(l.quantity), unit: l.unit })) };
+  return { ok: true, inputs: scaled.lines.map((l) => ({ itemId: l.itemId, quantity: quantity(l.quantity), unit: l.unit })), target };
+}
+
+/** T-650 S2: "Only Lipa make House sauce." - a recipe listed for stores can be made only at them. Null when the store may make it (or the recipe has no list). */
+export async function recipeStoreRefusal(tx: Tx, orgId: string, recipe: { readonly id: string; readonly name: string }, storeId: string): Promise<string | null> {
+  const allowed = await productionRepo.listRecipeStores(tx, orgId, recipe.id);
+  if (allowed.length === 0 || allowed.some((s) => s.storeId === storeId)) return null;
+  const names = allowed.map((s) => s.storeName);
+  const who = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`;
+  return `Only ${who} make ${recipe.name}.`;
 }
 
 /** Loads a cook record's recipe (any status: a recipe retired after the draft must not strand it) or the R3 sentence. */
@@ -771,6 +790,12 @@ export async function postProduction(tx: Tx, actor: Actor, input: { recordId: st
   if (record.kind === 'cook') {
     const refusal = await cookPostRefusal(tx, record, inputs, outputs);
     if (refusal) return { ok: false, reason: refusal };
+    // T-650 S2: a recipe limited to some stores after the draft was saved still cannot be posted at another store.
+    const found = await cookRecipeOrRefusal(tx, record);
+    if (found.ok) {
+      const notHere = await recipeStoreRefusal(tx, record.orgId, found.recipe, record.storeId);
+      if (notHere) return { ok: false, reason: notHere };
+    }
   }
 
   // T-650 S1: the labour figure was fixed when the draft was saved (blank -> slicer pay; typed -> as typed). Post never re-decides it, so a TYPED 0.00 stays 0.00.

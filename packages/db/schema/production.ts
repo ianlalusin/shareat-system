@@ -36,6 +36,7 @@ import {
   jsonb,
   numeric,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -66,6 +67,8 @@ export const productionRecipes = pgTable(
       .notNull()
       .references(() => items.id, { onDelete: 'restrict' }),
     outputQuantity: numeric('output_quantity', { precision: 14, scale: 3 }).notNull(),
+    /** T-650 S2, migration 0290: the labour for ONE batch of `outputQuantity`; null = none. A cook with a blank labour box takes this scaled to the quantity made. */
+    standardLabourCost: numeric('standard_labour_cost', { precision: 14, scale: 2 }),
     status: text('status', { enum: PRODUCTION_RECIPE_STATUSES }).notNull().default('active'),
     createdBy: uuid('created_by')
       .notNull()
@@ -77,6 +80,8 @@ export const productionRecipes = pgTable(
     uniqueIndex('production_recipes_org_name_key').on(t.orgId, sql`lower(${t.name})`),
     check('production_recipes_output_quantity_positive_check', sql`${t.outputQuantity} > 0`),
     index('production_recipes_org_idx').on(t.orgId),
+    check('production_recipes_standard_labour_cost_check', sql`${t.standardLabourCost} is null or ${t.standardLabourCost} >= 0`),
+    check('production_recipes_standard_labour_cost_finite_check', sql`${t.standardLabourCost} > '-Infinity'::numeric and ${t.standardLabourCost} < 'Infinity'::numeric`),
     check('production_recipes_output_quantity_finite_check', sql`${t.outputQuantity} > '-Infinity'::numeric and ${t.outputQuantity} < 'Infinity'::numeric`),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
     // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a
@@ -93,6 +98,31 @@ export const productionRecipes = pgTable(
       foreignColumns: [items.orgId, items.id],
       name: 'production_recipes_output_item_id_same_org_fk',
     }).onDelete('restrict'),
+  ],
+);
+
+/**
+ * T-650 S2, migration 0290 - the stores a PRODUCT recipe may be made at. No rows = every store (back-compatible); rows = only those stores
+ * (`createProductionDraft` refuses elsewhere). Both FKs are same-org composites, so a store of another organisation is refused by the database.
+ * NOTE: the two composite FKs reference `production_recipes_org_id_id_unique` (migration 0196) and `stores_org_id_id_unique` (migration 0194), and RLS
+ * (ENABLE + FORCE + the org_isolation policy) is hand-added in migration 0290.
+ */
+export const productionRecipeStores = pgTable(
+  'production_recipe_stores',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    recipeId: uuid('recipe_id').notNull(),
+    storeId: uuid('store_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.recipeId, t.storeId], name: 'production_recipe_stores_pkey' }),
+    foreignKey({ columns: [t.orgId, t.recipeId], foreignColumns: [productionRecipes.orgId, productionRecipes.id], name: 'production_recipe_stores_recipe_same_org_fk' }).onDelete('cascade'),
+    foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'production_recipe_stores_store_same_org_fk' }).onDelete('restrict'),
+    index('production_recipe_stores_store_idx').on(t.storeId),
+    index('production_recipe_stores_org_idx').on(t.orgId),
   ],
 );
 

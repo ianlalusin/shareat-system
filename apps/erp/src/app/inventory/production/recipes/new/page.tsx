@@ -6,6 +6,7 @@ import { withFlash } from '@/lib/flash';
 import { createRecipeAction } from '../actions';
 import { RECIPES_PATH, canManageRecipes, recipeItemOptions } from '../lib';
 import { RecipeFields } from '../recipe-form';
+import { listStores } from '../../lib';
 
 export const metadata = { title: 'New recipe - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ export default async function NewRecipePage({ searchParams }: { searchParams: Pr
   if (refusal) return refusal;
   const canManage = await canManageRecipes(actor.orgId, actor);
   const items = canManage ? await recipeItemOptions(actor.orgId) : [];
+  const stores = canManage ? await listStores(actor.orgId) : [];
 
   return (
     <Page density="table" className="space-y-6">
@@ -33,7 +35,7 @@ export default async function NewRecipePage({ searchParams }: { searchParams: Pr
 
       {canManage ? (
         <form action={createRecipeAction} className="space-y-4">
-          <RecipeFields items={items} name="" outputItemId="" outputQuantity="" outputUnit={null} lines={[]} blankRows={BLANK_ROWS} />
+          <RecipeFields items={items} name="" outputItemId="" outputQuantity="" outputUnit={null} lines={[]} blankRows={BLANK_ROWS} stores={stores} storeIds={[]} standardLabourCost="" />
           <Button type="submit" variant="primary">
             Save
           </Button>

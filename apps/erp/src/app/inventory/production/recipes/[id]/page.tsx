@@ -8,6 +8,7 @@ import { withFlash } from '@/lib/flash';
 import { editRecipeAction, restoreRecipeAction, retireRecipeAction } from '../actions';
 import { RECIPES_PATH, canManageRecipes, fmtQty, recipeDetail, recipeItemOptions, type RecipeItemOption } from '../lib';
 import { RecipeFields, type FormLine } from '../recipe-form';
+import { listStores } from '../../lib';
 
 export const metadata = { title: 'Recipe - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,7 @@ export default async function RecipePage({
     ].filter((i) => !known.has(i.id));
     items = [...items, ...extra.filter((e, i) => extra.findIndex((x) => x.id === e.id) === i)];
   }
+  const stores = canManage ? await listStores(actor.orgId) : [];
   const retired = recipe.status !== 'active';
 
   return (
@@ -84,6 +86,9 @@ export default async function RecipePage({
               outputUnit={recipe.outputUnit}
               lines={formLines}
               blankRows={SPARE_ROWS}
+              stores={stores}
+              storeIds={recipe.storeIds}
+              standardLabourCost={recipe.standardLabourCost ?? ''}
             />
             <Button type="submit" variant="primary">
               Save recipe
