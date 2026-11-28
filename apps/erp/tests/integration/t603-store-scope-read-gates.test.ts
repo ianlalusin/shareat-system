@@ -19,7 +19,7 @@ import { M, asOrg, expectAbsent, expectNotAvailable, expectPresent, expectRefusa
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('next/navigation', async () => (await import('../helpers/flash-jar-core')).nextNavigationMock());
 vi.mock('../../src/lib/session', async () => (await import('./t435-fixture')).sessionMock());
-vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children, PageHeader: () => null }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('../../src/components/scheduler-status', () => ({ SchedulerStatus: () => null }));
 
 afterAll(async () => {
