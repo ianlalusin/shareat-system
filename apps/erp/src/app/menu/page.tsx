@@ -11,8 +11,8 @@ import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Badge, Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
-import { createCategoryAction, createItemAction, editCategoryAction, retireCategoryAction } from './actions';
-import { listCategories, listOverviewItems, storesInScope, withOrgPrincipal } from './lib';
+import { createCategoryAction, createItemAction, editCategoryAction, retireCategoryAction, setNoStockForPackagesAndRefillsAction } from './actions';
+import { countPackageRefillVariantsNeedingNoStock, listCategories, listOverviewItems, storesInScope, withOrgPrincipal } from './lib';
 import { MENU_CATEGORY } from './typed-forms';
 import { NAV_LINK } from '@/components/action-link';
 
@@ -40,9 +40,10 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
     const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : (stores[0]?.id ?? null);
     const categories = await listCategories(tx, actor.orgId);
     const items = await listOverviewItems(tx, actor.orgId, sp.filter === 'not_offered' ? storeId : null);
-    return { held, stores, storeId, categories, items };
+    const needNoStock = held.has('set_menu_depletion') ? await countPackageRefillVariantsNeedingNoStock(tx, actor.orgId) : 0;
+    return { held, stores, storeId, categories, items, needNoStock };
   });
-  const { held, stores, storeId, categories, items } = data;
+  const { held, stores, storeId, categories, items, needNoStock } = data;
   const canManage = held.has('manage_menu');
   const canAddItem = held.has('add_menu_item');
 
@@ -158,6 +159,21 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
 
       <FlashBanner flash={sp} />
       {sp.ok && <Banner tone="success">{sp.ok}</Banner>}
+
+      {/* T-648: package and refill usage is hand-entered, so a sale of them should take nothing from stock. Only for who may set rules, only when some still do. */}
+      {held.has('set_menu_depletion') && needNoStock > 0 && (
+        <form action={setNoStockForPackagesAndRefillsAction} className="flex flex-wrap items-center gap-3 rounded-[14px] border border-surface-border p-4 text-sm">
+          <p className="min-w-0 flex-1">
+            <strong>{needNoStock} package and refill {needNoStock === 1 ? 'variant still uses' : 'variants still use'} stock.</strong> Their usage is entered by hand, so a sale should use no stock.
+          </p>
+          <ConfirmDestructive
+            tier="confirm"
+            quiet
+            label="Set all to Uses no stock"
+            consequence={`Sets ${needNoStock} package and refill ${needNoStock === 1 ? 'variant' : 'variants'} to Uses no stock, from now. A sale of them takes nothing from stock; only the usage you enter counts. You can change any item back on its page.`}
+          />
+        </form>
+      )}
 
       <FilterRow>
         <SearchBox q={q} placeholder="Item, variant or category…" />

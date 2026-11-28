@@ -82,6 +82,35 @@ export async function setDepletionRule(actor: Actor, input: SetDepletionRuleInpu
   });
 }
 
+export interface NoStockBatchResult {
+  changed: number;
+  skipped: { variantId: string; itemName: string; reason: 'scheduled_change' }[];
+}
+
+/**
+ * T-648: one click sets every active package and refill variant that does not already use no stock to `no_stock`, from now. Their
+ * usage is entered by hand, so a sale must take nothing from stock. Goes through `setDepletionRule` per variant (validation, history
+ * slot, audit in one place), all in ONE transaction. A variant with a later change already scheduled is skipped and reported,
+ * never fails the batch; any other refusal rolls the whole batch back.
+ */
+export async function setNoStockForPackagesAndRefills(actor: Actor, tx?: Tx): Promise<NoStockBatchResult> {
+  return inTx(tx, actor.orgId, async (trx) => {
+    await authorize(trx, actor, 'set_menu_depletion', {});
+    const result: NoStockBatchResult = { changed: 0, skipped: [] };
+    for (const t of await menuRepo.packageRefillVariantsNeedingNoStock(trx, actor.orgId)) {
+      // Same test `requireHistorySlot` makes; asked first so a scheduled change is a skip, not a caught error.
+      await menuRepo.lockKey(trx, t.variantId);
+      if ((await menuRepo.historyClash(trx, { kind: 'rule', variantId: t.variantId })) !== null) {
+        result.skipped.push({ ...t, reason: 'scheduled_change' });
+        continue;
+      }
+      await setDepletionRule(actor, { variantId: t.variantId, mode: 'no_stock' }, trx);
+      result.changed += 1;
+    }
+    return result;
+  });
+}
+
 /** Cancels a rule that has not taken effect. The database also refuses it if a live offer would be left with no rule in force. */
 export async function cancelScheduledDepletionRule(actor: Actor, input: { id: string }, tx?: Tx): Promise<{ id: string }> {
   return inTx(tx, actor.orgId, async (trx) => {

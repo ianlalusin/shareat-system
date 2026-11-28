@@ -219,6 +219,11 @@ export async function listOverviewItems(tx: Tx, orgId: string, storeId: string |
   });
 }
 
+/** T-648: how many active package and refill variants still use stock (same definition the batch action acts on). */
+export async function countPackageRefillVariantsNeedingNoStock(tx: Tx, orgId: string): Promise<number> {
+  return (await menuRepo.packageRefillVariantsNeedingNoStock(tx, orgId)).length;
+}
+
 /** Whole-organisation item names for pickers (a request marked as a duplicate of one). */
 export async function listActiveItemNames(tx: Tx, orgId: string): Promise<{ id: string; name: string; itemType: string }[]> {
   return tx
