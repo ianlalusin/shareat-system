@@ -7,11 +7,10 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_THRESHOLD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Button, Card, EmptyState, Field, FlashBanner, HelpTip, Input, NumTd, Select, Table, Td, Th } from '@/components/ui';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
 import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { LOW_STOCK_THRESHOLD } from './typed-forms';
@@ -70,15 +69,13 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
 
   return (
     <Page density="table" className="">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Low stock</h1>
+      <PageHeader title="Low stock" description={<>
+        Items running low at this store. The list is worked out fresh each time you open the page.
+      </>} actions={
         <Link href="/inventory" className={NAV_LINK}>
           ← Stock on hand
         </Link>
-      </div>
-      <PageDescription className="mt-1">
-        Items running low at this store. The list is worked out fresh each time you open the page.
-      </PageDescription>
+      } />
 
       <FlashBanner flash={sp} />
 

@@ -55,7 +55,7 @@ vi.mock('@/lib/constraint-messages', async () => {
 vi.mock('@/lib/money-lines/load', async () => {
   return await import('../../src/lib/money-lines/load');
 });
-vi.mock('@/components/shell/Page', () => ({
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: unknown }) => children,
 }));
 

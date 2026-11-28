@@ -9,9 +9,8 @@ import {
 import { NewTransferForm } from './NewTransferForm';
 import { storePageScope } from '../../../lib/store-scope';
 import { withOrgPrincipal } from '../../expenses/lib';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, ConfirmDestructive, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -93,15 +92,13 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
 
   return (
     <Page density="table" className="">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Stock transfers</h1>
+      <PageHeader title="Stock transfers" description={<>
+        Move stock from one room to another within one store. Only the quantity moves; the cost stays the same.
+      </>} actions={
         <Link href="/inventory" className={NAV_LINK}>
           ← Stock on hand
         </Link>
-      </div>
-      <PageDescription className="mt-1">
-        Move stock from one room to another within one store. Only the quantity moves; the cost stays the same.
-      </PageDescription>
+      } />
       <FlashBanner flash={sp} />
 
       <FilterRow className="mt-6">

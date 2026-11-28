@@ -81,7 +81,7 @@ vi.mock('next/headers', () => ({
 vi.mock('@/lib/constraint-messages', async () => {
   return await import('../../src/lib/constraint-messages');
 });
-vi.mock('@/components/shell/Page', () => ({
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: unknown }) => children,
 }));
 

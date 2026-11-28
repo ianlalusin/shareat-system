@@ -17,8 +17,7 @@ import {
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { CheckedForm } from '@/components/forms';
 import { PREPAID_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, Banner, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, statusTone, DialogActions } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
@@ -58,15 +57,12 @@ export default async function PrepaidPage({
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 basis-[16rem]">
-          <h1 className="text-2xl font-semibold">Prepaid expenses</h1>
-          <PageDescription>
+      <PageHeader title="Prepaid expenses" description={<>
             Things already paid for but not yet used up: a year of insurance, a mayor&apos;s permit,
             rent paid in advance. Each one is spread over the months it covers.
-          </PageDescription>
-        </div>
-        {/* T-448: the add form is a modal opened from the header. */}
+          </>} actions={
+        <>
+          {/* T-448: the add form is a modal opened from the header. */}
         <FormModal
           trigger="+ Record prepaid item"
           title="Record a prepaid item"
@@ -139,7 +135,8 @@ export default async function PrepaidPage({
             </DialogActions>
           </CheckedForm>
         </FormModal>
-      </div>
+        </>
+      } />
 
       <FlashBanner flash={sp} />
 

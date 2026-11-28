@@ -4,7 +4,7 @@ import { createOrderAction } from './actions';
 import { NewOrderForm } from './NewOrderForm';
 import { orderFormData, orderRegister, peso, today, tradeStoresFor } from './lib';
 import { StoreNotAvailable } from '../../../lib/page-access';
-import { Page } from '@/components/shell/Page';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { ChevronIcon } from '@/components/shell/icons';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
@@ -53,12 +53,11 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
 
   return (
     <Page density="table">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Trade orders</h1>
+      <PageHeader title="Trade orders" actions={
         <Link href="/trade/returns" className={NAV_LINK}>
           Customer returns →
         </Link>
-      </div>
+      } />
       <PageDescription>
         Wholesale sales and transfers to other stores, on one document. <strong>Nothing is posted until the order is dispatched.</strong>{' '}
         A sale then bills the customer. A transfer puts the goods on the way until the receiving store confirms them.

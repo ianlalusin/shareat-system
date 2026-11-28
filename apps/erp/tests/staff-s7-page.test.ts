@@ -51,7 +51,7 @@ vi.mock('next/navigation', () => ({
     throw new Error('notFound');
   },
 }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('../src/app/staff/actions', () => ({ upsertStorePositionAction: vi.fn() }));
 vi.mock('../src/app/staff/PinSignInPanel', () => ({ PinSignInPanel: () => null }));
 

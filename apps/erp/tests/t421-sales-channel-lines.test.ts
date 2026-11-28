@@ -34,7 +34,8 @@ vi.mock('../src/app/findings/lib', async () => ({
 }));
 // T-193: the dashboard also loads the Government payments tile; a non-holder gets null.
 vi.mock('../src/app/payroll/statutory-payments/lib', () => ({ statutoryTileFor: async () => null }));
-vi.mock('@/components/shell/Page', () => ({
+vi.mock('@/components/shell/Page', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: unknown }) => children,
 }));
 

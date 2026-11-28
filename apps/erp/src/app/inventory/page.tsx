@@ -1,8 +1,7 @@
 import Link from 'next/link';
 import { stockSummary } from './lib';
 import { recordInScope, storePageScope } from '../../lib/store-scope';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { NoMatches, SearchBox, SearchCount } from '@/components/SearchBox';
 import { clearSearchHref, matchesQuery, readQ } from '@/lib/search';
@@ -43,15 +42,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
   return (
     <Page density="table" className="">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold">Stock on hand</h1>
-          <PageDescription className="mt-1">
+      <PageHeader title="Stock on hand" description={<>
             What is on the shelves at this store, worked out from every delivery, use and count.
-          </PageDescription>
-        </div>
-        {/* The four doors stock actually passes through, plus the two exceptions and the alert. */}
-        <nav aria-label="Inventory sections" className="flex max-w-full flex-wrap gap-2 pb-1 text-sm md:flex-nowrap md:overflow-x-auto">
+          </>} actions={
+        <>
+          {/* The four doors stock actually passes through, plus the two exceptions and the alert. */}
+        <nav aria-label="Inventory sections" className="flex min-w-0 max-w-full flex-nowrap gap-2 pb-1 text-sm md:overflow-x-auto">
           {[
             { href: `/inventory/locations?store=${storeId}`, label: 'Rooms' },
             { href: `/inventory/deliveries?store=${storeId}`, label: 'Deliveries' },
@@ -70,7 +66,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             </Link>
           ))}
         </nav>
-      </div>
+        </>
+      } />
 
       <FilterRow className="mt-6">
         <label className="text-sm">

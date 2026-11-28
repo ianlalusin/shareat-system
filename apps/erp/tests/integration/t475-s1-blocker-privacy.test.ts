@@ -48,7 +48,7 @@ vi.mock('@/components/forms', async (orig) => ({
     return null;
   },
 }));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('@/lib/money-lines/load', async () => await import('../../src/lib/money-lines/load'));
 vi.mock('@/components/money/MoneyLines', async () => await import('../../src/components/money/MoneyLines'));
 

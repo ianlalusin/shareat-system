@@ -37,7 +37,7 @@ vi.mock('../../src/lib/page-access', () => ({
 // T-603 S3: the page's store gate reads the DB; this fixture actor is a stub that is in no store, so it stands in for a viewer who holds store-1.
 vi.mock('@/lib/store-scope', () => ({ recordInScope: async () => true }));
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
-vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
+vi.mock('@/components/shell/Page', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), Page: ({ children }: { children: unknown }) => children }));
 vi.mock('@/components/shell/DetailLayout', () => ({
   DetailLayout: ({ summary, children }: { summary: unknown; children: unknown }) => [summary, children],
 }));

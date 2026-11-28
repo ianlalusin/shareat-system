@@ -6,8 +6,7 @@ import { addDays, formatBusinessDayLong, parseBusinessDate, toBusinessDate } fro
 import { receiptCheckLine } from './receipt-check';
 import { reportScope } from '../reports/lib';
 import { withOrgPrincipal } from '../expenses/lib';
-import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
+import { Page, PageHeader } from '@/components/shell/Page';
 import { Badge, Banner, Button, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Sales days — Shareat System' };
@@ -74,21 +73,17 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
 
   return (
     <Page density="table">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Sales days</h1>
-          <PageDescription>
+      <PageHeader title="Sales days" description={<>
             A day&apos;s selling, per store. <strong>Verifying a day is what counts its revenue.</strong>{' '}
             An unverified day posts nothing.
-          </PageDescription>
-        </div>
+          </>} actions={
         <a
           href={`/sales-days/new?${carry.toString()}`}
           className="inline-flex min-h-11 shrink-0 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
         >
           New sales day
         </a>
-      </div>
+      } />
 
       {submitStoreIds.length > 0 && (
         <SchedulerStatus
